@@ -1,0 +1,17 @@
+{
+  "name": "employee-management-system",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "workspaces": [
+    "client",
+    "backend"
+  ],
+  "scripts": {
+    "build:frontend": "npm run build --workspace=client",
+    "build": "npm run build --workspace=client",
+    "dev": "npm run build:frontend && node backend/server.js",
+    "start": "node backend/server.js",
+    "lint": "npm run lint --workspace=client"
+  }
+}

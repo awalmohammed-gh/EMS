@@ -1,0 +1,8 @@
+{
+  "name": "Employee Management System",
+  "description": "Comprehensive employee management system for attendance, payroll, leaves, and staff administration.",
+  "requestFramePermissions": [],
+  "majorCapabilities": [
+    "MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"
+  ]
+}
