@@ -10,12 +10,12 @@ import {
   Clock as ClockIcon,
   User,
   Building2,
-  AlertCircle,
   X,
   Briefcase,
   CalendarDays,
 } from "lucide-react";
 import ApplyLeaveModal from "../../components/modal/ApplyLeaveModal";
+import LeaveRequestForm from "../../components/LeaveRequestForm";
 import { myLeave } from "../../apis/fontApis";
 import { useManagement } from "../../context/ManagementContextProvider";
 import Loading from "../../ui/Loading";
@@ -23,6 +23,7 @@ import ErrorMessage from "../../ui/ErrorMessage";
 
 const EmployeeLeave = () => {
   const [showLeaveModal, setShowLeaveModal] = useState(false);
+  const [showInlineForm, setShowInlineForm] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
   const [isError, setIsError] = useState(null);
   const [leaveRequests, setLeaveRequests] = useState([]);
@@ -186,15 +187,35 @@ const EmployeeLeave = () => {
               Apply for leave and view your leave request history
             </p>
           </div>
-          <button
-            type="button"
-            onClick={() => setShowLeaveModal(true)}
-            className="flex items-center gap-2 rounded-lg bg-[#002185] px-4 py-2.5 text-sm font-medium text-white shadow-sm transition hover:bg-[#ff5500] hover:shadow-lg"
-          >
-            <Plus className="h-4 w-4" />
-            Apply for Leave
-          </button>
+          <div className="flex items-center gap-2">
+            <button
+              type="button"
+              onClick={() => setShowInlineForm(!showInlineForm)}
+              className={`flex items-center gap-2 rounded-xl px-4 py-2.5 text-xs font-bold transition-all shadow-xs ${
+                showInlineForm
+                  ? "bg-[#F8FAFC] text-[#002185] border border-[#002185]"
+                  : "bg-[#002185] text-white hover:bg-[#ff5500]"
+              }`}
+            >
+              <Plus className="h-4 w-4" />
+              {showInlineForm ? "Hide Leave Form" : "New Leave Application"}
+            </button>
+          </div>
         </div>
+
+        {/* Inline Leave Request Form Component */}
+        {showInlineForm && (
+          <LeaveRequestForm
+            inline={true}
+            onSuccess={() => {
+              fetchLeaveData();
+              setShowInlineForm(false);
+            }}
+            onCancel={() => setShowInlineForm(false)}
+            title="Submit New Leave Request"
+            subtitle="Fill out the form below with your date range and reason to request time off."
+          />
+        )}
 
         {/* Summary Cards */}
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">

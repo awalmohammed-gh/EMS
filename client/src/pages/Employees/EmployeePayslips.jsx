@@ -7,8 +7,10 @@ import {
   Eye,
   Download,
   Building2,
+  Calculator,
 } from "lucide-react";
 import EmployeePayslipsModal from "../../components/modal/EmployeePayslipsModal";
+import PayrollSummaryCalculator from "../../components/PayrollSummaryCalculator";
 import { useManagement } from "../../context/ManagementContextProvider";
 import { getEmployeePayslip } from "../../apis/fontApis";
 import Loading from "../../ui/Loading";
@@ -18,6 +20,7 @@ import logo from "../../assets/eyenit_logo.png";
 const EmployeePayslips = () => {
   const [selectedPayslip, setSelectedPayslip] = useState(null);
   const [employeePayslips, setEmployeePayslips] = useState([]);
+  const [showCalculator, setShowCalculator] = useState(true);
   const [isLoading, setIsLoading] = useState(false);
   const [isError, setIsError] = useState(null);
 
@@ -316,14 +319,28 @@ const EmployeePayslips = () => {
               My Payslips
             </h1>
             <p className="text-sm text-[#64748B] mt-1">
-              View your salary payments and payslip history
+              View your salary payments and attendance-based salary calculations
             </p>
           </div>
-          <div className="text-sm text-[#64748B] bg-[#FFFFFF] px-4 py-2 rounded-lg border border-[#E2E8F0] transition-all duration-300 shadow-sm">
-            {employeePayslips.length} payslip
-            {employeePayslips.length !== 1 ? "s" : ""}
+          <div className="flex items-center gap-3">
+            <button
+              onClick={() => setShowCalculator(!showCalculator)}
+              className="px-3.5 py-2 bg-[#F8FAFC] border border-[#002185] text-[#002185] hover:bg-[#002185] hover:text-white rounded-lg transition-all duration-200 text-xs font-bold flex items-center gap-2 shadow-xs cursor-pointer"
+            >
+              <Calculator className="w-4 h-4 text-[#ff5500]" />
+              {showCalculator ? "Hide Salary Breakdown" : "View Attendance & Salary Calculation"}
+            </button>
+            <div className="text-sm text-[#64748B] bg-[#FFFFFF] px-4 py-2 rounded-lg border border-[#E2E8F0] transition-all duration-300 shadow-sm">
+              {employeePayslips.length} payslip
+              {employeePayslips.length !== 1 ? "s" : ""}
+            </div>
           </div>
         </div>
+
+        {/* Dynamic Payroll & Attendance-based Monthly Summary Calculator */}
+        {showCalculator && (
+          <PayrollSummaryCalculator />
+        )}
 
         {/* Payslip List */}
         {employeePayslips.length > 0 ? (

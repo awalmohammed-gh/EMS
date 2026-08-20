@@ -19,6 +19,10 @@ export const allEmployees = () => {
   return api.get("/employee/all-employees");
 };
 
+export const getEmployeeProfile = (id) => {
+  return api.get(`/employee/profile/${id}`);
+};
+
 export const namesList = () => {
   return api.get("/employee/list-employee-name");
 };
@@ -38,6 +42,10 @@ export const adminLogout = () => {
 //generate payroll
 export const payrollGenerate = (data) => {
   return api.post("/pay/generate", data);
+};
+
+export const calculatePayrollSummary = (params) => {
+  return api.get("/pay/calculate-summary", { params });
 };
 
 export const getAllPayslips = (data) => {
@@ -97,7 +105,7 @@ export const allLeaves = () =>{
   return api.get("/leave/all");
 }
 
-export const updateStatus = (id, status) =>{
-  return api.put(`/leave/status/${id}`, {status});
-}
+export const updateStatus = (id, status, adminRemark = "") => {
+  return api.put(`/leave/status/${id}`, { status, adminRemark });
+};
 

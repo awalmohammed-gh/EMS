@@ -1,5 +1,6 @@
 import { useState } from "react";
 import { useManagement } from "../../context/ManagementContextProvider";
+import { employeeAccount } from "../../apis/fontApis";
 import {
   X,
   User,
@@ -9,38 +10,77 @@ import {
   Calendar,
   UserPlus,
   ChevronDown,
+  Mail,
+  Lock,
 } from "lucide-react";
 
-const AddEmployee = () => {
-  const { setShowEmployeeModal } = useManagement();
+export const AddEmployee = ({ onEmployeeAdded }) => {
+  const { setShowEmployeeModal, setShowToast } = useManagement();
+  const [isSubmitting, setIsSubmitting] = useState(false);
 
   const [employeeForm, setEmployeeForm] = useState({
-    employeeId: "",
-    firstName: "",
-    lastName: "",
+    employeeId: `EMP00${Math.floor(Math.random() * 900) + 100}`,
+    fullName: "",
+    email: "",
+    password: "Password@123",
     phone: "",
-    department: "",
+    department: "Software Engineering",
     position: "",
-    employmentDate: "",
+    employmentDate: new Date().toISOString().split("T")[0],
+    role: "employee",
   });
 
   const handleChange = (e) => {
     const { name, value } = e.target;
-
     setEmployeeForm((prev) => ({
       ...prev,
       [name]: value,
     }));
   };
 
-  const handleSubmit = (e) => {
+  const handleSubmit = async (e) => {
     e.preventDefault();
 
-    console.log(employeeForm);
+    if (!employeeForm.fullName || !employeeForm.email || !employeeForm.phone || !employeeForm.department || !employeeForm.position) {
+      setShowToast({
+        show: true,
+        message: "Please fill in all required employee fields.",
+        type: "error",
+      });
+      return;
+    }
 
-    // Send employeeForm to your backend here
+    try {
+      setIsSubmitting(true);
+      const { data } = await employeeAccount(employeeForm);
 
-    setShowEmployeeModal(false);
+      if (data.success) {
+        setShowToast({
+          show: true,
+          message: data.message || `Employee account for ${employeeForm.fullName} registered successfully!`,
+          type: "success",
+        });
+        if (onEmployeeAdded) {
+          onEmployeeAdded();
+        }
+        setShowEmployeeModal(false);
+      } else {
+        setShowToast({
+          show: true,
+          message: data.message || "Failed to create employee account.",
+          type: "error",
+        });
+      }
+    } catch (error) {
+      console.error("Error creating employee:", error);
+      setShowToast({
+        show: true,
+        message: error.response?.data?.message || error.message || "Failed to create employee.",
+        type: "error",
+      });
+    } finally {
+      setIsSubmitting(false);
+    }
   };
 
   return (
@@ -54,12 +94,10 @@ const AddEmployee = () => {
       {/* Modal */}
       <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
         <div
-          onClick={(e) => {
-            e.stopPropagation();
-          }}
+          onClick={(e) => e.stopPropagation()}
           className="w-full max-w-2xl max-h-[90vh] rounded-2xl bg-[#FFFFFF] shadow-2xl border-2 border-[#002185] animate-fade-in flex flex-col overflow-hidden"
         >
-          {/* Header - fixed, never scrolls */}
+          {/* Header */}
           <div className="shrink-0 bg-[#FFFFFF] px-6 pt-6 pb-5 flex items-center justify-between border-b border-[#E2E8F0]">
             <div className="flex items-center gap-3">
               <div className="w-11 h-11 rounded-xl bg-[#002185] flex items-center justify-center shrink-0">
@@ -67,117 +105,118 @@ const AddEmployee = () => {
               </div>
               <div>
                 <h2 className="text-lg font-bold text-[#002185] leading-tight">
-                  Add Employee
+                  Add New Staff Member
                 </h2>
-                <p className="text-sm text-[#64748B]">
-                  Fill in the details to add a new employee
+                <p className="text-xs text-[#64748B]">
+                  Register an employee with contact details, role, and department
                 </p>
               </div>
             </div>
             <button
               type="button"
               onClick={() => setShowEmployeeModal(false)}
-              className="p-2 text-[#64748B] hover:text-[#ff5500] hover:bg-[#F8FAFC] rounded-lg transition-all duration-200 shrink-0"
+              className="p-2 text-[#64748B] hover:text-[#ff5500] hover:bg-[#F8FAFC] rounded-lg transition-all duration-200 shrink-0 cursor-pointer"
             >
               <X className="w-5 h-5" />
             </button>
           </div>
 
-          {/* Body - the only part that scrolls */}
+          {/* Form Body */}
           <form
             id="add-employee-form"
             onSubmit={handleSubmit}
-            className="flex-1 overflow-y-auto px-6 py-6 space-y-5"
+            className="flex-1 overflow-y-auto px-6 py-6 space-y-4"
           >
-            {/* Employee ID */}
-            <div>
-              <label className="mb-1.5 block text-sm font-medium text-[#002185]">
-                Employee ID
-              </label>
-              <div className="relative">
-                <div className="absolute inset-y-0 left-0 pl-3.5 flex items-center pointer-events-none">
-                  <User className="h-4 w-4 text-[#94A3B8]" />
+            {/* Employee ID and Full Name */}
+            <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
+              <div>
+                <label className="mb-1.5 block text-xs font-bold text-[#002185]">
+                  Employee ID
+                </label>
+                <div className="relative">
+                  <div className="absolute inset-y-0 left-0 pl-3.5 flex items-center pointer-events-none">
+                    <User className="h-4 w-4 text-[#94A3B8]" />
+                  </div>
+                  <input
+                    type="text"
+                    name="employeeId"
+                    value={employeeForm.employeeId}
+                    onChange={handleChange}
+                    placeholder="EMP001"
+                    className="w-full pl-10 pr-3 py-2 border border-[#E2E8F0] rounded-lg bg-[#FFFFFF] text-[#0F172A] text-xs font-mono font-bold hover:border-[#ff5500] focus:outline-none focus:ring-1 focus:ring-[#002185]"
+                    required
+                  />
                 </div>
-                <input
-                  type="text"
-                  name="employeeId"
-                  value={employeeForm.employeeId}
-                  onChange={handleChange}
-                  placeholder="EMP001"
-                  className="w-full pl-10 pr-3 py-2.5 border border-[#E2E8F0] rounded-lg bg-[#FFFFFF] text-[#0F172A] text-sm placeholder-[#94A3B8] hover:border-[#ff5500] focus:outline-none focus:ring-2 focus:ring-[#ff5500]/30 focus:border-[#ff5500] transition-all duration-200"
-                  required
-                />
+              </div>
+
+              <div className="sm:col-span-2">
+                <label className="mb-1.5 block text-xs font-bold text-[#002185]">
+                  Full Name
+                </label>
+                <div className="relative">
+                  <div className="absolute inset-y-0 left-0 pl-3.5 flex items-center pointer-events-none">
+                    <User className="h-4 w-4 text-[#94A3B8]" />
+                  </div>
+                  <input
+                    type="text"
+                    name="fullName"
+                    value={employeeForm.fullName}
+                    onChange={handleChange}
+                    placeholder="e.g. Kwame Mensah"
+                    className="w-full pl-10 pr-3 py-2 border border-[#E2E8F0] rounded-lg bg-[#FFFFFF] text-[#0F172A] text-xs hover:border-[#ff5500] focus:outline-none focus:ring-1 focus:ring-[#002185]"
+                    required
+                  />
+                </div>
               </div>
             </div>
 
-            {/* First and Last Name */}
+            {/* Email and Phone */}
             <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
               <div>
-                <label className="mb-1.5 block text-sm font-medium text-[#002185]">
-                  First Name
+                <label className="mb-1.5 block text-xs font-bold text-[#002185]">
+                  Email Address
                 </label>
                 <div className="relative">
                   <div className="absolute inset-y-0 left-0 pl-3.5 flex items-center pointer-events-none">
-                    <User className="h-4 w-4 text-[#94A3B8]" />
+                    <Mail className="h-4 w-4 text-[#94A3B8]" />
                   </div>
                   <input
-                    type="text"
-                    name="firstName"
-                    value={employeeForm.firstName}
+                    type="email"
+                    name="email"
+                    value={employeeForm.email}
                     onChange={handleChange}
-                    placeholder="Eyenit"
-                    className="w-full pl-10 pr-3 py-2.5 border border-[#E2E8F0] rounded-lg bg-[#FFFFFF] text-[#0F172A] text-sm placeholder-[#94A3B8] hover:border-[#ff5500] focus:outline-none focus:ring-2 focus:ring-[#ff5500]/30 focus:border-[#ff5500] transition-all duration-200"
+                    placeholder="employee@eyenit.com"
+                    className="w-full pl-10 pr-3 py-2 border border-[#E2E8F0] rounded-lg bg-[#FFFFFF] text-[#0F172A] text-xs hover:border-[#ff5500] focus:outline-none focus:ring-1 focus:ring-[#002185]"
                     required
                   />
                 </div>
               </div>
 
               <div>
-                <label className="mb-1.5 block text-sm font-medium text-[#002185]">
-                  Last Name
+                <label className="mb-1.5 block text-xs font-bold text-[#002185]">
+                  Phone Number
                 </label>
                 <div className="relative">
                   <div className="absolute inset-y-0 left-0 pl-3.5 flex items-center pointer-events-none">
-                    <User className="h-4 w-4 text-[#94A3B8]" />
+                    <Phone className="h-4 w-4 text-[#94A3B8]" />
                   </div>
                   <input
-                    type="text"
-                    name="lastName"
-                    value={employeeForm.lastName}
+                    type="tel"
+                    name="phone"
+                    value={employeeForm.phone}
                     onChange={handleChange}
-                    placeholder="gh"
-                    className="w-full pl-10 pr-3 py-2.5 border border-[#E2E8F0] rounded-lg bg-[#FFFFFF] text-[#0F172A] text-sm placeholder-[#94A3B8] hover:border-[#ff5500] focus:outline-none focus:ring-2 focus:ring-[#ff5500]/30 focus:border-[#ff5500] transition-all duration-200"
+                    placeholder="+233 24 123 4567"
+                    className="w-full pl-10 pr-3 py-2 border border-[#E2E8F0] rounded-lg bg-[#FFFFFF] text-[#0F172A] text-xs hover:border-[#ff5500] focus:outline-none focus:ring-1 focus:ring-[#002185]"
                     required
                   />
                 </div>
-              </div>
-            </div>
-
-            {/* Phone */}
-            <div>
-              <label className="mb-1.5 block text-sm font-medium text-[#002185]">
-                Phone
-              </label>
-              <div className="relative">
-                <div className="absolute inset-y-0 left-0 pl-3.5 flex items-center pointer-events-none">
-                  <Phone className="h-4 w-4 text-[#94A3B8]" />
-                </div>
-                <input
-                  type="tel"
-                  name="phone"
-                  value={employeeForm.phone}
-                  onChange={handleChange}
-                  placeholder="024 000 0000"
-                  className="w-full pl-10 pr-3 py-2.5 border border-[#E2E8F0] rounded-lg bg-[#FFFFFF] text-[#0F172A] text-sm placeholder-[#94A3B8] hover:border-[#ff5500] focus:outline-none focus:ring-2 focus:ring-[#ff5500]/30 focus:border-[#ff5500] transition-all duration-200"
-                  required
-                />
               </div>
             </div>
 
             {/* Department & Position */}
             <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
               <div>
-                <label className="mb-1.5 block text-sm font-medium text-[#002185]">
+                <label className="mb-1.5 block text-xs font-bold text-[#002185]">
                   Department
                 </label>
                 <div className="relative">
@@ -188,15 +227,15 @@ const AddEmployee = () => {
                     name="department"
                     value={employeeForm.department}
                     onChange={handleChange}
-                    className="w-full pl-10 pr-9 py-2.5 border border-[#E2E8F0] rounded-lg bg-[#FFFFFF] text-[#0F172A] text-sm hover:border-[#ff5500] focus:outline-none focus:ring-2 focus:ring-[#ff5500]/30 focus:border-[#ff5500] transition-all duration-200 appearance-none cursor-pointer"
+                    className="w-full pl-10 pr-9 py-2 border border-[#E2E8F0] rounded-lg bg-[#FFFFFF] text-[#0F172A] text-xs hover:border-[#ff5500] focus:outline-none focus:ring-1 focus:ring-[#002185] appearance-none cursor-pointer"
                     required
                   >
-                    <option value="">Select Department</option>
-                    <option value="Engineering">Engineering</option>
-                    <option value="Finance">Finance</option>
-                    <option value="Marketing">Marketing</option>
-                    <option value="Sales">Sales</option>
-                    <option value="Operations">Operations</option>
+                    <option value="Software Engineering">Software Engineering</option>
+                    <option value="Design & UX">Design & UX</option>
+                    <option value="Product & Marketing">Product & Marketing</option>
+                    <option value="Finance & Accounts">Finance & Accounts</option>
+                    <option value="Human Resources">Human Resources</option>
+                    <option value="Operations & Logistics">Operations & Logistics</option>
                   </select>
                   <div className="absolute inset-y-0 right-0 pr-3 flex items-center pointer-events-none">
                     <ChevronDown className="h-4 w-4 text-[#94A3B8]" />
@@ -204,10 +243,9 @@ const AddEmployee = () => {
                 </div>
               </div>
 
-              {/* Position */}
               <div>
-                <label className="mb-1.5 block text-sm font-medium text-[#002185]">
-                  Position
+                <label className="mb-1.5 block text-xs font-bold text-[#002185]">
+                  Position / Role
                 </label>
                 <div className="relative">
                   <div className="absolute inset-y-0 left-0 pl-3.5 flex items-center pointer-events-none">
@@ -218,41 +256,63 @@ const AddEmployee = () => {
                     name="position"
                     value={employeeForm.position}
                     onChange={handleChange}
-                    placeholder="Frontend Developer"
-                    className="w-full pl-10 pr-3 py-2.5 border border-[#E2E8F0] rounded-lg bg-[#FFFFFF] text-[#0F172A] text-sm placeholder-[#94A3B8] hover:border-[#ff5500] focus:outline-none focus:ring-2 focus:ring-[#ff5500]/30 focus:border-[#ff5500] transition-all duration-200"
+                    placeholder="e.g. Senior Frontend Engineer"
+                    className="w-full pl-10 pr-3 py-2 border border-[#E2E8F0] rounded-lg bg-[#FFFFFF] text-[#0F172A] text-xs hover:border-[#ff5500] focus:outline-none focus:ring-1 focus:ring-[#002185]"
                     required
                   />
                 </div>
               </div>
             </div>
 
-            {/* Employment Date */}
-            <div>
-              <label className="mb-1.5 block text-sm font-medium text-[#002185]">
-                Employment Date
-              </label>
-              <div className="relative">
-                <div className="absolute inset-y-0 left-0 pl-3.5 flex items-center pointer-events-none">
-                  <Calendar className="h-4 w-4 text-[#94A3B8]" />
+            {/* Employment Date & Default Password */}
+            <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+              <div>
+                <label className="mb-1.5 block text-xs font-bold text-[#002185]">
+                  Employment Date
+                </label>
+                <div className="relative">
+                  <div className="absolute inset-y-0 left-0 pl-3.5 flex items-center pointer-events-none">
+                    <Calendar className="h-4 w-4 text-[#94A3B8]" />
+                  </div>
+                  <input
+                    type="date"
+                    name="employmentDate"
+                    value={employeeForm.employmentDate}
+                    onChange={handleChange}
+                    className="w-full pl-10 pr-3 py-2 border border-[#E2E8F0] rounded-lg bg-[#FFFFFF] text-[#0F172A] text-xs hover:border-[#ff5500] focus:outline-none focus:ring-1 focus:ring-[#002185]"
+                    required
+                  />
                 </div>
-                <input
-                  type="date"
-                  name="employmentDate"
-                  value={employeeForm.employmentDate}
-                  onChange={handleChange}
-                  className="w-full pl-10 pr-3 py-2.5 border border-[#E2E8F0] rounded-lg bg-[#FFFFFF] text-[#0F172A] text-sm hover:border-[#ff5500] focus:outline-none focus:ring-2 focus:ring-[#ff5500]/30 focus:border-[#ff5500] transition-all duration-200"
-                  required
-                />
+              </div>
+
+              <div>
+                <label className="mb-1.5 block text-xs font-bold text-[#002185]">
+                  Initial Login Password
+                </label>
+                <div className="relative">
+                  <div className="absolute inset-y-0 left-0 pl-3.5 flex items-center pointer-events-none">
+                    <Lock className="h-4 w-4 text-[#94A3B8]" />
+                  </div>
+                  <input
+                    type="text"
+                    name="password"
+                    value={employeeForm.password}
+                    onChange={handleChange}
+                    placeholder="Password@123"
+                    className="w-full pl-10 pr-3 py-2 border border-[#E2E8F0] rounded-lg bg-[#FFFFFF] text-[#0F172A] text-xs hover:border-[#ff5500] focus:outline-none focus:ring-1 focus:ring-[#002185]"
+                    required
+                  />
+                </div>
               </div>
             </div>
           </form>
 
-          {/* Footer - fixed, never scrolls */}
+          {/* Footer */}
           <div className="shrink-0 bg-[#FFFFFF] px-6 py-4 flex justify-end gap-3 border-t border-[#E2E8F0]">
             <button
               type="button"
               onClick={() => setShowEmployeeModal(false)}
-              className="px-5 py-2.5 text-sm font-medium text-[#64748B] bg-[#F8FAFC] border border-[#E2E8F0] rounded-lg hover:border-[#ff5500] hover:text-[#002185] hover:bg-[#F8FAFC] transition-all duration-200"
+              className="px-4 py-2 text-xs font-semibold text-[#64748B] bg-[#F8FAFC] border border-[#E2E8F0] rounded-xl hover:border-[#ff5500] hover:text-[#002185] transition-all cursor-pointer"
             >
               Cancel
             </button>
@@ -260,10 +320,11 @@ const AddEmployee = () => {
             <button
               type="submit"
               form="add-employee-form"
-              className="px-5 py-2.5 text-sm font-medium text-white bg-[#002185] hover:bg-[#ff5500] rounded-lg transition-all duration-300 shadow-sm hover:shadow-lg flex items-center gap-2"
+              disabled={isSubmitting}
+              className="px-5 py-2 text-xs font-bold text-white bg-[#002185] hover:bg-[#ff5500] rounded-xl transition-all shadow-sm flex items-center gap-2 cursor-pointer disabled:opacity-50"
             >
               <UserPlus className="w-4 h-4" />
-              Add Employee
+              <span>{isSubmitting ? "Creating..." : "Save to Directory"}</span>
             </button>
           </div>
         </div>

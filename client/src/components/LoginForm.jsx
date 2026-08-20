@@ -70,6 +70,9 @@ const LoginForm = ({ role, title, subtitle }) => {
       });
 
       if (data.success) {
+        if (typeof window !== "undefined") {
+          localStorage.setItem("userRole", "admin");
+        }
         setShowToast({
           show: true,
           message: data.message,
@@ -196,6 +199,9 @@ const LoginForm = ({ role, title, subtitle }) => {
 
       const { data } = await employeeLogin(employeeFormData);
       if (data.success) {
+        if (typeof window !== "undefined") {
+          localStorage.setItem("userRole", "employee");
+        }
         setShowToast({
           show: true,
           message: data.message,

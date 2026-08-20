@@ -23,8 +23,11 @@ import Loading from "../../ui/Loading";
 import ErrorMessage from "../../ui/ErrorMessage";
 import Toaster from "../../ui/Toaster";
 import { getAllAttendance } from "../../apis/fontApis";
+import DailyAttendanceLogger from "../../components/DailyAttendanceLogger";
+import WeeklyAttendanceChart from "../../components/WeeklyAttendanceChart";
 
 const Attendance = () => {
+  const [viewMode, setViewMode] = useState("logger");
   const [attendance, setAttendance] = useState([]);
   const [filteredAttendance, setFilteredAttendance] = useState([]);
   const [isLoading, setIsLoading] = useState(false);
@@ -343,7 +346,35 @@ const Attendance = () => {
           />
         )}
 
-        {/* Stats Cards */}
+        {/* View Switcher Tabs */}
+        <div className="flex items-center gap-2 border-b border-[#E2E8F0] pb-2">
+          <button
+            onClick={() => setViewMode("logger")}
+            className={`px-4 py-2 text-sm font-semibold rounded-xl transition-all ${
+              viewMode === "logger"
+                ? "bg-[#002185] text-white shadow-xs"
+                : "text-[#64748B] hover:text-[#002185] hover:bg-[#F8FAFC]"
+            }`}
+          >
+            Daily Check-In Tracker
+          </button>
+          <button
+            onClick={() => setViewMode("records")}
+            className={`px-4 py-2 text-sm font-semibold rounded-xl transition-all ${
+              viewMode === "records"
+                ? "bg-[#002185] text-white shadow-xs"
+                : "text-[#64748B] hover:text-[#002185] hover:bg-[#F8FAFC]"
+            }`}
+          >
+            All Attendance Records
+          </button>
+        </div>
+
+        {viewMode === "logger" ? (
+          <DailyAttendanceLogger />
+        ) : (
+          <>
+            {/* Stats Cards */}
         <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-6 gap-4">
           <div className="relative overflow-hidden rounded-xl border border-[#E2E8F0] bg-[#FFFFFF] p-4 shadow-sm hover:shadow-md transition-all duration-300">
             <div className="absolute top-0 left-0 right-0 h-1" />
@@ -447,6 +478,13 @@ const Attendance = () => {
             </div>
           </div>
         </div>
+
+        {/* Weekly Attendance Trends Chart Section */}
+        <WeeklyAttendanceChart
+          attendanceLogs={attendance}
+          title="Weekly Attendance & Punctuality Overview"
+          subtitle="Real-time Recharts bar chart tracking employee attendance, on-time rates, and check-in volumes"
+        />
 
         {/* Filters */}
         <div className="flex flex-col lg:flex-row items-start lg:items-center gap-4 bg-[#FFFFFF] rounded-xl border border-[#E2E8F0] p-4 shadow-sm">
@@ -700,6 +738,8 @@ const Attendance = () => {
             </div>
           )}
         </div>
+          </>
+        )}
       </div>
 
       {/* Details Modal */}

@@ -13,5 +13,8 @@
     "dev": "npm run build:frontend && node backend/server.js",
     "start": "node backend/server.js",
     "lint": "npm run lint --workspace=client"
+  },
+  "dependencies": {
+    "recharts": "^3.10.1"
   }
 }

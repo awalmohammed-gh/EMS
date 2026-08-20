@@ -62,4 +62,6 @@ const leaveSchema = new mongoose.Schema(
   },
 );
 
-export const Leave = mongoose.models.Leave || mongoose.model("Leave", leaveSchema);
+export const Leave =
+  mongoose.models.Leave ||
+  mongoose.model("Leave", leaveSchema, "leave_requests");

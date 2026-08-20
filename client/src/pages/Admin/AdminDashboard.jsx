@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import { useNavigate } from "react-router-dom";
 import { adminDashboardOverview } from "../../apis/fontApis";
 import {
   Users,
@@ -7,12 +8,12 @@ import {
   Building2,
   Clock,
   BanknoteIcon,
-
 } from "lucide-react";
 import Loading from "../../ui/Loading";
 import ErrorMessage from "../../ui/ErrorMessage";
 
 const AdminDashboard = () => {
+  const navigate = useNavigate();
   const [dashboardData, setDashboardData] = useState(null);
   const [isLoading, setIsLoading] = useState(false);
   const [isError, setIsError] = useState(null);
@@ -86,6 +87,7 @@ const AdminDashboard = () => {
       icon: Users,
       color: "bg-[#002185]",
       textColor: "text-[#002185]",
+      link: "/admin/employees",
     },
     {
       title: "Present Today",
@@ -93,6 +95,7 @@ const AdminDashboard = () => {
       icon: UserCheck,
       color: "bg-[#16A34A]",
       textColor: "text-[#16A34A]",
+      link: "/admin/attendance",
     },
     {
       title: "On Leave",
@@ -100,13 +103,15 @@ const AdminDashboard = () => {
       icon: CalendarCheck,
       color: "bg-[#F59E0B]",
       textColor: "text-[#F59E0B]",
+      link: "/admin/leave",
     },
     {
       title: "Pending Leaves",
       value: dashboardData.cards?.pendingLeaves || 0,
       icon: Clock,
-      color: "bg-[#8B5CF6]",
-      textColor: "text-[#8B5CF6]",
+      color: "bg-[#ff5500]",
+      textColor: "text-[#ff5500]",
+      link: "/admin/leave",
     },
   ];
 
@@ -138,7 +143,8 @@ const AdminDashboard = () => {
           return (
             <div
               key={index}
-              className="bg-[#FFFFFF] border border-[#E2E8F0] rounded-xl p-6 shadow-sm hover:shadow-lg transition-all duration-300 group"
+              onClick={() => stat.link && navigate(stat.link)}
+              className="bg-[#FFFFFF] border border-[#E2E8F0] rounded-xl p-6 shadow-sm hover:shadow-lg hover:border-[#ff5500] transition-all duration-300 group cursor-pointer"
             >
               <div className="flex items-center justify-between">
                 <div>

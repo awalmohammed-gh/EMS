@@ -1,5 +1,4 @@
-import { useState } from "react";
-// import { payslips } from "../../assets/data";
+import { useState, useEffect } from "react";
 import {
   Search,
   User,
@@ -7,14 +6,15 @@ import {
   Calendar,
   Clock,
   FileText,
-  MoreVertical,
-  BanknoteIcon,
   Eye,
+  Calculator,
+  BanknoteIcon,
+  MoreVertical,
 } from "lucide-react";
 import { useManagement } from "../../context/ManagementContextProvider";
 import PayslipsModal from "../../components/modal/PayslipsModal";
+import PayrollSummaryCalculator from "../../components/PayrollSummaryCalculator";
 import { getAllPayslips } from "../../apis/fontApis";
-import { useEffect } from "react";
 import Loading from "../../ui/Loading";
 import ErrorMessage from "../../ui/ErrorMessage";
 
@@ -22,6 +22,7 @@ const Payslips = () => {
   const [search, setSearch] = useState("");
   const [filterStatus, setFilterStatus] = useState("All");
   const [filterMonth, setFilterMonth] = useState("All Months");
+  const [showCalculator, setShowCalculator] = useState(true);
   const { showPayslipsModal, setShowPayslipsModal } = useManagement();
   const [payslips, setPayslips] = useState([]);
   const [isLoading, setIsLoading] = useState(false);
@@ -215,6 +216,13 @@ const Payslips = () => {
             </p>
           </div>
           <div className="flex items-center gap-3">
+            <button
+              onClick={() => setShowCalculator(!showCalculator)}
+              className="px-3.5 py-2.5 bg-[#F8FAFC] border border-[#002185] text-[#002185] hover:bg-[#002185] hover:text-white rounded-lg transition-all duration-200 text-xs font-bold flex items-center gap-2 shadow-xs cursor-pointer"
+            >
+              <Calculator className="w-4 h-4 text-[#ff5500]" />
+              {showCalculator ? "Hide Calculator" : "Payroll Summary Calculator"}
+            </button>
             <div className="text-sm text-[#64748B] bg-[#FFFFFF] px-4 py-2 rounded-lg border border-[#E2E8F0] shadow-sm flex items-center gap-2">
               <Calendar className="h-4 w-4 text-[#ff5500]" />
               <span className="font-medium text-[#002185]">
@@ -230,6 +238,15 @@ const Payslips = () => {
             </button>
           </div>
         </div>
+
+        {/* Dynamic Payroll & Attendance-based Monthly Summary Calculator */}
+        {showCalculator && (
+          <PayrollSummaryCalculator
+            onApplyCalculatedValues={(calculatedData) => {
+              setShowPayslipsModal(true);
+            }}
+          />
+        )}
 
         {/* Error Message */}
         {error && (

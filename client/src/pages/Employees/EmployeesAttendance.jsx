@@ -25,6 +25,7 @@ import {
   getEmployeeAttendance,
   getNowAttendance,
 } from "../../apis/fontApis";
+import WeeklyAttendanceChart from "../../components/WeeklyAttendanceChart";
 
 const EmployeesAttendance = () => {
   // Today's attendance
@@ -68,11 +69,19 @@ const EmployeesAttendance = () => {
             status: data.attendance.status || null,
             workHours: data.attendance.workHours || 0,
           });
+        } else {
+          setAttendanceData({
+            date: new Date().toISOString().split("T")[0],
+            clockIn: null,
+            clockOut: null,
+            status: null,
+            workHours: 0,
+          });
         }
 
         // Update clock in/out status
-        setHasClockedIn(data.hasClockedIn || false);
-        setHasClockedOut(data.hasClockedOut || false);
+        setHasClockedIn(Boolean(data.hasClockedIn || data.attendance?.clockIn));
+        setHasClockedOut(Boolean(data.hasClockedOut || data.attendance?.clockOut));
       } else {
         setError(data.message || "Failed to fetch attendance.");
         setShowToast({
@@ -622,6 +631,13 @@ const EmployeesAttendance = () => {
                 </div>
               </div>
             </div>
+
+            {/* Weekly Attendance Trends Visualizer */}
+            <WeeklyAttendanceChart
+              attendanceLogs={attendanceHistory}
+              title="My Weekly Attendance & Punctuality Trends"
+              subtitle="Recharts bar chart analyzing your on-time check-ins, tardiness, and total logged hours"
+            />
 
             {/* Attendance History */}
             <div>
