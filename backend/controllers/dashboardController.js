@@ -8,6 +8,7 @@ import {
   getEmployeeLiveToday,
   liveAttendanceStore,
 } from "./employeeAttendance.js";
+import { liveLeaveStore } from "./leaveController.js";
 
 // Admin dashboard overview
 export const getDashboardOverview = async (req, res) => {
@@ -232,3 +233,158 @@ export const employeeDashboardOverview = async (req, res) => {
     });
   }
 };
+
+// Dashboard Alerts & System Notifications
+export const getDashboardNotifications = async (req, res) => {
+  try {
+    const role = req.headers["x-role"] || req.query.role || "admin";
+    const userEmployeeId = req.employee?.id || req.headers["x-employee-id"] || "demo_employee_id_001";
+
+    let pendingLeaves = [];
+
+    // 1. Fetch pending leaves from DB if available
+    try {
+      const dbPending = await Leave.find({ status: "Pending" })
+        .populate("employee", "fullName employeeId department position")
+        .sort({ createdAt: -1 })
+        .lean();
+
+      if (dbPending && dbPending.length > 0) {
+        pendingLeaves = dbPending;
+      }
+    } catch (err) {
+      console.warn("DB fetch fallback for leave notifications:", err.message);
+    }
+
+    // Combine with in-memory pending leaves if not already present
+    if (liveLeaveStore && liveLeaveStore.length > 0) {
+      const inMemoryPending = liveLeaveStore.filter((l) => l.status === "Pending");
+      inMemoryPending.forEach((item) => {
+        if (!pendingLeaves.some((p) => String(p._id) === String(item._id))) {
+          pendingLeaves.push(item);
+        }
+      });
+    }
+
+    // Format Leave Notifications
+    const leaveNotifications = pendingLeaves.map((item) => {
+      const empName = item.employee?.fullName || "An Employee";
+      const empDept = item.employee?.department ? ` (${item.employee.department})` : "";
+      const days = item.totalDays || 1;
+      const leaveType = item.leaveType || "Leave";
+      const reasonSnippet = item.reason ? ` - "${item.reason.length > 50 ? item.reason.slice(0, 47) + "..." : item.reason}"` : "";
+
+      return {
+        id: `leave_${item._id}`,
+        type: "leave_request",
+        category: "leave",
+        title: `New ${leaveType} Request`,
+        message: `${empName}${empDept} requested ${days} day${days > 1 ? "s" : ""} from ${item.startDate} to ${item.endDate}${reasonSnippet}`,
+        timestamp: item.createdAt || new Date().toISOString(),
+        priority: "high",
+        unread: true,
+        actionUrl: role === "admin" ? "/admin/dashboard/leave" : "/employee/dashboard/leave",
+        actionLabel: role === "admin" ? "Review Leave" : "View Status",
+        metadata: {
+          leaveId: item._id,
+          employeeName: empName,
+          leaveType,
+          totalDays: days,
+          startDate: item.startDate,
+          endDate: item.endDate,
+        },
+      };
+    });
+
+    // Curated System Updates & Operational Alerts
+    const systemUpdates = [
+      {
+        id: "sys_update_001",
+        type: "system_update",
+        category: "system",
+        title: "August 2026 Payroll Cycle Processed",
+        message: "Payroll calculations and automated net disbursements for August 2026 have been generated and reconciled.",
+        timestamp: new Date(Date.now() - 3600000 * 2).toISOString(),
+        priority: "medium",
+        unread: true,
+        actionUrl: role === "admin" ? "/admin/dashboard/payslips" : "/employee/dashboard/payslips",
+        actionLabel: "View Payslips",
+        metadata: {
+          period: "August 2026",
+          status: "Processed",
+        },
+      },
+      {
+        id: "sys_update_002",
+        type: "system_update",
+        category: "announcement",
+        title: "Company Holiday Notice: Founders' Day",
+        message: "Statutory public holiday scheduled on September 21, 2026. Normal operations resume the following business day.",
+        timestamp: new Date(Date.now() - 3600000 * 7).toISOString(),
+        priority: "info",
+        unread: true,
+        actionUrl: role === "admin" ? "/admin/dashboard" : "/employee/dashboard",
+        actionLabel: "View Calendar",
+        metadata: {
+          holidayDate: "2026-09-21",
+        },
+      },
+      {
+        id: "sys_update_003",
+        type: "system_update",
+        category: "security",
+        title: "Security & Role Policy Update",
+        message: "Two-factor authentication standards and session timeout rules have been updated for administrative personnel.",
+        timestamp: new Date(Date.now() - 86400000 * 1).toISOString(),
+        priority: "info",
+        unread: false,
+        actionUrl: role === "admin" ? "/admin/dashboard/settings" : "/employee/dashboard/settings",
+        actionLabel: "View Settings",
+        metadata: {
+          policy: "Security 2.4",
+        },
+      },
+      {
+        id: "sys_update_004",
+        type: "attendance_alert",
+        category: "attendance",
+        title: "Daily Attendance Reconciliation",
+        message: "Morning check-in report finalized. 88% overall on-time staff attendance recorded for today's active roster.",
+        timestamp: new Date(Date.now() - 3600000 * 4).toISOString(),
+        priority: "low",
+        unread: true,
+        actionUrl: role === "admin" ? "/admin/dashboard/attendance" : "/employee/dashboard/attendance",
+        actionLabel: "Attendance Log",
+        metadata: {
+          rate: "88%",
+        },
+      },
+    ];
+
+    // Combine and sort by timestamp descending
+    const allNotifications = [...leaveNotifications, ...systemUpdates].sort(
+      (a, b) => new Date(b.timestamp) - new Date(a.timestamp),
+    );
+
+    const unreadCount = allNotifications.filter((n) => n.unread).length;
+
+    return res.status(200).json({
+      success: true,
+      notifications: allNotifications,
+      unreadCount,
+      counts: {
+        total: allNotifications.length,
+        leaves: leaveNotifications.length,
+        system: systemUpdates.length,
+        unread: unreadCount,
+      },
+    });
+  } catch (error) {
+    console.error("getDashboardNotifications error:", error);
+    return res.status(500).json({
+      success: false,
+      message: error.message || "Failed to retrieve notifications",
+    });
+  }
+};
+

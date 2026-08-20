@@ -14,7 +14,10 @@ import {
   PhoneCall,
   X,
   ChevronRight,
+  Download,
+  FileSpreadsheet,
 } from "lucide-react";
+import { exportEmployeesToCSV } from "../utils/exportCsv";
 
 export const EmployeeDirectory = ({
   employees = [],
@@ -27,6 +30,8 @@ export const EmployeeDirectory = ({
   const [viewMode, setViewMode] = useState("grid"); // "grid" | "table"
   const [selectedEmployee, setSelectedEmployee] = useState(null);
   const [copiedField, setCopiedField] = useState(null);
+  const [isExporting, setIsExporting] = useState(false);
+  const [exportSuccess, setExportSuccess] = useState(false);
 
   // Extract unique departments and statuses
   const departments = useMemo(() => {
@@ -82,6 +87,34 @@ export const EmployeeDirectory = ({
       .size;
     return { total, active, onLeave, deptsCount };
   }, [employees]);
+
+  const handleExportCSV = () => {
+    try {
+      setIsExporting(true);
+      const isFiltered =
+        Boolean(search) ||
+        selectedDepartment !== "All" ||
+        selectedStatus !== "All";
+
+      const listToExport =
+        filteredEmployees.length > 0 ? filteredEmployees : employees;
+
+      const dateTag = new Date().toISOString().split("T")[0];
+      const filename = isFiltered
+        ? `employee_directory_filtered_${dateTag}.csv`
+        : `employee_directory_all_${dateTag}.csv`;
+
+      const success = exportEmployeesToCSV(listToExport, filename);
+      if (success) {
+        setExportSuccess(true);
+        setTimeout(() => setExportSuccess(false), 2500);
+      }
+    } catch (err) {
+      console.error("Export CSV error:", err);
+    } finally {
+      setIsExporting(false);
+    }
+  };
 
   const handleCopy = (text, fieldName) => {
     if (!text) return;
@@ -266,26 +299,68 @@ export const EmployeeDirectory = ({
                 <List className="w-4 h-4" />
               </button>
             </div>
+
+            {/* Download CSV Button */}
+            <button
+              type="button"
+              onClick={handleExportCSV}
+              disabled={isExporting || employees.length === 0}
+              title={`Download CSV export (${filteredEmployees.length} records)`}
+              className={`px-3 py-2 rounded-xl text-xs font-bold transition-all flex items-center gap-1.5 shrink-0 shadow-xs cursor-pointer disabled:opacity-50 ${
+                exportSuccess
+                  ? "bg-green-600 text-white border border-green-600"
+                  : "bg-[#F8FAFC] hover:bg-[#002185] text-[#002185] hover:text-white border border-[#E2E8F0] hover:border-[#002185]"
+              }`}
+            >
+              {exportSuccess ? (
+                <>
+                  <Check className="w-3.5 h-3.5 text-white" />
+                  <span>Exported!</span>
+                </>
+              ) : (
+                <>
+                  <Download className="w-3.5 h-3.5" />
+                  <span>Download CSV</span>
+                  <span className="ml-0.5 px-1.5 py-0.2 rounded-full text-[10px] bg-black/10 text-current">
+                    {filteredEmployees.length}
+                  </span>
+                </>
+              )}
+            </button>
           </div>
         </div>
 
         {/* Filter tags summary */}
         {(search || selectedDepartment !== "All" || selectedStatus !== "All") && (
-          <div className="mt-3 flex items-center justify-between text-xs text-[#64748B] bg-[#F8FAFC] p-2 rounded-lg border border-[#E2E8F0]">
-            <span>
-              Showing <strong className="text-[#002185]">{filteredEmployees.length}</strong> matching results of {employees.length} total staff
-            </span>
-            <button
-              type="button"
-              onClick={() => {
-                setSearch("");
-                setSelectedDepartment("All");
-                setSelectedStatus("All");
-              }}
-              className="text-[#ff5500] hover:underline font-semibold cursor-pointer"
-            >
-              Reset Filters
-            </button>
+          <div className="mt-3 flex items-center justify-between text-xs text-[#64748B] bg-[#F8FAFC] p-2.5 rounded-xl border border-[#E2E8F0]">
+            <div className="flex items-center gap-2">
+              <FileSpreadsheet className="w-3.5 h-3.5 text-[#002185]" />
+              <span>
+                Showing <strong className="text-[#002185]">{filteredEmployees.length}</strong> matching results of {employees.length} total staff
+              </span>
+            </div>
+            <div className="flex items-center gap-3">
+              <button
+                type="button"
+                onClick={handleExportCSV}
+                className="text-[#002185] hover:text-[#ff5500] font-bold cursor-pointer inline-flex items-center gap-1 text-[11px]"
+              >
+                <Download className="w-3 h-3" />
+                Export Filtered View
+              </button>
+              <span className="text-[#CBD5E1]">|</span>
+              <button
+                type="button"
+                onClick={() => {
+                  setSearch("");
+                  setSelectedDepartment("All");
+                  setSelectedStatus("All");
+                }}
+                className="text-[#ff5500] hover:underline font-semibold cursor-pointer"
+              >
+                Clear Filters
+              </button>
+            </div>
           </div>
         )}
       </div>

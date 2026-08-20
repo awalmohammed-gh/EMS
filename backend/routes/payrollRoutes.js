@@ -5,6 +5,10 @@ import {
   employeePayslips,
   generatePayroll,
   calculateMonthlyPayrollSummary,
+  getPayrollById,
+  updatePayrollStatus,
+  deletePayroll,
+  exportPayrollReport,
 } from "../controllers/payrollController.js";
 import { employeeAuth } from "../middleware/employeeAuth.js";
 
@@ -17,8 +21,22 @@ payrollRouter.get("/admin/calculate-summary", verifyAdmin, calculateMonthlyPayro
 // Payroll generation & listing
 payrollRouter.post("/generate", verifyAdmin, generatePayroll);
 payrollRouter.get("/payslips", verifyAdmin, allPayslips);
+payrollRouter.get("/list", verifyAdmin, allPayslips);
+
+// Payroll export reports
+payrollRouter.get("/export", verifyAdmin, exportPayrollReport);
 
 // Employee payslips
 payrollRouter.get("/employee-payslip", employeeAuth, employeePayslips);
 
+// Single payroll record details (by ID or payslipNumber)
+payrollRouter.get("/payslip/:id", getPayrollById);
+payrollRouter.get("/details/:id", getPayrollById);
+payrollRouter.get("/:id", getPayrollById);
+
+// Update status and deletion
+payrollRouter.put("/status/:id", verifyAdmin, updatePayrollStatus);
+payrollRouter.delete("/:id", verifyAdmin, deletePayroll);
+
 export default payrollRouter;
+

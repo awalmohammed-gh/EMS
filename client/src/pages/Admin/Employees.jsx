@@ -1,9 +1,10 @@
 import { useState, useEffect } from "react";
-import { UserPlus, RefreshCw } from "lucide-react";
+import { UserPlus, RefreshCw, Download, Check } from "lucide-react";
 import { allEmployees } from "../../apis/fontApis";
 import { EmployeeDirectory } from "../../components/EmployeeDirectory";
 import AddEmployee from "../../components/modal/AddEmployee";
 import { useManagement } from "../../context/ManagementContextProvider";
+import { exportEmployeesToCSV } from "../../utils/exportCsv";
 import ErrorMessage from "../../ui/ErrorMessage";
 import Loading from "../../ui/Loading";
 
@@ -12,22 +13,54 @@ const Employees = () => {
   const [employees, setEmployees] = useState([]);
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState(null);
+  const [isExporting, setIsExporting] = useState(false);
+  const [exportSuccess, setExportSuccess] = useState(false);
 
   const fetchEmployees = async () => {
     try {
       setIsLoading(true);
       setError(null);
-      const { data } = await allEmployees();
-      if (data.success && Array.isArray(data.employees)) {
-        setEmployees(data.employees);
+      const res = await allEmployees();
+      const data = res?.data;
+
+      if (data && (data.success || Array.isArray(data.employees) || Array.isArray(data))) {
+        const list = Array.isArray(data.employees)
+          ? data.employees
+          : Array.isArray(data)
+          ? data
+          : data.list || [];
+        setEmployees(list);
       } else {
-        setError(data.message || "Failed to fetch employee directory.");
+        setError(data?.message || "Failed to fetch employee directory.");
       }
     } catch (err) {
-      setError(err.response?.data?.message || err.message || "An error occurred while fetching employees.");
+      setError(
+        err.response?.data?.message ||
+          err.message ||
+          "An error occurred while fetching employees."
+      );
       console.error("fetchEmployees error:", err);
     } finally {
       setIsLoading(false);
+    }
+  };
+
+  const handleDownloadAllCSV = () => {
+    if (!employees || employees.length === 0) return;
+    try {
+      setIsExporting(true);
+      const success = exportEmployeesToCSV(
+        employees,
+        `eyenit_employee_records_${new Date().toISOString().split("T")[0]}.csv`
+      );
+      if (success) {
+        setExportSuccess(true);
+        setTimeout(() => setExportSuccess(false), 2500);
+      }
+    } catch (err) {
+      console.error("Download CSV error:", err);
+    } finally {
+      setIsExporting(false);
     }
   };
 
@@ -53,7 +86,31 @@ const Employees = () => {
           </p>
         </div>
 
-        <div className="flex items-center gap-2.5">
+        <div className="flex flex-wrap items-center gap-2.5">
+          <button
+            type="button"
+            onClick={handleDownloadAllCSV}
+            disabled={isExporting || employees.length === 0}
+            title="Download complete employee directory CSV"
+            className={`px-3.5 py-2.5 rounded-xl border text-xs font-bold transition-all flex items-center gap-2 shadow-xs cursor-pointer disabled:opacity-50 ${
+              exportSuccess
+                ? "bg-green-600 text-white border-green-600"
+                : "border-[#E2E8F0] hover:border-[#002185] text-[#002185] bg-white hover:bg-[#F8FAFC]"
+            }`}
+          >
+            {exportSuccess ? (
+              <>
+                <Check className="w-3.5 h-3.5 text-white" />
+                <span>CSV Exported!</span>
+              </>
+            ) : (
+              <>
+                <Download className="w-3.5 h-3.5" />
+                <span>Download CSV</span>
+              </>
+            )}
+          </button>
+
           <button
             type="button"
             onClick={fetchEmployees}

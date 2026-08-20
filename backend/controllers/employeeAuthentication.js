@@ -1,6 +1,8 @@
 import jwt from "jsonwebtoken";
 import bcrypt from "bcryptjs";
+import mongoose from "mongoose";
 import { Employee } from "../models/employeeModel.js";
+import { initialEmployeeDirectory } from "./employeeController.js";
 
 // Create Employee Account
 export const createEmployeeAccount = async (req, res) => {
@@ -33,8 +35,15 @@ export const createEmployeeAccount = async (req, res) => {
       });
     }
 
-    // Check if email already exists
-    const existingEmail = await Employee.findOne({ email });
+    // Check if email or employee ID already exists
+    let existingEmail = null;
+    let existingEmployeeId = null;
+    try {
+      existingEmail = await Employee.findOne({ email });
+      existingEmployeeId = await Employee.findOne({ employeeId });
+    } catch (dbErr) {
+      console.warn("DB check in createEmployeeAccount:", dbErr.message);
+    }
 
     if (existingEmail) {
       return res.status(409).json({
@@ -42,9 +51,6 @@ export const createEmployeeAccount = async (req, res) => {
         message: "Email already exists.",
       });
     }
-
-    // Check if employee ID already exists
-    const existingEmployeeId = await Employee.findOne({ employeeId });
 
     if (existingEmployeeId) {
       return res.status(409).json({
@@ -57,29 +63,72 @@ export const createEmployeeAccount = async (req, res) => {
     const hashedPassword = await bcrypt.hash(password, 10);
 
     // Create employee
-    const employee = await Employee.create({
+    let employee = null;
+    try {
+      employee = await Employee.create({
+        employeeId,
+        fullName,
+        email,
+        password: hashedPassword,
+        phone,
+        department,
+        position,
+        employmentDate,
+        role: "employee",
+      });
+    } catch (dbErr) {
+      console.warn("DB create in createEmployeeAccount fallback:", dbErr.message);
+      employee = {
+        _id: new mongoose.Types.ObjectId().toString(),
+        employeeId,
+        fullName,
+        email,
+        phone,
+        department,
+        position,
+        employmentType: "Full-time",
+        employmentDate: new Date(employmentDate),
+        role: "employee",
+        isActive: true,
+        status: "Active",
+        location: "Accra Head Office",
+        createdAt: new Date(),
+        updatedAt: new Date(),
+      };
+    }
+
+    // Also add to memory directory for instant visibility
+    const memEntry = {
+      _id: employee._id?.toString() || new mongoose.Types.ObjectId().toString(),
       employeeId,
       fullName,
       email,
-      password: hashedPassword,
       phone,
       department,
       position,
-      employmentDate,
+      employmentType: "Full-time",
+      employmentDate: new Date(employmentDate),
       role: "employee",
-    });
+      isActive: true,
+      status: "Active",
+      location: "Accra Head Office",
+      createdAt: new Date(),
+      updatedAt: new Date(),
+    };
+    if (!initialEmployeeDirectory.some((e) => e.employeeId === employeeId || e.email === email)) {
+      initialEmployeeDirectory.unshift(memEntry);
+    }
 
     res.status(201).json({
       success: true,
       message: "Employee account created successfully.",
-      employee
+      employee,
     });
   } catch (error) {
-    console.error(error);
-
+    console.error("Error creating employee account:", error);
     res.status(500).json({
       success: false,
-      message: "Internal server error.",
+      message: error.message || "Internal server error.",
     });
   }
 };

@@ -17,19 +17,19 @@ const AdminSidebar = () => {
     { name: "Dashboard", path: "/admin/dashboard", icon: LayoutDashboardIcon },
     { name: "Employees", path: "/admin/dashboard/employees", icon: UsersIcon },
     { name: "Attendance", path: "/admin/dashboard/attendance", icon: UsersIcon },
-    { name: "Payslips", path: "/admin/dashboard/payslips", icon: FileTextIcon },
+    { name: "Payroll", path: "/admin/dashboard/payroll", icon: FileTextIcon },
     { name: "Leave", path: "/admin/dashboard/leave", icon: CalendarIcon },
     { name: "Settings", path: "/admin/dashboard/settings", icon: SettingsIcon },
   ];
-
- 
 
   return (
     <Sidebar>
       {/* Navigation Links */}
       <div className="flex-1 space-y-1.5">
         {adminLinks.map((link) => {
-          const isActive = pathname === link.path;
+          const isActive =
+            pathname === link.path ||
+            (link.path === "/admin/dashboard/payroll" && pathname === "/admin/dashboard/payslips");
           return (
             <Link
               key={link.name}

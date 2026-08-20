@@ -11,6 +11,7 @@ import {
 } from "lucide-react";
 import Loading from "../../ui/Loading";
 import ErrorMessage from "../../ui/ErrorMessage";
+import NotificationBell from "../../components/NotificationBell";
 
 const AdminDashboard = () => {
   const navigate = useNavigate();
@@ -118,21 +119,31 @@ const AdminDashboard = () => {
   return (
     <div className="space-y-8">
       {/* Header */}
-      <div className="flex items-center justify-between">
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 bg-white p-6 rounded-2xl border border-[#E2E8F0] shadow-xs">
         <div>
-          <h1 className="text-3xl font-bold text-[#002185]">Dashboard</h1>
-          <p className="text-[#64748B] mt-1">
-            Welcome back! Here's an overview of your system.
+          <h1 className="text-2xl sm:text-3xl font-bold text-[#002185] tracking-tight">
+            Dashboard
+          </h1>
+          <p className="text-sm text-[#64748B] mt-1">
+            Welcome back! Here&apos;s an overview of your organization and workforce.
           </p>
         </div>
-        <div className="text-sm text-[#64748B] bg-[#FFFFFF] px-4 py-2 rounded-lg border border-[#E2E8F0] transition-colors duration-300">
-          Last updated:{" "}
-          {new Date().toLocaleDateString("en-GH", {
-            weekday: "short",
-            year: "numeric",
-            month: "short",
-            day: "numeric",
-          })}
+
+        <div className="flex items-center gap-3 self-end sm:self-auto">
+          {/* Notification Bell with Leave Requests and System Alerts */}
+          <NotificationBell role="admin" />
+
+          <div className="text-xs sm:text-sm text-[#64748B] bg-[#F8FAFC] px-3.5 py-2.5 rounded-xl border border-[#E2E8F0] font-medium flex items-center gap-2 shadow-xs">
+            <span className="w-2 h-2 rounded-full bg-[#16A34A] animate-pulse"></span>
+            <span>
+              {new Date().toLocaleDateString("en-GH", {
+                weekday: "short",
+                year: "numeric",
+                month: "short",
+                day: "numeric",
+              })}
+            </span>
+          </div>
         </div>
       </div>
 

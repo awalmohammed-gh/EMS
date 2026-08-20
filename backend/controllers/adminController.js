@@ -36,6 +36,7 @@ export const adminLogin = async (req, res) => {
     res.status(200).json({
       success: true,
       message: "Login successful.",
+      token,
     });
   } catch (error) {
     console.error(error);
@@ -64,6 +65,32 @@ export const adminLogout = async (req, res) => {
     res.status(500).json({
       success: false,
       message: "Something went wrong.",
+    });
+  }
+};
+
+// function to get admin profile details
+export const getAdminProfile = async (req, res) => {
+  try {
+    const adminEmail = process.env.ADMIN_EMAIL || "admin@eyenit.com";
+    const adminName = process.env.ADMIN_NAME || "System Administrator";
+
+    res.status(200).json({
+      success: true,
+      admin: {
+        id: "admin_001",
+        fullName: adminName,
+        email: adminEmail,
+        role: "admin",
+        department: "Executive Management",
+        position: "Principal System Administrator",
+        avatar: "",
+      },
+    });
+  } catch (error) {
+    res.status(500).json({
+      success: false,
+      message: error.message,
     });
   }
 };

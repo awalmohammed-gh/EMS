@@ -2,8 +2,14 @@ import mongoose from "mongoose";
 import { Leave } from "../models/leaveModel.js";
 import { Employee } from "../models/employeeModel.js";
 
+const isValidObjectId = (id) =>
+  id &&
+  typeof id === "string" &&
+  mongoose.Types.ObjectId.isValid(id) &&
+  String(new mongoose.Types.ObjectId(id)) === String(id);
+
 // In-memory reactive store for newly submitted and managed leaves
-const liveLeaveStore = [
+export const liveLeaveStore = [
   {
     _id: "leave_003",
     leaveType: "Annual Leave",
@@ -94,7 +100,7 @@ const liveLeaveStore = [
 // Helper to get employee info
 const resolveEmployeeInfo = async (employeeIdOrObj) => {
   try {
-    if (employeeIdOrObj && typeof employeeIdOrObj === "string" && employeeIdOrObj !== "demo_employee_id_001") {
+    if (employeeIdOrObj && typeof employeeIdOrObj === "string" && isValidObjectId(employeeIdOrObj)) {
       const emp = await Employee.findById(employeeIdOrObj).select("fullName employeeId department position").lean();
       if (emp) return emp;
     }
@@ -148,24 +154,26 @@ export const applyLeave = async (req, res) => {
 
     let savedLeave = null;
 
-    // 1. Attempt writing to MongoDB
-    try {
-      const doc = await Leave.create({
-        employee: employeeInfo._id,
-        leaveType,
-        startDate: start,
-        endDate: end,
-        totalDays: days,
-        reason,
-        status: "Pending",
-      });
+    // 1. Attempt writing to MongoDB if valid ObjectId
+    if (isValidObjectId(employeeInfo._id)) {
+      try {
+        const doc = await Leave.create({
+          employee: employeeInfo._id,
+          leaveType,
+          startDate: start,
+          endDate: end,
+          totalDays: days,
+          reason,
+          status: "Pending",
+        });
 
-      if (doc) {
-        savedLeave = doc.toObject ? doc.toObject() : doc;
-        savedLeave.employee = employeeInfo;
+        if (doc) {
+          savedLeave = doc.toObject ? doc.toObject() : doc;
+          savedLeave.employee = employeeInfo;
+        }
+      } catch (dbErr) {
+        console.warn("Database storage fallback in applyLeave:", dbErr.message);
       }
-    } catch (dbErr) {
-      console.warn("Database storage fallback in applyLeave:", dbErr.message);
     }
 
     // 2. If DB is unavailable or on memory fallback, generate consistent leave record

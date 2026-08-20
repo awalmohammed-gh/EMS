@@ -25,6 +25,15 @@ app.use(
   cors({
     origin: true,
     credentials: true,
+    methods: ["GET", "POST", "PUT", "DELETE", "PATCH", "OPTIONS"],
+    allowedHeaders: [
+      "Content-Type",
+      "Authorization",
+      "x-admin-token",
+      "x-employee-token",
+      "X-Requested-With",
+      "Accept",
+    ],
   })
 );
 app.use(cookieParser());
@@ -36,8 +45,11 @@ await connectMongodb();
 
 // api endpoints
 app.use("/api/employee", employeeRouter);
+app.use("/api/employees", employeeRouter);
 app.use("/api/admin", adminRouter);
 app.use("/api/pay", payrollRouter);
+app.use("/api/payroll", payrollRouter);
+app.use("/api/payslips", payrollRouter);
 app.use("/api/attendance", attendanceRouter);
 app.use("/api/dashboard", dashboardRouter);
 app.use("/api/leave", leaveRouter);

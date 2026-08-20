@@ -235,3 +235,35 @@ export const getEmployeeById = async (req, res) => {
     });
   }
 };
+
+// get logged-in employee profile for /me endpoint
+export const getCurrentLoggedInEmployee = async (req, res) => {
+  try {
+    const rawId = req.employee?.id || "demo_employee_id_001";
+    let employee = null;
+
+    if (mongoose.Types.ObjectId.isValid(rawId) && String(new mongoose.Types.ObjectId(rawId)) === String(rawId)) {
+      employee = await Employee.findById(rawId).select("-password").lean();
+    } else {
+      employee = await Employee.findOne({
+        $or: [{ employeeId: req.employee?.employeeId || rawId }, { email: rawId }],
+      }).select("-password").lean();
+    }
+
+    if (!employee) {
+      employee = initialEmployeeDirectory.find(
+        (e) => String(e._id) === String(rawId) || e.employeeId === (req.employee?.employeeId || rawId)
+      ) || initialEmployeeDirectory[0];
+    }
+
+    res.status(200).json({
+      success: true,
+      employee,
+    });
+  } catch (error) {
+    res.status(500).json({
+      success: false,
+      message: error.message,
+    });
+  }
+};

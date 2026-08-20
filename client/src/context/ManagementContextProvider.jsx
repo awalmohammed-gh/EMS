@@ -1,99 +1,231 @@
-import { createContext, useContext, useState } from "react"
-
+import { createContext, useContext, useState, useEffect, useCallback } from "react";
+import { getAdminMe, getEmployee, adminLogout, employeeLogout } from "../apis/fontApis";
 
 const ManagementContext = createContext();
-export const ManagementContextProvider = ({children}) => {
 
-  const [showEmployeeModal, setShowEmployeeModal] = useState(false)
+export const ManagementContextProvider = ({ children }) => {
+  const [showEmployeeModal, setShowEmployeeModal] = useState(false);
   const [showPayslipsModal, setShowPayslipsModal] = useState(false);
   const [showToast, setShowToast] = useState({
-    message:"",
-    show:false,
-    type:"success"
-  })
+    message: "",
+    show: false,
+    type: "success",
+  });
 
+  // Role and User state
+  const [role, setRole] = useState(() => {
+    if (typeof window !== "undefined") {
+      return localStorage.getItem("userRole") || "admin";
+    }
+    return "admin";
+  });
 
-    const clockIn = ({ attendanceData, setAttendanceData }) => {
-      // Prevent multiple clock-ins
-      if (attendanceData.clockIn) {
-       setShowToast("You have already clocked in today.");
-       return;
+  const [user, setUser] = useState(() => {
+    if (typeof window !== "undefined") {
+      try {
+        const storedRole = localStorage.getItem("userRole") || "admin";
+        if (storedRole === "employee") {
+          const storedEmp = localStorage.getItem("employeeData");
+          if (storedEmp) return JSON.parse(storedEmp);
+        } else {
+          const storedAdmin = localStorage.getItem("adminData");
+          if (storedAdmin) return JSON.parse(storedAdmin);
+        }
+      } catch (e) {
+        console.warn("Error reading stored user:", e);
       }
-
-      const now = new Date();
-
-      const currentDate = now.toISOString().split("T")[0];
-
-      const currentTime = now.toLocaleTimeString("en-US", {
-        hour: "2-digit",
-        minute: "2-digit",
-        hour12: false,
-      });
-
-      // Official start time: 8:30 AM
-      const startTime = new Date();
-      startTime.setHours(8, 30, 0, 0);
-
-      const status = now <= startTime ? "On Time" : "Late";
-
-      setAttendanceData({
-        date: currentDate,
-        clockIn: currentTime,
-        clockOut: null,
-        status,
-        workHours: 0,
-      });
-
-     setShowToast("You have successfully clocked in.");
-     return;
+    }
+    return {
+      fullName: "System Administrator",
+      email: "admin@eyenit.com",
+      role: "admin",
+      department: "Executive Management",
+      position: "Principal Administrator",
+      avatar: "",
     };
+  });
 
-    const clockOut = ({ attendanceData, setAttendanceData }) => {
-      // Employee must clock in first
-      if (!attendanceData.clockIn) {
-        setShowToast("You have not clocked in yet.");
-        return;
+  const [isLoadingUser, setIsLoadingUser] = useState(false);
+
+  // Fetch current logged in user from backend based on role
+  const fetchCurrentUser = useCallback(async (currentRole = role) => {
+    try {
+      setIsLoadingUser(true);
+      const activeRole = currentRole || localStorage.getItem("userRole") || "admin";
+      setRole(activeRole);
+
+      if (activeRole === "employee") {
+        const res = await getEmployee();
+        if (res?.data?.success && res.data.employee) {
+          const empData = res.data.employee;
+          setUser(empData);
+          localStorage.setItem("employeeData", JSON.stringify(empData));
+        }
+      } else {
+        const res = await getAdminMe();
+        if (res?.data?.success && res.data.admin) {
+          const adminData = res.data.admin;
+          setUser(adminData);
+          localStorage.setItem("adminData", JSON.stringify(adminData));
+        }
       }
-
-      // Prevent multiple clock-outs
-      if (attendanceData.clockOut) {
-        setShowToast("You have already clocked out today.");
-        return;
+    } catch (err) {
+      console.warn("fetchCurrentUser fallback:", err.message);
+      // Fallback defaults if offline / network issue
+      if ((currentRole || role) === "employee") {
+        const fallbackEmp = {
+          fullName: "Kwame Mensah",
+          email: "kwame.mensah@eyenit.com",
+          employeeId: "EMP001",
+          department: "Software Engineering",
+          position: "Senior Fullstack Engineer",
+          role: "employee",
+          avatar: "",
+        };
+        setUser((prev) => prev?.fullName ? prev : fallbackEmp);
+      } else {
+        const fallbackAdmin = {
+          fullName: "System Administrator",
+          email: "admin@eyenit.com",
+          role: "admin",
+          department: "Executive Management",
+          position: "Principal Administrator",
+          avatar: "",
+        };
+        setUser((prev) => prev?.fullName ? prev : fallbackAdmin);
       }
+    } finally {
+      setIsLoadingUser(false);
+    }
+  }, [role]);
 
-      const now = new Date();
+  // Initial load
+  useEffect(() => {
+    fetchCurrentUser();
+  }, [fetchCurrentUser]);
 
-      const currentTime = now.toLocaleTimeString("en-US", {
-        hour: "2-digit",
-        minute: "2-digit",
-        hour12: false,
+  // Logout handler
+  const handleUserLogout = async (targetRole = role) => {
+    try {
+      if (targetRole === "admin") {
+        await adminLogout();
+      } else {
+        await employeeLogout();
+      }
+    } catch (e) {
+      console.warn("Logout error:", e.message);
+    } finally {
+      localStorage.removeItem("token");
+      localStorage.removeItem("adminToken");
+      localStorage.removeItem("employeeToken");
+      localStorage.removeItem("employeeData");
+      localStorage.removeItem("adminData");
+      setShowToast({
+        show: true,
+        message: "You have been logged out successfully.",
+        type: "success",
       });
+    }
+  };
 
-      // Get clock-in time
-      const [hours, minutes] = attendanceData.clockIn.split(":").map(Number);
-
-      const clockInTime = new Date();
-
-      clockInTime.setHours(hours, minutes, 0, 0);
-
-      // Calculate work hours
-      const millisecondsWorked = now.getTime() - clockInTime.getTime();
-
-      const workHours = millisecondsWorked / (1000 * 60 * 60);
-
-      const formattedWorkHours = Number(workHours.toFixed(2));
-
-      setAttendanceData((prev) => ({
-        ...prev,
-        clockOut: currentTime,
-        workHours: formattedWorkHours,
-      }));
-
-      setShowToast("You have successfully clocked out.");
+  const clockIn = ({ attendanceData, setAttendanceData }) => {
+    // Prevent multiple clock-ins
+    if (attendanceData.clockIn) {
+      setShowToast({
+        show: true,
+        message: "You have already clocked in today.",
+        type: "error",
+      });
       return;
-    };
+    }
+
+    const now = new Date();
+    const currentDate = now.toISOString().split("T")[0];
+    const currentTime = now.toLocaleTimeString("en-US", {
+      hour: "2-digit",
+      minute: "2-digit",
+      hour12: false,
+    });
+
+    // Official start time: 8:30 AM
+    const startTime = new Date();
+    startTime.setHours(8, 30, 0, 0);
+    const status = now <= startTime ? "On Time" : "Late";
+
+    setAttendanceData({
+      date: currentDate,
+      clockIn: currentTime,
+      clockOut: null,
+      status,
+      workHours: 0,
+    });
+
+    setShowToast({
+      show: true,
+      message: "You have successfully clocked in.",
+      type: "success",
+    });
+  };
+
+  const clockOut = ({ attendanceData, setAttendanceData }) => {
+    // Employee must clock in first
+    if (!attendanceData.clockIn) {
+      setShowToast({
+        show: true,
+        message: "You have not clocked in yet.",
+        type: "error",
+      });
+      return;
+    }
+
+    // Prevent multiple clock-outs
+    if (attendanceData.clockOut) {
+      setShowToast({
+        show: true,
+        message: "You have already clocked out today.",
+        type: "error",
+      });
+      return;
+    }
+
+    const now = new Date();
+    const currentTime = now.toLocaleTimeString("en-US", {
+      hour: "2-digit",
+      minute: "2-digit",
+      hour12: false,
+    });
+
+    // Get clock-in time
+    const [hours, minutes] = attendanceData.clockIn.split(":").map(Number);
+    const clockInTime = new Date();
+    clockInTime.setHours(hours, minutes, 0, 0);
+
+    // Calculate work hours
+    const millisecondsWorked = now.getTime() - clockInTime.getTime();
+    const workHours = millisecondsWorked / (1000 * 60 * 60);
+    const formattedWorkHours = Number(workHours.toFixed(2));
+
+    setAttendanceData((prev) => ({
+      ...prev,
+      clockOut: currentTime,
+      workHours: formattedWorkHours,
+    }));
+
+    setShowToast({
+      show: true,
+      message: "You have successfully clocked out.",
+      type: "success",
+    });
+  };
 
   const value = {
+    user,
+    setUser,
+    role,
+    setRole,
+    isLoadingUser,
+    fetchCurrentUser,
+    logout: handleUserLogout,
     showEmployeeModal,
     setShowEmployeeModal,
     showPayslipsModal,
@@ -103,19 +235,19 @@ export const ManagementContextProvider = ({children}) => {
     showToast,
     setShowToast,
   };
+
   return (
     <ManagementContext.Provider value={value}>
-       {children}
+      {children}
     </ManagementContext.Provider>
-  )
-}
+  );
+};
 
 export const useManagement = () => {
-   const context = useContext(ManagementContext);
+  const context = useContext(ManagementContext);
+  if (!context) {
+    throw new Error("Check your context provider");
+  }
+  return context;
+};
 
-   if(!context){
-    throw new Error("Check your context provider")
-   }
-
-   return context;
-}

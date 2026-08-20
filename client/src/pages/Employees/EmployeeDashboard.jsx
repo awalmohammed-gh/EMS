@@ -26,6 +26,7 @@ import ErrorMessage from "../../ui/ErrorMessage";
 import { useManagement } from "../../context/ManagementContextProvider";
 import { useNavigate } from "react-router-dom";
 import { employeeProfile } from "../../assets/employeesData";
+import NotificationBell from "../../components/NotificationBell";
 
 const EmployeeDashboard = () => {
   const [dashboardData, setDashboardData] = useState(null);
@@ -449,8 +450,11 @@ const EmployeeDashboard = () => {
             </div>
           </div>
           <div className="flex items-center gap-3">
+            {/* Notification Bell */}
+            <NotificationBell role="employee" />
+
             <span
-              className={`px-3 py-1 rounded-full text-xs font-medium ${
+              className={`px-3 py-1.5 rounded-full text-xs font-semibold ${
                 employee.isActive
                   ? "bg-[#16A34A] text-white"
                   : "bg-[#64748B] text-white"
@@ -458,8 +462,8 @@ const EmployeeDashboard = () => {
             >
               {employee.isActive ? "Active" : "Inactive"}
             </span>
-            <span className="text-sm text-[#64748B] bg-[#F8FAFC] px-3 py-1 rounded-lg border border-[#E2E8F0]">
-              ID: {employee.employeeId || employee._id?.slice(-6) || "N/A"}
+            <span className="text-sm text-[#64748B] bg-[#F8FAFC] px-3 py-1.5 rounded-xl border border-[#E2E8F0] font-medium">
+              ID: {employee.employeeId || employee._id?.slice(-6) || "EMP001"}
             </span>
           </div>
         </div>

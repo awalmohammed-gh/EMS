@@ -72,6 +72,10 @@ const LoginForm = ({ role, title, subtitle }) => {
       if (data.success) {
         if (typeof window !== "undefined") {
           localStorage.setItem("userRole", "admin");
+          if (data.token) {
+            localStorage.setItem("token", data.token);
+            localStorage.setItem("adminToken", data.token);
+          }
         }
         setShowToast({
           show: true,
@@ -201,6 +205,13 @@ const LoginForm = ({ role, title, subtitle }) => {
       if (data.success) {
         if (typeof window !== "undefined") {
           localStorage.setItem("userRole", "employee");
+          if (data.token) {
+            localStorage.setItem("token", data.token);
+            localStorage.setItem("employeeToken", data.token);
+          }
+          if (data.employee) {
+            localStorage.setItem("employeeData", JSON.stringify(data.employee));
+          }
         }
         setShowToast({
           show: true,
@@ -293,14 +304,12 @@ const LoginForm = ({ role, title, subtitle }) => {
             <h2 className="text-2xl font-bold text-[#002185] tracking-tight">
               {isSignUp && role === "admin"
                 ? "Create Employee Account"
-                : role === "admin"}
+                : title || (role === "admin" ? "Admin Portal" : "Employee Portal")}
             </h2>
             <p className="text-[#64748B] mt-2">
               {isSignUp && role === "admin"
                 ? "Register a new employee with their credentials"
-                : role === "admin"
-                  ? adminSubtitle
-                  : employeeSubtitle}
+                : subtitle || (role === "admin" ? adminSubtitle : employeeSubtitle)}
             </p>
           </div>
 

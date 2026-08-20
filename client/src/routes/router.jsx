@@ -60,6 +60,7 @@ export const router = createBrowserRouter(
           <Route path="attendance" element={<Attendance />} />
           <Route path="employees" element={<Employees />} />
           <Route path="leave" element={<Leave />} />
+          <Route path="payroll" element={<Payslips />} />
           <Route path="payslips" element={<Payslips />} />
           <Route path="settings" element={<Settings />} />
         </Route>

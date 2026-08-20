@@ -13,10 +13,10 @@ import { namesList, payrollGenerate, calculatePayrollSummary } from "../../apis/
 import { useManagement } from "../../context/ManagementContextProvider";
 import Loading from "../../ui/Loading";
 
-export const PayslipsModal = ({ onClose }) => {
+export const PayslipsModal = ({ onClose, onSuccess }) => {
   const [payslipForm, setPayslipForm] = useState({
     employeeId: "",
-    month: "2026-08",
+    month: "August 2026",
     paymentDate: new Date().toISOString().split("T")[0],
     basicSalary: "",
     allowances: "",
@@ -143,6 +143,7 @@ export const PayslipsModal = ({ onClose }) => {
           type: "success",
           show: true,
         });
+        if (onSuccess) onSuccess();
         onClose();
       } else {
         setShowToast({
