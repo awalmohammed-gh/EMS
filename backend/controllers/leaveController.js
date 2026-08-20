@@ -1,6 +1,7 @@
 import mongoose from "mongoose";
 import { Leave } from "../models/leaveModel.js";
 import { Employee } from "../models/employeeModel.js";
+import { createNotificationRecord } from "./notificationController.js";
 
 const isValidObjectId = (id) =>
   id &&
