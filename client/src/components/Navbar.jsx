@@ -1,6 +1,7 @@
 import { useState, useRef, useEffect } from "react";
 import { useLocation, useNavigate, Link } from "react-router-dom";
 import {
+  Menu,
   User,
   Settings,
   LogOut,
@@ -17,9 +18,25 @@ import NotificationBell from "./NotificationBell";
 export const Navbar = ({ role: propsRole }) => {
   const location = useLocation();
   const navigate = useNavigate();
-  const { user, role: contextRole, logout } = useManagement();
+  const {
+    user,
+    role: contextRole,
+    logout,
+    isSidebarOpen,
+    isMobileSidebarOpen,
+    toggleSidebar,
+    toggleMobileSidebar,
+  } = useManagement();
   const [isProfileMenuOpen, setIsProfileMenuOpen] = useState(false);
   const profileMenuRef = useRef(null);
+
+  const handleSidebarToggle = () => {
+    if (typeof toggleSidebar === "function") {
+      toggleSidebar();
+    } else if (typeof toggleMobileSidebar === "function") {
+      toggleMobileSidebar();
+    }
+  };
 
   // Active role can be passed via props or retrieved from context/pathname
   const role =
@@ -30,14 +47,16 @@ export const Navbar = ({ role: propsRole }) => {
 
   // Derive current page context name from pathname
   const getPageTitle = () => {
-    const path = location.pathname;
-    if (path.includes("/attendance")) return "Attendance & Timesheet";
-    if (path.includes("/employees")) return "Employee Directory";
+    const path = location.pathname.toLowerCase();
+    if (path.includes("/attendance")) return "Attendance";
+    if (path.includes("/employees")) return "Employees";
     if (path.includes("/leave")) return "Leave Management";
-    if (path.includes("/payroll") || path.includes("/payslips")) return "Payroll & Payslips";
-    if (path.includes("/settings")) return "System Settings";
-    if (path === "/admin/dashboard" || path === "/employee/dashboard") return "Dashboard Overview";
-    return "Dashboard";
+    if (path.includes("/payroll") || path.includes("/payslips")) return "Payslips";
+    if (path.includes("/settings")) return "Settings";
+    if (path === "/admin/dashboard" || path === "/employee/dashboard" || path.endsWith("/dashboard") || path.endsWith("/dashboard/")) {
+      return "Dashboard Overview";
+    }
+    return "Dashboard Overview";
   };
 
   // Close dropdown on click outside
@@ -66,21 +85,40 @@ export const Navbar = ({ role: propsRole }) => {
     navigate("/welcome");
   };
 
-  // Fallback initial helper
-  const getAvatarInitials = (name) => {
-    if (!name) return isAdmin ? "A" : "U";
-    const parts = name.trim().split(" ");
-    if (parts.length >= 2) {
-      return `${parts[0][0]}${parts[1][0]}`.toUpperCase();
-    }
-    return name.slice(0, 2).toUpperCase();
-  };
+  // Profile data resolution
+  const isUserAdmin =
+    isAdmin || user?.role === "admin" || user?.role === "super_admin";
 
-  const displayName = user?.fullName || (isAdmin ? "System Administrator" : "Employee");
-  const displayEmail = user?.email || (isAdmin ? "admin@eyenit.com" : "employee@eyenit.com");
-  const displayRole = isAdmin ? "Administrator" : "Employee";
-  const displayDept = user?.department || (isAdmin ? "Executive Management" : "Operations");
-  const displayPosition = user?.position || (isAdmin ? "Principal Administrator" : "Staff Member");
+  const rawName = (
+    user?.full_name ||
+    user?.fullName ||
+    user?.name ||
+    ""
+  ).trim();
+  const displayEmail = user?.email || "";
+
+  // Primary heading and subtitle resolution based on user role
+  const displayName = isUserAdmin
+    ? "Super Admin"
+    : rawName || "Staff Member";
+
+  const displaySubtitle = isUserAdmin ? "" : displayEmail;
+
+  const avatarUrl =
+    user?.avatar ||
+    user?.profile_image_url ||
+    user?.profile_picture ||
+    `https://ui-avatars.com/api/?name=${encodeURIComponent(
+      displayName
+    )}&background=${isUserAdmin ? "002185" : "ff5500"}&color=fff&bold=true`;
+
+  // Secondary descriptive tag (Admin View: Role | Employee View: Position / Staff Member)
+  const displayRoleLabel = isUserAdmin
+    ? "Super Admin"
+    : user?.position || user?.role || "Staff Member";
+
+  const displayDepartment =
+    user?.department || (isUserAdmin ? "Executive Office" : "");
 
   return (
     <header
@@ -90,8 +128,21 @@ export const Navbar = ({ role: propsRole }) => {
     >
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
         <div className="flex items-center justify-between h-16">
-          {/* Left: Page Title / Breadcrumb / Context */}
-          <div className="flex items-center gap-3 pl-12 lg:pl-0">
+          {/* Left Section: Mobile Menu Toggle + Breadcrumbs/Page Context */}
+          <div className="flex items-center gap-3">
+            {/* Hamburger / Menu Icon Button (Visible on mobile and tablet screen sizes < 1024px) */}
+            <button
+              id="mobile-sidebar-toggle-btn"
+              type="button"
+              onClick={handleSidebarToggle}
+              aria-expanded={isSidebarOpen ?? isMobileSidebarOpen}
+              aria-controls="mobile-sidebar-drawer-panel"
+              className="lg:hidden inline-flex items-center justify-center p-2.5 -ml-1.5 rounded-xl border border-[#E2E8F0] bg-white hover:bg-[#F8FAFC] text-[#002185] hover:border-[#002185] transition-all cursor-pointer shadow-xs focus:outline-none focus:ring-2 focus:ring-[#002185]/20 shrink-0"
+              aria-label="Toggle navigation drawer"
+            >
+              <Menu className="w-5 h-5" />
+            </button>
+
             <div>
               <div className="flex items-center gap-2">
                 <span
@@ -106,33 +157,27 @@ export const Navbar = ({ role: propsRole }) => {
                   ) : (
                     <User className="w-3 h-3 text-[#ff5500]" />
                   )}
-                  {displayRole}
+                  {displayRoleLabel}
                 </span>
                 <span className="hidden sm:inline text-xs text-[#94A3B8]">•</span>
                 <span className="hidden sm:inline text-xs font-semibold text-[#64748B]">
-                  {displayDept}
+                  {displayDepartment}
                 </span>
               </div>
-              <h1 className="text-base sm:text-lg font-bold text-[#0F172A] tracking-tight truncate max-w-[200px] sm:max-w-xs md:max-w-md">
+              <h1 className="text-base sm:text-lg font-bold text-[#0F172A] tracking-tight truncate max-w-[170px] sm:max-w-xs md:max-w-md">
                 {getPageTitle()}
               </h1>
             </div>
           </div>
 
-          {/* Right Section: Date Badge + Notification Bell + User Profile */}
-          <div className="flex items-center gap-2.5 sm:gap-4">
-            {/* Quick Status / Portal Tag (Desktop) */}
-            <div className="hidden md:flex items-center gap-2 px-3 py-1.5 rounded-xl bg-[#F8FAFC] border border-[#E2E8F0] text-xs text-[#64748B]">
-              <span className="w-2 h-2 rounded-full bg-[#16A34A] animate-pulse"></span>
-              <span className="font-semibold text-[#002185]">{displayDept}</span>
+          {/* Right Section: Notification Bell + User Profile */}
+          <div className="flex items-center gap-2 sm:gap-3.5">
+            {/* Notification Bell (placed to the left of the user profile badge) */}
+            <div className="relative shrink-0">
+              <NotificationBell role={role} userId={user?.id || user?._id || user?.employeeId} />
             </div>
 
-            {/* Notification Bell with live unread badge */}
-            <div className="relative">
-              <NotificationBell role={role} />
-            </div>
-
-            {/* User Profile Trigger & Dropdown */}
+            {/* User Profile Badge Trigger & Dropdown */}
             <div className="relative" ref={profileMenuRef}>
               <button
                 id="user-profile-menu-trigger"
@@ -140,47 +185,35 @@ export const Navbar = ({ role: propsRole }) => {
                 onClick={() => setIsProfileMenuOpen(!isProfileMenuOpen)}
                 aria-expanded={isProfileMenuOpen}
                 aria-haspopup="true"
-                className={`flex items-center gap-2 sm:gap-3 p-1 sm:px-2.5 sm:py-1.5 rounded-xl border transition-all duration-200 cursor-pointer ${
+                className={`flex items-center gap-2 sm:gap-2.5 p-1 sm:px-2.5 sm:py-1.5 rounded-xl border transition-all duration-200 cursor-pointer ${
                   isProfileMenuOpen
                     ? "bg-[#F8FAFC] border-[#002185] shadow-xs"
                     : "bg-white border-[#E2E8F0] hover:bg-[#F8FAFC] hover:border-[#CBD5E1]"
                 }`}
               >
-                {/* User Profile Avatar / Image with Fallback Initial */}
-                <div className="relative">
-                  {user?.avatar ? (
-                    <img
-                      src={user.avatar}
-                      alt={displayName}
-                      className="w-8 h-8 sm:w-9 sm:h-9 rounded-xl object-cover border border-[#E2E8F0] shadow-xs"
-                    />
-                  ) : (
-                    <div
-                      className={`w-8 h-8 sm:w-9 sm:h-9 rounded-xl flex items-center justify-center text-white text-xs font-bold shadow-xs ${
-                        isAdmin
-                          ? "bg-gradient-to-tr from-[#002185] to-[#0A3BB8]"
-                          : "bg-gradient-to-tr from-[#ff5500] to-[#FF7733]"
-                      }`}
-                    >
-                      {getAvatarInitials(displayName)}
-                    </div>
-                  )}
+                {/* Avatar with Live Status Indicator */}
+                <div className="relative shrink-0">
+                  <img
+                    src={avatarUrl}
+                    alt={displayName}
+                    className="w-8 h-8 sm:w-9 sm:h-9 rounded-xl object-cover border border-[#E2E8F0] shadow-xs"
+                  />
                   <span className="absolute -bottom-0.5 -right-0.5 w-2.5 h-2.5 bg-[#16A34A] border-2 border-white rounded-full"></span>
                 </div>
 
-                {/* Name & Title (Desktop) */}
-                <div className="hidden sm:block text-left max-w-[130px] md:max-w-[160px]">
+                {/* User Info: Top Line = Full Name, Bottom Line = Email Address */}
+                <div className="hidden sm:block text-left max-w-[130px] md:max-w-[170px] lg:max-w-[200px]">
                   <p className="text-xs font-bold text-[#0F172A] truncate leading-tight">
                     {displayName}
                   </p>
-                  <p className="text-[11px] text-[#64748B] truncate leading-tight">
-                    {displayPosition}
+                  <p className="text-[11px] text-[#64748B] font-medium truncate leading-tight mt-0.5" title={displayEmail}>
+                    {displayEmail || "user@organization.com"}
                   </p>
                 </div>
 
                 {/* Dropdown Chevron */}
                 <ChevronDown
-                  className={`w-4 h-4 text-[#64748B] transition-transform duration-200 ${
+                  className={`w-4 h-4 text-[#64748B] transition-transform duration-200 shrink-0 ${
                     isProfileMenuOpen ? "rotate-180 text-[#002185]" : ""
                   }`}
                 />
@@ -197,23 +230,11 @@ export const Navbar = ({ role: propsRole }) => {
                   {/* Dropdown Header Card */}
                   <div className="px-4 py-3 border-b border-[#F1F5F9] bg-[#F8FAFC]">
                     <div className="flex items-center gap-3">
-                      {user?.avatar ? (
-                        <img
-                          src={user.avatar}
-                          alt={displayName}
-                          className="w-11 h-11 rounded-xl object-cover border border-[#E2E8F0]"
-                        />
-                      ) : (
-                        <div
-                          className={`w-11 h-11 rounded-xl flex items-center justify-center text-white text-sm font-bold shadow-xs ${
-                            isAdmin
-                              ? "bg-[#002185]"
-                              : "bg-[#ff5500]"
-                          }`}
-                        >
-                          {getAvatarInitials(displayName)}
-                        </div>
-                      )}
+                      <img
+                        src={avatarUrl}
+                        alt={displayName}
+                        className="w-11 h-11 rounded-xl object-cover border border-[#E2E8F0] shrink-0"
+                      />
                       <div className="min-w-0 flex-1">
                         <p className="text-sm font-bold text-[#0F172A] truncate">
                           {displayName}
@@ -229,7 +250,7 @@ export const Navbar = ({ role: propsRole }) => {
                                 : "bg-[#ff5500] text-white"
                             }`}
                           >
-                            {displayRole}
+                            {displayRoleLabel}
                           </span>
                           <span className="text-[10px] text-[#64748B] font-medium flex items-center gap-1">
                             <CheckCircle2 className="w-3 h-3 text-[#16A34A]" />
@@ -248,7 +269,7 @@ export const Navbar = ({ role: propsRole }) => {
                         Department
                       </span>
                       <span className="font-semibold text-[#0F172A]">
-                        {displayDept}
+                        {displayDepartment}
                       </span>
                     </div>
                     {user?.employeeId && (

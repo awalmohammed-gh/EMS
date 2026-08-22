@@ -4,37 +4,47 @@ import { Employee } from "../models/employeeModel.js";
 import { Leave } from "../models/leaveModel.js";
 import { Payroll } from "../models/payrollModel.js";
 import {
-  fallbackEmployee,
   getEmployeeLiveToday,
   liveAttendanceStore,
 } from "./employeeAttendance.js";
 import { liveLeaveStore } from "./leaveController.js";
+import { getNotifications } from "./notificationController.js";
+
+const isValidObjectId = (id) =>
+  id &&
+  typeof id === "string" &&
+  mongoose.Types.ObjectId.isValid(id) &&
+  String(new mongoose.Types.ObjectId(id)) === String(id);
 
 // Admin dashboard overview
 export const getDashboardOverview = async (req, res) => {
   try {
     const today = new Date().toISOString().split("T")[0];
 
-    let totalEmployees = 6;
-    let presentToday = 4;
-    let lateToday = 1;
-    let onLeave = 1;
-    let absentToday = 1;
-    let totalRequests = 4;
-    let approvedLeaves = 2;
-    let pendingLeaves = 1;
-    let rejectedLeaves = 1;
+    let totalEmployees = 0;
+    let presentToday = 0;
+    let lateToday = 0;
+    let onLeave = 0;
+    let absentToday = 0;
+    let totalRequests = 0;
+    let approvedLeaves = 0;
+    let pendingLeaves = 0;
+    let rejectedLeaves = 0;
     let payroll = {
-      totalPayroll: 32500,
-      paidPayroll: 25000,
-      pendingPayroll: 7500,
+      totalPayroll: 0,
+      paidPayroll: 0,
+      pendingPayroll: 0,
     };
-    let departments = [
-      { _id: "Software Engineering", total: 3 },
-      { _id: "Administrative", total: 1 },
-      { _id: "Large Format", total: 1 },
-      { _id: "Digital Marketing", total: 1 },
+    let departments = [];
+    let attendanceTrends = [
+      { day: "Mon", present: 0, late: 0, absent: 0, onLeave: 0 },
+      { day: "Tue", present: 0, late: 0, absent: 0, onLeave: 0 },
+      { day: "Wed", present: 0, late: 0, absent: 0, onLeave: 0 },
+      { day: "Thu", present: 0, late: 0, absent: 0, onLeave: 0 },
+      { day: "Fri", present: 0, late: 0, absent: 0, onLeave: 0 },
     ];
+    let leaveTypeDistribution = [];
+    let pendingApprovalsList = [];
 
     try {
       totalEmployees = await Employee.countDocuments({ isActive: true });
@@ -57,6 +67,38 @@ export const getDashboardOverview = async (req, res) => {
       approvedLeaves = await Leave.countDocuments({ status: "Approved" });
       pendingLeaves = await Leave.countDocuments({ status: "Pending" });
       rejectedLeaves = await Leave.countDocuments({ status: "Rejected" });
+
+      attendanceTrends = [
+        { day: "Mon", present: presentToday, late: lateToday, absent: absentToday, onLeave },
+        { day: "Tue", present: presentToday, late: lateToday, absent: absentToday, onLeave },
+        { day: "Wed", present: presentToday, late: lateToday, absent: absentToday, onLeave },
+        { day: "Thu", present: presentToday, late: lateToday, absent: absentToday, onLeave },
+        { day: "Fri", present: presentToday, late: lateToday, absent: absentToday, onLeave },
+      ];
+
+      // Gather real pending leaves for visual approvals tracker
+      const dbPendingLeaves = await Leave.find({ status: "Pending" })
+        .populate("employee", "fullName department position employeeId")
+        .sort({ createdAt: -1 })
+        .limit(6)
+        .lean();
+
+      if (dbPendingLeaves && dbPendingLeaves.length > 0) {
+        pendingApprovalsList = dbPendingLeaves;
+      }
+
+      // Group leave by type
+      const leaveTypeCounts = await Leave.aggregate([
+        { $group: { _id: "$leaveType", count: { $sum: 1 } } },
+      ]);
+      if (leaveTypeCounts.length > 0) {
+        const colors = ["#002185", "#ff5500", "#16A34A", "#8B5CF6", "#F59E0B", "#06B6D4"];
+        leaveTypeDistribution = leaveTypeCounts.map((item, idx) => ({
+          name: item._id || "Other",
+          value: item.count,
+          fill: colors[idx % colors.length],
+        }));
+      }
 
       const payrollSummary = await Payroll.aggregate([
         {
@@ -87,8 +129,29 @@ export const getDashboardOverview = async (req, res) => {
         departments = dbDepartments;
       }
     } catch (dbErr) {
-      console.warn("Using fallback data for admin dashboard:", dbErr.message);
+      console.warn("DB query for admin dashboard:", dbErr.message);
     }
+
+    // Merge in-memory pending leaves if not in list
+    if (liveLeaveStore && liveLeaveStore.length > 0) {
+      const inMemoryPending = liveLeaveStore.filter((l) => l.status === "Pending");
+      inMemoryPending.forEach((item) => {
+        if (!pendingApprovalsList.some((p) => String(p._id) === String(item._id))) {
+          pendingApprovalsList.unshift(item);
+        }
+      });
+      pendingLeaves = liveLeaveStore.filter((l) => l.status === "Pending").length || pendingLeaves;
+      totalRequests = Math.max(totalRequests, liveLeaveStore.length);
+      approvedLeaves = liveLeaveStore.filter((l) => l.status === "Approved").length || approvedLeaves;
+      rejectedLeaves = liveLeaveStore.filter((l) => l.status === "Rejected").length || rejectedLeaves;
+    }
+
+    // Dynamic leave status breakdown for charts
+    const leaveStatusData = [
+      { name: "Approved", value: approvedLeaves, fill: "#16A34A" },
+      { name: "Pending", value: pendingLeaves, fill: "#ff5500" },
+      { name: "Rejected", value: rejectedLeaves, fill: "#DC2626" },
+    ];
 
     res.status(200).json({
       success: true,
@@ -101,9 +164,9 @@ export const getDashboardOverview = async (req, res) => {
         },
         payroll: {
           totalEmployees,
-          totalPayroll: payroll.totalPayroll,
-          paid: payroll.paidPayroll,
-          pending: payroll.pendingPayroll,
+          totalPayroll: payroll.totalPayroll || 0,
+          paid: payroll.paidPayroll || 0,
+          pending: payroll.pendingPayroll || 0,
         },
         attendance: {
           totalEmployees,
@@ -118,6 +181,10 @@ export const getDashboardOverview = async (req, res) => {
           pending: pendingLeaves,
           rejected: rejectedLeaves,
         },
+        attendanceTrends,
+        leaveStatusData,
+        leaveTypeDistribution,
+        pendingApprovalsList,
         departments,
       },
     });
@@ -132,44 +199,41 @@ export const getDashboardOverview = async (req, res) => {
 // Employee dashboard overview
 export const employeeDashboardOverview = async (req, res) => {
   try {
-    const rawEmployeeId = req.employee?.id || req.employee?._id || fallbackEmployee._id;
+    const rawEmployeeId = req.employee?.id || req.employee?._id;
     const today = new Date().toISOString().split("T")[0];
 
-    let employee = fallbackEmployee;
-    let presentDays = 20;
-    let lateDays = 2;
-    let leaveBalance = 14;
-    let latestPayslip = {
-      month: "August 2026",
-      amount: 4500,
-      netSalary: 4500,
-    };
+    let employee = null;
+    let presentDays = 0;
+    let lateDays = 0;
+    let leaveBalance = 15;
+    let latestPayslip = null;
+    let recentLeaves = [];
+    let todayAttendance = null;
 
-    // Check live in-memory attendance first
-    let todayAttendance = getEmployeeLiveToday(rawEmployeeId, today);
+    if (rawEmployeeId) {
+      todayAttendance = getEmployeeLiveToday(rawEmployeeId, today);
+    }
 
     try {
       let dbEmployee = null;
       let validObjectId = null;
 
-      if (mongoose.Types.ObjectId.isValid(rawEmployeeId) && String(new mongoose.Types.ObjectId(rawEmployeeId)) === String(rawEmployeeId)) {
+      if (isValidObjectId(rawEmployeeId)) {
         validObjectId = rawEmployeeId;
         dbEmployee = await Employee.findById(rawEmployeeId)
           .select("fullName email department position isActive employeeId phone")
           .lean();
-      } else {
-        // Query by employeeId or email if rawEmployeeId is string identifier
+      } else if (rawEmployeeId) {
         dbEmployee = await Employee.findOne({
           $or: [
             { employeeId: rawEmployeeId },
             { email: rawEmployeeId },
-            { employeeId: "EMP001" },
           ],
         })
           .select("fullName email department position isActive employeeId phone")
           .lean();
         if (dbEmployee && dbEmployee._id) {
-          validObjectId = dbEmployee._id;
+          validObjectId = dbEmployee._id.toString();
         }
       }
 
@@ -208,9 +272,38 @@ export const employeeDashboardOverview = async (req, res) => {
             netSalary: dbPayslip.netSalary,
           };
         }
+
+        // Query real leaves from DB
+        const dbLeaves = await Leave.find({ employee: validObjectId })
+          .sort({ createdAt: -1 })
+          .limit(5)
+          .lean();
+
+        if (dbLeaves && dbLeaves.length > 0) {
+          recentLeaves = dbLeaves;
+          const usedDays = dbLeaves
+            .filter((l) => l.status === "Approved")
+            .reduce((acc, curr) => acc + (curr.totalDays || curr.days || 0), 0);
+          leaveBalance = Math.max(0, 15 - usedDays);
+        }
+      }
+
+      // Merge in-memory live leave store items
+      if (liveLeaveStore && liveLeaveStore.length > 0 && employee) {
+        const matchingLive = liveLeaveStore.filter(
+          (l) =>
+            String(l.employee?._id) === String(rawEmployeeId) ||
+            String(l.employee?._id) === String(validObjectId) ||
+            l.employee?.employeeId === employee.employeeId
+        );
+        matchingLive.forEach((item) => {
+          if (!recentLeaves.some((r) => String(r._id) === String(item._id))) {
+            recentLeaves.unshift(item);
+          }
+        });
       }
     } catch (dbErr) {
-      console.warn("Using fallback data for employee dashboard:", dbErr.message);
+      console.warn("DB error in employee dashboard overview:", dbErr.message);
     }
 
     res.status(200).json({
@@ -220,11 +313,11 @@ export const employeeDashboardOverview = async (req, res) => {
         presentDays,
         lateDays,
         leaveBalance,
-        netSalary: latestPayslip ? latestPayslip.amount : 4500,
+        netSalary: latestPayslip ? latestPayslip.amount : 0,
         latestPayslip,
       },
       todayAttendance,
-      recentLeaves: [],
+      recentLeaves,
     });
   } catch (error) {
     res.status(500).json({
@@ -234,157 +327,8 @@ export const employeeDashboardOverview = async (req, res) => {
   }
 };
 
-// Dashboard Alerts & System Notifications
+// Dashboard Alerts & System Notifications (uses live DB/Reactive store - zero mock data)
 export const getDashboardNotifications = async (req, res) => {
-  try {
-    const role = req.headers["x-role"] || req.query.role || "admin";
-    const userEmployeeId = req.employee?.id || req.headers["x-employee-id"] || "demo_employee_id_001";
-
-    let pendingLeaves = [];
-
-    // 1. Fetch pending leaves from DB if available
-    try {
-      const dbPending = await Leave.find({ status: "Pending" })
-        .populate("employee", "fullName employeeId department position")
-        .sort({ createdAt: -1 })
-        .lean();
-
-      if (dbPending && dbPending.length > 0) {
-        pendingLeaves = dbPending;
-      }
-    } catch (err) {
-      console.warn("DB fetch fallback for leave notifications:", err.message);
-    }
-
-    // Combine with in-memory pending leaves if not already present
-    if (liveLeaveStore && liveLeaveStore.length > 0) {
-      const inMemoryPending = liveLeaveStore.filter((l) => l.status === "Pending");
-      inMemoryPending.forEach((item) => {
-        if (!pendingLeaves.some((p) => String(p._id) === String(item._id))) {
-          pendingLeaves.push(item);
-        }
-      });
-    }
-
-    // Format Leave Notifications
-    const leaveNotifications = pendingLeaves.map((item) => {
-      const empName = item.employee?.fullName || "An Employee";
-      const empDept = item.employee?.department ? ` (${item.employee.department})` : "";
-      const days = item.totalDays || 1;
-      const leaveType = item.leaveType || "Leave";
-      const reasonSnippet = item.reason ? ` - "${item.reason.length > 50 ? item.reason.slice(0, 47) + "..." : item.reason}"` : "";
-
-      return {
-        id: `leave_${item._id}`,
-        type: "leave_request",
-        category: "leave",
-        title: `New ${leaveType} Request`,
-        message: `${empName}${empDept} requested ${days} day${days > 1 ? "s" : ""} from ${item.startDate} to ${item.endDate}${reasonSnippet}`,
-        timestamp: item.createdAt || new Date().toISOString(),
-        priority: "high",
-        unread: true,
-        actionUrl: role === "admin" ? "/admin/dashboard/leave" : "/employee/dashboard/leave",
-        actionLabel: role === "admin" ? "Review Leave" : "View Status",
-        metadata: {
-          leaveId: item._id,
-          employeeName: empName,
-          leaveType,
-          totalDays: days,
-          startDate: item.startDate,
-          endDate: item.endDate,
-        },
-      };
-    });
-
-    // Curated System Updates & Operational Alerts
-    const systemUpdates = [
-      {
-        id: "sys_update_001",
-        type: "system_update",
-        category: "system",
-        title: "August 2026 Payroll Cycle Processed",
-        message: "Payroll calculations and automated net disbursements for August 2026 have been generated and reconciled.",
-        timestamp: new Date(Date.now() - 3600000 * 2).toISOString(),
-        priority: "medium",
-        unread: true,
-        actionUrl: role === "admin" ? "/admin/dashboard/payslips" : "/employee/dashboard/payslips",
-        actionLabel: "View Payslips",
-        metadata: {
-          period: "August 2026",
-          status: "Processed",
-        },
-      },
-      {
-        id: "sys_update_002",
-        type: "system_update",
-        category: "announcement",
-        title: "Company Holiday Notice: Founders' Day",
-        message: "Statutory public holiday scheduled on September 21, 2026. Normal operations resume the following business day.",
-        timestamp: new Date(Date.now() - 3600000 * 7).toISOString(),
-        priority: "info",
-        unread: true,
-        actionUrl: role === "admin" ? "/admin/dashboard" : "/employee/dashboard",
-        actionLabel: "View Calendar",
-        metadata: {
-          holidayDate: "2026-09-21",
-        },
-      },
-      {
-        id: "sys_update_003",
-        type: "system_update",
-        category: "security",
-        title: "Security & Role Policy Update",
-        message: "Two-factor authentication standards and session timeout rules have been updated for administrative personnel.",
-        timestamp: new Date(Date.now() - 86400000 * 1).toISOString(),
-        priority: "info",
-        unread: false,
-        actionUrl: role === "admin" ? "/admin/dashboard/settings" : "/employee/dashboard/settings",
-        actionLabel: "View Settings",
-        metadata: {
-          policy: "Security 2.4",
-        },
-      },
-      {
-        id: "sys_update_004",
-        type: "attendance_alert",
-        category: "attendance",
-        title: "Daily Attendance Reconciliation",
-        message: "Morning check-in report finalized. 88% overall on-time staff attendance recorded for today's active roster.",
-        timestamp: new Date(Date.now() - 3600000 * 4).toISOString(),
-        priority: "low",
-        unread: true,
-        actionUrl: role === "admin" ? "/admin/dashboard/attendance" : "/employee/dashboard/attendance",
-        actionLabel: "Attendance Log",
-        metadata: {
-          rate: "88%",
-        },
-      },
-    ];
-
-    // Combine and sort by timestamp descending
-    const allNotifications = [...leaveNotifications, ...systemUpdates].sort(
-      (a, b) => new Date(b.timestamp) - new Date(a.timestamp),
-    );
-
-    const unreadCount = allNotifications.filter((n) => n.unread).length;
-
-    return res.status(200).json({
-      success: true,
-      notifications: allNotifications,
-      unreadCount,
-      counts: {
-        total: allNotifications.length,
-        leaves: leaveNotifications.length,
-        system: systemUpdates.length,
-        unread: unreadCount,
-      },
-    });
-  } catch (error) {
-    console.error("getDashboardNotifications error:", error);
-    return res.status(500).json({
-      success: false,
-      message: error.message || "Failed to retrieve notifications",
-    });
-  }
+  return getNotifications(req, res);
 };
 

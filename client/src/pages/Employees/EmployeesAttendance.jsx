@@ -372,10 +372,22 @@ const EmployeesAttendance = () => {
             <div className="rounded-2xl border border-[#E2E8F0] bg-[#FFFFFF] p-6 shadow-sm hover:border-[#ff5500] transition-all duration-300">
               <div className="flex flex-col md:flex-row items-start md:items-center gap-4">
                 <div className="flex items-center gap-4">
-                  <div className="relative w-14 h-14 rounded-2xl bg-[#002185] flex items-center justify-center shadow-md ring-4 ring-[#002185]/10">
-                    <span className="text-xl font-bold text-white">
-                      {employee?.fullName?.charAt(0).toUpperCase() || "E"}
-                    </span>
+                  <div className="relative w-14 h-14 rounded-2xl overflow-hidden bg-[#002185] flex items-center justify-center shadow-md ring-4 ring-[#002185]/10 shrink-0">
+                    {employee?.avatar || employee?.profile_picture ? (
+                      <img
+                        src={employee.avatar || employee.profile_picture}
+                        alt={employee.fullName || "Employee"}
+                        className="w-full h-full object-cover"
+                      />
+                    ) : (
+                      <img
+                        src={`https://ui-avatars.com/api/?name=${encodeURIComponent(
+                          employee?.fullName || "Employee",
+                        )}&background=002185&color=fff&bold=true`}
+                        alt={employee?.fullName || "Employee"}
+                        className="w-full h-full object-cover"
+                      />
+                    )}
                     <span className="absolute -bottom-1 -right-1 w-4 h-4 rounded-full bg-[#16A34A] border-2 border-white" />
                   </div>
                   <div>

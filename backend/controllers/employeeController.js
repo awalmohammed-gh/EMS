@@ -1,150 +1,43 @@
 import { Employee } from "../models/employeeModel.js";
 import mongoose from "mongoose";
 
-// Initial staff directory records with full contact details, roles, and status
-export const initialEmployeeDirectory = [
-  {
-    _id: "66d000000000000000000001",
-    employeeId: "EMP001",
-    fullName: "Kwame Mensah",
-    email: "kwame.mensah@eyenit.com",
-    phone: "+233 24 123 4567",
-    department: "Software Engineering",
-    position: "Senior Fullstack Engineer",
-    employmentType: "Full-time",
-    employmentDate: new Date("2023-01-15"),
-    role: "employee",
-    isActive: true,
-    status: "Active",
-    location: "Accra Head Office",
-    emergencyContact: "+233 20 987 6543",
-  },
-  {
-    _id: "66d000000000000000000002",
-    employeeId: "EMP002",
-    fullName: "Ama Serwaa",
-    email: "ama.serwaa@eyenit.com",
-    phone: "+233 50 234 5678",
-    department: "Design & UX",
-    position: "Senior Product Designer",
-    employmentType: "Full-time",
-    employmentDate: new Date("2023-04-10"),
-    role: "employee",
-    isActive: true,
-    status: "On Leave",
-    location: "Accra Head Office",
-    emergencyContact: "+233 24 876 5432",
-  },
-  {
-    _id: "66d000000000000000000003",
-    employeeId: "EMP003",
-    fullName: "Kofi Boakye",
-    email: "kofi.boakye@eyenit.com",
-    phone: "+233 27 345 6789",
-    department: "Product & Marketing",
-    position: "Growth & Marketing Lead",
-    employmentType: "Full-time",
-    employmentDate: new Date("2023-08-01"),
-    role: "employee",
-    isActive: true,
-    status: "Active",
-    location: "Kumasi Branch",
-    emergencyContact: "+233 55 765 4321",
-  },
-  {
-    _id: "66d000000000000000000004",
-    employeeId: "EMP004",
-    fullName: "Abena Osei",
-    email: "abena.osei@eyenit.com",
-    phone: "+233 55 456 7890",
-    department: "Finance & Accounts",
-    position: "Financial Controller",
-    employmentType: "Full-time",
-    employmentDate: new Date("2024-02-15"),
-    role: "employee",
-    isActive: true,
-    status: "Active",
-    location: "Accra Head Office",
-    emergencyContact: "+233 20 654 3210",
-  },
-  {
-    _id: "66d000000000000000000005",
-    employeeId: "EMP005",
-    fullName: "Emmanuel Darko",
-    email: "emmanuel.darko@eyenit.com",
-    phone: "+233 20 567 8901",
-    department: "Human Resources",
-    position: "HR & People Operations Lead",
-    employmentType: "Full-time",
-    employmentDate: new Date("2024-06-01"),
-    role: "employee",
-    isActive: true,
-    status: "Active",
-    location: "Accra Head Office",
-    emergencyContact: "+233 27 543 2109",
-  },
-  {
-    _id: "66d000000000000000000006",
-    employeeId: "EMP006",
-    fullName: "Akosua Frimpong",
-    email: "akosua.frimpong@eyenit.com",
-    phone: "+233 24 678 9012",
-    department: "Operations & Logistics",
-    position: "Operations Coordinator",
-    employmentType: "Contract",
-    employmentDate: new Date("2025-01-10"),
-    role: "employee",
-    isActive: true,
-    status: "Active",
-    location: "Tema Warehouse",
-    emergencyContact: "+233 50 432 1098",
-  },
-];
+// Helper for valid MongoDB ObjectId checking
+const isValidObjectId = (id) =>
+  id &&
+  typeof id === "string" &&
+  mongoose.Types.ObjectId.isValid(id) &&
+  String(new mongoose.Types.ObjectId(id)) === String(id);
 
-// function to get all employees details
+// Function to get all employees details directly from the database
 export const employeeDetails = async (req, res) => {
   try {
     let employees = [];
 
     try {
-      employees = await Employee.find({}).select("-password").lean();
+      employees = await Employee.find({}).select("-password").sort({ createdAt: -1 }).lean();
     } catch (dbErr) {
       console.warn("DB find in employeeDetails:", dbErr.message);
     }
 
-    if (!employees || employees.length === 0) {
-      // Return directory fallback records with full contact details
-      return res.status(200).json({
-        success: true,
-        count: initialEmployeeDirectory.length,
-        employees: initialEmployeeDirectory,
-      });
-    }
-
-    // Ensure all returned employees have standard contact, department, and status fields
-    const enrichedEmployees = employees.map((emp) => {
-      const match = initialEmployeeDirectory.find(
-        (seed) => seed.employeeId === emp.employeeId || seed.email === emp.email
-      );
-      return {
-        _id: emp._id,
-        employeeId: emp.employeeId,
-        fullName: emp.fullName,
-        email: emp.email,
-        phone: emp.phone || match?.phone || "+233 24 000 0000",
-        department: emp.department || match?.department || "General",
-        position: emp.position || match?.position || "Staff Member",
-        employmentType: emp.employmentType || match?.employmentType || "Full-time",
-        employmentDate: emp.employmentDate || match?.employmentDate || new Date(),
-        role: emp.role || "employee",
-        isActive: typeof emp.isActive === "boolean" ? emp.isActive : true,
-        status: match?.status || (emp.isActive ? "Active" : "Inactive"),
-        location: match?.location || "Accra Head Office",
-        emergencyContact: match?.emergencyContact || "+233 20 000 0000",
-        createdAt: emp.createdAt,
-        updatedAt: emp.updatedAt,
-      };
-    });
+    // Format employee records cleanly for client consuming
+    const enrichedEmployees = (employees || []).map((emp) => ({
+      _id: emp._id,
+      employeeId: emp.employeeId,
+      fullName: emp.fullName,
+      email: emp.email,
+      phone: emp.phone || "+233 24 000 0000",
+      department: emp.department || "General",
+      position: emp.position || "Staff Member",
+      employmentType: emp.employmentType || "Full-time",
+      employmentDate: emp.employmentDate || new Date(),
+      role: emp.role || "employee",
+      isActive: typeof emp.isActive === "boolean" ? emp.isActive : true,
+      status: emp.status || (emp.isActive !== false ? "Active" : "Inactive"),
+      location: emp.location || "Accra Head Office",
+      emergencyContact: emp.emergencyContact || "+233 20 000 0000",
+      createdAt: emp.createdAt,
+      updatedAt: emp.updatedAt,
+    }));
 
     res.status(200).json({
       success: true,
@@ -153,41 +46,29 @@ export const employeeDetails = async (req, res) => {
     });
   } catch (error) {
     console.error("Error in employeeDetails:", error);
-    res.status(200).json({
-      success: true,
-      count: initialEmployeeDirectory.length,
-      employees: initialEmployeeDirectory,
+    res.status(500).json({
+      success: false,
+      message: error.message || "Failed to retrieve employee directory from database.",
     });
   }
 };
 
-// employee names
+// Function to get compact employee name list for dropdowns and filters
 export const employeeNameList = async (req, res) => {
   try {
     let employees = [];
     try {
       employees = await Employee.find({})
         .select("_id employeeId fullName department position email phone")
+        .sort({ fullName: 1 })
         .lean();
     } catch (dbErr) {
       console.warn("DB find in employeeNameList:", dbErr.message);
     }
 
-    if (!employees || employees.length === 0) {
-      employees = initialEmployeeDirectory.map((e) => ({
-        _id: e._id,
-        employeeId: e.employeeId,
-        fullName: e.fullName,
-        department: e.department,
-        position: e.position,
-        email: e.email,
-        phone: e.phone,
-      }));
-    }
-
     res.status(200).json({
       success: true,
-      employees,
+      employees: employees || [],
     });
   } catch (error) {
     res.status(500).json({
@@ -197,13 +78,13 @@ export const employeeNameList = async (req, res) => {
   }
 };
 
-// get single employee profile
+// Get single employee profile by MongoDB _id, employeeId, or email
 export const getEmployeeById = async (req, res) => {
   try {
     const { id } = req.params;
     let employee = null;
 
-    if (mongoose.Types.ObjectId.isValid(id) && String(new mongoose.Types.ObjectId(id)) === String(id)) {
+    if (isValidObjectId(id)) {
       employee = await Employee.findById(id).select("-password").lean();
     } else {
       employee = await Employee.findOne({
@@ -212,15 +93,9 @@ export const getEmployeeById = async (req, res) => {
     }
 
     if (!employee) {
-      employee = initialEmployeeDirectory.find(
-        (e) => String(e._id) === String(id) || e.employeeId === id || e.email === id
-      );
-    }
-
-    if (!employee) {
       return res.status(404).json({
         success: false,
-        message: "Employee not found",
+        message: "Employee record not found in database.",
       });
     }
 
@@ -236,24 +111,30 @@ export const getEmployeeById = async (req, res) => {
   }
 };
 
-// get logged-in employee profile for /me endpoint
+// Get logged-in employee profile for /me endpoint
 export const getCurrentLoggedInEmployee = async (req, res) => {
   try {
-    const rawId = req.employee?.id || "demo_employee_id_001";
+    const rawId = req.employee?.id || req.employee?._id;
     let employee = null;
 
-    if (mongoose.Types.ObjectId.isValid(rawId) && String(new mongoose.Types.ObjectId(rawId)) === String(rawId)) {
+    if (isValidObjectId(rawId)) {
       employee = await Employee.findById(rawId).select("-password").lean();
-    } else {
+    } else if (rawId) {
       employee = await Employee.findOne({
         $or: [{ employeeId: req.employee?.employeeId || rawId }, { email: rawId }],
       }).select("-password").lean();
     }
 
+    // If still null, find the active employee from DB
     if (!employee) {
-      employee = initialEmployeeDirectory.find(
-        (e) => String(e._id) === String(rawId) || e.employeeId === (req.employee?.employeeId || rawId)
-      ) || initialEmployeeDirectory[0];
+      employee = await Employee.findOne({ isActive: true }).select("-password").lean();
+    }
+
+    if (!employee) {
+      return res.status(404).json({
+        success: false,
+        message: "No employee profile found in database.",
+      });
     }
 
     res.status(200).json({
@@ -267,3 +148,57 @@ export const getCurrentLoggedInEmployee = async (req, res) => {
     });
   }
 };
+
+// Update logged-in employee profile
+export const updateCurrentEmployee = async (req, res) => {
+  try {
+    const rawId = req.employee?.id || req.employee?._id;
+    const { fullName, phone, avatar } = req.body;
+    let filter = {};
+
+    if (isValidObjectId(rawId)) {
+      filter = { _id: rawId };
+    } else if (rawId) {
+      filter = {
+        $or: [{ employeeId: req.employee?.employeeId || rawId }, { email: rawId }],
+      };
+    } else {
+      const active = await Employee.findOne({ isActive: true });
+      if (active) filter = { _id: active._id };
+      else {
+        return res.status(404).json({
+          success: false,
+          message: "Employee profile not found.",
+        });
+      }
+    }
+
+    const updates = {};
+    if (fullName) updates.fullName = fullName.trim();
+    if (phone) updates.phone = phone.trim();
+    if (avatar) updates.avatar = avatar;
+
+    const updated = await Employee.findOneAndUpdate(filter, { $set: updates }, { new: true })
+      .select("-password")
+      .lean();
+
+    if (!updated) {
+      return res.status(404).json({
+        success: false,
+        message: "Failed to find and update employee profile.",
+      });
+    }
+
+    res.status(200).json({
+      success: true,
+      message: "Profile updated successfully.",
+      employee: updated,
+    });
+  } catch (error) {
+    res.status(500).json({
+      success: false,
+      message: error.message,
+    });
+  }
+};
+

@@ -209,7 +209,7 @@ export const PayrollDetailsModal = ({ payrollId, initialData, onClose, onRefresh
     const payDate = formatDate(payroll?.paymentDate);
     const paymentMethod = payroll?.paymentMethod || "Bank Transfer";
     const ssnit = (basic * 0.055).toFixed(2);
-    const paye = (Math.max(0, basic + allow - ssnit - 402) * 0.175).toFixed(2);
+    const _paye = (Math.max(0, basic + allow - ssnit - 402) * 0.175).toFixed(2);
 
     printWindow.document.write(`
       <!DOCTYPE html>

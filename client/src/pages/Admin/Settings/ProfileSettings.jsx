@@ -1,18 +1,41 @@
 // components/admin/settings/ProfileSettings.js
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { User, Mail, Phone, Briefcase, Key, Camera } from "lucide-react";
-
- const profileSettings = {
-  fullName: "Mohammed Awal",
-  email: "admin@eyenit.com",
-  phone: "0241234567",
-  profileImage: "/profile.png",
-  role: "Administrator",
-};
+import { useManagement } from "../../../context/ManagementContextProvider";
+import { getAdminProfile } from "../../../apis/fontApis";
 
 const ProfileSettings = () => {
-  const [profile, setProfile] = useState(profileSettings);
+  const { user, setUser } = useManagement();
+  const [profile, setProfile] = useState({
+    fullName: user?.fullName || user?.full_name || "Administrator",
+    email: user?.email || "admin@eyenit.com",
+    phone: user?.phone || "",
+    role: user?.role === "super_admin" ? "Super Admin" : "Administrator",
+    avatar: user?.avatar || "",
+  });
   const [showChangePassword, setShowChangePassword] = useState(false);
+
+  useEffect(() => {
+    const fetchAdmin = async () => {
+      try {
+        const res = await getAdminProfile();
+        if (res?.data?.success && res.data.admin) {
+          const adm = res.data.admin;
+          setProfile({
+            fullName: adm.fullName || adm.full_name || "Administrator",
+            email: adm.email || "admin@eyenit.com",
+            phone: adm.phone || "",
+            role: adm.role === "super_admin" ? "Super Admin" : "Administrator",
+            avatar: adm.avatar || "",
+          });
+          setUser((prev) => ({ ...prev, ...adm }));
+        }
+      } catch (err) {
+        console.warn("Failed to fetch admin profile:", err.message);
+      }
+    };
+    fetchAdmin();
+  }, [setUser]);
 
   const handleChange = (field, value) => {
     setProfile((prev) => ({ ...prev, [field]: value }));

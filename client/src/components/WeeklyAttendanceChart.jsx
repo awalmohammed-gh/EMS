@@ -18,22 +18,15 @@ import {
   BarChart3,
 } from "lucide-react";
 
-// Default standard weekly trend dataset
-const defaultWeeklyData = [
-  { day: "Mon", fullDay: "Monday", present: 22, late: 2, absent: 1, totalHours: 182, rate: 92 },
-  { day: "Tue", fullDay: "Tuesday", present: 24, late: 1, absent: 0, totalHours: 198, rate: 96 },
-  { day: "Wed", fullDay: "Wednesday", present: 25, late: 0, absent: 0, totalHours: 205, rate: 100 },
-  { day: "Thu", fullDay: "Thursday", present: 23, late: 2, absent: 0, totalHours: 191, rate: 92 },
-  { day: "Fri", fullDay: "Friday", present: 21, late: 3, absent: 1, totalHours: 175, rate: 84 },
-  { day: "Sat", fullDay: "Saturday", present: 8, late: 0, absent: 0, totalHours: 48, rate: 100 },
-];
-
-const defaultMonthlyWeeks = [
-  { week: "Week 1", fullWeek: "Aug 1 - Aug 7", present: 114, late: 8, absent: 3, avgRate: 91 },
-  { week: "Week 2", fullWeek: "Aug 8 - Aug 14", present: 119, late: 5, absent: 1, avgRate: 95 },
-  { week: "Week 3", fullWeek: "Aug 15 - Aug 21", present: 122, late: 4, absent: 0, avgRate: 97 },
-  { week: "Week 4", fullWeek: "Aug 22 - Aug 28", present: 116, late: 7, absent: 2, avgRate: 93 },
-];
+// Standard days of the week template
+const generateEmptyWeeklyMap = () => ({
+  Mon: { day: "Mon", fullDay: "Monday", present: 0, late: 0, absent: 0, totalHours: 0, rate: 0 },
+  Tue: { day: "Tue", fullDay: "Tuesday", present: 0, late: 0, absent: 0, totalHours: 0, rate: 0 },
+  Wed: { day: "Wed", fullDay: "Wednesday", present: 0, late: 0, absent: 0, totalHours: 0, rate: 0 },
+  Thu: { day: "Thu", fullDay: "Thursday", present: 0, late: 0, absent: 0, totalHours: 0, rate: 0 },
+  Fri: { day: "Fri", fullDay: "Friday", present: 0, late: 0, absent: 0, totalHours: 0, rate: 0 },
+  Sat: { day: "Sat", fullDay: "Saturday", present: 0, late: 0, absent: 0, totalHours: 0, rate: 0 },
+});
 
 // Custom Tooltip component for Recharts
 const CustomTooltip = ({ active, payload, label }) => {
@@ -99,22 +92,13 @@ export const WeeklyAttendanceChart = ({
   const [timeframe, setTimeframe] = useState("week"); // 'week' | 'month'
   const [chartType, setChartType] = useState("stacked"); // 'stacked' | 'grouped'
 
-  // Compute live trends from actual attendance records if available
+  // Compute live weekly trends from actual attendance records
   const computedWeeklyData = useMemo(() => {
+    const daysMap = generateEmptyWeeklyMap();
+
     if (!attendanceLogs || !Array.isArray(attendanceLogs) || attendanceLogs.length === 0) {
-      return defaultWeeklyData;
+      return Object.values(daysMap);
     }
-
-    const daysMap = {
-      Mon: { day: "Mon", fullDay: "Monday", present: 0, late: 0, absent: 0, totalHours: 0 },
-      Tue: { day: "Tue", fullDay: "Tuesday", present: 0, late: 0, absent: 0, totalHours: 0 },
-      Wed: { day: "Wed", fullDay: "Wednesday", present: 0, late: 0, absent: 0, totalHours: 0 },
-      Thu: { day: "Thu", fullDay: "Thursday", present: 0, late: 0, absent: 0, totalHours: 0 },
-      Fri: { day: "Fri", fullDay: "Friday", present: 0, late: 0, absent: 0, totalHours: 0 },
-      Sat: { day: "Sat", fullDay: "Saturday", present: 0, late: 0, absent: 0, totalHours: 0 },
-    };
-
-    let hasMatchedData = false;
 
     attendanceLogs.forEach((log) => {
       const dateStr = log.date;
@@ -124,7 +108,6 @@ export const WeeklyAttendanceChart = ({
 
       const dayShort = logDate.toLocaleDateString("en-US", { weekday: "short" });
       if (daysMap[dayShort]) {
-        hasMatchedData = true;
         const status = (log.status || "").toLowerCase();
         if (status.includes("late")) {
           daysMap[dayShort].late += 1;
@@ -139,13 +122,9 @@ export const WeeklyAttendanceChart = ({
       }
     });
 
-    if (!hasMatchedData) {
-      return defaultWeeklyData;
-    }
-
     return Object.values(daysMap).map((d) => {
       const total = d.present + d.late + d.absent;
-      const rate = total > 0 ? Math.round((d.present / total) * 100) : 100;
+      const rate = total > 0 ? Math.round((d.present / total) * 100) : 0;
       return {
         ...d,
         rate,
@@ -154,7 +133,50 @@ export const WeeklyAttendanceChart = ({
     });
   }, [attendanceLogs]);
 
-  const activeData = timeframe === "week" ? computedWeeklyData : defaultMonthlyWeeks;
+  // Compute live monthly week buckets from actual attendance records
+  const computedMonthlyData = useMemo(() => {
+    const weeks = [
+      { week: "Week 1", fullWeek: "Days 1 - 7", present: 0, late: 0, absent: 0, avgRate: 0 },
+      { week: "Week 2", fullWeek: "Days 8 - 14", present: 0, late: 0, absent: 0, avgRate: 0 },
+      { week: "Week 3", fullWeek: "Days 15 - 21", present: 0, late: 0, absent: 0, avgRate: 0 },
+      { week: "Week 4", fullWeek: "Days 22 - 31", present: 0, late: 0, absent: 0, avgRate: 0 },
+    ];
+
+    if (!attendanceLogs || !Array.isArray(attendanceLogs) || attendanceLogs.length === 0) {
+      return weeks;
+    }
+
+    attendanceLogs.forEach((log) => {
+      if (!log.date) return;
+      const d = new Date(log.date);
+      if (isNaN(d.getTime())) return;
+      const dayOfMonth = d.getDate();
+
+      let targetWeek = weeks[3];
+      if (dayOfMonth <= 7) targetWeek = weeks[0];
+      else if (dayOfMonth <= 14) targetWeek = weeks[1];
+      else if (dayOfMonth <= 21) targetWeek = weeks[2];
+
+      const status = (log.status || "").toLowerCase();
+      if (status.includes("late")) {
+        targetWeek.late += 1;
+      } else if (status.includes("absent") || status.includes("leave")) {
+        targetWeek.absent += 1;
+      } else {
+        targetWeek.present += 1;
+      }
+    });
+
+    return weeks.map((w) => {
+      const total = w.present + w.late + w.absent;
+      return {
+        ...w,
+        avgRate: total > 0 ? Math.round((w.present / total) * 100) : 0,
+      };
+    });
+  }, [attendanceLogs]);
+
+  const activeData = timeframe === "week" ? computedWeeklyData : computedMonthlyData;
   const xDataKey = timeframe === "week" ? "day" : "week";
 
   // Summary Metrics
@@ -163,8 +185,8 @@ export const WeeklyAttendanceChart = ({
     const totalLate = activeData.reduce((acc, curr) => acc + (curr.late || 0), 0);
     const totalAbsent = activeData.reduce((acc, curr) => acc + (curr.absent || 0), 0);
     const totalLogged = totalPresent + totalLate + totalAbsent;
-    const overallRate = totalLogged > 0 ? Math.round(((totalPresent + totalLate * 0.5) / totalLogged) * 100) : 95;
-    const punctuality = totalPresent + totalLate > 0 ? Math.round((totalPresent / (totalPresent + totalLate)) * 100) : 92;
+    const overallRate = totalLogged > 0 ? Math.round(((totalPresent + totalLate * 0.5) / totalLogged) * 100) : 0;
+    const punctuality = totalPresent + totalLate > 0 ? Math.round((totalPresent / (totalPresent + totalLate)) * 100) : 0;
 
     return {
       totalPresent,

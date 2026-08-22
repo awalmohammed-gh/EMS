@@ -8,51 +8,8 @@ const isValidObjectId = (id) =>
   mongoose.Types.ObjectId.isValid(id) &&
   String(new mongoose.Types.ObjectId(id)) === String(id);
 
-export const fallbackEmployee = {
-  _id: "demo_employee_id_001",
-  employeeId: "EMP001",
-  fullName: "Kwame Mensah",
-  email: "kwame.mensah@eyenit.com",
-  department: "Software Engineering",
-  position: "Senior Fullstack Engineer",
-  isActive: true,
-};
-
-// In-memory attendance storage for real-time reactivity & offline/preview support
+// In-memory attendance storage for real-time reactivity & fast lookups
 export const liveAttendanceStore = new Map();
-
-export const liveAttendanceHistory = [
-  {
-    _id: "att_101",
-    employee: fallbackEmployee._id,
-    date: new Date(Date.now() - 86400000).toISOString().split("T")[0],
-    clockIn: new Date(Date.now() - 86400000 + 8 * 3600000 + 15 * 60000).toISOString(),
-    clockOut: new Date(Date.now() - 86400000 + 17 * 3600000).toISOString(),
-    workHours: 8.75,
-    status: "On Time",
-    notes: "Regular check-in",
-  },
-  {
-    _id: "att_102",
-    employee: fallbackEmployee._id,
-    date: new Date(Date.now() - 172800000).toISOString().split("T")[0],
-    clockIn: new Date(Date.now() - 172800000 + 8 * 3600000 + 20 * 60000).toISOString(),
-    clockOut: new Date(Date.now() - 172800000 + 17 * 3600000 + 10 * 60000).toISOString(),
-    workHours: 8.8,
-    status: "On Time",
-    notes: "Regular check-in",
-  },
-  {
-    _id: "att_103",
-    employee: fallbackEmployee._id,
-    date: new Date(Date.now() - 259200000).toISOString().split("T")[0],
-    clockIn: new Date(Date.now() - 259200000 + 8 * 3600000 + 45 * 60000).toISOString(),
-    clockOut: new Date(Date.now() - 259200000 + 17 * 3600000 + 15 * 60000).toISOString(),
-    workHours: 8.5,
-    status: "Late",
-    notes: "Traffic delay",
-  },
-];
 
 // Helper to get active record for an employee today
 export const getEmployeeLiveToday = (employeeId, todayStr) => {
@@ -60,10 +17,34 @@ export const getEmployeeLiveToday = (employeeId, todayStr) => {
   return liveAttendanceStore.get(key) || null;
 };
 
+// Helper to resolve employee ObjectId
+const resolveEmployeeObjectId = async (idOrKey) => {
+  if (!idOrKey) return null;
+  if (isValidObjectId(idOrKey)) return idOrKey;
+  try {
+    const emp = await Employee.findOne({
+      $or: [{ employeeId: idOrKey }, { email: idOrKey }],
+    }).select("_id").lean();
+    return emp ? emp._id.toString() : null;
+  } catch {
+    return null;
+  }
+};
+
 // Clock in handler
 export const clockIn = async (req, res) => {
   try {
-    const employeeId = req.employee?.id || fallbackEmployee._id;
+    let employeeId = req.employee?.id || req.employee?._id;
+    const resolvedId = await resolveEmployeeObjectId(employeeId);
+    if (resolvedId) employeeId = resolvedId;
+
+    if (!employeeId) {
+      return res.status(401).json({
+        success: false,
+        message: "Employee identification required for clock in.",
+      });
+    }
+
     const today = new Date().toISOString().split("T")[0];
     const key = `${employeeId}_${today}`;
     const now = new Date();
@@ -84,7 +65,7 @@ export const clockIn = async (req, res) => {
       });
     }
 
-    // 2. Check MongoDB if connected
+    // 2. Check MongoDB
     if (isValidObjectId(employeeId)) {
       try {
         const existingAttendance = await Attendance.findOne({
@@ -107,8 +88,8 @@ export const clockIn = async (req, res) => {
     }
 
     // 3. Create new attendance record
-    const newRecord = {
-      _id: "att_live_" + Date.now(),
+    let newRecord = {
+      _id: "att_" + Date.now(),
       employee: employeeId,
       date: today,
       clockIn: now.toISOString(),
@@ -127,23 +108,15 @@ export const clockIn = async (req, res) => {
           status,
         });
         if (dbCreated) {
-          newRecord._id = dbCreated._id.toString();
+          newRecord = dbCreated.toObject ? dbCreated.toObject() : dbCreated;
         }
       } catch (dbErr) {
-        console.warn("DB create in clockIn fallback to memory:", dbErr.message);
+        console.warn("DB create in clockIn:", dbErr.message);
       }
     }
 
-    // Update live memory store & history
+    // Update live memory store
     liveAttendanceStore.set(key, newRecord);
-    const existingHistIndex = liveAttendanceHistory.findIndex(
-      (h) => h.employee === employeeId && h.date === today,
-    );
-    if (existingHistIndex >= 0) {
-      liveAttendanceHistory[existingHistIndex] = newRecord;
-    } else {
-      liveAttendanceHistory.unshift(newRecord);
-    }
 
     return res.status(201).json({
       success: true,
@@ -162,7 +135,17 @@ export const clockIn = async (req, res) => {
 // Clock out handler
 export const clockOut = async (req, res) => {
   try {
-    const employeeId = req.employee?.id || fallbackEmployee._id;
+    let employeeId = req.employee?.id || req.employee?._id;
+    const resolvedId = await resolveEmployeeObjectId(employeeId);
+    if (resolvedId) employeeId = resolvedId;
+
+    if (!employeeId) {
+      return res.status(401).json({
+        success: false,
+        message: "Employee identification required for clock out.",
+      });
+    }
+
     const today = new Date().toISOString().split("T")[0];
     const key = `${employeeId}_${today}`;
     const now = new Date();
@@ -192,19 +175,11 @@ export const clockOut = async (req, res) => {
       }
     }
 
-    // If still no clock-in record today, synthesize standard check-in at 8:15 AM so user can clock out
     if (!record || !record.clockIn) {
-      const defaultClockIn = new Date();
-      defaultClockIn.setHours(8, 15, 0, 0);
-      record = {
-        _id: "att_live_" + Date.now(),
-        employee: employeeId,
-        date: today,
-        clockIn: defaultClockIn.toISOString(),
-        clockOut: null,
-        status: "On Time",
-        workHours: 0,
-      };
+      return res.status(400).json({
+        success: false,
+        message: "No clock-in record found for today. Please clock in first.",
+      });
     }
 
     if (record.clockOut) {
@@ -218,7 +193,7 @@ export const clockOut = async (req, res) => {
     // Calculate hours worked
     const clockInTime = new Date(record.clockIn);
     const diffMs = Math.max(0, now.getTime() - clockInTime.getTime());
-    const hoursWorked = Math.max(0.5, Number((diffMs / (1000 * 60 * 60)).toFixed(2)));
+    const hoursWorked = Math.max(0.1, Number((diffMs / (1000 * 60 * 60)).toFixed(2)));
 
     record.clockOut = now.toISOString();
     record.workHours = hoursWorked;
@@ -229,23 +204,15 @@ export const clockOut = async (req, res) => {
         await Attendance.findOneAndUpdate(
           { employee: employeeId, date: today },
           { clockOut: now, workHours: hoursWorked },
-          { upsert: true, new: true },
+          { new: true },
         );
       } catch (dbErr) {
-        console.warn("DB update in clockOut fallback to memory:", dbErr.message);
+        console.warn("DB update in clockOut:", dbErr.message);
       }
     }
 
-    // Update live memory store & history
+    // Update live memory store
     liveAttendanceStore.set(key, record);
-    const histIdx = liveAttendanceHistory.findIndex(
-      (h) => h.employee === employeeId && h.date === today,
-    );
-    if (histIdx >= 0) {
-      liveAttendanceHistory[histIdx] = record;
-    } else {
-      liveAttendanceHistory.unshift(record);
-    }
 
     return res.status(200).json({
       success: true,
@@ -263,17 +230,30 @@ export const clockOut = async (req, res) => {
 // Current employee profile
 export const getCurrentEmployee = async (req, res) => {
   try {
-    let employee = fallbackEmployee;
-    const targetId = req.employee?.id;
+    let employee = null;
+    const targetId = req.employee?.id || req.employee?._id;
+
     if (isValidObjectId(targetId)) {
       try {
-        const dbEmp = await Employee.findById(targetId)
-          .select("-password")
-          .lean();
-        if (dbEmp) employee = dbEmp;
+        employee = await Employee.findById(targetId).select("-password").lean();
       } catch (dbErr) {
-        console.warn("DB fallback for getCurrentEmployee:", dbErr.message);
+        console.warn("DB find in getCurrentEmployee:", dbErr.message);
       }
+    } else if (targetId) {
+      try {
+        employee = await Employee.findOne({
+          $or: [{ employeeId: targetId }, { email: targetId }],
+        }).select("-password").lean();
+      } catch (dbErr) {
+        console.warn("DB find in getCurrentEmployee by identifier:", dbErr.message);
+      }
+    }
+
+    if (!employee) {
+      return res.status(404).json({
+        success: false,
+        message: "Employee profile not found in database.",
+      });
     }
 
     res.status(200).json({
@@ -291,22 +271,30 @@ export const getCurrentEmployee = async (req, res) => {
 // Employee attendance history
 export const getEmployeeAttendance = async (req, res) => {
   try {
-    const employeeId = req.employee?.id || fallbackEmployee._id;
-    let attendance = liveAttendanceHistory.filter(
-      (item) => item.employee === employeeId || item.employee === fallbackEmployee._id,
-    );
+    let employeeId = req.employee?.id || req.employee?._id;
+    let attendance = [];
+
+    // If ID is not an ObjectId, lookup employee document to get real ObjectId
+    if (employeeId && !isValidObjectId(employeeId)) {
+      const empDoc = await Employee.findOne({
+        $or: [{ employeeId: employeeId }, { email: employeeId }],
+      }).lean();
+      if (empDoc) {
+        employeeId = empDoc._id.toString();
+      }
+    }
 
     if (isValidObjectId(employeeId)) {
       try {
         const dbAtt = await Attendance.find({
           employee: employeeId,
-        }).sort({ date: -1 });
+        }).sort({ date: -1 }).lean();
 
-        if (dbAtt && dbAtt.length > 0) {
+        if (dbAtt) {
           attendance = dbAtt;
         }
       } catch (dbErr) {
-        console.warn("DB fallback for getEmployeeAttendance:", dbErr.message);
+        console.warn("DB query in getEmployeeAttendance:", dbErr.message);
       }
     }
 
@@ -325,26 +313,19 @@ export const getEmployeeAttendance = async (req, res) => {
 // Get all attendance for admin
 export const getAllAttendance = async (req, res) => {
   try {
-    let attendance = liveAttendanceHistory.map((a, i) => ({
-      ...a,
-      employee: {
-        _id: a.employee || `emp_${i + 1}`,
-        fullName: i === 0 ? "Kwame Mensah" : i === 1 ? "Ama Serwaa" : "Kofi Boateng",
-        department: i === 0 ? "Software Engineering" : i === 1 ? "Administrative" : "Large Format",
-        position: i === 0 ? "Senior Fullstack Engineer" : i === 1 ? "HR Officer" : "Print Specialist",
-      },
-    }));
+    let attendance = [];
 
     try {
       const dbAtt = await Attendance.find({})
-        .populate("employee", "fullName department position")
-        .sort({ date: -1 });
+        .populate("employee", "fullName department position employeeId email")
+        .sort({ date: -1, createdAt: -1 })
+        .lean();
 
-      if (dbAtt && dbAtt.length > 0) {
+      if (dbAtt) {
         attendance = dbAtt;
       }
     } catch (dbErr) {
-      console.warn("DB fallback for getAllAttendance:", dbErr.message);
+      console.warn("DB query in getAllAttendance:", dbErr.message);
     }
 
     res.status(200).json({
@@ -362,30 +343,38 @@ export const getAllAttendance = async (req, res) => {
 // Get today's attendance for active employee
 export const getTodayAttendance = async (req, res) => {
   try {
-    const employeeId = req.employee?.id || fallbackEmployee._id;
+    let employeeId = req.employee?.id || req.employee?._id;
     const today = new Date().toISOString().split("T")[0];
-    const key = `${employeeId}_${today}`;
 
-    let employee = fallbackEmployee;
-    let attendance = liveAttendanceStore.get(key) || null;
+    let employee = null;
+    let attendance = null;
+
+    if (employeeId && !isValidObjectId(employeeId)) {
+      const empDoc = await Employee.findOne({
+        $or: [{ employeeId: employeeId }, { email: employeeId }],
+      }).lean();
+      if (empDoc) {
+        employee = empDoc;
+        employeeId = empDoc._id.toString();
+      }
+    }
 
     if (isValidObjectId(employeeId)) {
       try {
-        const dbEmp = await Employee.findById(employeeId)
-          .select("fullName position department")
-          .lean();
-        if (dbEmp) employee = dbEmp;
+        if (!employee) {
+          employee = await Employee.findById(employeeId).select("fullName position department employeeId").lean();
+        }
 
         const dbAtt = await Attendance.findOne({
           employee: employeeId,
           date: today,
         }).lean();
+
         if (dbAtt) {
           attendance = dbAtt;
-          liveAttendanceStore.set(key, dbAtt);
         }
       } catch (dbErr) {
-        console.warn("DB fallback for getTodayAttendance:", dbErr.message);
+        console.warn("DB query in getTodayAttendance:", dbErr.message);
       }
     }
 

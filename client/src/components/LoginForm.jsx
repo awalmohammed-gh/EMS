@@ -418,32 +418,6 @@ const LoginForm = ({ role, title, subtitle }) => {
                 >
                   Admin Login
                 </button>
-
-                {/* Toggle to Sign Up */}
-                <div className="text-center">
-                  <button
-                    type="button"
-                    onClick={() => {
-                      setIsSignUp(true);
-                      setError(null);
-                      setSuccessMessage(null);
-                      setFormData({
-                        fullName: "",
-                        employeeId: "",
-                        email: "",
-                        password: "",
-                        phone: "",
-                        department: "",
-                        position: "",
-                        employmentDate: "",
-                        showPassword: false,
-                      });
-                    }}
-                    className="text-sm text-[#002185] hover:text-[#ff5500] font-medium transition-colors duration-300"
-                  >
-                    + Create New Employee Account
-                  </button>
-                </div>
               </div>
             </form>
           )}

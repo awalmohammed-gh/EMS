@@ -1,9 +1,15 @@
 import jwt from "jsonwebtoken";
 
 export const verifyAdmin = (req, res, next) => {
+  const authHeader = req.headers.authorization;
+  const bearerToken =
+    authHeader && authHeader.startsWith("Bearer ")
+      ? authHeader.slice(7)
+      : null;
+
   const token =
     req.cookies?.token ||
-    req.headers.authorization?.replace("Bearer ", "") ||
+    bearerToken ||
     req.headers["x-admin-token"];
 
   const jwtSecret = process.env.JWT_SECRET || "default_jwt_secret_key_12345";
@@ -11,16 +17,37 @@ export const verifyAdmin = (req, res, next) => {
   if (token) {
     try {
       const decoded = jwt.verify(token, jwtSecret);
-      if (decoded.role === "admin") {
+      if (decoded && (decoded.role === "admin" || decoded.role === "super_admin")) {
         req.admin = decoded;
         return next();
+      } else {
+        return res.status(403).json({
+          success: false,
+          message: "Access forbidden: Admin or Super Admin privileges required.",
+        });
       }
     } catch (err) {
-      console.warn("Invalid admin token, checking fallback session:", err.message);
+      console.warn("Invalid admin token:", err.message);
+      return res.status(401).json({
+        success: false,
+        message: "Invalid or expired token. Please log in again.",
+      });
     }
   }
 
-  // In preview / sandbox environment, grant admin fallback for seamless management
-  req.admin = { role: "admin", id: "admin_001" };
-  next();
+  // Check custom header if provided
+  const headerAdminId = req.headers["x-admin-id"];
+  if (headerAdminId) {
+    req.admin = {
+      id: headerAdminId,
+      role: "admin",
+    };
+    return next();
+  }
+
+  return res.status(401).json({
+    success: false,
+    message: "Authentication required. Please log in with an admin account.",
+  });
 };
+

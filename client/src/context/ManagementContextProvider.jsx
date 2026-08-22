@@ -1,20 +1,29 @@
 import { createContext, useContext, useState, useEffect, useCallback } from "react";
 import { getAdminMe, getEmployee, adminLogout, employeeLogout } from "../apis/fontApis";
+import { notificationService } from "../services/notificationService";
 
 const ManagementContext = createContext();
 
 export const ManagementContextProvider = ({ children }) => {
   const [showEmployeeModal, setShowEmployeeModal] = useState(false);
   const [showPayslipsModal, setShowPayslipsModal] = useState(false);
+  const [isSidebarOpen, setIsSidebarOpen] = useState(false);
   const [showToast, setShowToast] = useState({
     message: "",
     show: false,
     type: "success",
   });
 
+  const toggleSidebar = () => setIsSidebarOpen((prev) => !prev);
+  const closeSidebar = () => setIsSidebarOpen(false);
+  const openSidebar = () => setIsSidebarOpen(true);
+
+
   // Role and User state
   const [role, setRole] = useState(() => {
     if (typeof window !== "undefined") {
+      if (window.location.pathname.startsWith("/employee")) return "employee";
+      if (window.location.pathname.startsWith("/admin")) return "admin";
       return localStorage.getItem("userRole") || "admin";
     }
     return "admin";
@@ -23,8 +32,9 @@ export const ManagementContextProvider = ({ children }) => {
   const [user, setUser] = useState(() => {
     if (typeof window !== "undefined") {
       try {
-        const storedRole = localStorage.getItem("userRole") || "admin";
-        if (storedRole === "employee") {
+        const isEmpPath = window.location.pathname.startsWith("/employee");
+        const storedRole = localStorage.getItem("userRole");
+        if (isEmpPath || storedRole === "employee") {
           const storedEmp = localStorage.getItem("employeeData");
           if (storedEmp) return JSON.parse(storedEmp);
         } else {
@@ -35,23 +45,25 @@ export const ManagementContextProvider = ({ children }) => {
         console.warn("Error reading stored user:", e);
       }
     }
-    return {
-      fullName: "System Administrator",
-      email: "admin@eyenit.com",
-      role: "admin",
-      department: "Executive Management",
-      position: "Principal Administrator",
-      avatar: "",
-    };
+    return null;
   });
 
   const [isLoadingUser, setIsLoadingUser] = useState(false);
 
   // Fetch current logged in user from backend based on role
-  const fetchCurrentUser = useCallback(async (currentRole = role) => {
+  const fetchCurrentUser = useCallback(async (currentRole) => {
     try {
       setIsLoadingUser(true);
-      const activeRole = currentRole || localStorage.getItem("userRole") || "admin";
+      let activeRole = currentRole;
+      if (!activeRole) {
+        if (typeof window !== "undefined" && window.location.pathname.startsWith("/employee")) {
+          activeRole = "employee";
+        } else if (typeof window !== "undefined" && window.location.pathname.startsWith("/admin")) {
+          activeRole = "admin";
+        } else {
+          activeRole = localStorage.getItem("userRole") || "admin";
+        }
+      }
       setRole(activeRole);
 
       if (activeRole === "employee") {
@@ -70,34 +82,11 @@ export const ManagementContextProvider = ({ children }) => {
         }
       }
     } catch (err) {
-      console.warn("fetchCurrentUser fallback:", err.message);
-      // Fallback defaults if offline / network issue
-      if ((currentRole || role) === "employee") {
-        const fallbackEmp = {
-          fullName: "Kwame Mensah",
-          email: "kwame.mensah@eyenit.com",
-          employeeId: "EMP001",
-          department: "Software Engineering",
-          position: "Senior Fullstack Engineer",
-          role: "employee",
-          avatar: "",
-        };
-        setUser((prev) => prev?.fullName ? prev : fallbackEmp);
-      } else {
-        const fallbackAdmin = {
-          fullName: "System Administrator",
-          email: "admin@eyenit.com",
-          role: "admin",
-          department: "Executive Management",
-          position: "Principal Administrator",
-          avatar: "",
-        };
-        setUser((prev) => prev?.fullName ? prev : fallbackAdmin);
-      }
+      console.warn("fetchCurrentUser failed:", err.message);
     } finally {
       setIsLoadingUser(false);
     }
-  }, [role]);
+  }, []);
 
   // Initial load
   useEffect(() => {
@@ -226,6 +215,16 @@ export const ManagementContextProvider = ({ children }) => {
     isLoadingUser,
     fetchCurrentUser,
     logout: handleUserLogout,
+    isSidebarOpen,
+    setIsSidebarOpen,
+    toggleSidebar,
+    closeSidebar,
+    openSidebar,
+    isMobileSidebarOpen: isSidebarOpen,
+    setIsMobileSidebarOpen: setIsSidebarOpen,
+    toggleMobileSidebar: toggleSidebar,
+    closeMobileSidebar: closeSidebar,
+    openMobileSidebar: openSidebar,
     showEmployeeModal,
     setShowEmployeeModal,
     showPayslipsModal,
@@ -234,7 +233,9 @@ export const ManagementContextProvider = ({ children }) => {
     clockOut,
     showToast,
     setShowToast,
+    notificationService,
   };
+
 
   return (
     <ManagementContext.Provider value={value}>

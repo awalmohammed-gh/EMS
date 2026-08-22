@@ -412,7 +412,7 @@ const Payslips = () => {
         {showCalculator && (
           <div className="animate-in fade-in slide-in-from-top-4 duration-200">
             <PayrollSummaryCalculator
-              onApplyCalculatedValues={(calculatedData) => {
+              onApplyCalculatedValues={(_calculatedData) => {
                 setShowPayslipsModal(true);
               }}
             />

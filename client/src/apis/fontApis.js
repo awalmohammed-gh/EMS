@@ -36,6 +36,17 @@ export const getEmployee = () => {
 export const getEmployeeMe = () => {
   return api.get("/employee/me");
 };
+export const updateEmployeeMe = (data) => {
+  return api.put("/employee/me", data);
+};
+
+export const updateEmployeeStatus = (id, status) => {
+  return api.put(`/admin/employees/${id}/status`, { status });
+};
+
+export const deleteEmployee = (id) => {
+  return api.delete(`/admin/employees/${id}`);
+};
 
 // authentication
 export const employeeLogin = (data) => {
@@ -59,6 +70,10 @@ export const getAdminMe = () => {
 export const getAdminProfile = () => {
   return api.get("/admin/me");
 };
+export const createAdminAccount = (data) => {
+  return api.post("/admin/create-account", data);
+};
+
 
 //generate payroll
 export const payrollGenerate = (data) => {
@@ -133,12 +148,24 @@ export const employeeDashboardOverview = () =>{
 }
 
 export const getDashboardNotifications = (params) => {
-  return api.get("/dashboard/notifications", { params });
-}
+  return api.get("/notifications", { params });
+};
 
 export const getNotifications = (params) => {
-  return api.get("/dashboard/notifications", { params });
-}
+  return api.get("/notifications", { params });
+};
+
+export const markNotificationAsRead = (id) => {
+  return api.patch(`/notifications/${id}/read`, {});
+};
+
+export const markAllNotificationsAsRead = (params) => {
+  return api.patch("/notifications/read-all", {}, { params });
+};
+
+export const deleteNotification = (id) => {
+  return api.delete(`/notifications/${id}`);
+};
 
 
 

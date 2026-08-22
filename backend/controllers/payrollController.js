@@ -3,7 +3,7 @@ import { Employee } from "../models/employeeModel.js";
 import { Payroll } from "../models/payrollModel.js";
 import { Leave } from "../models/leaveModel.js";
 import { Attendance } from "../models/attendanceModel.js";
-import { liveAttendanceHistory, liveAttendanceStore } from "./employeeAttendance.js";
+import { liveAttendanceStore } from "./employeeAttendance.js";
 
 const isValidObjectId = (id) =>
   id &&
@@ -11,98 +11,7 @@ const isValidObjectId = (id) =>
   mongoose.Types.ObjectId.isValid(id) &&
   String(new mongoose.Types.ObjectId(id)) === String(id);
 
-const livePayrollStore = [
-  {
-    _id: "pay_demo_001",
-    payslipNumber: "PAY-2026-08-001",
-    id: "PAY-2026-08-001",
-    employee: {
-      _id: "demo_employee_id_001",
-      employeeId: "EMP001",
-      fullName: "Kwame Mensah",
-      email: "kwame.mensah@eyenit.com",
-      department: "Software Engineering",
-      position: "Senior Fullstack Engineer",
-      bankName: "Stanbic Bank Ghana",
-      accountNumber: "9040002938471",
-    },
-    employeeId: "EMP001",
-    employeeName: "Kwame Mensah",
-    department: "Software Engineering",
-    position: "Senior Fullstack Engineer",
-    month: "August 2026",
-    payMonth: "August 2026",
-    basicSalary: 4000,
-    allowances: 700,
-    deductions: 200,
-    netSalary: 4500,
-    status: "Paid",
-    paymentDate: "2026-08-25",
-    paymentMethod: "Bank Transfer",
-    remarks: "Full monthly disbursement with on-time attendance bonus.",
-    createdAt: new Date("2026-08-20T08:00:00Z").toISOString(),
-  },
-  {
-    _id: "pay_demo_002",
-    payslipNumber: "PAY-2026-08-002",
-    id: "PAY-2026-08-002",
-    employee: {
-      _id: "demo_employee_id_002",
-      employeeId: "EMP002",
-      fullName: "Abena Osei",
-      email: "abena.osei@eyenit.com",
-      department: "Human Resources",
-      position: "HR Operations Lead",
-      bankName: "Ecobank Ghana",
-      accountNumber: "1441000847291",
-    },
-    employeeId: "EMP002",
-    employeeName: "Abena Osei",
-    department: "Human Resources",
-    position: "HR Operations Lead",
-    month: "August 2026",
-    payMonth: "August 2026",
-    basicSalary: 3800,
-    allowances: 600,
-    deductions: 190,
-    netSalary: 4210,
-    status: "Paid",
-    paymentDate: "2026-08-25",
-    paymentMethod: "Bank Transfer",
-    remarks: "Processed on regular payroll cycle.",
-    createdAt: new Date("2026-08-20T08:15:00Z").toISOString(),
-  },
-  {
-    _id: "pay_demo_003",
-    payslipNumber: "PAY-2026-08-003",
-    id: "PAY-2026-08-003",
-    employee: {
-      _id: "demo_employee_id_003",
-      employeeId: "EMP003",
-      fullName: "Kofi Boateng",
-      email: "kofi.boateng@eyenit.com",
-      department: "Product & Design",
-      position: "Lead UI/UX Designer",
-      bankName: "GCB Bank",
-      accountNumber: "2011000384729",
-    },
-    employeeId: "EMP003",
-    employeeName: "Kofi Boateng",
-    department: "Product & Design",
-    position: "Lead UI/UX Designer",
-    month: "August 2026",
-    payMonth: "August 2026",
-    basicSalary: 4200,
-    allowances: 750,
-    deductions: 210,
-    netSalary: 4740,
-    status: "Pending",
-    paymentDate: "2026-08-28",
-    paymentMethod: "Bank Transfer",
-    remarks: "Awaiting final accounts authorization.",
-    createdAt: new Date("2026-08-20T09:00:00Z").toISOString(),
-  },
-];
+const livePayrollStore = [];
 
 // Helper: Calculate working days in a month (excluding Sat/Sun)
 const getWorkingDaysInMonth = (year = 2026, monthIndex = 7) => {
@@ -126,30 +35,34 @@ export const calculateMonthlyPayrollSummary = async (req, res) => {
     const targetYear = parseInt(year, 10) || 2026;
     const standardWorkingDays = getWorkingDaysInMonth(targetYear, 7); // Default ~22 days
 
-    let targetEmployee = {
-      _id: "demo_employee_id_001",
-      employeeId: "EMP001",
-      fullName: "Kwame Mensah",
-      department: "Software Engineering",
-      position: "Senior Fullstack Engineer",
-      email: "kwame.mensah@eyenit.com",
-    };
+    let targetEmployee = null;
 
-    if (employeeId && employeeId !== "all" && employeeId !== "demo_employee_id_001") {
+    if (employeeId && employeeId !== "all") {
       try {
         if (isValidObjectId(employeeId)) {
-          const emp = await Employee.findById(employeeId).lean();
-          if (emp) targetEmployee = emp;
+          targetEmployee = await Employee.findById(employeeId).lean();
         } else {
-          const emp = await Employee.findOne({ employeeId }).lean();
-          if (emp) targetEmployee = emp;
+          targetEmployee = await Employee.findOne({
+            $or: [{ employeeId }, { email: employeeId }],
+          }).lean();
         }
       } catch (err) {
         console.warn("Could not query DB employee in calculateMonthlyPayrollSummary:", err.message);
       }
     }
 
-    const baseSalary = parseFloat(baseSalaryInput) || 4000;
+    if (!targetEmployee) {
+      targetEmployee = await Employee.findOne({ isActive: true }).lean();
+    }
+
+    if (!targetEmployee) {
+      return res.status(404).json({
+        success: false,
+        message: "No active employee found to calculate payroll summary.",
+      });
+    }
+
+    const baseSalary = parseFloat(baseSalaryInput) || (targetEmployee.salary ? Number(targetEmployee.salary) : 4000);
     const dailyRate = parseFloat((baseSalary / standardWorkingDays).toFixed(2));
     const hourlyRate = parseFloat((dailyRate / 8).toFixed(2));
 
@@ -167,24 +80,20 @@ export const calculateMonthlyPayrollSummary = async (req, res) => {
           attendanceRecords = dbAttendance;
         }
       } catch (err) {
-        console.warn("DB attendance fallback for payroll calculation:", err.message);
+        console.warn("DB attendance query for payroll calculation:", err.message);
       }
-    }
-
-    if (attendanceRecords.length === 0) {
-      attendanceRecords = [...liveAttendanceHistory];
     }
 
     // Add active live clock-ins from memory
     liveAttendanceStore.forEach((liveAtt) => {
-      if (liveAtt.employee === String(targetEmployee._id) || targetEmployee._id === "demo_employee_id_001") {
+      if (liveAtt.employee === String(targetEmployee._id)) {
         if (!attendanceRecords.some((a) => a.date === liveAtt.date)) {
           attendanceRecords.push(liveAtt);
         }
       }
     });
 
-    // Compute attendance statistics
+    // Compute attendance statistics directly from actual records
     let presentDays = 0;
     let onTimeDays = 0;
     let lateDays = 0;
@@ -206,20 +115,7 @@ export const calculateMonthlyPayrollSummary = async (req, res) => {
       }
     });
 
-    // Provide representative monthly baseline if month is in progress
-    if (presentDays === 0) {
-      presentDays = 18;
-      onTimeDays = 16;
-      lateDays = 2;
-      totalWorkHours = 146;
-      overtimeHours = 4;
-    } else if (presentDays < 15) {
-      // Simulate realistic full month projections for current demo month
-      presentDays = Math.min(standardWorkingDays, presentDays + 15);
-      onTimeDays = Math.max(0, presentDays - lateDays);
-    }
-
-    // 2. Gather Approved Leave Requests
+    // 2. Gather Approved Leave Requests directly from Database
     let approvedLeaves = [];
     if (isTargetValidObjId) {
       try {
@@ -232,22 +128,8 @@ export const calculateMonthlyPayrollSummary = async (req, res) => {
           approvedLeaves = dbLeaves;
         }
       } catch (err) {
-        console.warn("DB leave fallback for payroll calculation:", err.message);
+        console.warn("DB leave query for payroll calculation:", err.message);
       }
-    }
-
-    // Fallback/Default sample approved leaves if none
-    if (approvedLeaves.length === 0) {
-      approvedLeaves = [
-        {
-          leaveType: "Annual Leave",
-          startDate: "2026-08-10",
-          endDate: "2026-08-12",
-          totalDays: 3,
-          reason: "Approved family break",
-          status: "Approved",
-        },
-      ];
     }
 
     let approvedPaidLeaveDays = 0;
@@ -403,24 +285,32 @@ export const generatePayroll = async (req, res) => {
       } catch (err) {
         console.warn("Could not find employee for payroll generation:", err.message);
       }
+    } else if (employee) {
+      try {
+        empDoc = await Employee.findOne({
+          $or: [{ employeeId: employee }, { email: employee }],
+        }).select("employeeId fullName email department position bankName accountNumber").lean();
+      } catch (err) {
+        console.warn("Could not find employee by identifier for payroll generation:", err.message);
+      }
+    }
+
+    if (!empDoc) {
+      return res.status(404).json({
+        success: false,
+        message: "Employee record not found in database.",
+      });
     }
 
     const newRecord = {
       _id: "pay_" + Date.now(),
       id: payslipNumber,
       payslipNumber,
-      employee: empDoc || {
-        _id: employee,
-        employeeId: "EMP001",
-        fullName: "Kwame Mensah",
-        email: "kwame.mensah@eyenit.com",
-        department: "Software Engineering",
-        position: "Senior Fullstack Engineer",
-      },
-      employeeId: empDoc?.employeeId || "EMP001",
-      employeeName: empDoc?.fullName || "Kwame Mensah",
-      department: empDoc?.department || "Software Engineering",
-      position: empDoc?.position || "Senior Fullstack Engineer",
+      employee: empDoc,
+      employeeId: empDoc.employeeId || "",
+      employeeName: empDoc.fullName || "Staff Member",
+      department: empDoc.department || "Operations",
+      position: empDoc.position || "Staff Member",
       payMonth,
       month: payMonth,
       paymentDate,
@@ -435,10 +325,10 @@ export const generatePayroll = async (req, res) => {
     };
 
     // If valid MongoDB connection, save to MongoDB
-    if (isValidObjectId(employee)) {
+    if (isValidObjectId(empDoc._id)) {
       try {
         const payroll = await Payroll.create({
-          employee,
+          employee: empDoc._id,
           payslipNumber,
           payMonth,
           paymentDate,
@@ -458,7 +348,7 @@ export const generatePayroll = async (req, res) => {
 
         newRecord._id = payroll._id;
       } catch (dbErr) {
-        console.warn("DB offline in generatePayroll, saving to live store:", dbErr.message);
+        console.warn("DB storage in generatePayroll:", dbErr.message);
       }
     }
 
@@ -561,11 +451,6 @@ export const getPayrollById = async (req, res) => {
       );
     }
 
-    // 4. If still not found, construct standard details from fallback template
-    if (!foundRecord) {
-      foundRecord = livePayrollStore[0];
-    }
-
     if (!foundRecord) {
       return res.status(404).json({
         success: false,
@@ -575,13 +460,13 @@ export const getPayrollById = async (req, res) => {
 
     // Normalize employee object and structure
     const employeeData = foundRecord.employee || {
-      fullName: foundRecord.employeeName || "Kwame Mensah",
-      employeeId: foundRecord.employeeId || "EMP001",
-      department: foundRecord.department || "Software Engineering",
-      position: foundRecord.position || "Senior Fullstack Engineer",
-      email: "kwame.mensah@eyenit.com",
-      bankName: "Stanbic Bank Ghana",
-      accountNumber: "9040002938471",
+      fullName: foundRecord.employeeName || "Employee",
+      employeeId: foundRecord.employeeId || "",
+      department: foundRecord.department || "Operations",
+      position: foundRecord.position || "Staff",
+      email: "",
+      bankName: "",
+      accountNumber: "",
     };
 
     const basicSalary = Number(foundRecord.basicSalary || 4000);
@@ -799,29 +684,28 @@ export const exportPayrollReport = async (req, res) => {
 // Each employee payslip
 export const employeePayslips = async (req, res) => {
   try {
-    const employeeId = req.employee?.id || "demo_employee_id_001";
-    let formattedPayslips = livePayrollStore.map((p) => ({
-      id: p.payslipNumber || p.id,
-      payslipNumber: p.payslipNumber || p.id,
-      _id: p._id,
-      employeeId: p.employee?.employeeId || p.employeeId || "EMP001",
-      employeeName: p.employee?.fullName || p.employeeName || "Kwame Mensah",
-      department: p.employee?.department || p.department || "Software Engineering",
-      position: p.employee?.position || p.position || "Senior Fullstack Engineer",
-      month: p.payMonth || p.month,
-      payMonth: p.payMonth || p.month,
-      basicSalary: p.basicSalary,
-      allowances: p.allowances,
-      deductions: p.deductions,
-      netSalary: p.netSalary,
-      status: p.status,
-      paymentDate: p.paymentDate,
-    }));
+    const rawEmployeeId = req.employee?.id || req.employee?._id;
+    let validObjectId = null;
 
-    if (isValidObjectId(employeeId)) {
+    if (isValidObjectId(rawEmployeeId)) {
+      validObjectId = rawEmployeeId;
+    } else if (rawEmployeeId) {
+      try {
+        const emp = await Employee.findOne({
+          $or: [{ employeeId: rawEmployeeId }, { email: rawEmployeeId }],
+        }).select("_id").lean();
+        if (emp) validObjectId = emp._id.toString();
+      } catch (err) {
+        console.warn("Could not find employee for payslips query:", err.message);
+      }
+    }
+
+    let formattedPayslips = [];
+
+    if (validObjectId) {
       try {
         const payslips = await Payroll.find({
-          employee: employeeId,
+          employee: validObjectId,
         })
           .populate("employee", "employeeId fullName department position")
           .sort({ paymentDate: -1 })
@@ -832,10 +716,10 @@ export const employeePayslips = async (req, res) => {
             id: payslip.payslipNumber || payslip._id,
             payslipNumber: payslip.payslipNumber,
             _id: payslip._id,
-            employeeId: payslip.employee?.employeeId || "EMP001",
-            employeeName: payslip.employee?.fullName || "Kwame Mensah",
-            department: payslip.employee?.department || "Software Engineering",
-            position: payslip.employee?.position || "Senior Fullstack Engineer",
+            employeeId: payslip.employee?.employeeId || "",
+            employeeName: payslip.employee?.fullName || "Employee",
+            department: payslip.employee?.department || "Operations",
+            position: payslip.employee?.position || "Staff",
             month: payslip.payMonth,
             payMonth: payslip.payMonth,
             basicSalary: payslip.basicSalary,
@@ -847,8 +731,38 @@ export const employeePayslips = async (req, res) => {
           }));
         }
       } catch (dbErr) {
-        console.warn("DB fallback for employeePayslips:", dbErr.message);
+        console.warn("DB error for employeePayslips:", dbErr.message);
       }
+    }
+
+    // Merge live generated store records matching this employee
+    if (livePayrollStore.length > 0 && (rawEmployeeId || validObjectId)) {
+      const liveMatches = livePayrollStore.filter((p) => {
+        const pEmpId = String(p.employee?._id || p.employee || "");
+        return pEmpId === String(validObjectId) || pEmpId === String(rawEmployeeId) || p.employeeId === rawEmployeeId;
+      });
+
+      liveMatches.forEach((p) => {
+        if (!formattedPayslips.some((f) => String(f._id) === String(p._id) || f.payslipNumber === p.payslipNumber)) {
+          formattedPayslips.unshift({
+            id: p.payslipNumber || p.id,
+            payslipNumber: p.payslipNumber || p.id,
+            _id: p._id,
+            employeeId: p.employee?.employeeId || p.employeeId || "",
+            employeeName: p.employee?.fullName || p.employeeName || "Employee",
+            department: p.employee?.department || p.department || "Operations",
+            position: p.employee?.position || p.position || "Staff",
+            month: p.payMonth || p.month,
+            payMonth: p.payMonth || p.month,
+            basicSalary: p.basicSalary,
+            allowances: p.allowances,
+            deductions: p.deductions,
+            netSalary: p.netSalary,
+            status: p.status,
+            paymentDate: p.paymentDate,
+          });
+        }
+      });
     }
 
     return res.status(200).json({

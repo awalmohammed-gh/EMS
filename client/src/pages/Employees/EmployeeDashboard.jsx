@@ -25,8 +25,6 @@ import Loading from "../../ui/Loading";
 import ErrorMessage from "../../ui/ErrorMessage";
 import { useManagement } from "../../context/ManagementContextProvider";
 import { useNavigate } from "react-router-dom";
-import { employeeProfile } from "../../assets/employeesData";
-import NotificationBell from "../../components/NotificationBell";
 
 const EmployeeDashboard = () => {
   const [dashboardData, setDashboardData] = useState(null);
@@ -48,7 +46,7 @@ const EmployeeDashboard = () => {
       setIsLoading(true);
       setIsError(null);
       const { data } = await employeeDashboardOverview();
-      console.log("Employee Dashboard Data:", data);
+      console.log("Employee Dashboard Live Data:", data);
 
       if (data && data.success) {
         setDashboardData(data);
@@ -73,41 +71,24 @@ const EmployeeDashboard = () => {
           });
         }
       } else {
-        throw new Error(data?.message || "Failed to fetch dashboard data.");
+        const errorMsg = data?.message || "Failed to fetch dashboard data.";
+        setIsError(errorMsg);
+        setShowToast({
+          show: true,
+          message: errorMsg,
+          type: "error",
+        });
       }
     } catch (error) {
-      console.warn("Using resilient fallback for employee dashboard:", error.message);
-      const fallbackData = {
-        success: true,
-        employee: {
-          fullName: employeeProfile.name || "Kwame Mensah",
-          email: employeeProfile.email || "kwame.mensah@eyenit.com",
-          department: employeeProfile.department || "Software Engineering",
-          position: employeeProfile.position || "Senior Fullstack Engineer",
-          isActive: true,
-        },
-        overview: {
-          presentDays: 20,
-          lateDays: 2,
-          leaveBalance: 12,
-          netSalary: 4500,
-          latestPayslip: {
-            month: "August 2026",
-            amount: 4500,
-          },
-        },
-        todayAttendance: null,
-        recentLeaves: [],
-      };
-      setDashboardData(fallbackData);
-      setAttendanceData((prev) => ({
-        date: prev.date || new Date().toISOString().split("T")[0],
-        clockIn: prev.clockIn || null,
-        clockOut: prev.clockOut || null,
-        status: prev.status || null,
-        workHours: prev.workHours || 0,
-      }));
-      setIsError(null);
+      console.error("Error fetching employee dashboard:", error);
+      const errorMessage =
+        error.response?.data?.message || error.message || "Failed to fetch live dashboard data.";
+      setIsError(errorMessage);
+      setShowToast({
+        show: true,
+        message: errorMessage,
+        type: "error",
+      });
     } finally {
       setIsLoading(false);
     }
@@ -423,8 +404,22 @@ const EmployeeDashboard = () => {
       <div className="bg-[#FFFFFF] border border-[#E2E8F0] rounded-2xl p-6 shadow-sm hover:border-[#ff5500] transition-all duration-300">
         <div className="flex flex-col md:flex-row items-start md:items-center justify-between gap-4">
           <div className="flex items-center gap-4">
-            <div className="relative w-16 h-16 rounded-2xl bg-[#002185] flex items-center justify-center text-2xl font-bold text-white shadow-md ring-4 ring-[#002185]/10">
-              {employee.fullName?.charAt(0) || "E"}
+            <div className="relative w-16 h-16 rounded-2xl overflow-hidden bg-[#002185] flex items-center justify-center shadow-md ring-4 ring-[#002185]/10 shrink-0">
+              {employee.avatar || employee.profile_picture || employee.avatar_url ? (
+                <img
+                  src={employee.avatar || employee.profile_picture || employee.avatar_url}
+                  alt={employee.fullName || "Employee"}
+                  className="w-full h-full object-cover"
+                />
+              ) : (
+                <img
+                  src={`https://ui-avatars.com/api/?name=${encodeURIComponent(
+                    employee.fullName || "Employee",
+                  )}&background=002185&color=fff&bold=true`}
+                  alt={employee.fullName || "Employee"}
+                  className="w-full h-full object-cover"
+                />
+              )}
               {employee.isActive && (
                 <span className="absolute -bottom-1 -right-1 w-4 h-4 rounded-full bg-[#16A34A] border-2 border-white" />
               )}
@@ -450,9 +445,6 @@ const EmployeeDashboard = () => {
             </div>
           </div>
           <div className="flex items-center gap-3">
-            {/* Notification Bell */}
-            <NotificationBell role="employee" />
-
             <span
               className={`px-3 py-1.5 rounded-full text-xs font-semibold ${
                 employee.isActive
@@ -462,9 +454,11 @@ const EmployeeDashboard = () => {
             >
               {employee.isActive ? "Active" : "Inactive"}
             </span>
-            <span className="text-sm text-[#64748B] bg-[#F8FAFC] px-3 py-1.5 rounded-xl border border-[#E2E8F0] font-medium">
-              ID: {employee.employeeId || employee._id?.slice(-6) || "EMP001"}
-            </span>
+            {(employee.employeeId || employee._id) && (
+              <span className="text-sm text-[#64748B] bg-[#F8FAFC] px-3 py-1.5 rounded-xl border border-[#E2E8F0] font-medium font-mono">
+                ID: {employee.employeeId || employee._id?.slice(-6)}
+              </span>
+            )}
           </div>
         </div>
       </div>
@@ -787,11 +781,25 @@ const EmployeeDashboard = () => {
                 </span>
               </div>
               <div className="flex gap-2 mt-4 pt-4 border-t border-[#E2E8F0]">
-                <button className="flex-1 flex items-center justify-center gap-2 px-4 py-2 bg-[#002185] text-white rounded-lg hover:bg-[#ff5500] transition-all duration-300 text-sm font-medium">
+                <button
+                  type="button"
+                  onClick={() => {
+                    navigate("/employee/dashboard/payslips");
+                    scrollTo({ top: 0, behavior: "smooth" });
+                  }}
+                  className="flex-1 flex items-center justify-center gap-2 px-4 py-2 bg-[#002185] text-white rounded-lg hover:bg-[#ff5500] transition-all duration-300 text-sm font-medium cursor-pointer"
+                >
                   <Eye className="w-4 h-4" />
                   View
                 </button>
-                <button className="flex-1 flex items-center justify-center gap-2 px-4 py-2 border border-[#E2E8F0] text-[#64748B] rounded-lg hover:border-[#ff5500] hover:text-[#ff5500] transition-all duration-300 text-sm font-medium">
+                <button
+                  type="button"
+                  onClick={() => {
+                    navigate("/employee/dashboard/payslips");
+                    scrollTo({ top: 0, behavior: "smooth" });
+                  }}
+                  className="flex-1 flex items-center justify-center gap-2 px-4 py-2 border border-[#E2E8F0] text-[#64748B] rounded-lg hover:border-[#ff5500] hover:text-[#ff5500] transition-all duration-300 text-sm font-medium cursor-pointer"
+                >
                   <Download className="w-4 h-4" />
                   Download
                 </button>

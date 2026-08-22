@@ -1,4 +1,4 @@
-import { useState, useMemo } from "react";
+import { useState, useMemo, useEffect } from "react";
 import {
   Calendar,
   Clock,
@@ -13,21 +13,8 @@ import {
   Users,
   X,
 } from "lucide-react";
-import { dummyProfileData, attendanceRecords } from "../assets/data";
+import { allEmployees } from "../apis/fontApis";
 import WeeklyAttendanceChart from "./WeeklyAttendanceChart";
-
-const initialSampleLogs = attendanceRecords.map((item, idx) => ({
-  id: item.id || `EYENIT-${1000 + idx}`,
-  employeeId: item.employeeId || `EMP00${idx + 1}`,
-  employeeName: item.employeeName || "Employee",
-  department: item.department || "Operations",
-  date: item.date || new Date().toISOString().split("T")[0],
-  checkIn: item.checkIn || "08:00 AM",
-  checkOut: item.checkOut || "05:00 PM",
-  workHours: item.workHours || "8h 00m",
-  status: item.status || "Present",
-  notes: "Regular check-in",
-}));
 
 export const DailyAttendanceLogger = ({
   initialData = null,
@@ -36,12 +23,13 @@ export const DailyAttendanceLogger = ({
   showAddForm = true,
 }) => {
   const [logs, setLogs] = useState(() => {
-    if (initialData && Array.isArray(initialData) && initialData.length > 0) {
+    if (initialData && Array.isArray(initialData)) {
       return initialData;
     }
-    return initialSampleLogs;
+    return [];
   });
 
+  const [employeesList, setEmployeesList] = useState([]);
   const [searchTerm, setSearchTerm] = useState("");
   const [selectedStatus, setSelectedStatus] = useState("All");
   const [selectedDate, setSelectedDate] = useState("");
@@ -50,9 +38,9 @@ export const DailyAttendanceLogger = ({
 
   // New Log Form State
   const [formData, setFormData] = useState({
-    employeeId: "EMP001",
-    employeeName: "Kwame Mensah",
-    department: "Engineering",
+    employeeId: "",
+    employeeName: "",
+    department: "",
     date: new Date().toISOString().split("T")[0],
     checkIn: new Date().toLocaleTimeString("en-US", {
       hour: "2-digit",
@@ -63,6 +51,34 @@ export const DailyAttendanceLogger = ({
     status: "Present",
     notes: "",
   });
+
+  useEffect(() => {
+    if (initialData && Array.isArray(initialData)) {
+      setLogs(initialData);
+    }
+  }, [initialData]);
+
+  useEffect(() => {
+    const fetchEmployees = async () => {
+      try {
+        const { data } = await allEmployees();
+        if (data && data.success && Array.isArray(data.employees)) {
+          setEmployeesList(data.employees);
+          if (data.employees.length > 0) {
+            setFormData((prev) => ({
+              ...prev,
+              employeeId: data.employees[0].employeeId || data.employees[0]._id,
+              employeeName: data.employees[0].fullName,
+              department: data.employees[0].department,
+            }));
+          }
+        }
+      } catch (err) {
+        console.warn("Could not load employee directory for logger:", err.message);
+      }
+    };
+    fetchEmployees();
+  }, []);
 
   // Filtered attendance data
   const filteredLogs = useMemo(() => {
@@ -510,8 +526,8 @@ export const DailyAttendanceLogger = ({
                 <select
                   value={formData.employeeId}
                   onChange={(e) => {
-                    const emp = dummyProfileData.find(
-                      (d) => d.id === e.target.value,
+                    const emp = employeesList.find(
+                      (d) => (d.employeeId || d._id) === e.target.value,
                     );
                     setFormData((prev) => ({
                       ...prev,
@@ -522,9 +538,12 @@ export const DailyAttendanceLogger = ({
                   }}
                   className="w-full text-sm bg-[#F8FAFC] border border-[#E2E8F0] rounded-xl px-3.5 py-2.5 text-[#002185] focus:outline-none focus:border-[#002185]"
                 >
-                  {dummyProfileData.map((emp) => (
-                    <option key={emp.id} value={emp.id}>
-                      {emp.fullName} ({emp.id}) - {emp.department}
+                  {employeesList.length === 0 && (
+                    <option value="">No employees found</option>
+                  )}
+                  {employeesList.map((emp) => (
+                    <option key={emp._id || emp.employeeId} value={emp.employeeId || emp._id}>
+                      {emp.fullName} ({emp.employeeId || "EMP"}) - {emp.department}
                     </option>
                   ))}
                 </select>
