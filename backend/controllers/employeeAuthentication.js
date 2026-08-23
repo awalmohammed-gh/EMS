@@ -15,6 +15,7 @@ export const createEmployeeAccount = async (req, res) => {
       department,
       position,
       employmentDate,
+      role,
     } = req.body;
 
     // Validate input
@@ -54,7 +55,7 @@ export const createEmployeeAccount = async (req, res) => {
     // Hash password
     const hashedPassword = await bcrypt.hash(password, 10);
 
-    // Create real MongoDB employee record with default active status
+    // Create real MongoDB employee record with default active status and assigned role
     const employee = await Employee.create({
       employeeId,
       fullName,
@@ -64,7 +65,7 @@ export const createEmployeeAccount = async (req, res) => {
       department,
       position,
       employmentDate: new Date(employmentDate),
-      role: "employee",
+      role: role || "employee",
       status: "active",
       isActive: true,
     });

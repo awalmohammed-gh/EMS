@@ -38,7 +38,7 @@ const EmployeeDashboard = () => {
     workHours: 0,
   });
 
-  const { setShowToast } = useManagement();
+  const { setShowToast, user, setUser } = useManagement();
   const navigate = useNavigate();
 
   const fetchEmployeeDashboardData = async () => {
@@ -50,6 +50,12 @@ const EmployeeDashboard = () => {
 
       if (data && data.success) {
         setDashboardData(data);
+        if (data.employee) {
+          localStorage.setItem("employeeData", JSON.stringify(data.employee));
+          if (typeof setUser === "function") {
+            setUser(data.employee);
+          }
+        }
 
         if (data.todayAttendance) {
           setAttendanceData({
@@ -342,6 +348,39 @@ const EmployeeDashboard = () => {
   // Get latest payslip from overview
   const latestPayslip = overview.latestPayslip || {};
 
+  // Database-bound account status ('active', 'inactive', 'suspended')
+  const currentStatus = (
+    employee?.status ||
+    user?.status ||
+    (employee?.isActive !== false ? "active" : "inactive")
+  ).toLowerCase().trim();
+
+  const getAccountStatusBadge = (status) => {
+    switch (status) {
+      case "active":
+        return {
+          label: "Active",
+          className: "bg-[#16A34A] text-white",
+          dotColor: "bg-[#16A34A]",
+        };
+      case "suspended":
+        return {
+          label: "Suspended",
+          className: "bg-[#DC2626] text-white",
+          dotColor: "bg-[#DC2626]",
+        };
+      case "inactive":
+      default:
+        return {
+          label: "Inactive",
+          className: "bg-[#64748B] text-white",
+          dotColor: "bg-[#64748B]",
+        };
+    }
+  };
+
+  const accountBadge = getAccountStatusBadge(currentStatus);
+
   // Calculate total days
   const totalDays = (overview.presentDays || 0) + (overview.lateDays || 0);
 
@@ -412,47 +451,45 @@ const EmployeeDashboard = () => {
                   className="w-full h-full object-cover"
                 />
               ) : (
-                <img
-                  src={`https://ui-avatars.com/api/?name=${encodeURIComponent(
-                    employee.fullName || "Employee",
-                  )}&background=002185&color=fff&bold=true`}
-                  alt={employee.fullName || "Employee"}
-                  className="w-full h-full object-cover"
-                />
+                <div className="w-full h-full bg-[#ff5500] text-white flex items-center justify-center font-bold text-lg select-none">
+                  {employee.fullName
+                    ? employee.fullName
+                        .trim()
+                        .split(/\s+/)
+                        .map((n) => n[0])
+                        .join("")
+                        .toUpperCase()
+                        .slice(0, 2)
+                    : "MA"}
+                </div>
               )}
-              {employee.isActive && (
-                <span className="absolute -bottom-1 -right-1 w-4 h-4 rounded-full bg-[#16A34A] border-2 border-white" />
-              )}
+              <span className={`absolute -bottom-1 -right-1 w-4 h-4 rounded-full border-2 border-white ${accountBadge.dotColor}`} />
             </div>
             <div>
               <h1 className="text-2xl font-bold text-[#002185]">
-                Welcome back, {employee.fullName || "Employee"}!
+                Welcome back, {employee.fullName || user?.fullName || "Mohammed Awal"}!
               </h1>
               <div className="flex flex-wrap items-center gap-3 mt-1.5 text-sm text-[#64748B]">
                 <span className="flex items-center gap-1.5 bg-[#F8FAFC] rounded-full px-2.5 py-1">
                   <Briefcase className="w-3.5 h-3.5 text-[#002185]" />
-                  {employee.position || "N/A"}
+                  {employee.position || user?.position || "Frontend Developer"}
                 </span>
                 <span className="flex items-center gap-1.5 bg-[#F8FAFC] rounded-full px-2.5 py-1">
                   <Building2 className="w-3.5 h-3.5 text-[#002185]" />
-                  {employee.department || "N/A"}
+                  {employee.department || user?.department || "Engineering"}
                 </span>
                 <span className="flex items-center gap-1.5 bg-[#F8FAFC] rounded-full px-2.5 py-1">
                   <Mail className="w-3.5 h-3.5 text-[#002185]" />
-                  {employee.email || "N/A"}
+                  {employee.email || user?.email || "awalm8043@gmail.com"}
                 </span>
               </div>
             </div>
           </div>
           <div className="flex items-center gap-3">
             <span
-              className={`px-3 py-1.5 rounded-full text-xs font-semibold ${
-                employee.isActive
-                  ? "bg-[#16A34A] text-white"
-                  : "bg-[#64748B] text-white"
-              }`}
+              className={`px-3 py-1.5 rounded-full text-xs font-semibold ${accountBadge.className}`}
             >
-              {employee.isActive ? "Active" : "Inactive"}
+              {accountBadge.label}
             </span>
             {(employee.employeeId || employee._id) && (
               <span className="text-sm text-[#64748B] bg-[#F8FAFC] px-3 py-1.5 rounded-xl border border-[#E2E8F0] font-medium font-mono">

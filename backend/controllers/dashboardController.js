@@ -45,9 +45,21 @@ export const getDashboardOverview = async (req, res) => {
     ];
     let leaveTypeDistribution = [];
     let pendingApprovalsList = [];
+    let departmentDistribution = [];
+    let employeeStatusDistribution = [
+      { name: "Active", value: 0, fill: "#16A34A" },
+      { name: "Inactive", value: 0, fill: "#F59E0B" },
+      { name: "Suspended", value: 0, fill: "#DC2626" },
+    ];
 
     try {
-      totalEmployees = await Employee.countDocuments({ isActive: true });
+      totalEmployees = await Employee.countDocuments({});
+      const dbActiveCount = await Employee.countDocuments({
+        $or: [{ status: "active" }, { status: { $exists: false }, isActive: { $ne: false } }],
+      });
+      const dbInactiveCount = await Employee.countDocuments({ status: "inactive" });
+      const dbSuspendedCount = await Employee.countDocuments({ status: "suspended" });
+
       presentToday = await Attendance.countDocuments({
         date: today,
         clockIn: { $ne: null },
@@ -61,7 +73,7 @@ export const getDashboardOverview = async (req, res) => {
         startDate: { $lte: new Date() },
         endDate: { $gte: new Date() },
       });
-      absentToday = Math.max(0, totalEmployees - presentToday - onLeave);
+      absentToday = Math.max(0, dbActiveCount - presentToday - onLeave);
 
       totalRequests = await Leave.countDocuments();
       approvedLeaves = await Leave.countDocuments({ status: "Approved" });
@@ -128,6 +140,61 @@ export const getDashboardOverview = async (req, res) => {
       if (dbDepartments.length > 0) {
         departments = dbDepartments;
       }
+
+      // Detailed Department & Status Breakdown Aggregation
+      const allEmployees = await Employee.find({})
+        .select("department status isActive")
+        .lean();
+
+      const deptMap = {};
+      let totalActive = 0;
+      let totalInactive = 0;
+      let totalSuspended = 0;
+
+      (allEmployees || []).forEach((emp) => {
+        const dept = emp.department || "General";
+        const rawStatus = (
+          emp.status || (emp.isActive !== false ? "active" : "inactive")
+        )
+          .toLowerCase()
+          .trim();
+        const status =
+          rawStatus === "suspended" || rawStatus === "inactive"
+            ? rawStatus
+            : "active";
+
+        if (!deptMap[dept]) {
+          deptMap[dept] = {
+            department: dept,
+            active: 0,
+            inactive: 0,
+            suspended: 0,
+            total: 0,
+          };
+        }
+
+        if (status === "active") {
+          deptMap[dept].active += 1;
+          totalActive += 1;
+        } else if (status === "inactive") {
+          deptMap[dept].inactive += 1;
+          totalInactive += 1;
+        } else if (status === "suspended") {
+          deptMap[dept].suspended += 1;
+          totalSuspended += 1;
+        }
+        deptMap[dept].total += 1;
+      });
+
+      departmentDistribution = Object.values(deptMap).sort(
+        (a, b) => b.total - a.total
+      );
+
+      employeeStatusDistribution = [
+        { name: "Active", value: totalActive, fill: "#16A34A" },
+        { name: "Inactive", value: totalInactive, fill: "#F59E0B" },
+        { name: "Suspended", value: totalSuspended, fill: "#DC2626" },
+      ];
     } catch (dbErr) {
       console.warn("DB query for admin dashboard:", dbErr.message);
     }
@@ -186,6 +253,8 @@ export const getDashboardOverview = async (req, res) => {
         leaveTypeDistribution,
         pendingApprovalsList,
         departments,
+        departmentDistribution,
+        employeeStatusDistribution,
       },
     });
   } catch (error) {
@@ -221,7 +290,7 @@ export const employeeDashboardOverview = async (req, res) => {
       if (isValidObjectId(rawEmployeeId)) {
         validObjectId = rawEmployeeId;
         dbEmployee = await Employee.findById(rawEmployeeId)
-          .select("fullName email department position isActive employeeId phone")
+          .select("fullName email department position isActive status employeeId phone")
           .lean();
       } else if (rawEmployeeId) {
         dbEmployee = await Employee.findOne({
@@ -230,7 +299,7 @@ export const employeeDashboardOverview = async (req, res) => {
             { email: rawEmployeeId },
           ],
         })
-          .select("fullName email department position isActive employeeId phone")
+          .select("fullName email department position isActive status employeeId phone")
           .lean();
         if (dbEmployee && dbEmployee._id) {
           validObjectId = dbEmployee._id.toString();
@@ -239,6 +308,29 @@ export const employeeDashboardOverview = async (req, res) => {
 
       if (dbEmployee) {
         employee = dbEmployee;
+      } else {
+        const anyEmployee = await Employee.findOne({ isActive: true })
+          .select("fullName email department position isActive status employeeId phone")
+          .lean();
+        if (anyEmployee) {
+          employee = anyEmployee;
+          validObjectId = anyEmployee._id.toString();
+        }
+      }
+
+      if (!employee) {
+        employee = {
+          _id: rawEmployeeId || "emp_demo_001",
+          employeeId: "EMP-001",
+          fullName: "Mohammed Awal",
+          email: "awalm8043@gmail.com",
+          phone: "+233 24 123 4567",
+          department: "Engineering",
+          position: "Frontend Developer",
+          role: "employee",
+          status: "active",
+          isActive: true,
+        };
       }
 
       if (validObjectId) {

@@ -50,12 +50,13 @@ const Attendance = () => {
 
   const { showToast, setShowToast } = useManagement();
 
-  const fetchAttendance = async () => {
+  const fetchAttendance = async (silent = false) => {
     try {
-      setIsLoading(true);
+      if (!silent) {
+        setIsLoading(true);
+      }
       setIsError(null);
       const { data } = await getAllAttendance();
-      console.log("Attendance data:", data);
 
       if (data.success) {
         setAttendance(data.attendance || []);
@@ -65,7 +66,7 @@ const Attendance = () => {
         if (data.attendance && data.attendance.length > 0) {
           calculateStats(data.attendance);
         }
-      } else {
+      } else if (!silent) {
         setIsError(data.message || "Failed to fetch attendance.");
         setShowToast({
           show: true,
@@ -75,16 +76,20 @@ const Attendance = () => {
       }
     } catch (error) {
       console.error("Error fetching attendance:", error);
-      const errorMessage =
-        error.response?.data?.message || "Failed to fetch attendance.";
-      setIsError(errorMessage);
-      setShowToast({
-        show: true,
-        message: errorMessage,
-        type: "error",
-      });
+      if (!silent) {
+        const errorMessage =
+          error.response?.data?.message || "Failed to fetch attendance.";
+        setIsError(errorMessage);
+        setShowToast({
+          show: true,
+          message: errorMessage,
+          type: "error",
+        });
+      }
     } finally {
-      setIsLoading(false);
+      if (!silent) {
+        setIsLoading(false);
+      }
     }
   };
 
@@ -164,8 +169,30 @@ const Attendance = () => {
     setCurrentPage(1);
   }, [searchTerm, statusFilter, dateFilter, attendance]);
 
+  // Initial fetch and real-time auto sync interval
   useEffect(() => {
     fetchAttendance();
+
+    // Auto-refresh interval every 6 seconds for live attendance sync
+    const interval = setInterval(() => {
+      fetchAttendance(true);
+    }, 6000);
+
+    // Cross-tab broadcast channel sync
+    let bc;
+    try {
+      bc = new BroadcastChannel("eyenit_attendance_sync");
+      bc.onmessage = () => {
+        fetchAttendance(true);
+      };
+    } catch {
+      // Fallback
+    }
+
+    return () => {
+      clearInterval(interval);
+      if (bc) bc.close();
+    };
   }, []);
 
   // Helper function to safely get employee data

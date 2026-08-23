@@ -7,6 +7,7 @@ import {
   updateEmployeeStatus,
   deleteEmployee,
 } from "../controllers/adminController.js";
+import { createEmployeeAccount } from "../controllers/employeeAuthentication.js";
 import { verifyAdmin } from "../middleware/authAdmin.js";
 
 const adminRouter = express.Router();
@@ -17,6 +18,8 @@ adminRouter.post("/admin-logout", adminLogout);
 adminRouter.post("/logout", adminLogout);
 adminRouter.post("/create-account", verifyAdmin, createAdminAccount);
 adminRouter.post("/register", verifyAdmin, createAdminAccount);
+adminRouter.post("/create-user", verifyAdmin, createEmployeeAccount);
+adminRouter.post("/create-employee", verifyAdmin, createEmployeeAccount);
 adminRouter.get("/me", verifyAdmin, getAdminProfile);
 adminRouter.get("/profile", verifyAdmin, getAdminProfile);
 

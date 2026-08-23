@@ -16,22 +16,38 @@ import {
   ChevronRight,
   Download,
   FileSpreadsheet,
+  Trash2,
+  UserCheck,
+  AlertTriangle,
+  ShieldAlert,
+  Loader2,
 } from "lucide-react";
 import { exportEmployeesToCSV } from "../utils/exportCsv";
+import { updateEmployeeStatus, deleteEmployee } from "../apis/fontApis";
+import { useManagement } from "../context/ManagementContextProvider";
 
 export const EmployeeDirectory = ({
   employees = [],
   isLoading = false,
   onRefresh,
 }) => {
+  const { role } = useManagement();
+  const isAdmin = role === "admin" || window.location.pathname.startsWith("/admin");
+
   const [search, setSearch] = useState("");
   const [selectedDepartment, setSelectedDepartment] = useState("All");
   const [selectedStatus, setSelectedStatus] = useState("All");
-  const [viewMode, setViewMode] = useState("grid"); // "grid" | "table"
+  const [viewMode, setViewMode] = useState("table"); // Default to table for easy admin operations
   const [selectedEmployee, setSelectedEmployee] = useState(null);
   const [copiedField, setCopiedField] = useState(null);
   const [isExporting, setIsExporting] = useState(false);
   const [exportSuccess, setExportSuccess] = useState(false);
+
+  // Status update & delete state
+  const [statusUpdatingId, setStatusUpdatingId] = useState(null);
+  const [employeeToDelete, setEmployeeToDelete] = useState(null);
+  const [isDeleting, setIsDeleting] = useState(false);
+  const [actionMessage, setActionMessage] = useState(null);
 
   // Extract unique departments and statuses
   const departments = useMemo(() => {
@@ -39,7 +55,7 @@ export const EmployeeDirectory = ({
     return ["All", ...Array.from(set)];
   }, [employees]);
 
-  const statusOptions = ["All", "Active", "On Leave", "Inactive"];
+  const statusOptions = ["All", "Active", "Inactive", "Suspended"];
 
   // Filtered employees list
   const filteredEmployees = useMemo(() => {
@@ -63,11 +79,12 @@ export const EmployeeDirectory = ({
         idMatch ||
         locMatch;
 
-      const empStatus =
-        emp.status || (emp.isActive !== false ? "Active" : "Inactive");
+      const empStatus = (
+        emp.status || (emp.isActive !== false ? "active" : "inactive")
+      ).toLowerCase();
       const matchesStatus =
         selectedStatus === "All" ||
-        empStatus.toLowerCase() === selectedStatus.toLowerCase();
+        empStatus === selectedStatus.toLowerCase();
 
       const matchesDept =
         selectedDepartment === "All" || emp.department === selectedDepartment;
@@ -80,12 +97,17 @@ export const EmployeeDirectory = ({
   const metrics = useMemo(() => {
     const total = employees.length;
     const active = employees.filter(
-      (e) => (e.status || (e.isActive ? "Active" : "Inactive")) === "Active"
+      (e) => (e.status || (e.isActive ? "active" : "inactive")).toLowerCase() === "active"
     ).length;
-    const onLeave = employees.filter((e) => e.status === "On Leave").length;
+    const inactive = employees.filter(
+      (e) => (e.status || "").toLowerCase() === "inactive"
+    ).length;
+    const suspended = employees.filter(
+      (e) => (e.status || "").toLowerCase() === "suspended"
+    ).length;
     const deptsCount = new Set(employees.map((e) => e.department).filter(Boolean))
       .size;
-    return { total, active, onLeave, deptsCount };
+    return { total, active, inactive, suspended, deptsCount };
   }, [employees]);
 
   const handleExportCSV = () => {
@@ -123,32 +145,104 @@ export const EmployeeDirectory = ({
     setTimeout(() => setCopiedField(null), 2000);
   };
 
+  const handleStatusChange = async (employeeId, newStatus) => {
+    try {
+      setStatusUpdatingId(employeeId);
+      setActionMessage(null);
+      const res = await updateEmployeeStatus(employeeId, newStatus);
+      if (res?.data?.success) {
+        setActionMessage({
+          type: "success",
+          text: res.data.message || `Status updated to ${newStatus}.`,
+        });
+        if (selectedEmployee && (selectedEmployee._id === employeeId || selectedEmployee.employeeId === employeeId)) {
+          setSelectedEmployee((prev) => ({
+            ...prev,
+            status: newStatus,
+            isActive: newStatus === "active",
+          }));
+        }
+        if (typeof onRefresh === "function") {
+          await onRefresh();
+        }
+      }
+    } catch (err) {
+      console.error("Status update error:", err);
+      setActionMessage({
+        type: "error",
+        text:
+          err.response?.data?.message ||
+          err.message ||
+          "Failed to update employee status.",
+      });
+    } finally {
+      setStatusUpdatingId(null);
+      setTimeout(() => setActionMessage(null), 4000);
+    }
+  };
+
+  const handleDeleteEmployee = async () => {
+    if (!employeeToDelete) return;
+    const targetId = employeeToDelete._id || employeeToDelete.employeeId;
+    try {
+      setIsDeleting(true);
+      const res = await deleteEmployee(targetId);
+      if (res?.data?.success) {
+        setActionMessage({
+          type: "success",
+          text:
+            res.data.message ||
+            `Employee "${employeeToDelete.fullName}" successfully removed.`,
+        });
+        setEmployeeToDelete(null);
+        if (selectedEmployee && (selectedEmployee._id === targetId || selectedEmployee.employeeId === targetId)) {
+          setSelectedEmployee(null);
+        }
+        if (typeof onRefresh === "function") {
+          await onRefresh();
+        }
+      }
+    } catch (err) {
+      console.error("Delete employee error:", err);
+      setActionMessage({
+        type: "error",
+        text:
+          err.response?.data?.message ||
+          err.message ||
+          "Failed to delete employee from database.",
+      });
+    } finally {
+      setIsDeleting(false);
+      setTimeout(() => setActionMessage(null), 5000);
+    }
+  };
+
   const getStatusBadge = (status, isActive) => {
-    const s = status || (isActive !== false ? "Active" : "Inactive");
-    switch (s) {
-      case "Active":
+    const raw = (status || (isActive !== false ? "active" : "inactive")).toLowerCase();
+    switch (raw) {
+      case "active":
         return {
           bg: "bg-[#F0FDF4] text-[#16A34A] border-[#16A34A]/30",
           dot: "bg-[#16A34A]",
           label: "Active",
         };
-      case "On Leave":
-        return {
-          bg: "bg-[#FFFBEB] text-[#B45309] border-[#F59E0B]/30",
-          dot: "bg-[#F59E0B]",
-          label: "On Leave",
-        };
-      case "Inactive":
+      case "suspended":
         return {
           bg: "bg-[#FEF2F2] text-[#DC2626] border-[#DC2626]/30",
           dot: "bg-[#DC2626]",
+          label: "Suspended",
+        };
+      case "inactive":
+        return {
+          bg: "bg-[#FFFBEB] text-[#B45309] border-[#F59E0B]/30",
+          dot: "bg-[#F59E0B]",
           label: "Inactive",
         };
       default:
         return {
           bg: "bg-[#F8FAFC] text-[#64748B] border-[#64748B]/30",
           dot: "bg-[#64748B]",
-          label: s,
+          label: raw.charAt(0).toUpperCase() + raw.slice(1),
         };
     }
   };
@@ -199,8 +293,12 @@ export const EmployeeDirectory = ({
               <div className="text-[10px] text-[#16A34A] font-medium uppercase">Active</div>
             </div>
             <div className="px-3 py-2 rounded-xl bg-[#FFFBEB] border border-[#F59E0B]/20 text-center min-w-[70px]">
-              <div className="text-sm font-bold text-[#B45309]">{metrics.onLeave}</div>
-              <div className="text-[10px] text-[#B45309] font-medium uppercase">On Leave</div>
+              <div className="text-sm font-bold text-[#B45309]">{metrics.inactive}</div>
+              <div className="text-[10px] text-[#B45309] font-medium uppercase">Inactive</div>
+            </div>
+            <div className="px-3 py-2 rounded-xl bg-[#FEF2F2] border border-[#DC2626]/20 text-center min-w-[70px]">
+              <div className="text-sm font-bold text-[#DC2626]">{metrics.suspended}</div>
+              <div className="text-[10px] text-[#DC2626] font-medium uppercase">Suspended</div>
             </div>
             <div className="px-3 py-2 rounded-xl bg-[#F8FAFC] border border-[#E2E8F0] text-center min-w-[70px]">
               <div className="text-sm font-bold text-[#002185]">{metrics.deptsCount}</div>
@@ -219,6 +317,33 @@ export const EmployeeDirectory = ({
             )}
           </div>
         </div>
+
+        {/* Action Message Feedback Banner */}
+        {actionMessage && (
+          <div
+            className={`mt-4 p-3 rounded-xl text-xs font-semibold flex items-center justify-between border ${
+              actionMessage.type === "success"
+                ? "bg-[#F0FDF4] text-[#16A34A] border-[#16A34A]/30"
+                : "bg-[#FEF2F2] text-[#DC2626] border-[#DC2626]/30"
+            }`}
+          >
+            <div className="flex items-center gap-2">
+              {actionMessage.type === "success" ? (
+                <Check className="w-4 h-4 text-[#16A34A]" />
+              ) : (
+                <AlertTriangle className="w-4 h-4 text-[#DC2626]" />
+              )}
+              <span>{actionMessage.text}</span>
+            </div>
+            <button
+              type="button"
+              onClick={() => setActionMessage(null)}
+              className="text-[#64748B] hover:text-[#0F172A] p-0.5 cursor-pointer"
+            >
+              <X className="w-3.5 h-3.5" />
+            </button>
+          </div>
+        )}
 
         {/* Search Input and Filter Bar */}
         <div className="mt-4 pt-4 border-t border-[#E2E8F0] flex flex-col md:flex-row gap-3">
@@ -418,6 +543,43 @@ export const EmployeeDirectory = ({
                     <span className="truncate">{emp.position || "Staff Member"}</span>
                   </div>
 
+                  {/* Admin Status Quick Switcher */}
+                  {isAdmin && (
+                    <div className="mt-3 p-2.5 bg-[#F8FAFC] rounded-xl border border-[#E2E8F0] space-y-1.5">
+                      <div className="text-[10px] font-bold text-[#64748B] uppercase tracking-wider flex items-center justify-between">
+                        <span>Account Status</span>
+                        {statusUpdatingId === empId && (
+                          <Loader2 className="w-3 h-3 text-[#002185] animate-spin" />
+                        )}
+                      </div>
+                      <div className="grid grid-cols-3 gap-1">
+                        {["active", "inactive", "suspended"].map((st) => {
+                          const currentStatus = (emp.status || (emp.isActive !== false ? "active" : "inactive")).toLowerCase();
+                          const isCurrent = currentStatus === st;
+                          return (
+                            <button
+                              key={st}
+                              type="button"
+                              disabled={statusUpdatingId === empId || isCurrent}
+                              onClick={() => handleStatusChange(empId, st)}
+                              className={`px-2 py-1 rounded-lg text-[10px] font-bold capitalize transition-all cursor-pointer ${
+                                isCurrent
+                                  ? st === "active"
+                                    ? "bg-[#16A34A] text-white shadow-xs"
+                                    : st === "suspended"
+                                    ? "bg-[#DC2626] text-white shadow-xs"
+                                    : "bg-[#F59E0B] text-white shadow-xs"
+                                  : "bg-white border border-[#E2E8F0] text-[#64748B] hover:border-[#002185] hover:text-[#002185]"
+                              } disabled:opacity-60`}
+                            >
+                              {st}
+                            </button>
+                          );
+                        })}
+                      </div>
+                    </div>
+                  )}
+
                   {/* Contact Details Info Box */}
                   <div className="mt-3 space-y-2 text-xs">
                     {/* Email */}
@@ -476,9 +638,21 @@ export const EmployeeDirectory = ({
 
                 {/* Footer Action */}
                 <div className="mt-4 pt-3 border-t border-[#E2E8F0] flex items-center justify-between gap-2">
-                  <span className="text-[10px] text-[#94A3B8] font-medium">
-                    Type: {emp.employmentType || "Full-time"}
-                  </span>
+                  {isAdmin ? (
+                    <button
+                      type="button"
+                      onClick={() => setEmployeeToDelete(emp)}
+                      className="px-2.5 py-1.5 rounded-lg border border-[#FCA5A5] text-[#DC2626] hover:bg-[#FEF2F2] text-xs font-bold transition-all flex items-center gap-1.5 cursor-pointer"
+                      title="Delete employee permanently"
+                    >
+                      <Trash2 className="w-3.5 h-3.5" />
+                      <span>Delete</span>
+                    </button>
+                  ) : (
+                    <span className="text-[10px] text-[#94A3B8] font-medium">
+                      Type: {emp.employmentType || "Full-time"}
+                    </span>
+                  )}
                   <button
                     type="button"
                     onClick={() => setSelectedEmployee(emp)}
@@ -507,6 +681,7 @@ export const EmployeeDirectory = ({
                   <th className="px-4 py-3.5">Contact Details</th>
                   <th className="px-4 py-3.5">Location</th>
                   <th className="px-4 py-3.5 text-center">Status</th>
+                  {isAdmin && <th className="px-4 py-3.5 text-center">Update Status</th>}
                   <th className="px-4 py-3.5 text-right">Actions</th>
                 </tr>
               </thead>
@@ -520,6 +695,8 @@ export const EmployeeDirectory = ({
                     .join("")
                     .slice(0, 2)
                     .toUpperCase();
+                  const currentStatus = (emp.status || (emp.isActive !== false ? "active" : "inactive")).toLowerCase();
+                  const isUpdatingThis = statusUpdatingId === empId;
 
                   return (
                     <tr
@@ -583,7 +760,7 @@ export const EmployeeDirectory = ({
                         </div>
                       </td>
 
-                      {/* Status */}
+                      {/* Status Badge */}
                       <td className="px-4 py-3 text-center">
                         <span
                           className={`inline-flex items-center gap-1 text-[10px] font-bold px-2.5 py-1 rounded-full border ${badge.bg}`}
@@ -593,15 +770,55 @@ export const EmployeeDirectory = ({
                         </span>
                       </td>
 
-                      {/* Actions */}
+                      {/* Change Status Action (Admin only) */}
+                      {isAdmin && (
+                        <td className="px-4 py-3 text-center">
+                          <div className="inline-flex items-center gap-1 p-1 bg-[#F1F5F9] rounded-xl border border-[#E2E8F0]">
+                            {["active", "inactive", "suspended"].map((st) => (
+                              <button
+                                key={st}
+                                type="button"
+                                disabled={isUpdatingThis || currentStatus === st}
+                                onClick={() => handleStatusChange(empId, st)}
+                                className={`px-2 py-1 rounded-lg text-[10px] font-bold capitalize transition-all cursor-pointer ${
+                                  currentStatus === st
+                                    ? st === "active"
+                                      ? "bg-[#16A34A] text-white shadow-xs"
+                                      : st === "suspended"
+                                      ? "bg-[#DC2626] text-white shadow-xs"
+                                      : "bg-[#F59E0B] text-white shadow-xs"
+                                    : "bg-white hover:bg-[#F8FAFC] text-[#64748B] hover:text-[#002185]"
+                                } disabled:opacity-50`}
+                                title={`Set status to ${st}`}
+                              >
+                                {st}
+                              </button>
+                            ))}
+                          </div>
+                        </td>
+                      )}
+
+                      {/* Action Buttons */}
                       <td className="px-4 py-3 text-right">
-                        <button
-                          type="button"
-                          onClick={() => setSelectedEmployee(emp)}
-                          className="px-3 py-1 rounded-lg bg-[#F1F5F9] hover:bg-[#002185] hover:text-white text-[#002185] text-xs font-semibold transition-all cursor-pointer"
-                        >
-                          Details
-                        </button>
+                        <div className="flex items-center justify-end gap-1.5">
+                          <button
+                            type="button"
+                            onClick={() => setSelectedEmployee(emp)}
+                            className="px-3 py-1.5 rounded-lg bg-[#F1F5F9] hover:bg-[#002185] hover:text-white text-[#002185] text-xs font-semibold transition-all cursor-pointer"
+                          >
+                            Details
+                          </button>
+                          {isAdmin && (
+                            <button
+                              type="button"
+                              onClick={() => setEmployeeToDelete(emp)}
+                              className="p-1.5 rounded-lg border border-[#FCA5A5] text-[#DC2626] hover:bg-[#FEF2F2] transition-colors cursor-pointer"
+                              title="Delete employee permanently"
+                            >
+                              <Trash2 className="w-4 h-4" />
+                            </button>
+                          )}
+                        </div>
                       </td>
                     </tr>
                   );
@@ -635,6 +852,86 @@ export const EmployeeDirectory = ({
           >
             Clear All Filters
           </button>
+        </div>
+      )}
+
+      {/* Delete Confirmation Modal */}
+      {employeeToDelete && (
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-xs p-4 animate-fade-in"
+          onClick={() => !isDeleting && setEmployeeToDelete(null)}
+        >
+          <div
+            className="bg-white rounded-3xl max-w-md w-full overflow-hidden shadow-2xl border border-[#E2E8F0] animate-scale-up"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="bg-[#FEF2F2] p-6 border-b border-[#FCA5A5]/40 flex items-center gap-4">
+              <div className="w-12 h-12 rounded-2xl bg-[#DC2626] text-white flex items-center justify-center shadow-xs shrink-0">
+                <ShieldAlert className="w-6 h-6" />
+              </div>
+              <div>
+                <h3 className="text-base font-bold text-[#991B1B]">
+                  Confirm Employee Deletion
+                </h3>
+                <p className="text-xs text-[#B91C1C] mt-0.5">
+                  This action permanently removes the record from the database.
+                </p>
+              </div>
+            </div>
+
+            <div className="p-6 space-y-3 text-xs text-[#475569]">
+              <div className="p-3 bg-[#F8FAFC] rounded-2xl border border-[#E2E8F0] space-y-1.5">
+                <div className="flex justify-between">
+                  <span className="text-[#64748B]">Staff Name:</span>
+                  <span className="font-bold text-[#0F172A]">{employeeToDelete.fullName}</span>
+                </div>
+                <div className="flex justify-between">
+                  <span className="text-[#64748B]">Employee ID:</span>
+                  <span className="font-mono font-bold text-[#002185]">{employeeToDelete.employeeId}</span>
+                </div>
+                <div className="flex justify-between">
+                  <span className="text-[#64748B]">Email Address:</span>
+                  <span className="font-semibold text-[#0F172A]">{employeeToDelete.email}</span>
+                </div>
+                <div className="flex justify-between">
+                  <span className="text-[#64748B]">Department:</span>
+                  <span className="font-semibold text-[#0F172A]">{employeeToDelete.department}</span>
+                </div>
+              </div>
+              <p className="text-[11px] text-[#DC2626] bg-[#FEF2F2] p-2.5 rounded-xl border border-[#FCA5A5]">
+                Warning: Once deleted, this employee will no longer be able to log in, and all associated portal profile data will be permanently cleared from the active database.
+              </p>
+            </div>
+
+            <div className="p-4 bg-[#F8FAFC] border-t border-[#E2E8F0] flex items-center justify-end gap-3">
+              <button
+                type="button"
+                disabled={isDeleting}
+                onClick={() => setEmployeeToDelete(null)}
+                className="px-4 py-2 rounded-xl border border-[#E2E8F0] hover:bg-white text-xs font-bold text-[#64748B] hover:text-[#0F172A] transition-colors cursor-pointer disabled:opacity-50"
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                disabled={isDeleting}
+                onClick={handleDeleteEmployee}
+                className="px-4 py-2 rounded-xl bg-[#DC2626] hover:bg-[#B91C1C] text-white text-xs font-bold transition-all shadow-xs hover:shadow-md flex items-center gap-1.5 cursor-pointer disabled:opacity-50"
+              >
+                {isDeleting ? (
+                  <>
+                    <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                    <span>Deleting Record...</span>
+                  </>
+                ) : (
+                  <>
+                    <Trash2 className="w-3.5 h-3.5" />
+                    <span>Delete Employee</span>
+                  </>
+                )}
+              </button>
+            </div>
+          </div>
         </div>
       )}
 
@@ -678,7 +975,7 @@ export const EmployeeDirectory = ({
                     <span className="font-mono bg-white/20 text-white text-[10px] font-bold px-2 py-0.5 rounded">
                       {selectedEmployee.employeeId || "EMP"}
                     </span>
-                    <span className="text-[10px] font-bold px-2 py-0.5 rounded bg-emerald-500/30 text-emerald-100 border border-emerald-400/40">
+                    <span className="text-[10px] font-bold px-2 py-0.5 rounded bg-emerald-500/30 text-emerald-100 border border-emerald-400/40 capitalize">
                       {selectedEmployee.status || "Active"}
                     </span>
                   </div>
@@ -688,6 +985,46 @@ export const EmployeeDirectory = ({
 
             {/* Modal Body */}
             <div className="p-6 space-y-4 max-h-[70vh] overflow-y-auto">
+              {/* Admin Status Management in Profile Modal */}
+              {isAdmin && (
+                <div className="p-3 bg-[#F8FAFC] border border-[#002185]/20 rounded-2xl space-y-2">
+                  <div className="flex items-center justify-between">
+                    <span className="text-xs font-bold text-[#002185] uppercase tracking-wider flex items-center gap-1.5">
+                      <UserCheck className="w-3.5 h-3.5 text-[#ff5500]" />
+                      Update Account Status
+                    </span>
+                    {statusUpdatingId === (selectedEmployee._id || selectedEmployee.employeeId) && (
+                      <Loader2 className="w-3.5 h-3.5 text-[#002185] animate-spin" />
+                    )}
+                  </div>
+                  <div className="grid grid-cols-3 gap-2 text-xs">
+                    {["active", "inactive", "suspended"].map((st) => {
+                      const empId = selectedEmployee._id || selectedEmployee.employeeId;
+                      const isCurrent = (selectedEmployee.status || (selectedEmployee.isActive !== false ? "active" : "inactive")).toLowerCase() === st;
+                      return (
+                        <button
+                          key={st}
+                          type="button"
+                          disabled={isCurrent || statusUpdatingId === empId}
+                          onClick={() => handleStatusChange(empId, st)}
+                          className={`py-2 rounded-xl text-xs font-bold capitalize transition-all cursor-pointer ${
+                            isCurrent
+                              ? st === "active"
+                                ? "bg-[#16A34A] text-white shadow-xs"
+                                : st === "suspended"
+                                ? "bg-[#DC2626] text-white shadow-xs"
+                                : "bg-[#F59E0B] text-white shadow-xs"
+                              : "bg-white border border-[#E2E8F0] text-[#64748B] hover:border-[#002185] hover:text-[#002185]"
+                          } disabled:opacity-60`}
+                        >
+                          {st}
+                        </button>
+                      );
+                    })}
+                  </div>
+                </div>
+              )}
+
               {/* Contact Information Section */}
               <div>
                 <h4 className="text-xs font-bold text-[#002185] uppercase tracking-wider flex items-center gap-1.5 mb-2">
@@ -769,9 +1106,23 @@ export const EmployeeDirectory = ({
 
             {/* Modal Footer */}
             <div className="p-4 bg-[#F8FAFC] border-t border-[#E2E8F0] flex items-center justify-between">
-              <span className="text-[11px] text-[#64748B]">
-                ID: {selectedEmployee.employeeId || "EMP"}
-              </span>
+              {isAdmin ? (
+                <button
+                  type="button"
+                  onClick={() => {
+                    setEmployeeToDelete(selectedEmployee);
+                  }}
+                  className="px-3 py-2 bg-[#FEF2F2] hover:bg-[#FCA5A5]/30 text-[#DC2626] border border-[#FCA5A5] text-xs font-bold rounded-xl transition-all flex items-center gap-1.5 cursor-pointer"
+                >
+                  <Trash2 className="w-3.5 h-3.5" />
+                  <span>Delete Record</span>
+                </button>
+              ) : (
+                <span className="text-[11px] text-[#64748B]">
+                  ID: {selectedEmployee.employeeId || "EMP"}
+                </span>
+              )}
+
               <button
                 type="button"
                 onClick={() => setSelectedEmployee(null)}

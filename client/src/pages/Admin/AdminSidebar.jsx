@@ -9,9 +9,8 @@ import {
 import Sidebar from "../../components/Sidebar";
 
 
-const AdminSidebar = () => {
+const AdminSidebar = ({ isMobileOpen, onClose }) => {
   const { pathname } = useLocation();
-  
 
   const adminLinks = [
     { name: "Dashboard", path: "/admin/dashboard", icon: LayoutDashboardIcon },
@@ -23,7 +22,7 @@ const AdminSidebar = () => {
   ];
 
   return (
-    <Sidebar>
+    <Sidebar isMobileOpen={isMobileOpen} onClose={onClose}>
       {/* Navigation Links */}
       <div className="flex-1 space-y-1.5">
         {adminLinks.map((link) => {
@@ -35,6 +34,9 @@ const AdminSidebar = () => {
               key={link.name}
               to={link.path}
               state={{ role: "admin" }}
+              onClick={() => {
+                if (typeof onClose === "function") onClose();
+              }}
               className={`flex items-center px-3 py-2.5 rounded-lg text-sm font-medium transition-all duration-200 ${
                 isActive
                   ? "bg-[#002185] text-white shadow-md shadow-[#002185]/20"

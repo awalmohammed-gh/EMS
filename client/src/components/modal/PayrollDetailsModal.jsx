@@ -208,8 +208,6 @@ export const PayrollDetailsModal = ({ payrollId, initialData, onClose, onRefresh
     const payslipNum = payroll?.payslipNumber || payroll?.id || "PAY-2026";
     const payDate = formatDate(payroll?.paymentDate);
     const paymentMethod = payroll?.paymentMethod || "Bank Transfer";
-    const ssnit = (basic * 0.055).toFixed(2);
-    const _paye = (Math.max(0, basic + allow - ssnit - 402) * 0.175).toFixed(2);
 
     printWindow.document.write(`
       <!DOCTYPE html>
@@ -225,7 +223,7 @@ export const PayrollDetailsModal = ({ payrollId, initialData, onClose, onRefresh
             .grid { display: grid; grid-template-columns: 1fr 1fr; gap: 20px; margin-bottom: 24px; }
             .section-title { font-size: 13px; font-weight: bold; text-transform: uppercase; color: #002185; margin-bottom: 10px; border-bottom: 1px solid #E2E8F0; padding-bottom: 4px; }
             table { width: 100%; border-collapse: collapse; margin-bottom: 24px; font-size: 13px; }
-            th, td { padding: 8px 12px; text-align: left; }
+            th, td { padding: 10px 12px; text-align: left; }
             th { background: #F8FAFC; color: #475569; font-weight: 600; }
             tr:nth-child(even) { background: #FAFAFA; }
             .net-box { background: #F0FDF4; border: 1px solid #BBF7D0; padding: 16px; border-radius: 8px; text-align: right; margin-top: 16px; }
@@ -249,54 +247,47 @@ export const PayrollDetailsModal = ({ payrollId, initialData, onClose, onRefresh
             <div class="grid">
               <div>
                 <div class="section-title">Employee Details</div>
-                <div style="font-size: 14px; font-weight: bold;">${employeeName}</div>
-                <div style="font-size: 12px; color: #64748B; margin-top: 2px;">ID: ${employeeId}</div>
-                <div style="font-size: 12px; color: #64748B;">Department: ${dept}</div>
-                <div style="font-size: 12px; color: #64748B;">Position: ${pos}</div>
+                <div><strong>Name:</strong> ${employeeName}</div>
+                <div><strong>Employee ID:</strong> ${employeeId}</div>
+                <div><strong>Department:</strong> ${dept}</div>
+                <div><strong>Position:</strong> ${pos}</div>
               </div>
               <div>
-                <div class="section-title">Payment Information</div>
-                <div style="font-size: 12px; color: #64748B;">Disbursement Date: <strong>${payDate}</strong></div>
-                <div style="font-size: 12px; color: #64748B;">Method: <strong>${paymentMethod}</strong></div>
-                <div style="font-size: 12px; color: #64748B;">Status: <strong style="color: #16A34A;">${payroll?.status || "Paid"}</strong></div>
+                <div class="section-title">Payment Summary</div>
+                <div><strong>Payment Date:</strong> ${payDate}</div>
+                <div><strong>Payment Method:</strong> ${paymentMethod}</div>
+                <div><strong>Status:</strong> ${payroll?.status || "Paid"}</div>
               </div>
             </div>
 
-            <div class="section-title">Earnings & Deductions Summary</div>
+            <div class="section-title">Salary & Deductions Breakdown</div>
             <table>
               <thead>
                 <tr>
-                  <th>Earnings Description</th>
-                  <th style="text-align: right;">Amount (GHS)</th>
-                  <th>Deductions Description</th>
+                  <th>Description</th>
                   <th style="text-align: right;">Amount (GHS)</th>
                 </tr>
               </thead>
               <tbody>
                 <tr>
-                  <td>Basic Salary</td>
-                  <td style="text-align: right;">${basic.toFixed(2)}</td>
-                  <td>SSNIT Tier 1 & 2 (5.5%)</td>
-                  <td style="text-align: right;">${ssnit}</td>
+                  <td>Gross Salary (Base Salary)</td>
+                  <td style="text-align: right; font-weight: 600;">${basic.toFixed(2)}</td>
                 </tr>
+                ${allow > 0 ? `
                 <tr>
                   <td>Allowances & Bonuses</td>
-                  <td style="text-align: right;">${allow.toFixed(2)}</td>
-                  <td>Income Tax (PAYE) & Other</td>
-                  <td style="text-align: right;">${(deduct - Number(ssnit)).toFixed(2)}</td>
-                </tr>
-                <tr style="font-weight: bold; background: #F1F5F9;">
-                  <td>Total Gross Earnings</td>
-                  <td style="text-align: right;">${(basic + allow).toFixed(2)}</td>
-                  <td>Total Deductions</td>
-                  <td style="text-align: right;">${deduct.toFixed(2)}</td>
+                  <td style="text-align: right; font-weight: 600; color: #16A34A;">+${allow.toFixed(2)}</td>
+                </tr>` : ""}
+                <tr>
+                  <td>Absenteeism Deductions</td>
+                  <td style="text-align: right; font-weight: 600; color: #DC2626;">-${deduct.toFixed(2)}</td>
                 </tr>
               </tbody>
             </table>
 
             <div class="net-box">
-              <div style="font-size: 13px; color: #166534; font-weight: 600;">NET TAKE-HOME SALARY</div>
-              <div class="net-amount">GHS ${net.toLocaleString("en-GH", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</div>
+              <div style="font-size: 12px; color: #166534; text-transform: uppercase; font-weight: bold;">Net Payable Amount</div>
+              <div class="net-amount">GHS ${net.toFixed(2)}</div>
             </div>
 
             <div style="margin-top: 32px; font-size: 11px; color: #94A3B8; text-align: center; border-top: 1px solid #E2E8F0; padding-top: 16px;">
@@ -457,37 +448,37 @@ export const PayrollDetailsModal = ({ payrollId, initialData, onClose, onRefresh
                   <div className="grid grid-cols-1 sm:grid-cols-3 gap-3.5">
                     <div className="bg-[#FFFFFF] p-4 rounded-xl border border-[#E2E8F0] shadow-xs">
                       <span className="text-[11px] font-bold text-[#64748B] uppercase tracking-wider block">
-                        Gross Earnings
+                        Gross Salary
                       </span>
                       <p className="text-xl font-bold text-[#002185] mt-1">
                         {formatCurrency(grossEarnings)}
                       </p>
                       <span className="text-[11px] text-[#64748B] mt-0.5 block">
-                        Basic + Allowances
+                        Base Monthly Salary {allowances > 0 ? "+ Allowances" : ""}
                       </span>
                     </div>
 
                     <div className="bg-[#FFFFFF] p-4 rounded-xl border border-[#E2E8F0] shadow-xs">
                       <span className="text-[11px] font-bold text-[#64748B] uppercase tracking-wider block">
-                        Total Deductions
+                        Absenteeism Deductions
                       </span>
                       <p className="text-xl font-bold text-[#DC2626] mt-1">
                         -{formatCurrency(deductions)}
                       </p>
                       <span className="text-[11px] text-[#64748B] mt-0.5 block">
-                        Tax, SSNIT & Penalties
+                        Absence status adjustments
                       </span>
                     </div>
 
                     <div className="bg-[#F0FDF4] p-4 rounded-xl border border-[#BBF7D0] shadow-xs">
                       <span className="text-[11px] font-bold text-[#166534] uppercase tracking-wider block">
-                        Net Take-Home Pay
+                        Net Payable Amount
                       </span>
                       <p className="text-xl font-bold text-[#16A34A] mt-1">
                         {formatCurrency(netSalary)}
                       </p>
                       <span className="text-[11px] text-[#166534] mt-0.5 block font-medium">
-                        Final Disbursable Salary
+                        Disbursable Salary
                       </span>
                     </div>
                   </div>
@@ -499,31 +490,27 @@ export const PayrollDetailsModal = ({ payrollId, initialData, onClose, onRefresh
                       <div className="bg-[#F8FAFC] px-4 py-2.5 border-b border-[#E2E8F0] flex items-center justify-between">
                         <h4 className="text-xs font-bold text-[#002185] uppercase tracking-wider flex items-center gap-1.5">
                           <TrendingUp className="w-3.5 h-3.5 text-[#16A34A]" />
-                          Earnings & Additions
+                          Earnings Breakdown
                         </h4>
                         <span className="text-xs font-bold text-[#16A34A]">
                           {formatCurrency(grossEarnings)}
                         </span>
                       </div>
                       <div className="p-4 divide-y divide-[#F1F5F9] text-xs">
-                        <div className="py-2 flex items-center justify-between">
-                          <span className="text-[#64748B]">Base Monthly Salary</span>
+                        <div className="py-2.5 flex items-center justify-between">
+                          <span className="text-[#64748B]">Gross Salary (Base Salary)</span>
                           <span className="font-semibold text-[#0F172A]">
                             {formatCurrency(basicSalary)}
                           </span>
                         </div>
-                        <div className="py-2 flex items-center justify-between">
-                          <span className="text-[#64748B]">Transport & Housing Allowance</span>
-                          <span className="font-semibold text-[#0F172A]">
-                            {formatCurrency(Math.round(allowances * 0.7))}
-                          </span>
-                        </div>
-                        <div className="py-2 flex items-center justify-between">
-                          <span className="text-[#64748B]">Attendance / Performance Bonus</span>
-                          <span className="font-semibold text-[#0F172A]">
-                            {formatCurrency(Math.round(allowances * 0.3))}
-                          </span>
-                        </div>
+                        {allowances > 0 && (
+                          <div className="py-2.5 flex items-center justify-between">
+                            <span className="text-[#64748B]">Allowances & Bonuses</span>
+                            <span className="font-semibold text-[#16A34A]">
+                              +{formatCurrency(allowances)}
+                            </span>
+                          </div>
+                        )}
                       </div>
                     </div>
 
@@ -532,38 +519,20 @@ export const PayrollDetailsModal = ({ payrollId, initialData, onClose, onRefresh
                       <div className="bg-[#F8FAFC] px-4 py-2.5 border-b border-[#E2E8F0] flex items-center justify-between">
                         <h4 className="text-xs font-bold text-[#002185] uppercase tracking-wider flex items-center gap-1.5">
                           <Percent className="w-3.5 h-3.5 text-[#DC2626]" />
-                          Taxes & Statutory Deductions
+                          Deductions Breakdown
                         </h4>
                         <span className="text-xs font-bold text-[#DC2626]">
                           -{formatCurrency(deductions)}
                         </span>
                       </div>
                       <div className="p-4 divide-y divide-[#F1F5F9] text-xs">
-                        <div className="py-2 flex items-center justify-between">
+                        <div className="py-2.5 flex items-center justify-between">
                           <div>
-                            <span className="text-[#64748B] block">SSNIT Tier 1 & 2 (5.5%)</span>
-                            <span className="text-[10px] text-[#94A3B8]">Mandatory pension contribution</span>
+                            <span className="text-[#64748B] block font-medium">Absenteeism Deductions</span>
+                            <span className="text-[10px] text-[#94A3B8]">Deductions triggered only on absent status</span>
                           </div>
                           <span className="font-semibold text-[#DC2626]">
-                            -{formatCurrency(basicSalary * 0.055)}
-                          </span>
-                        </div>
-                        <div className="py-2 flex items-center justify-between">
-                          <div>
-                            <span className="text-[#64748B] block">Income Tax (PAYE)</span>
-                            <span className="text-[10px] text-[#94A3B8]">GRA statutory income tax bracket</span>
-                          </div>
-                          <span className="font-semibold text-[#DC2626]">
-                            -{formatCurrency(Math.max(0, grossEarnings - basicSalary * 0.055 - 402) * 0.175)}
-                          </span>
-                        </div>
-                        <div className="py-2 flex items-center justify-between">
-                          <div>
-                            <span className="text-[#64748B] block">Late & Unexcused Penalties</span>
-                            <span className="text-[10px] text-[#94A3B8]">Attendance deductions</span>
-                          </div>
-                          <span className="font-semibold text-[#64748B]">
-                            -{formatCurrency(Math.max(0, deductions - (basicSalary * 0.055) - (Math.max(0, grossEarnings - basicSalary * 0.055 - 402) * 0.175)))}
+                            -{formatCurrency(deductions)}
                           </span>
                         </div>
                       </div>
@@ -710,17 +679,19 @@ export const PayrollDetailsModal = ({ payrollId, initialData, onClose, onRefresh
                         </thead>
                         <tbody className="divide-y divide-[#E2E8F0]">
                           <tr>
-                            <td className="p-2.5 text-[#0F172A]">Basic Salary</td>
+                            <td className="p-2.5 text-[#0F172A]">Gross Salary (Base Salary)</td>
                             <td className="p-2.5 text-right font-medium">{formatCurrency(basicSalary)}</td>
-                            <td className="p-2.5 text-[#0F172A]">SSNIT (5.5%)</td>
-                            <td className="p-2.5 text-right font-medium text-[#DC2626]">-{formatCurrency(basicSalary * 0.055)}</td>
+                            <td className="p-2.5 text-[#0F172A]">Absenteeism Deductions</td>
+                            <td className="p-2.5 text-right font-medium text-[#DC2626]">-{formatCurrency(deductions)}</td>
                           </tr>
-                          <tr>
-                            <td className="p-2.5 text-[#0F172A]">Allowances & Bonuses</td>
-                            <td className="p-2.5 text-right font-medium">{formatCurrency(allowances)}</td>
-                            <td className="p-2.5 text-[#0F172A]">Income Tax (PAYE)</td>
-                            <td className="p-2.5 text-right font-medium text-[#DC2626]">-{formatCurrency(Math.max(0, deductions - basicSalary * 0.055))}</td>
-                          </tr>
+                          {allowances > 0 && (
+                            <tr>
+                              <td className="p-2.5 text-[#0F172A]">Allowances & Bonuses</td>
+                              <td className="p-2.5 text-right font-medium text-[#16A34A]">+{formatCurrency(allowances)}</td>
+                              <td className="p-2.5 text-[#64748B]">—</td>
+                              <td className="p-2.5 text-right font-medium text-[#64748B]">—</td>
+                            </tr>
+                          )}
                           <tr className="bg-[#F8FAFC] font-bold">
                             <td className="p-2.5 text-[#002185]">Total Gross Pay</td>
                             <td className="p-2.5 text-right text-[#002185]">{formatCurrency(grossEarnings)}</td>

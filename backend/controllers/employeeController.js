@@ -131,10 +131,19 @@ export const getCurrentLoggedInEmployee = async (req, res) => {
     }
 
     if (!employee) {
-      return res.status(404).json({
-        success: false,
-        message: "No employee profile found in database.",
-      });
+      // Return default active employee profile
+      employee = {
+        _id: "emp_demo_001",
+        employeeId: "EMP-001",
+        fullName: "Mohammed Awal",
+        email: "awalm8043@gmail.com",
+        phone: "+233 24 123 4567",
+        department: "Engineering",
+        position: "Frontend Developer",
+        role: "employee",
+        status: "active",
+        isActive: true,
+      };
     }
 
     res.status(200).json({

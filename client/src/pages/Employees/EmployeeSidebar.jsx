@@ -7,9 +7,8 @@ import {
 } from "lucide-react";
 import Sidebar from "../../components/Sidebar";
 
-const EmployeeSidebar = () => {
+const EmployeeSidebar = ({ isMobileOpen, onClose }) => {
   const { pathname } = useLocation();
-
 
   const employeeLinks = [
     {
@@ -35,10 +34,8 @@ const EmployeeSidebar = () => {
     },
   ];
 
-
-
   return (
-    <Sidebar>
+    <Sidebar isMobileOpen={isMobileOpen} onClose={onClose}>
       {/* Navigation Links */}
       <div className="flex-1 space-y-1.5">
         {employeeLinks.map((link) => {
@@ -48,6 +45,9 @@ const EmployeeSidebar = () => {
               key={link.name}
               to={link.path}
               state={{ role: "employee" }}
+              onClick={() => {
+                if (typeof onClose === "function") onClose();
+              }}
               className={`flex items-center px-3 py-2.5 rounded-lg text-sm font-medium transition-all duration-200 ${
                 isActive
                   ? "bg-[#002185] text-white shadow-md shadow-[#002185]/20"

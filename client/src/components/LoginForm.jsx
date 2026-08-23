@@ -1,3 +1,4 @@
+import { useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import {
   ArrowLeftIcon,
@@ -6,787 +7,621 @@ import {
   Mail,
   Lock,
   User,
-  Phone,
-  Building2,
-  Briefcase,
-  Calendar,
-  UserPlus,
   ShieldCheckIcon,
   UserIcon,
+  UserPlus,
+  Info,
+  CheckCircle2,
 } from "lucide-react";
-import { useState} from "react";
 import Loading from "../ui/Loading";
 import ErrorMessage from "../ui/ErrorMessage";
 import eyenitLogo from "../assets/eyenit_logo.png";
-import { adminLog, employeeAccount, employeeLogin } from "../apis/fontApis";
+import { adminLogin, adminRegister, employeeLogin } from "../apis/fontApis";
 import { useManagement } from "../context/ManagementContextProvider";
 import Toaster from "../ui/Toaster";
 
-const LoginForm = ({ role, title, subtitle }) => {
+export const LoginForm = ({ role = "admin", title, subtitle, initialMode = "login" }) => {
+  const [isRegisterMode, setIsRegisterMode] = useState(initialMode === "register");
   const [formData, setFormData] = useState({
     fullName: "",
-    employeeId: "",
     email: "",
     password: "",
-    phone: "",
-    department: "",
-    position: "",
-    employmentDate: "",
+    confirmPassword: "",
     showPassword: false,
+    showConfirmPassword: false,
   });
   const [error, setError] = useState(null);
   const [isLoading, setIsLoading] = useState(false);
-  const [isSignUp, setIsSignUp] = useState(false);
-  const [successMessage, setSuccessMessage] = useState(null);
-  const { showToast, setShowToast } = useManagement();
+  const { showToast, setShowToast, setUser, setRole } = useManagement();
   const navigate = useNavigate();
 
   const handleInputChange = (e) => {
-    const { name, value, type, checked } = e.target;
-    setFormData((prevData) => ({
-      ...prevData,
-      [name]: type === "checkbox" ? checked : value,
+    const { name, value } = e.target;
+    setFormData((prev) => ({
+      ...prev,
+      [name]: value,
     }));
   };
 
-  const togglePasswordVisibility = () => {
-    setFormData((prevData) => ({
-      ...prevData,
-      showPassword: !prevData.showPassword,
-    }));
-  };
-
-  // Admin Login Handler
-  const handleAdminLogin = async (e) => {
+  // 1. Admin Login Submission
+  const handleAdminLoginSubmit = async (e) => {
     e.preventDefault();
+    setError(null);
+
+    if (!formData.email.trim() || !formData.password) {
+      setError("Please enter your admin email address and password.");
+      return;
+    }
+
     try {
       setIsLoading(true);
-      setError(null);
-      setSuccessMessage(null);
-
-      const { data } = await adminLog({
-        email: formData.email,
+      const res = await adminLogin({
+        email: formData.email.trim().toLowerCase(),
         password: formData.password,
       });
 
-      if (data.success) {
-        if (typeof window !== "undefined") {
-          localStorage.setItem("userRole", "admin");
-          if (data.token) {
-            localStorage.setItem("token", data.token);
-            localStorage.setItem("adminToken", data.token);
-          }
+      if (res.data?.success) {
+        const { token, admin } = res.data;
+        if (token) {
+          localStorage.setItem("token", token);
+          localStorage.setItem("adminToken", token);
         }
+        localStorage.setItem("userRole", "admin");
+        if (admin) {
+          localStorage.setItem("adminData", JSON.stringify(admin));
+          if (typeof setUser === "function") setUser(admin);
+          if (typeof setRole === "function") setRole("admin");
+        }
+
         setShowToast({
           show: true,
-          message: data.message,
+          message: "Signed in successfully as Administrator.",
           type: "success",
         });
-        navigate("/admin/dashboard", {
-          state: {
-            role: "admin",
-          },
-        });
+
+        navigate("/admin/dashboard", { state: { role: "admin" } });
       } else {
-        setError(data.message || "Login failed. Please try again.");
+        setError(res.data?.message || "Invalid email or password credentials.");
       }
-    } catch (error) {
-      setError(error.message || "An error occurred. Please try again.");
+    } catch (err) {
+      const msg =
+        err.response?.data?.message ||
+        err.message ||
+        "Invalid email or password credentials.";
+      setError(msg);
     } finally {
       setIsLoading(false);
     }
   };
 
-  // Admin Sign Up Handler (for creating employee accounts)
-  const handleAdminSignUp = async (e) => {
+  // 2. Admin Register Submission
+  const handleAdminRegisterSubmit = async (e) => {
     e.preventDefault();
-    try {
-      setIsLoading(true);
-      setError(null);
-      setSuccessMessage(null);
+    setError(null);
 
-      // Validate form fields
-      if (!formData.fullName) {
-        setError("Please enter the employee's full name.");
-        setIsLoading(false);
-        return;
-      }
-      if (!formData.employeeId) {
-        setError("Please enter the employee's ID.");
-        setIsLoading(false);
-        return;
-      }
-      if (!formData.email) {
-        setError("Please enter the employee's email address.");
-        setIsLoading(false);
-        return;
-      }
-      if (!formData.password || formData.password.length < 6) {
-        setError("Password must be at least 6 characters long.");
-        setIsLoading(false);
-        return;
-      }
-      if (!formData.phone) {
-        setError("Please enter the employee's phone number.");
-        setIsLoading(false);
-        return;
-      }
-      if (!formData.department) {
-        setError("Please select the employee's department.");
-        setIsLoading(false);
-        return;
-      }
-      if (!formData.position) {
-        setError("Please enter the employee's position.");
-        setIsLoading(false);
-        return;
-      }
-      if (!formData.employmentDate) {
-        setError("Please select the employment date.");
-        setIsLoading(false);
-        return;
-      }
-
-      const { data } = await employeeAccount(formData);
-      if (data.success) {
-        setSuccessMessage(
-          `Account created successfully for ${formData.fullName} (${formData.email})! The employee can now login with these credentials.`,
-        );
-
-        setShowToast({
-          type: "success",
-          message: data.message,
-          show: true,
-        });
-
-        // Reset form after success - clear all fields
-        setFormData({
-          fullName: "",
-          employeeId: "",
-          email: "",
-          password: "",
-          phone: "",
-          department: "",
-          position: "",
-          employmentDate: "",
-          showPassword: false,
-        });
-
-        // Auto switch back to login after 3 seconds
-        setTimeout(() => {
-          setIsSignUp(false);
-          setSuccessMessage(null);
-        }, 3000);
-      } else {
-        setError(data.message || "Failed to create account. Please try again.");
-      }
-    } catch (error) {
-      setError(error.message || "Failed to create account. Please try again.");
-    } finally {
-      setIsLoading(false);
+    if (!formData.fullName.trim()) {
+      setError("Please enter your full name.");
+      return;
     }
-  };
+    if (!formData.email.trim()) {
+      setError("Please enter your email address.");
+      return;
+    }
+    if (!formData.password || formData.password.length < 6) {
+      setError("Password must be at least 6 characters long.");
+      return;
+    }
+    if (formData.password !== formData.confirmPassword) {
+      setError("Passwords do not match. Please re-enter.");
+      return;
+    }
 
-  // Employee Login Handler
-  const handleEmployeeLogin = async (e) => {
-    e.preventDefault();
     try {
       setIsLoading(true);
-      setError(null);
-      setSuccessMessage(null);
-
-      // Only email and password are needed for employee login
-      const employeeFormData = {
-        email: formData.email,
+      const res = await adminRegister({
+        fullName: formData.fullName.trim(),
+        email: formData.email.trim().toLowerCase(),
         password: formData.password,
-      };
+        confirmPassword: formData.confirmPassword,
+      });
 
-      const { data } = await employeeLogin(employeeFormData);
-      if (data.success) {
-        if (typeof window !== "undefined") {
-          localStorage.setItem("userRole", "employee");
-          if (data.token) {
-            localStorage.setItem("token", data.token);
-            localStorage.setItem("employeeToken", data.token);
-          }
-          if (data.employee) {
-            localStorage.setItem("employeeData", JSON.stringify(data.employee));
-          }
+      if (res.data?.success) {
+        const { token, admin } = res.data;
+        if (token) {
+          localStorage.setItem("token", token);
+          localStorage.setItem("adminToken", token);
         }
+        localStorage.setItem("userRole", "admin");
+        if (admin) {
+          localStorage.setItem("adminData", JSON.stringify(admin));
+          if (typeof setUser === "function") setUser(admin);
+          if (typeof setRole === "function") setRole("admin");
+        }
+
         setShowToast({
           show: true,
-          message: data.message,
+          message: "Admin account registered successfully.",
           type: "success",
         });
-        navigate("/employee/dashboard", {
-          state: {
-            role: "employee",
-          },
-        });
+
+        navigate("/admin/dashboard", { state: { role: "admin" } });
       } else {
-        setError(data.message || "Login failed. Please try again.");
+        setError(res.data?.message || "Registration failed.");
       }
-    } catch (error) {
-      setError(error.message || "An error occurred. Please try again.");
+    } catch (err) {
+      const msg =
+        err.response?.data?.message ||
+        err.message ||
+        "An error occurred while creating the admin account.";
+      setError(msg);
     } finally {
       setIsLoading(false);
     }
   };
 
-  const handleSubmit = (e) => {
+  // 3. Employee Login Submission (Login ONLY - No self-registration)
+  const handleEmployeeLoginSubmit = async (e) => {
     e.preventDefault();
-    if (role === "admin") {
-      if (isSignUp) {
-        handleAdminSignUp(e);
+    setError(null);
+
+    if (!formData.email.trim() || !formData.password) {
+      setError("Please enter your Work Email or Employee ID and password.");
+      return;
+    }
+
+    try {
+      setIsLoading(true);
+      const res = await employeeLogin({
+        email: formData.email.trim(),
+        password: formData.password,
+      });
+
+      if (res.data?.success) {
+        const { token, employee } = res.data;
+        if (token) {
+          localStorage.setItem("token", token);
+          localStorage.setItem("employeeToken", token);
+        }
+        localStorage.setItem("userRole", "employee");
+        if (employee) {
+          localStorage.setItem("employeeData", JSON.stringify(employee));
+          if (typeof setUser === "function") setUser(employee);
+          if (typeof setRole === "function") setRole("employee");
+        }
+
+        setShowToast({
+          show: true,
+          message: `Welcome back, ${employee?.fullName || "Employee"}!`,
+          type: "success",
+        });
+
+        navigate("/employee/dashboard", { state: { role: "employee" } });
       } else {
-        handleAdminLogin(e);
+        setError(res.data?.message || "Login failed. Please check your credentials.");
       }
-    } else {
-      handleEmployeeLogin(e);
+    } catch (err) {
+      const msg =
+        err.response?.data?.message ||
+        err.message ||
+        "Invalid email/employee ID or password.";
+      setError(msg);
+    } finally {
+      setIsLoading(false);
     }
   };
-
 
   if (isLoading) {
     return <Loading />;
   }
 
-  // Admin specific titles and descriptions
-
-  const adminSubtitle =
-    "Enter your admin credentials to access the management dashboard";
-
-  // Employee specific titles and descriptions
-  // const employeeTitle = "Employee Login";
-  const employeeSubtitle =
-    "Enter your employee credentials to access your portal";
+  const isAdmin = role === "admin";
 
   return (
     <>
-      <div className="min-h-screen flex items-center justify-center bg-[#F8FAFC] p-6 relative">
-        {/* Back Button - Top Left Corner */}
+      <div className="min-h-screen flex items-center justify-center bg-[#F8FAFC] p-4 sm:p-6 relative">
+        {/* Back to Portal Selection */}
         <Link
           to="/welcome"
-          className="absolute top-6 left-6 inline-flex items-center px-4 py-2 bg-[#FFFFFF] border-2 border-[#002185] rounded-lg shadow-md hover:shadow-lg transition-all duration-300 text-[#002185] hover:text-[#ff5500] hover:border-[#ff5500] z-10"
+          className="absolute top-6 left-6 inline-flex items-center px-3.5 py-2 bg-white border border-[#E2E8F0] rounded-xl shadow-xs hover:shadow-md hover:border-[#002185] transition-all text-[#002185] font-medium text-sm z-10"
         >
-          <ArrowLeftIcon size={16} />
-          <span className="ml-2 text-sm font-medium">
-            Back to Portal Selection
-          </span>
+          <ArrowLeftIcon className="w-4 h-4 mr-2" />
+          Back to Selection
         </Link>
 
-        <div
-          className={`w-full ${isSignUp && role === "admin" ? "max-w-2xl" : "max-w-md"}`}
-        >
-          {/* Brand/Header */}
-          <div className="text-center mb-4">
-            <div className="flex items-center justify-center">
-              <img
-                className="w-34 h-auto object-contain"
-                src={eyenitLogo}
-                alt="Eyenit"
-              />
+        <div className="w-full max-w-md my-8">
+          {/* Header Brand */}
+          <div className="text-center mb-6">
+            <div className="flex items-center justify-center mb-3">
+              <img className="w-32 h-auto object-contain" src={eyenitLogo} alt="Eyenit" />
             </div>
-          </div>
 
-          {/* Welcome Section */}
-          <div className="mb-8 text-center">
-            <div className="flex items-center justify-center gap-2 mb-2">
-              {role === "admin" ? (
-                <ShieldCheckIcon className="w-6 h-6 text-[#002185]" />
+            <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-[#002185]/10 text-[#002185] border border-[#002185]/20 text-xs font-bold uppercase tracking-wider mb-2">
+              {isAdmin ? (
+                <>
+                  <ShieldCheckIcon className="w-4 h-4 text-[#002185]" />
+                  {isRegisterMode ? "Admin Registration" : "Administrator Portal"}
+                </>
               ) : (
-                <UserIcon className="w-6 h-6 text-[#002185]" />
+                <>
+                  <UserIcon className="w-4 h-4 text-[#ff5500]" />
+                  Staff & Employee Portal
+                </>
               )}
-              <span className="text-xs font-medium text-[#002185] bg-[#EFF6FF] px-3 py-1 rounded-full border border-[#002185]/20">
-                {role === "admin" ? "Administrator" : "Employee"}
-              </span>
             </div>
-            <h2 className="text-2xl font-bold text-[#002185] tracking-tight">
-              {isSignUp && role === "admin"
-                ? "Create Employee Account"
-                : title || (role === "admin" ? "Admin Portal" : "Employee Portal")}
-            </h2>
-            <p className="text-[#64748B] mt-2">
-              {isSignUp && role === "admin"
-                ? "Register a new employee with their credentials"
-                : subtitle || (role === "admin" ? adminSubtitle : employeeSubtitle)}
+
+            <h1 className="text-2xl font-extrabold text-[#002185] tracking-tight">
+              {isAdmin
+                ? isRegisterMode
+                  ? "Create Admin Account"
+                  : title || "Admin Portal Login"
+                : title || "Employee Sign In"}
+            </h1>
+
+            <p className="text-sm text-[#64748B] mt-1">
+              {isAdmin
+                ? isRegisterMode
+                  ? "Register a new administrator account with system privileges."
+                  : subtitle || "Sign in with your verified administrator database credentials."
+                : subtitle || "Access your attendance, personal payslips, leaves, and dashboard."}
             </p>
           </div>
 
-          {/* Success Message */}
-          {successMessage && (
-            <div className="mb-6 p-4 bg-[#F0FDF4] border border-[#16A34A] rounded-lg text-sm text-[#16A34A]">
-              {successMessage}
-            </div>
-          )}
-
           {/* Error Message */}
           {error && (
-            <div className="mb-6">
-              <ErrorMessage
-                message={error}
-                onRetry={() => {
-                  setError(null);
-                  handleSubmit(new Event("submit"));
-                }}
-                onClose={() => setError(null)}
-              />
+            <div className="mb-5">
+              <ErrorMessage message={error} onClose={() => setError(null)} />
             </div>
           )}
 
-          {/* ===================== ADMIN LOGIN (narrower container) ===================== */}
-          {!isSignUp && role === "admin" && (
-            <form
-              onSubmit={handleSubmit}
-              className="bg-[#FFFFFF] p-8 rounded-xl shadow-md border-2 border-[#002185]"
-            >
-              <div className="space-y-6">
-                {/* Admin Badge */}
-                <div className="flex items-center justify-center gap-2 p-2 bg-[#EFF6FF] rounded-lg border border-[#002185]/20">
-                  <ShieldCheckIcon className="w-5 h-5 text-[#002185]" />
-                  <span className="text-sm font-medium text-[#002185]">
-                    Administrator Access
-                  </span>
-                </div>
-
-                {/* Email Field */}
-                <div>
-                  <label
-                    htmlFor="email"
-                    className="block text-sm font-medium text-[#002185] mb-1.5"
-                  >
-                    Email Address <span className="text-[#DC2626]">*</span>
-                  </label>
-                  <div className="relative">
-                    <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
-                      <Mail className="h-5 w-5 text-[#64748B]" />
-                    </div>
-                    <input
-                      type="email"
-                      id="email"
-                      name="email"
-                      value={formData.email}
-                      onChange={handleInputChange}
-                      placeholder="Enter your email"
-                      className="w-full pl-10 pr-3 py-2.5 border border-[#E2E8F0] rounded-lg bg-[#F8FAFC] text-[#0F172A] placeholder-[#64748B] hover:border-[#ff5500] focus:outline-none focus:ring-2 focus:ring-[#ff5500]/30 focus:border-[#ff5500] transition-all duration-200"
-                      required
-                    />
-                  </div>
-                </div>
-
-                {/* Password Field */}
-                <div>
-                  <label
-                    htmlFor="password"
-                    className="block text-sm font-medium text-[#002185] mb-1.5"
-                  >
-                    Password <span className="text-[#DC2626]">*</span>
-                  </label>
-                  <div className="relative">
-                    <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
-                      <Lock className="h-5 w-5 text-[#64748B]" />
-                    </div>
-                    <input
-                      type={formData.showPassword ? "text" : "password"}
-                      id="password"
-                      name="password"
-                      value={formData.password}
-                      onChange={handleInputChange}
-                      placeholder="Enter your password"
-                      className="w-full pl-10 pr-12 py-2.5 border border-[#E2E8F0] rounded-lg bg-[#F8FAFC] text-[#0F172A] placeholder-[#64748B] hover:border-[#ff5500] focus:outline-none focus:ring-2 focus:ring-[#ff5500]/30 focus:border-[#ff5500] transition-all duration-200"
-                      required
-                      minLength={6}
-                    />
-                    <button
-                      type="button"
-                      onClick={togglePasswordVisibility}
-                      className="absolute inset-y-0 right-0 pr-3 flex items-center text-[#64748B] hover:text-[#002185] transition-colors duration-200"
+          {/* Card Container */}
+          <div className="bg-white p-7 sm:p-8 rounded-2xl shadow-lg border border-[#E2E8F0]">
+            {isAdmin ? (
+              isRegisterMode ? (
+                /* ================= ADMIN REGISTRATION FORM ================= */
+                <form onSubmit={handleAdminRegisterSubmit} className="space-y-4">
+                  {/* Full Name */}
+                  <div>
+                    <label
+                      htmlFor="form-admin-fullname"
+                      className="block text-xs font-bold text-[#0F172A] uppercase tracking-wider mb-1.5"
                     >
-                      {formData.showPassword ? (
-                        <EyeOff className="h-5 w-5" />
-                      ) : (
-                        <Eye className="h-5 w-5" />
-                      )}
-                    </button>
-                  </div>
-                </div>
-
-                {/* Submit Button */}
-                <button
-                  type="submit"
-                  className="w-full bg-[#002185] hover:bg-[#ff5500] text-white font-semibold py-2.5 px-4 rounded-lg transition-all duration-300 shadow-md hover:shadow-lg focus:outline-none focus:ring-2 focus:ring-[#ff5500] focus:ring-offset-2"
-                >
-                  Admin Login
-                </button>
-              </div>
-            </form>
-          )}
-
-          {/* ===================== EMPLOYEE LOGIN (stands alone) ===================== */}
-          {!isSignUp && role !== "admin" && (
-            <form
-              onSubmit={handleSubmit}
-              className="bg-[#FFFFFF] p-8 rounded-xl shadow-md border-2 border-[#002185]"
-            >
-              <div className="space-y-6">
-                {/* Employee Badge */}
-                <div className="flex items-center justify-center gap-2 p-2 bg-[#EFF6FF] rounded-lg border border-[#002185]/20">
-                  <UserIcon className="w-5 h-5 text-[#002185]" />
-                  <span className="text-sm font-medium text-[#002185]">
-                    Employee Access
-                  </span>
-                </div>
-
-                {/* Email Field */}
-                <div>
-                  <label
-                    htmlFor="email"
-                    className="block text-sm font-medium text-[#002185] mb-1.5"
-                  >
-                    Email Address <span className="text-[#DC2626]">*</span>
-                  </label>
-                  <div className="relative">
-                    <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
-                      <Mail className="h-5 w-5 text-[#64748B]" />
+                      Full Name <span className="text-[#DC2626]">*</span>
+                    </label>
+                    <div className="relative">
+                      <div className="absolute inset-y-0 left-0 pl-3.5 flex items-center pointer-events-none text-[#94A3B8]">
+                        <User className="h-4 w-4" />
+                      </div>
+                      <input
+                        id="form-admin-fullname"
+                        type="text"
+                        name="fullName"
+                        value={formData.fullName}
+                        onChange={handleInputChange}
+                        placeholder="e.g. Sarah Jenkins"
+                        required
+                        className="w-full pl-10 pr-3.5 py-2.5 bg-[#F8FAFC] border border-[#CBD5E1] rounded-xl text-[#0F172A] text-sm placeholder-[#94A3B8] focus:outline-none focus:ring-2 focus:ring-[#002185]/20 focus:border-[#002185] transition-all"
+                      />
                     </div>
-                    <input
-                      type="email"
-                      id="email"
-                      name="email"
-                      value={formData.email}
-                      onChange={handleInputChange}
-                      placeholder="Enter your email"
-                      className="w-full pl-10 pr-3 py-2.5 border border-[#E2E8F0] rounded-lg bg-[#F8FAFC] text-[#0F172A] placeholder-[#64748B] hover:border-[#ff5500] focus:outline-none focus:ring-2 focus:ring-[#ff5500]/30 focus:border-[#ff5500] transition-all duration-200"
-                      required
-                    />
                   </div>
-                </div>
 
-                {/* Password Field */}
-                <div>
-                  <label
-                    htmlFor="password"
-                    className="block text-sm font-medium text-[#002185] mb-1.5"
-                  >
-                    Password <span className="text-[#DC2626]">*</span>
-                  </label>
-                  <div className="relative">
-                    <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
-                      <Lock className="h-5 w-5 text-[#64748B]" />
-                    </div>
-                    <input
-                      type={formData.showPassword ? "text" : "password"}
-                      id="password"
-                      name="password"
-                      value={formData.password}
-                      onChange={handleInputChange}
-                      placeholder="Enter your password"
-                      className="w-full pl-10 pr-12 py-2.5 border border-[#E2E8F0] rounded-lg bg-[#F8FAFC] text-[#0F172A] placeholder-[#64748B] hover:border-[#ff5500] focus:outline-none focus:ring-2 focus:ring-[#ff5500]/30 focus:border-[#ff5500] transition-all duration-200"
-                      required
-                      minLength={6}
-                    />
-                    <button
-                      type="button"
-                      onClick={togglePasswordVisibility}
-                      className="absolute inset-y-0 right-0 pr-3 flex items-center text-[#64748B] hover:text-[#002185] transition-colors duration-200"
+                  {/* Email */}
+                  <div>
+                    <label
+                      htmlFor="form-admin-reg-email"
+                      className="block text-xs font-bold text-[#0F172A] uppercase tracking-wider mb-1.5"
                     >
-                      {formData.showPassword ? (
-                        <EyeOff className="h-5 w-5" />
-                      ) : (
-                        <Eye className="h-5 w-5" />
-                      )}
-                    </button>
-                  </div>
-                </div>
-
-                {/* Submit Button */}
-                <button
-                  type="submit"
-                  className="w-full bg-[#002185] hover:bg-[#ff5500] text-white font-semibold py-2.5 px-4 rounded-lg transition-all duration-300 shadow-md hover:shadow-lg focus:outline-none focus:ring-2 focus:ring-[#ff5500] focus:ring-offset-2"
-                >
-                  Employee Login
-                </button>
-              </div>
-            </form>
-          )}
-
-          {/* ===================== ADMIN SIGN UP — fields split left/right ===================== */}
-          {isSignUp && role === "admin" && (
-            <form
-              onSubmit={handleSubmit}
-              className="bg-[#FFFFFF] p-8 rounded-xl shadow-md border-2 border-[#002185]"
-            >
-              <div className="space-y-6">
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
-                  {/* Left Column: Full Name, Email, Password */}
-                  <div className="space-y-4 md:pr-4">
-                    {/* Full Name */}
-                    <div>
-                      <label
-                        htmlFor="fullName"
-                        className="block text-sm font-medium text-[#002185] mb-1.5"
-                      >
-                        Full Name <span className="text-[#DC2626]">*</span>
-                      </label>
-                      <div className="relative">
-                        <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
-                          <User className="h-5 w-5 text-[#64748B]" />
-                        </div>
-                        <input
-                          type="text"
-                          id="fullName"
-                          name="fullName"
-                          value={formData.fullName}
-                          onChange={handleInputChange}
-                          placeholder="Enter full name"
-                          className="w-full pl-10 pr-3 py-2.5 border border-[#E2E8F0] rounded-lg bg-[#F8FAFC] text-[#0F172A] placeholder-[#64748B] hover:border-[#ff5500] focus:outline-none focus:ring-2 focus:ring-[#ff5500]/30 focus:border-[#ff5500] transition-all duration-200"
-                          required
-                        />
+                      Email Address <span className="text-[#DC2626]">*</span>
+                    </label>
+                    <div className="relative">
+                      <div className="absolute inset-y-0 left-0 pl-3.5 flex items-center pointer-events-none text-[#94A3B8]">
+                        <Mail className="h-4 w-4" />
                       </div>
-                    </div>
-
-                    {/* Email */}
-                    <div>
-                      <label
-                        htmlFor="email"
-                        className="block text-sm font-medium text-[#002185] mb-1.5"
-                      >
-                        Email Address <span className="text-[#DC2626]">*</span>
-                      </label>
-                      <div className="relative">
-                        <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
-                          <Mail className="h-5 w-5 text-[#64748B]" />
-                        </div>
-                        <input
-                          type="email"
-                          id="email"
-                          name="email"
-                          value={formData.email}
-                          onChange={handleInputChange}
-                          placeholder="Enter email address"
-                          className="w-full pl-10 pr-3 py-2.5 border border-[#E2E8F0] rounded-lg bg-[#F8FAFC] text-[#0F172A] placeholder-[#64748B] hover:border-[#ff5500] focus:outline-none focus:ring-2 focus:ring-[#ff5500]/30 focus:border-[#ff5500] transition-all duration-200"
-                          required
-                        />
-                      </div>
-                    </div>
-
-                    {/* Password */}
-                    <div>
-                      <label
-                        htmlFor="password"
-                        className="block text-sm font-medium text-[#002185] mb-1.5"
-                      >
-                        Temporary Password{" "}
-                        <span className="text-[#DC2626]">*</span>
-                      </label>
-                      <div className="relative">
-                        <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
-                          <Lock className="h-5 w-5 text-[#64748B]" />
-                        </div>
-                        <input
-                          type={formData.showPassword ? "text" : "password"}
-                          id="password"
-                          name="password"
-                          value={formData.password}
-                          onChange={handleInputChange}
-                          placeholder="Min 6 characters"
-                          className="w-full pl-10 pr-12 py-2.5 border border-[#E2E8F0] rounded-lg bg-[#F8FAFC] text-[#0F172A] placeholder-[#64748B] hover:border-[#ff5500] focus:outline-none focus:ring-2 focus:ring-[#ff5500]/30 focus:border-[#ff5500] transition-all duration-200"
-                          required
-                          minLength={6}
-                        />
-                        <button
-                          type="button"
-                          onClick={togglePasswordVisibility}
-                          className="absolute inset-y-0 right-0 pr-3 flex items-center text-[#64748B] hover:text-[#002185] transition-colors duration-200"
-                        >
-                          {formData.showPassword ? (
-                            <EyeOff className="h-5 w-5" />
-                          ) : (
-                            <Eye className="h-5 w-5" />
-                          )}
-                        </button>
-                      </div>
-                      <p className="mt-1.5 text-xs text-[#64748B]">
-                        Password must be at least 6 characters
-                      </p>
+                      <input
+                        id="form-admin-reg-email"
+                        type="email"
+                        name="email"
+                        value={formData.email}
+                        onChange={handleInputChange}
+                        placeholder="admin@organization.com"
+                        required
+                        className="w-full pl-10 pr-3.5 py-2.5 bg-[#F8FAFC] border border-[#CBD5E1] rounded-xl text-[#0F172A] text-sm placeholder-[#94A3B8] focus:outline-none focus:ring-2 focus:ring-[#002185]/20 focus:border-[#002185] transition-all"
+                      />
                     </div>
                   </div>
 
-                  {/* Right Column: Employee ID, Phone, Department, Position, Employment Date */}
-                  <div className="space-y-4 md:pl-4 md:border-l md:border-[#E2E8F0]">
-                    {/* Employee ID */}
-                    <div>
-                      <label
-                        htmlFor="employeeId"
-                        className="block text-sm font-medium text-[#002185] mb-1.5"
-                      >
-                        Employee ID <span className="text-[#DC2626]">*</span>
-                      </label>
-                      <div className="relative">
-                        <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
-                          <UserPlus className="h-5 w-5 text-[#64748B]" />
-                        </div>
-                        <input
-                          type="text"
-                          id="employeeId"
-                          name="employeeId"
-                          value={formData.employeeId}
-                          onChange={handleInputChange}
-                          placeholder="EMP001"
-                          className="w-full pl-10 pr-3 py-2.5 border border-[#E2E8F0] rounded-lg bg-[#F8FAFC] text-[#0F172A] placeholder-[#64748B] hover:border-[#ff5500] focus:outline-none focus:ring-2 focus:ring-[#ff5500]/30 focus:border-[#ff5500] transition-all duration-200"
-                          required
-                        />
+                  {/* Password */}
+                  <div>
+                    <label
+                      htmlFor="form-admin-reg-pass"
+                      className="block text-xs font-bold text-[#0F172A] uppercase tracking-wider mb-1.5"
+                    >
+                      Password <span className="text-[#DC2626]">*</span>
+                    </label>
+                    <div className="relative">
+                      <div className="absolute inset-y-0 left-0 pl-3.5 flex items-center pointer-events-none text-[#94A3B8]">
+                        <Lock className="h-4 w-4" />
                       </div>
-                    </div>
-
-                    {/* Phone */}
-                    <div>
-                      <label
-                        htmlFor="phone"
-                        className="block text-sm font-medium text-[#002185] mb-1.5"
+                      <input
+                        id="form-admin-reg-pass"
+                        type={formData.showPassword ? "text" : "password"}
+                        name="password"
+                        value={formData.password}
+                        onChange={handleInputChange}
+                        placeholder="At least 6 characters"
+                        required
+                        minLength={6}
+                        className="w-full pl-10 pr-11 py-2.5 bg-[#F8FAFC] border border-[#CBD5E1] rounded-xl text-[#0F172A] text-sm placeholder-[#94A3B8] focus:outline-none focus:ring-2 focus:ring-[#002185]/20 focus:border-[#002185] transition-all"
+                      />
+                      <button
+                        type="button"
+                        onClick={() =>
+                          setFormData((p) => ({ ...p, showPassword: !p.showPassword }))
+                        }
+                        className="absolute inset-y-0 right-0 pr-3.5 flex items-center text-[#94A3B8] hover:text-[#0F172A]"
                       >
-                        Phone Number <span className="text-[#DC2626]">*</span>
-                      </label>
-                      <div className="relative">
-                        <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
-                          <Phone className="h-5 w-5 text-[#64748B]" />
-                        </div>
-                        <input
-                          type="tel"
-                          id="phone"
-                          name="phone"
-                          value={formData.phone}
-                          onChange={handleInputChange}
-                          placeholder="024 000 0000"
-                          className="w-full pl-10 pr-3 py-2.5 border border-[#E2E8F0] rounded-lg bg-[#F8FAFC] text-[#0F172A] placeholder-[#64748B] hover:border-[#ff5500] focus:outline-none focus:ring-2 focus:ring-[#ff5500]/30 focus:border-[#ff5500] transition-all duration-200"
-                          required
-                        />
-                      </div>
-                    </div>
-
-                    {/* Department */}
-                    <div>
-                      <label
-                        htmlFor="department"
-                        className="block text-sm font-medium text-[#002185] mb-1.5"
-                      >
-                        Department <span className="text-[#DC2626]">*</span>
-                      </label>
-                      <div className="relative">
-                        <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
-                          <Building2 className="h-5 w-5 text-[#64748B]" />
-                        </div>
-                        <select
-                          id="department"
-                          name="department"
-                          value={formData.department}
-                          onChange={handleInputChange}
-                          className="w-full pl-10 pr-3 py-2.5 border border-[#E2E8F0] rounded-lg bg-[#F8FAFC] text-[#0F172A] hover:border-[#ff5500] focus:outline-none focus:ring-2 focus:ring-[#ff5500]/30 focus:border-[#ff5500] transition-all duration-200 appearance-none cursor-pointer"
-                          required
-                        >
-                          <option value="">Select Department</option>
-                          <option value="Human Resources">
-                            Administrative
-                          </option>
-                          <option value="Engineering">
-                            Software Engineering
-                          </option>
-                          <option value="Finance">Large Format</option>
-                          <option value="Marketing">Digital Marketing</option>
-                          <option value="Sales">Graphic Design</option>
-                        </select>
-                      </div>
-                    </div>
-
-                    {/* Position */}
-                    <div>
-                      <label
-                        htmlFor="position"
-                        className="block text-sm font-medium text-[#002185] mb-1.5"
-                      >
-                        Position <span className="text-[#DC2626]">*</span>
-                      </label>
-                      <div className="relative">
-                        <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
-                          <Briefcase className="h-5 w-5 text-[#64748B]" />
-                        </div>
-                        <input
-                          type="text"
-                          id="position"
-                          name="position"
-                          value={formData.position}
-                          onChange={handleInputChange}
-                          placeholder="Frontend Developer"
-                          className="w-full pl-10 pr-3 py-2.5 border border-[#E2E8F0] rounded-lg bg-[#F8FAFC] text-[#0F172A] placeholder-[#64748B] hover:border-[#ff5500] focus:outline-none focus:ring-2 focus:ring-[#ff5500]/30 focus:border-[#ff5500] transition-all duration-200"
-                          required
-                        />
-                      </div>
-                    </div>
-
-                    {/* Employment Date */}
-                    <div>
-                      <label
-                        htmlFor="employmentDate"
-                        className="block text-sm font-medium text-[#002185] mb-1.5"
-                      >
-                        Employment Date{" "}
-                        <span className="text-[#DC2626]">*</span>
-                      </label>
-                      <div className="relative">
-                        <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
-                          <Calendar className="h-5 w-5 text-[#64748B]" />
-                        </div>
-                        <input
-                          type="date"
-                          id="employmentDate"
-                          name="employmentDate"
-                          value={formData.employmentDate}
-                          onChange={handleInputChange}
-                          className="w-full pl-10 pr-3 py-2.5 border border-[#E2E8F0] rounded-lg bg-[#F8FAFC] text-[#0F172A] hover:border-[#ff5500] focus:outline-none focus:ring-2 focus:ring-[#ff5500]/30 focus:border-[#ff5500] transition-all duration-200"
-                          required
-                        />
-                      </div>
+                        {formData.showPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                      </button>
                     </div>
                   </div>
-                </div>
 
-                {/* Submit & Back Buttons */}
-                <div className="flex flex-col sm:flex-row gap-3 pt-4 border-t border-[#E2E8F0]">
-                  <button
-                    type="button"
-                    onClick={() => {
-                      setIsSignUp(false);
-                      setError(null);
-                      setSuccessMessage(null);
-                      setFormData({
-                        fullName: "",
-                        employeeId: "",
-                        email: "",
-                        password: "",
-                        phone: "",
-                        department: "",
-                        position: "",
-                        employmentDate: "",
-                        showPassword: false,
-                      });
-                    }}
-                    className="flex-1 px-4 py-2.5 text-sm font-medium text-[#64748B] bg-[#F8FAFC] border border-[#E2E8F0] rounded-lg hover:border-[#ff5500] hover:text-[#002185] transition-all duration-200"
-                  >
-                    ← Back to Login
-                  </button>
+                  {/* Confirm Password */}
+                  <div>
+                    <label
+                      htmlFor="form-admin-reg-conf-pass"
+                      className="block text-xs font-bold text-[#0F172A] uppercase tracking-wider mb-1.5"
+                    >
+                      Confirm Password <span className="text-[#DC2626]">*</span>
+                    </label>
+                    <div className="relative">
+                      <div className="absolute inset-y-0 left-0 pl-3.5 flex items-center pointer-events-none text-[#94A3B8]">
+                        <Lock className="h-4 w-4" />
+                      </div>
+                      <input
+                        id="form-admin-reg-conf-pass"
+                        type={formData.showConfirmPassword ? "text" : "password"}
+                        name="confirmPassword"
+                        value={formData.confirmPassword}
+                        onChange={handleInputChange}
+                        placeholder="Re-enter password"
+                        required
+                        minLength={6}
+                        className="w-full pl-10 pr-11 py-2.5 bg-[#F8FAFC] border border-[#CBD5E1] rounded-xl text-[#0F172A] text-sm placeholder-[#94A3B8] focus:outline-none focus:ring-2 focus:ring-[#002185]/20 focus:border-[#002185] transition-all"
+                      />
+                      <button
+                        type="button"
+                        onClick={() =>
+                          setFormData((p) => ({
+                            ...p,
+                            showConfirmPassword: !p.showConfirmPassword,
+                          }))
+                        }
+                        className="absolute inset-y-0 right-0 pr-3.5 flex items-center text-[#94A3B8] hover:text-[#0F172A]"
+                      >
+                        {formData.showConfirmPassword ? (
+                          <EyeOff className="w-4 h-4" />
+                        ) : (
+                          <Eye className="w-4 h-4" />
+                        )}
+                      </button>
+                    </div>
+                  </div>
+
+                  {/* Privilege Notice */}
+                  <div className="p-3 bg-[#F0FDF4] border border-[#86EFAC] rounded-xl flex items-start gap-2.5 text-xs text-[#166534]">
+                    <CheckCircle2 className="w-4 h-4 text-[#16A34A] shrink-0 mt-0.5" />
+                    <span>
+                      Account will be registered directly in database with <strong>role: 'admin'</strong>.
+                    </span>
+                  </div>
+
                   <button
                     type="submit"
-                    className="flex-1 bg-[#002185] hover:bg-[#ff5500] text-white font-semibold py-2.5 px-4 rounded-lg transition-all duration-300 shadow-md hover:shadow-lg focus:outline-none focus:ring-2 focus:ring-[#ff5500] focus:ring-offset-2"
+                    className="w-full bg-[#002185] hover:bg-[#001760] text-white font-bold py-3 px-4 rounded-xl shadow-md transition-all flex items-center justify-center gap-2 cursor-pointer mt-2"
                   >
-                    Create Employee Account
+                    <ShieldCheckIcon className="w-4 h-4" />
+                    Create Admin Account
                   </button>
+
+                  <div className="pt-4 text-center">
+                    <p className="text-sm text-[#64748B]">
+                      Already have an Admin account?{" "}
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setError(null);
+                          setIsRegisterMode(false);
+                        }}
+                        className="text-[#002185] font-bold hover:text-[#ff5500] hover:underline cursor-pointer"
+                      >
+                        Sign In here
+                      </button>
+                    </p>
+                  </div>
+                </form>
+              ) : (
+                /* ================= ADMIN LOGIN FORM ================= */
+                <form onSubmit={handleAdminLoginSubmit} className="space-y-4">
+                  {/* Email */}
+                  <div>
+                    <label
+                      htmlFor="form-admin-login-email"
+                      className="block text-xs font-bold text-[#0F172A] uppercase tracking-wider mb-1.5"
+                    >
+                      Admin Email <span className="text-[#DC2626]">*</span>
+                    </label>
+                    <div className="relative">
+                      <div className="absolute inset-y-0 left-0 pl-3.5 flex items-center pointer-events-none text-[#94A3B8]">
+                        <Mail className="h-4 w-4" />
+                      </div>
+                      <input
+                        id="form-admin-login-email"
+                        type="email"
+                        name="email"
+                        value={formData.email}
+                        onChange={handleInputChange}
+                        placeholder="admin@organization.com"
+                        required
+                        className="w-full pl-10 pr-3.5 py-2.5 bg-[#F8FAFC] border border-[#CBD5E1] rounded-xl text-[#0F172A] text-sm placeholder-[#94A3B8] focus:outline-none focus:ring-2 focus:ring-[#002185]/20 focus:border-[#002185] transition-all"
+                      />
+                    </div>
+                  </div>
+
+                  {/* Password */}
+                  <div>
+                    <label
+                      htmlFor="form-admin-login-pass"
+                      className="block text-xs font-bold text-[#0F172A] uppercase tracking-wider mb-1.5"
+                    >
+                      Password <span className="text-[#DC2626]">*</span>
+                    </label>
+                    <div className="relative">
+                      <div className="absolute inset-y-0 left-0 pl-3.5 flex items-center pointer-events-none text-[#94A3B8]">
+                        <Lock className="h-4 w-4" />
+                      </div>
+                      <input
+                        id="form-admin-login-pass"
+                        type={formData.showPassword ? "text" : "password"}
+                        name="password"
+                        value={formData.password}
+                        onChange={handleInputChange}
+                        placeholder="Enter admin password"
+                        required
+                        className="w-full pl-10 pr-11 py-2.5 bg-[#F8FAFC] border border-[#CBD5E1] rounded-xl text-[#0F172A] text-sm placeholder-[#94A3B8] focus:outline-none focus:ring-2 focus:ring-[#002185]/20 focus:border-[#002185] transition-all"
+                      />
+                      <button
+                        type="button"
+                        onClick={() =>
+                          setFormData((p) => ({ ...p, showPassword: !p.showPassword }))
+                        }
+                        className="absolute inset-y-0 right-0 pr-3.5 flex items-center text-[#94A3B8] hover:text-[#0F172A]"
+                      >
+                        {formData.showPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                      </button>
+                    </div>
+                  </div>
+
+                  <button
+                    type="submit"
+                    className="w-full bg-[#002185] hover:bg-[#001760] text-white font-bold py-3 px-4 rounded-xl shadow-md transition-all flex items-center justify-center gap-2 cursor-pointer mt-2"
+                  >
+                    <ShieldCheckIcon className="w-4 h-4" />
+                    Sign In as Administrator
+                  </button>
+
+                  <div className="pt-4 text-center">
+                    <p className="text-sm text-[#64748B]">
+                      Need a new Admin account?{" "}
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setError(null);
+                          setIsRegisterMode(true);
+                        }}
+                        className="text-[#002185] font-bold hover:text-[#ff5500] hover:underline inline-flex items-center gap-1 cursor-pointer"
+                      >
+                        <UserPlus className="w-3.5 h-3.5" />
+                        Register Admin
+                      </button>
+                    </p>
+                  </div>
+                </form>
+              )
+            ) : (
+              /* ================= EMPLOYEE LOGIN FORM (LOGIN ONLY) ================= */
+              <form onSubmit={handleEmployeeLoginSubmit} className="space-y-4">
+                {/* Email or ID */}
+                <div>
+                  <label
+                    htmlFor="form-emp-login-email"
+                    className="block text-xs font-bold text-[#0F172A] uppercase tracking-wider mb-1.5"
+                  >
+                    Work Email or Employee ID <span className="text-[#DC2626]">*</span>
+                  </label>
+                  <div className="relative">
+                    <div className="absolute inset-y-0 left-0 pl-3.5 flex items-center pointer-events-none text-[#94A3B8]">
+                      <Mail className="h-4 w-4" />
+                    </div>
+                    <input
+                      id="form-emp-login-email"
+                      type="text"
+                      name="email"
+                      value={formData.email}
+                      onChange={handleInputChange}
+                      placeholder="e.g. employee@organization.com or EMP001"
+                      required
+                      className="w-full pl-10 pr-3.5 py-2.5 bg-[#F8FAFC] border border-[#CBD5E1] rounded-xl text-[#0F172A] text-sm placeholder-[#94A3B8] focus:outline-none focus:ring-2 focus:ring-[#ff5500]/20 focus:border-[#ff5500] transition-all"
+                    />
+                  </div>
                 </div>
-              </div>
-            </form>
-          )}
+
+                {/* Password */}
+                <div>
+                  <label
+                    htmlFor="form-emp-login-pass"
+                    className="block text-xs font-bold text-[#0F172A] uppercase tracking-wider mb-1.5"
+                  >
+                    Password <span className="text-[#DC2626]">*</span>
+                  </label>
+                  <div className="relative">
+                    <div className="absolute inset-y-0 left-0 pl-3.5 flex items-center pointer-events-none text-[#94A3B8]">
+                      <Lock className="h-4 w-4" />
+                    </div>
+                    <input
+                      id="form-emp-login-pass"
+                      type={formData.showPassword ? "text" : "password"}
+                      name="password"
+                      value={formData.password}
+                      onChange={handleInputChange}
+                      placeholder="Enter your password"
+                      required
+                      className="w-full pl-10 pr-11 py-2.5 bg-[#F8FAFC] border border-[#CBD5E1] rounded-xl text-[#0F172A] text-sm placeholder-[#94A3B8] focus:outline-none focus:ring-2 focus:ring-[#ff5500]/20 focus:border-[#ff5500] transition-all"
+                    />
+                    <button
+                      type="button"
+                      onClick={() =>
+                        setFormData((p) => ({ ...p, showPassword: !p.showPassword }))
+                      }
+                      className="absolute inset-y-0 right-0 pr-3.5 flex items-center text-[#94A3B8] hover:text-[#0F172A]"
+                    >
+                      {formData.showPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                    </button>
+                  </div>
+                </div>
+
+                {/* Strict Restriction Notice: Employees Cannot Self-Register */}
+                <div className="p-3 bg-[#FFF7ED] border border-[#FED7AA] rounded-xl flex items-start gap-2.5 text-xs text-[#9A3412]">
+                  <Info className="w-4 h-4 text-[#EA580C] shrink-0 mt-0.5" />
+                  <span>
+                    Employee accounts are provisioned exclusively by administrators. Self-registration is restricted.
+                  </span>
+                </div>
+
+                <button
+                  type="submit"
+                  className="w-full bg-[#ff5500] hover:bg-[#e04b00] text-white font-bold py-3 px-4 rounded-xl shadow-md transition-all flex items-center justify-center gap-2 cursor-pointer mt-2"
+                >
+                  <UserIcon className="w-4 h-4" />
+                  Sign In to Employee Portal
+                </button>
+
+                <div className="pt-4 text-center">
+                  <p className="text-sm text-[#64748B]">
+                    Are you an Administrator?{" "}
+                    <Link
+                      to="/admin/login"
+                      className="text-[#002185] font-bold hover:text-[#ff5500] hover:underline"
+                    >
+                      Admin Sign In
+                    </Link>
+                  </p>
+                </div>
+              </form>
+            )}
+          </div>
         </div>
       </div>
-      {showToast.show && (
+
+      {showToast?.show && (
         <Toaster
           message={showToast.message}
           type={showToast.type}

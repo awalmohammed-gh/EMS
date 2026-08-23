@@ -1,6 +1,7 @@
 import mongoose from "mongoose";
 import { Attendance } from "../models/attendanceModel.js";
 import { Employee } from "../models/employeeModel.js";
+import { createNotificationRecord } from "./notificationController.js";
 
 const isValidObjectId = (id) =>
   id &&
@@ -43,6 +44,16 @@ export const clockIn = async (req, res) => {
         success: false,
         message: "Employee identification required for clock in.",
       });
+    }
+
+    // Lookup employee details for rich notification
+    let employeeDoc = null;
+    if (isValidObjectId(employeeId)) {
+      try {
+        employeeDoc = await Employee.findById(employeeId).select("fullName employeeId department position").lean();
+      } catch (err) {
+        console.warn("Could not fetch employee details for clockIn notification:", err.message);
+      }
     }
 
     const today = new Date().toISOString().split("T")[0];
@@ -106,6 +117,7 @@ export const clockIn = async (req, res) => {
           date: today,
           clockIn: now,
           status,
+          workHours: 0,
         });
         if (dbCreated) {
           newRecord = dbCreated.toObject ? dbCreated.toObject() : dbCreated;
@@ -117,6 +129,37 @@ export const clockIn = async (req, res) => {
 
     // Update live memory store
     liveAttendanceStore.set(key, newRecord);
+
+    // Push automated notification record targeting Admins
+    try {
+      const empName = employeeDoc?.fullName || req.employee?.fullName || "Employee";
+      const empCode = employeeDoc?.employeeId || req.employee?.employeeId || "Staff";
+      const timeStr = now.toLocaleTimeString("en-US", { hour: "2-digit", minute: "2-digit" });
+
+      await createNotificationRecord({
+        recipient_id: "admin",
+        recipient_role: "admin",
+        sender_id: String(employeeId),
+        sender_role: "employee",
+        sender_name: empName,
+        title: "Employee Clock In",
+        message: `${empName} (${empCode}) clocked in at ${timeStr} [${status}]`,
+        type: "attendance_alert",
+        category: "attendance",
+        priority: status === "Late" ? "medium" : "info",
+        action_url: "/admin/dashboard/attendance",
+        action_label: "View Attendance",
+        metadata: {
+          employeeId: empCode,
+          employeeName: empName,
+          date: today,
+          status,
+          clockIn: now.toISOString(),
+        },
+      });
+    } catch (notifErr) {
+      console.error("Failed to push clock-in notification:", notifErr.message);
+    }
 
     return res.status(201).json({
       success: true,
@@ -144,6 +187,16 @@ export const clockOut = async (req, res) => {
         success: false,
         message: "Employee identification required for clock out.",
       });
+    }
+
+    // Lookup employee details for rich notification
+    let employeeDoc = null;
+    if (isValidObjectId(employeeId)) {
+      try {
+        employeeDoc = await Employee.findById(employeeId).select("fullName employeeId department position").lean();
+      } catch (err) {
+        console.warn("Could not fetch employee details for clockOut notification:", err.message);
+      }
     }
 
     const today = new Date().toISOString().split("T")[0];
@@ -213,6 +266,37 @@ export const clockOut = async (req, res) => {
 
     // Update live memory store
     liveAttendanceStore.set(key, record);
+
+    // Push automated notification record targeting Admins
+    try {
+      const empName = employeeDoc?.fullName || req.employee?.fullName || "Employee";
+      const empCode = employeeDoc?.employeeId || req.employee?.employeeId || "Staff";
+      const timeStr = now.toLocaleTimeString("en-US", { hour: "2-digit", minute: "2-digit" });
+
+      await createNotificationRecord({
+        recipient_id: "admin",
+        recipient_role: "admin",
+        sender_id: String(employeeId),
+        sender_role: "employee",
+        sender_name: empName,
+        title: "Employee Clock Out",
+        message: `${empName} (${empCode}) clocked out at ${timeStr} (${hoursWorked} hrs recorded)`,
+        type: "attendance_alert",
+        category: "attendance",
+        priority: "info",
+        action_url: "/admin/dashboard/attendance",
+        action_label: "View Attendance",
+        metadata: {
+          employeeId: empCode,
+          employeeName: empName,
+          date: today,
+          clockOut: now.toISOString(),
+          workHours: hoursWorked,
+        },
+      });
+    } catch (notifErr) {
+      console.error("Failed to push clock-out notification:", notifErr.message);
+    }
 
     return res.status(200).json({
       success: true,

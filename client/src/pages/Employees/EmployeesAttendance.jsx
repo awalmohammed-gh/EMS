@@ -171,6 +171,15 @@ const EmployeesAttendance = () => {
           type: "success",
         });
 
+        // Broadcast to Admin real-time feed
+        try {
+          const bc = new BroadcastChannel("eyenit_attendance_sync");
+          bc.postMessage({ type: "clock_in", timestamp: Date.now() });
+          bc.close();
+        } catch {
+          // Ignore
+        }
+
         // Refresh data from server
         await fetchTodayAttendance();
         await getEmployeeAttendanceHistory();
@@ -224,6 +233,15 @@ const EmployeesAttendance = () => {
           message: data.message || "Clock out successful!",
           type: "success",
         });
+
+        // Broadcast to Admin real-time feed
+        try {
+          const bc = new BroadcastChannel("eyenit_attendance_sync");
+          bc.postMessage({ type: "clock_out", timestamp: Date.now() });
+          bc.close();
+        } catch {
+          // Ignore
+        }
 
         // Refresh data from server
         await fetchTodayAttendance();

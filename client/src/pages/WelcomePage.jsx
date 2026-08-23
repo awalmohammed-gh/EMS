@@ -174,7 +174,7 @@ const WelcomePage = () => {
                   >
                     <option.icon className="w-6 h-6 text-white" />
                   </motion.div>
-                  <div>
+                  <div className="flex-1">
                     <h3 className="text-lg font-bold text-[#002185] group-hover:text-[#ff5500] transition-colors duration-300">
                       {option.title}
                     </h3>
@@ -185,6 +185,17 @@ const WelcomePage = () => {
             </motion.div>
           ))}
         </div>
+
+        {/* Quick link to create admin account */}
+        <motion.div variants={itemVariants} className="mt-6 text-center text-xs text-[#64748B]">
+          First time setting up?{" "}
+          <Link
+            to="/admin/register"
+            className="text-[#002185] font-bold hover:text-[#ff5500] hover:underline"
+          >
+            Create an Administrator Account
+          </Link>
+        </motion.div>
       </motion.div>
     </div>
   );

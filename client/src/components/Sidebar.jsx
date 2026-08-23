@@ -9,7 +9,11 @@ import eyenitLogo from "../assets/eyenit_logo.png";
 import { useManagement } from "../context/ManagementContextProvider";
 import { MobileSidebarDrawer } from "./MobileSidebarDrawer";
 
-export const Sidebar = ({ children }) => {
+export const Sidebar = ({
+  children,
+  isMobileOpen: propIsMobileOpen,
+  onClose: propOnClose,
+}) => {
   const { pathname } = useLocation();
   const navigate = useNavigate();
   const {
@@ -34,9 +38,12 @@ export const Sidebar = ({ children }) => {
     : user?.position || "Staff Member";
 
   const handleClose = useCallback(() => {
+    if (typeof propOnClose === "function") {
+      propOnClose();
+    }
     if (typeof closeSidebar === "function") closeSidebar();
     if (typeof closeMobileSidebar === "function") closeMobileSidebar();
-  }, [closeSidebar, closeMobileSidebar]);
+  }, [propOnClose, closeSidebar, closeMobileSidebar]);
 
   // Handle logout
   const handleLogout = async () => {
@@ -50,7 +57,10 @@ export const Sidebar = ({ children }) => {
     handleClose();
   }, [pathname, handleClose]);
 
-  const activeIsOpen = isSidebarOpen ?? isMobileSidebarOpen ?? false;
+  const activeIsOpen =
+    propIsMobileOpen !== undefined
+      ? propIsMobileOpen
+      : isSidebarOpen ?? isMobileSidebarOpen ?? false;
 
   return (
     <>

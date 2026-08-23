@@ -12,8 +12,10 @@ import PrintPayslips from "../pages/Admin/PrintPayslips";
 import Settings from "../pages/Admin/Settings";
 import AdminLayout from "../layout/AdminLayout";
 import ProtectedRoute from "./ProtectedRoute";
-import LoginForm from "../components/LoginForm";
 import WelcomePage from "../pages/WelcomePage";
+import AdminLogin from "../pages/Auth/AdminLogin";
+import AdminRegister from "../pages/Auth/AdminRegister";
+import EmployeeLogin from "../pages/Auth/EmployeeLogin";
 import EmployeesLayout from "../layout/EmployeesLayout";
 import EmployeesAttendance from "../pages/Employees/EmployeesAttendance";
 import EmployeeLeave from "../pages/Employees/EmployeeLeave";
@@ -30,28 +32,16 @@ export const router = createBrowserRouter(
       <Route path="/" element={<Navigate to="/welcome" replace />} />
       <Route path="/welcome" element={<WelcomePage />} />
 
-      {/* Login Routes */}
-      <Route
-        path="/login/admin"
-        element={
-          <LoginForm
-            role="admin"
-            title="Admin Portal"
-            subtitle="Please enter your credentials to access the admin panel"
-          />
-        }
-      />
+      {/* Admin Authentication Routes */}
+      <Route path="/admin/login" element={<AdminLogin />} />
+      <Route path="/login/admin" element={<AdminLogin />} />
+      <Route path="/admin/register" element={<AdminRegister />} />
+      <Route path="/register/admin" element={<AdminRegister />} />
 
-      <Route
-        path="/login/employee"
-        element={
-          <LoginForm
-            role="employee"
-            title="Employee Portal"
-            subtitle="Please enter your credentials to access the employee portal"
-          />
-        }
-      />
+      {/* Employee Authentication Routes (Login Only - No Self Registration) */}
+      <Route path="/employee/login" element={<EmployeeLogin />} />
+      <Route path="/login/employee" element={<EmployeeLogin />} />
+      <Route path="/login" element={<EmployeeLogin />} />
 
       {/* Admin Protected Routes */}
       <Route element={<ProtectedRoute allowRole="admin" />}>

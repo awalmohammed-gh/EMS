@@ -48,21 +48,37 @@ export const deleteEmployee = (id) => {
   return api.delete(`/admin/employees/${id}`);
 };
 
-// authentication
+// authentication & registration endpoints
+export const adminRegister = (data) => {
+  return api.post("/auth/admin/register", data);
+};
+
+export const adminLogin = (data) => {
+  return api.post("/auth/admin/login", data);
+};
+
 export const employeeLogin = (data) => {
-  return api.post("/employee/login-account", data);
+  return api.post("/auth/employee/login", data);
+};
+
+export const authLogout = () => {
+  return api.post("/auth/logout");
+};
+
+export const getAuthMe = () => {
+  return api.get("/auth/me");
 };
 
 export const employeeLogout = () => {
-  return api.post("/employee/logout-account");
+  return api.post("/auth/employee/logout");
 };
 
-// function for admin
+// legacy aliases for backward compatibility
 export const adminLog = (data) => {
-  return api.post("/admin/admin-login", data);
+  return api.post("/auth/admin/login", data);
 };
 export const adminLogout = () => {
-  return api.post("/admin/admin-logout");
+  return api.post("/auth/admin/logout");
 };
 export const getAdminMe = () => {
   return api.get("/admin/me");
@@ -71,7 +87,7 @@ export const getAdminProfile = () => {
   return api.get("/admin/me");
 };
 export const createAdminAccount = (data) => {
-  return api.post("/admin/create-account", data);
+  return api.post("/auth/admin/register", data);
 };
 
 

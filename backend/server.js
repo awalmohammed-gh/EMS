@@ -13,6 +13,7 @@ import dashboardRouter from "./routes/dashboardRoutes.js";
 import leaveRouter from "./routes/leaveRoute.js";
 import settingsRouter from "./routes/adminSettingsRoute.js";
 import notificationRouter from "./routes/notificationRoutes.js";
+import authRouter from "./routes/authRoutes.js";
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -45,6 +46,7 @@ app.use(express.urlencoded({ extended: true }));
 await connectMongodb();
 
 // api endpoints
+app.use("/api/auth", authRouter);
 app.use("/api/employee", employeeRouter);
 app.use("/api/employees", employeeRouter);
 app.use("/api/admin", adminRouter);

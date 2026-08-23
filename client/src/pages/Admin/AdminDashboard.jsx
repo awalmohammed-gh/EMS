@@ -33,6 +33,7 @@ import {
 } from "recharts";
 import Loading from "../../ui/Loading";
 import ErrorMessage from "../../ui/ErrorMessage";
+import DepartmentStatusVisualizer from "../../components/DepartmentStatusVisualizer";
 
 const AdminDashboard = () => {
   const navigate = useNavigate();
@@ -272,6 +273,13 @@ const AdminDashboard = () => {
           );
         })}
       </div>
+
+      {/* DEPARTMENT & WORKFORCE STATUS RECHARTS VISUALIZATION */}
+      <DepartmentStatusVisualizer
+        departmentDistribution={dashboardData.departmentDistribution}
+        employeeStatusDistribution={dashboardData.employeeStatusDistribution}
+        totalEmployees={dashboardData.cards?.totalEmployees || 0}
+      />
 
       {/* RECHARTS SECTION 1: Attendance Trends & Leave Status Breakdown */}
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">

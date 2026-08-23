@@ -37,9 +37,18 @@ const payrollSchema = new mongoose.Schema(
     },
 
     deductions: {
-      type: Number,
-      default: 0,
-      min: 0,
+      type: mongoose.Schema.Types.Mixed,
+      default: [],
+    },
+
+    earnings: {
+      type: [
+        {
+          description: { type: String, required: true },
+          amount: { type: Number, required: true, min: 0 },
+        },
+      ],
+      default: [],
     },
 
     netSalary: {

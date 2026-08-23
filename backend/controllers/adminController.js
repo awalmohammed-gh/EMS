@@ -95,44 +95,31 @@ export const adminLogin = async (req, res) => {
     let authenticatedAdmin = null;
 
     // 1. Check MongoDB Admin collection
-    try {
-      const dbAdmin = await Admin.findOne({ email: cleanEmail });
-      if (dbAdmin && dbAdmin.password_hash) {
-        const isMatch = await bcrypt.compare(password, dbAdmin.password_hash);
-        if (isMatch) {
-          authenticatedAdmin = {
-            id: String(dbAdmin._id),
-            _id: String(dbAdmin._id),
-            fullName: dbAdmin.full_name,
-            full_name: dbAdmin.full_name,
-            email: dbAdmin.email,
-            role: dbAdmin.role || "admin",
-            profile_image_url: dbAdmin.profile_image_url || "",
-          };
-        }
-      }
-    } catch (dbErr) {
-      console.warn("DB check during admin login:", dbErr.message);
+    const dbAdmin = await Admin.findOne({ email: cleanEmail });
+    if (!dbAdmin || !dbAdmin.password_hash) {
+      return res.status(401).json({
+        success: false,
+        message: "Invalid email or password credentials.",
+      });
     }
 
-    // 2. Check process.env fallback credentials if DB admin not found or matched
-    if (!authenticatedAdmin) {
-      const adminEmail = (process.env.ADMIN_EMAIL || "admin@eyenit.com").toLowerCase().trim();
-      const adminPsd = process.env.ADMIN_PSD || process.env.ADMIN_PASSWORD || "admin123";
-      const adminName = process.env.ADMIN_NAME || "System Administrator";
-
-      if (cleanEmail === adminEmail && password === adminPsd) {
-        authenticatedAdmin = {
-          id: "admin_001",
-          _id: "admin_001",
-          fullName: adminName,
-          full_name: adminName,
-          email: adminEmail,
-          role: "super_admin",
-          profile_image_url: "",
-        };
-      }
+    const isMatch = await bcrypt.compare(password, dbAdmin.password_hash);
+    if (!isMatch) {
+      return res.status(401).json({
+        success: false,
+        message: "Invalid email or password credentials.",
+      });
     }
+
+    authenticatedAdmin = {
+      id: String(dbAdmin._id),
+      _id: String(dbAdmin._id),
+      fullName: dbAdmin.full_name,
+      full_name: dbAdmin.full_name,
+      email: dbAdmin.email,
+      role: dbAdmin.role || "admin",
+      profile_image_url: dbAdmin.profile_image_url || "",
+    };
 
     if (!authenticatedAdmin) {
       return res.status(401).json({

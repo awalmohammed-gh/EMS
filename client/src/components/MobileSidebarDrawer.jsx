@@ -74,6 +74,17 @@ export const MobileSidebarDrawer = ({
     return () => window.removeEventListener("keydown", handleKeyDown);
   }, [isOpen, handleClose]);
 
+  // Auto-dismiss on window resize to desktop (>= 1024px)
+  useEffect(() => {
+    const handleResize = () => {
+      if (window.innerWidth >= 1024 && isOpen) {
+        handleClose();
+      }
+    };
+    window.addEventListener("resize", handleResize);
+    return () => window.removeEventListener("resize", handleResize);
+  }, [isOpen, handleClose]);
+
   // Auto-close on route change
   useEffect(() => {
     handleClose();

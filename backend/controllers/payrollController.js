@@ -26,7 +26,7 @@ const getWorkingDaysInMonth = (year = 2026, monthIndex = 7) => {
   return count > 0 ? count : 22;
 };
 
-// Calculate monthly salary breakdown based on real attendance and approved leave requests
+// Calculate monthly salary breakdown based on real attendance (deductions ONLY on absent status)
 export const calculateMonthlyPayrollSummary = async (req, res) => {
   try {
     const { employeeId, month, year, baseSalaryInput } = req.query;
@@ -93,29 +93,31 @@ export const calculateMonthlyPayrollSummary = async (req, res) => {
       }
     });
 
-    // Compute attendance statistics directly from actual records
+    // Compute attendance counts directly from database records
     let presentDays = 0;
-    let onTimeDays = 0;
+    let absentDays = 0;
     let lateDays = 0;
+    let onTimeDays = 0;
     let totalWorkHours = 0;
-    let overtimeHours = 0;
 
     attendanceRecords.forEach((record) => {
       const hrs = record.workHours || 8;
       totalWorkHours += hrs;
-      if (hrs > 8) {
-        overtimeHours += hrs - 8;
-      }
 
-      presentDays++;
-      if (record.status === "Late") {
-        lateDays++;
+      const st = (record.status || "").toLowerCase();
+      if (st === "absent") {
+        absentDays++;
       } else {
-        onTimeDays++;
+        presentDays++;
+        if (st === "late") {
+          lateDays++;
+        } else {
+          onTimeDays++;
+        }
       }
     });
 
-    // 2. Gather Approved Leave Requests directly from Database
+    // 2. Gather Approved Leave Requests
     let approvedLeaves = [];
     if (isTargetValidObjId) {
       try {
@@ -139,50 +141,18 @@ export const calculateMonthlyPayrollSummary = async (req, res) => {
       const days = Number(leave.totalDays) || 1;
       if (leave.leaveType === "Unpaid Leave") {
         approvedUnpaidLeaveDays += days;
+        absentDays += days; // Unpaid leave counts as absent
       } else {
-        approvedPaidLeaveDays += days; // Annual, Sick, Maternity, Casual, Compassionate count as 100% paid
+        approvedPaidLeaveDays += days;
       }
     });
 
-    // 3. Compute Payable Days & Deductions
-    const payableDays = Math.min(standardWorkingDays, presentDays + approvedPaidLeaveDays);
-    const unexcusedAbsences = Math.max(0, standardWorkingDays - payableDays - approvedUnpaidLeaveDays);
-    const attendanceCompliance = Math.min(
-      100,
-      Math.round(((presentDays + approvedPaidLeaveDays) / standardWorkingDays) * 100)
-    );
-
-    // Prorated base salary based on attended + approved paid leave days
-    const earnedBaseSalary = parseFloat(((payableDays / standardWorkingDays) * baseSalary).toFixed(2));
-
-    // Overtime bonus calculation (1.5x hourly rate)
-    const overtimeBonus = parseFloat((overtimeHours * hourlyRate * 1.5).toFixed(2));
-
-    // Allowances
-    const allowancesBreakdown = {
-      housing: 350,
-      transport: 200,
-      performanceBonus: onTimeDays >= 15 ? 150 : 50,
-      total: 0,
-    };
-    allowancesBreakdown.total =
-      allowancesBreakdown.housing +
-      allowancesBreakdown.transport +
-      allowancesBreakdown.performanceBonus;
-
-    // Deductions
-    const latePenaltyRate = 25; // GHS 25 per unexcused late clock-in
-    const lateArrivalPenalty = parseFloat((lateDays * latePenaltyRate).toFixed(2));
-    const unexcusedAbsenceDeduction = parseFloat((unexcusedAbsences * dailyRate).toFixed(2));
-    const pensionSSNIT = parseFloat(((earnedBaseSalary + allowancesBreakdown.total) * 0.055).toFixed(2)); // 5.5% employee SSNIT
-    const incomeTaxPAYE = parseFloat(((earnedBaseSalary + allowancesBreakdown.total) * 0.08).toFixed(2)); // 8% Income tax bracket
-
-    const totalDeductions = parseFloat(
-      (lateArrivalPenalty + unexcusedAbsenceDeduction + pensionSSNIT + incomeTaxPAYE).toFixed(2)
-    );
-
-    const grossEarnings = parseFloat((earnedBaseSalary + allowancesBreakdown.total + overtimeBonus).toFixed(2));
-    const netCalculatedSalary = parseFloat(Math.max(0, grossEarnings - totalDeductions).toFixed(2));
+    // Absence-based calculation: Deductions trigger ONLY when status === 'absent'
+    // For employees with full attendance (absentDays === 0), process standard base salary with 0 deductions.
+    const absenceDeductions = parseFloat((absentDays * dailyRate).toFixed(2));
+    const grossSalary = baseSalary;
+    const totalDeductions = absenceDeductions;
+    const netCalculatedSalary = parseFloat(Math.max(0, grossSalary - totalDeductions).toFixed(2));
 
     const summary = {
       month: targetMonth,
@@ -193,45 +163,34 @@ export const calculateMonthlyPayrollSummary = async (req, res) => {
         presentDays,
         onTimeDays,
         lateDays,
+        absentDays,
         totalWorkHours,
-        overtimeHours,
         approvedPaidLeaveDays,
         approvedUnpaidLeaveDays,
-        unexcusedAbsences,
-        payableDays,
-        attendanceCompliance,
       },
-      approvedLeavesList: approvedLeaves.map((l) => ({
-        leaveType: l.leaveType,
-        startDate: l.startDate,
-        endDate: l.endDate,
-        totalDays: l.totalDays,
-        reason: l.reason,
-        status: l.status,
-      })),
       rates: {
         monthlyBaseSalary: baseSalary,
         dailyRate,
         hourlyRate,
       },
       salaryCalculation: {
-        earnedBaseSalary,
-        allowances: allowancesBreakdown,
-        overtimeBonus,
-        grossEarnings,
+        grossSalary,
+        basicSalary: baseSalary,
+        absentDays,
+        absenceDeductions,
         deductions: {
-          lateArrivalPenalty,
-          unexcusedAbsenceDeduction,
-          pensionSSNIT,
-          incomeTaxPAYE,
+          absenceDeduction: absenceDeductions,
           total: totalDeductions,
+        },
+        allowances: {
+          total: 0,
         },
         netCalculatedSalary,
       },
       formulaExplanation: {
-        payableDaysFormula: "Attended Days + Approved Paid Leave Days (Capped at Standard Month Working Days)",
-        earnedBaseFormula: "(Payable Days / Standard Working Days) * Base Salary",
-        netSalaryFormula: "Earned Base + Allowances + Overtime Bonus - Total Deductions (Taxes + Penalties)",
+        baseSalaryFormula: "Full Standard Base Salary",
+        deductionsFormula: "Absent Days * Daily Rate (triggered ONLY on status === 'absent')",
+        netSalaryFormula: "Gross Salary - Absenteeism Deductions",
       },
     };
 
@@ -469,16 +428,12 @@ export const getPayrollById = async (req, res) => {
       accountNumber: "",
     };
 
-    const basicSalary = Number(foundRecord.basicSalary || 4000);
-    const allowances = Number(foundRecord.allowances || 700);
-    const deductions = Number(foundRecord.deductions || 200);
+    const basicSalary = Number(foundRecord.basicSalary || 0);
+    const allowances = Number(foundRecord.allowances || 0);
+    const deductions = Number(foundRecord.deductions || 0);
     const netSalary = Number(foundRecord.netSalary || (basicSalary + allowances - deductions));
 
-    // Detailed tax & deduction calculations for payslip view
     const grossEarnings = basicSalary + allowances;
-    const ssnit5_5 = parseFloat((basicSalary * 0.055).toFixed(2));
-    const payeTax = parseFloat((Math.max(0, grossEarnings - ssnit5_5 - 402) * 0.175).toFixed(2));
-    const otherDeductions = Math.max(0, deductions - ssnit5_5 - payeTax);
 
     const detailedPayroll = {
       ...foundRecord,
@@ -491,33 +446,27 @@ export const getPayrollById = async (req, res) => {
       department: employeeData.department,
       position: employeeData.position,
       payMonth: foundRecord.payMonth || foundRecord.month || "August 2026",
-      paymentDate: foundRecord.paymentDate || "2026-08-25",
+      paymentDate: foundRecord.paymentDate || new Date().toISOString().split("T")[0],
       basicSalary,
       allowances,
       deductions,
       netSalary,
       status: foundRecord.status || "Paid",
       paymentMethod: foundRecord.paymentMethod || "Bank Transfer",
-      remarks: foundRecord.remarks || "Monthly payroll calculation based on recorded attendance & approved leaves.",
+      remarks: foundRecord.remarks || "Monthly payroll calculation.",
       breakdown: {
         grossEarnings,
+        basicSalary,
+        absenteeismDeductions: deductions,
+        allowances,
+        netPayable: netSalary,
         earnings: [
-          { label: "Basic Salary", amount: basicSalary, type: "base" },
-          { label: "Transport & Housing Allowance", amount: Math.round(allowances * 0.7), type: "allowance" },
-          { label: "Attendance / Performance Bonus", amount: Math.round(allowances * 0.3), type: "allowance" },
+          { label: "Gross Salary (Base Salary)", amount: basicSalary, type: "base" },
+          ...(allowances > 0 ? [{ label: "Allowances & Bonuses", amount: allowances, type: "allowance" }] : []),
         ],
         deductionsList: [
-          { label: "SSNIT Tier 1 & 2 (5.5%)", amount: ssnit5_5, type: "statutory" },
-          { label: "Income Tax (PAYE)", amount: payeTax, type: "tax" },
-          { label: "Other / Late Deductions", amount: parseFloat(otherDeductions.toFixed(2)), type: "other" },
+          { label: "Absenteeism Deductions", amount: deductions, type: "absence" },
         ],
-        attendanceSummary: {
-          standardWorkingDays: 22,
-          presentDays: 21,
-          approvedLeaves: 1,
-          unexcusedAbsences: 0,
-          attendanceCompliance: "96%",
-        },
       },
     };
 

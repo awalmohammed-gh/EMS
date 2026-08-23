@@ -1,8 +1,29 @@
 import { createContext, useContext, useState, useEffect, useCallback } from "react";
-import { getAdminMe, getEmployee, adminLogout, employeeLogout } from "../apis/fontApis";
+import { getAuthMe, getAdminMe, getEmployee, authLogout, adminLogout, employeeLogout } from "../apis/fontApis";
 import { notificationService } from "../services/notificationService";
 
 const ManagementContext = createContext();
+
+/**
+ * Helper to safely decode a JWT payload in the browser
+ */
+const parseJwt = (token) => {
+  try {
+    if (!token || typeof token !== "string") return null;
+    const base64Url = token.split(".")[1];
+    if (!base64Url) return null;
+    const base64 = base64Url.replace(/-/g, "+").replace(/_/g, "/");
+    const jsonPayload = decodeURIComponent(
+      atob(base64)
+        .split("")
+        .map((c) => "%" + ("00" + c.charCodeAt(0).toString(16)).slice(-2))
+        .join("")
+    );
+    return JSON.parse(jsonPayload);
+  } catch {
+    return null;
+  }
+};
 
 export const ManagementContextProvider = ({ children }) => {
   const [showEmployeeModal, setShowEmployeeModal] = useState(false);
@@ -18,8 +39,7 @@ export const ManagementContextProvider = ({ children }) => {
   const closeSidebar = () => setIsSidebarOpen(false);
   const openSidebar = () => setIsSidebarOpen(true);
 
-
-  // Role and User state
+  // Role and User state derived dynamically from local storage and JWT tokens
   const [role, setRole] = useState(() => {
     if (typeof window !== "undefined") {
       if (window.location.pathname.startsWith("/employee")) return "employee";
@@ -41,6 +61,26 @@ export const ManagementContextProvider = ({ children }) => {
           const storedAdmin = localStorage.getItem("adminData");
           if (storedAdmin) return JSON.parse(storedAdmin);
         }
+
+        // Fallback: decode JWT payload if available
+        const token =
+          localStorage.getItem("token") ||
+          localStorage.getItem("adminToken") ||
+          localStorage.getItem("employeeToken");
+        if (token) {
+          const decoded = parseJwt(token);
+          if (decoded) {
+            return {
+              _id: decoded.id,
+              id: decoded.id,
+              fullName: decoded.fullName || (decoded.role === "admin" ? "Admin" : "Employee"),
+              full_name: decoded.fullName || (decoded.role === "admin" ? "Admin" : "Employee"),
+              email: decoded.email || "",
+              role: decoded.role || (isEmpPath ? "employee" : "admin"),
+              employeeId: decoded.employeeId || "",
+            };
+          }
+        }
       } catch (e) {
         console.warn("Error reading stored user:", e);
       }
@@ -50,7 +90,7 @@ export const ManagementContextProvider = ({ children }) => {
 
   const [isLoadingUser, setIsLoadingUser] = useState(false);
 
-  // Fetch current logged in user from backend based on role
+  // Fetch current logged in user from database based on active session token
   const fetchCurrentUser = useCallback(async (currentRole) => {
     try {
       setIsLoadingUser(true);
@@ -65,6 +105,26 @@ export const ManagementContextProvider = ({ children }) => {
         }
       }
       setRole(activeRole);
+
+      // 1. Try unified getAuthMe first
+      try {
+        const meRes = await getAuthMe();
+        if (meRes?.data?.success && meRes.data.user) {
+          const fetchedUser = meRes.data.user;
+          setUser(fetchedUser);
+          const resolvedRole = meRes.data.role || fetchedUser.role || activeRole;
+          setRole(resolvedRole);
+          localStorage.setItem("userRole", resolvedRole);
+          if (resolvedRole === "admin") {
+            localStorage.setItem("adminData", JSON.stringify(fetchedUser));
+          } else {
+            localStorage.setItem("employeeData", JSON.stringify(fetchedUser));
+          }
+          return;
+        }
+      } catch {
+        // Fallback to role-specific endpoint
+      }
 
       if (activeRole === "employee") {
         const res = await getEmployee();
@@ -82,7 +142,7 @@ export const ManagementContextProvider = ({ children }) => {
         }
       }
     } catch (err) {
-      console.warn("fetchCurrentUser failed:", err.message);
+      console.warn("fetchCurrentUser error:", err.message);
     } finally {
       setIsLoadingUser(false);
     }
@@ -96,19 +156,25 @@ export const ManagementContextProvider = ({ children }) => {
   // Logout handler
   const handleUserLogout = async (targetRole = role) => {
     try {
-      if (targetRole === "admin") {
-        await adminLogout();
-      } else {
-        await employeeLogout();
+      await authLogout();
+    } catch {
+      try {
+        if (targetRole === "admin") {
+          await adminLogout();
+        } else {
+          await employeeLogout();
+        }
+      } catch (err) {
+        console.warn("Logout error:", err.message);
       }
-    } catch (e) {
-      console.warn("Logout error:", e.message);
     } finally {
       localStorage.removeItem("token");
       localStorage.removeItem("adminToken");
       localStorage.removeItem("employeeToken");
       localStorage.removeItem("employeeData");
       localStorage.removeItem("adminData");
+      localStorage.removeItem("userRole");
+      setUser(null);
       setShowToast({
         show: true,
         message: "You have been logged out successfully.",
@@ -236,7 +302,6 @@ export const ManagementContextProvider = ({ children }) => {
     notificationService,
   };
 
-
   return (
     <ManagementContext.Provider value={value}>
       {children}
@@ -252,3 +317,4 @@ export const useManagement = () => {
   return context;
 };
 
+export default ManagementContextProvider;
