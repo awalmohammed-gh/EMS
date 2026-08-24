@@ -214,27 +214,76 @@ export const generatePayroll = async (req, res) => {
       payMonth,
       paymentDate,
       basicSalary,
+      baseSalary: customBaseSalary,
       allowances,
       deductions,
+      earnings,
+      absentDaysDeduction,
       paymentMethod,
       remarks,
     } = req.body;
+
+    const finalBaseSalary = Number(customBaseSalary !== undefined ? customBaseSalary : basicSalary);
 
     if (
       !employee ||
       !payMonth ||
       !paymentDate ||
-      basicSalary === undefined ||
+      finalBaseSalary === undefined ||
+      isNaN(finalBaseSalary) ||
       !paymentMethod
     ) {
       return res.status(400).json({
         success: false,
-        message: "All required fields are required.",
+        message: "All required fields are required (employee, payMonth, paymentDate, baseSalary, paymentMethod).",
       });
     }
 
-    const netSalary =
-      Number(basicSalary) + Number(allowances || 0) - Number(deductions || 0);
+    // Process dynamic earnings array [{ description: String, amount: Number }]
+    let parsedEarnings = [];
+    if (Array.isArray(earnings)) {
+      parsedEarnings = earnings
+        .filter((e) => e && (e.description || e.name || e.label))
+        .map((e) => ({
+          description: e.description || e.name || e.label || "Allowance",
+          amount: Number(e.amount || 0),
+        }));
+    } else if (Number(allowances || 0) > 0) {
+      parsedEarnings = [
+        {
+          description: "Allowances & Bonuses",
+          amount: Number(allowances),
+        },
+      ];
+    }
+
+    // Process dynamic deductions array [{ description: String, amount: Number }]
+    let parsedDeductions = [];
+    if (Array.isArray(deductions)) {
+      parsedDeductions = deductions
+        .filter((d) => d && (d.description || d.name || d.label))
+        .map((d) => ({
+          description: d.description || d.name || d.label || "Deduction",
+          amount: Number(d.amount || 0),
+        }));
+    } else if (typeof deductions === "number" && Number(deductions) > 0) {
+      parsedDeductions = [
+        {
+          description: "Standard Deductions",
+          amount: Number(deductions),
+        },
+      ];
+    }
+
+    const totalCustomEarnings = parsedEarnings.reduce((acc, curr) => acc + Number(curr.amount || 0), 0);
+    const totalCustomDeductions = parsedDeductions.reduce((acc, curr) => acc + Number(curr.amount || 0), 0);
+    const finalAbsentDeduction = Number(absentDaysDeduction || 0);
+
+    const calculatedNetPay = Math.max(
+      0,
+      parseFloat((finalBaseSalary + totalCustomEarnings - totalCustomDeductions - finalAbsentDeduction).toFixed(2))
+    );
+
     const payslipNumber = `PAY-${Date.now()}`;
 
     let empDoc = null;
@@ -273,10 +322,14 @@ export const generatePayroll = async (req, res) => {
       payMonth,
       month: payMonth,
       paymentDate,
-      basicSalary: Number(basicSalary),
-      allowances: Number(allowances || 0),
-      deductions: Number(deductions || 0),
-      netSalary,
+      basicSalary: finalBaseSalary,
+      baseSalary: finalBaseSalary,
+      earnings: parsedEarnings,
+      deductions: parsedDeductions,
+      absentDaysDeduction: finalAbsentDeduction,
+      allowances: totalCustomEarnings,
+      netSalary: calculatedNetPay,
+      netPay: calculatedNetPay,
       paymentMethod,
       remarks: remarks || "Generated monthly salary disbursement.",
       status: "Paid",
@@ -291,10 +344,14 @@ export const generatePayroll = async (req, res) => {
           payslipNumber,
           payMonth,
           paymentDate,
-          basicSalary: Number(basicSalary),
-          allowances: Number(allowances || 0),
-          deductions: Number(deductions || 0),
-          netSalary,
+          basicSalary: finalBaseSalary,
+          baseSalary: finalBaseSalary,
+          earnings: parsedEarnings,
+          deductions: parsedDeductions,
+          absentDaysDeduction: finalAbsentDeduction,
+          allowances: totalCustomEarnings,
+          netSalary: calculatedNetPay,
+          netPay: calculatedNetPay,
           paymentMethod,
           remarks: newRecord.remarks,
           status: "Paid",
@@ -428,12 +485,50 @@ export const getPayrollById = async (req, res) => {
       accountNumber: "",
     };
 
-    const basicSalary = Number(foundRecord.basicSalary || 0);
+    const basicSalary = Number(foundRecord.basicSalary !== undefined ? foundRecord.basicSalary : (foundRecord.baseSalary || 0));
+    const baseSalary = basicSalary;
     const allowances = Number(foundRecord.allowances || 0);
-    const deductions = Number(foundRecord.deductions || 0);
-    const netSalary = Number(foundRecord.netSalary || (basicSalary + allowances - deductions));
+    const absentDaysDeduction = Number(foundRecord.absentDaysDeduction || 0);
 
-    const grossEarnings = basicSalary + allowances;
+    // Normalize dynamic earnings array
+    let dynamicEarnings = [];
+    if (Array.isArray(foundRecord.earnings) && foundRecord.earnings.length > 0) {
+      dynamicEarnings = foundRecord.earnings.map((e) => ({
+        description: e.description || e.name || e.label || "Allowance",
+        amount: Number(e.amount || 0),
+      }));
+    } else if (allowances > 0) {
+      dynamicEarnings = [
+        { description: "Allowances & Bonuses", amount: allowances },
+      ];
+    }
+
+    // Normalize dynamic deductions array
+    let dynamicDeductions = [];
+    if (Array.isArray(foundRecord.deductions)) {
+      dynamicDeductions = foundRecord.deductions.map((d) => ({
+        description: d.description || d.name || d.label || "Deduction",
+        amount: Number(d.amount || 0),
+      }));
+    } else if (typeof foundRecord.deductions === "number" && Number(foundRecord.deductions) > 0) {
+      dynamicDeductions = [
+        { description: "Standard Deductions", amount: Number(foundRecord.deductions) },
+      ];
+    }
+
+    const totalCustomEarnings = dynamicEarnings.reduce((acc, curr) => acc + Number(curr.amount || 0), 0);
+    const totalCustomDeductions = dynamicDeductions.reduce((acc, curr) => acc + Number(curr.amount || 0), 0);
+    const totalDeductionsAmount = totalCustomDeductions + absentDaysDeduction;
+
+    const netSalary = Number(
+      foundRecord.netPay !== undefined
+        ? foundRecord.netPay
+        : (foundRecord.netSalary !== undefined
+            ? foundRecord.netSalary
+            : Math.max(0, basicSalary + totalCustomEarnings - totalDeductionsAmount))
+    );
+    const netPay = netSalary;
+    const grossEarnings = basicSalary + totalCustomEarnings;
 
     const detailedPayroll = {
       ...foundRecord,
@@ -448,24 +543,39 @@ export const getPayrollById = async (req, res) => {
       payMonth: foundRecord.payMonth || foundRecord.month || "August 2026",
       paymentDate: foundRecord.paymentDate || new Date().toISOString().split("T")[0],
       basicSalary,
-      allowances,
-      deductions,
+      baseSalary,
+      earnings: dynamicEarnings,
+      deductions: dynamicDeductions,
+      absentDaysDeduction,
+      allowances: totalCustomEarnings,
+      totalEarnings: totalCustomEarnings,
+      totalDeductions: totalDeductionsAmount,
+      grossEarnings,
       netSalary,
+      netPay,
       status: foundRecord.status || "Paid",
       paymentMethod: foundRecord.paymentMethod || "Bank Transfer",
       remarks: foundRecord.remarks || "Monthly payroll calculation.",
       breakdown: {
         grossEarnings,
         basicSalary,
-        absenteeismDeductions: deductions,
-        allowances,
-        netPayable: netSalary,
+        baseSalary,
+        absentDaysDeduction,
+        absenteeismDeductions: absentDaysDeduction,
+        allowances: totalCustomEarnings,
+        totalEarnings: totalCustomEarnings,
+        totalDeductions: totalDeductionsAmount,
+        netPayable: netPay,
+        netPay,
         earnings: [
-          { label: "Gross Salary (Base Salary)", amount: basicSalary, type: "base" },
-          ...(allowances > 0 ? [{ label: "Allowances & Bonuses", amount: allowances, type: "allowance" }] : []),
+          { label: "Base Salary", amount: basicSalary, type: "base" },
+          ...dynamicEarnings.map((e) => ({ label: e.description, amount: e.amount, type: "allowance" })),
         ],
         deductionsList: [
-          { label: "Absenteeism Deductions", amount: deductions, type: "absence" },
+          ...dynamicDeductions.map((d) => ({ label: d.description, amount: d.amount, type: "deduction" })),
+          ...(absentDaysDeduction > 0
+            ? [{ label: "Absence Deduction", amount: absentDaysDeduction, type: "absence" }]
+            : []),
         ],
       },
     };
@@ -661,23 +771,41 @@ export const employeePayslips = async (req, res) => {
           .lean();
 
         if (payslips && payslips.length > 0) {
-          formattedPayslips = payslips.map((payslip) => ({
-            id: payslip.payslipNumber || payslip._id,
-            payslipNumber: payslip.payslipNumber,
-            _id: payslip._id,
-            employeeId: payslip.employee?.employeeId || "",
-            employeeName: payslip.employee?.fullName || "Employee",
-            department: payslip.employee?.department || "Operations",
-            position: payslip.employee?.position || "Staff",
-            month: payslip.payMonth,
-            payMonth: payslip.payMonth,
-            basicSalary: payslip.basicSalary,
-            allowances: payslip.allowances,
-            deductions: payslip.deductions,
-            netSalary: payslip.netSalary,
-            status: payslip.status,
-            paymentDate: payslip.paymentDate,
-          }));
+          formattedPayslips = payslips.map((payslip) => {
+            const bSal = Number(payslip.baseSalary !== undefined ? payslip.baseSalary : (payslip.basicSalary || 0));
+            const earn = Array.isArray(payslip.earnings) ? payslip.earnings : [];
+            const deduct = Array.isArray(payslip.deductions)
+              ? payslip.deductions
+              : (typeof payslip.deductions === "number" && payslip.deductions > 0
+                  ? [{ description: "Deduction", amount: payslip.deductions }]
+                  : []);
+            const absDeduct = Number(payslip.absentDaysDeduction || 0);
+            const totalEarn = earn.reduce((acc, c) => acc + Number(c.amount || 0), 0) || Number(payslip.allowances || 0);
+            const totalDeduct = deduct.reduce((acc, c) => acc + Number(c.amount || 0), 0) + absDeduct;
+            const net = Number(payslip.netPay !== undefined ? payslip.netPay : (payslip.netSalary !== undefined ? payslip.netSalary : Math.max(0, bSal + totalEarn - totalDeduct)));
+
+            return {
+              id: payslip.payslipNumber || payslip._id,
+              payslipNumber: payslip.payslipNumber,
+              _id: payslip._id,
+              employeeId: payslip.employee?.employeeId || "",
+              employeeName: payslip.employee?.fullName || "Employee",
+              department: payslip.employee?.department || "Operations",
+              position: payslip.employee?.position || "Staff",
+              month: payslip.payMonth,
+              payMonth: payslip.payMonth,
+              basicSalary: bSal,
+              baseSalary: bSal,
+              earnings: earn,
+              deductions: deduct,
+              absentDaysDeduction: absDeduct,
+              allowances: totalEarn,
+              netSalary: net,
+              netPay: net,
+              status: payslip.status,
+              paymentDate: payslip.paymentDate,
+            };
+          });
         }
       } catch (dbErr) {
         console.warn("DB error for employeePayslips:", dbErr.message);

@@ -28,6 +28,7 @@ const getInitials = (name, fallback = "EM") => {
 export const Navbar = ({
   role: propsRole,
   isMobileOpen,
+  toggleMobileSidebar: propToggleMobileSidebar,
   onMenuClick,
   onToggleMenu,
 }) => {
@@ -40,20 +41,25 @@ export const Navbar = ({
     isSidebarOpen,
     isMobileSidebarOpen,
     toggleSidebar,
-    toggleMobileSidebar,
+    toggleMobileSidebar: contextToggleMobileSidebar,
   } = useManagement();
   const [isProfileMenuOpen, setIsProfileMenuOpen] = useState(false);
   const profileMenuRef = useRef(null);
 
-  const handleSidebarToggle = () => {
-    if (typeof onMenuClick === "function") {
+  const handleSidebarToggle = (e) => {
+    if (e && typeof e.stopPropagation === "function") {
+      e.stopPropagation();
+    }
+    if (typeof propToggleMobileSidebar === "function") {
+      propToggleMobileSidebar();
+    } else if (typeof onMenuClick === "function") {
       onMenuClick();
     } else if (typeof onToggleMenu === "function") {
       onToggleMenu();
+    } else if (typeof contextToggleMobileSidebar === "function") {
+      contextToggleMobileSidebar();
     } else if (typeof toggleSidebar === "function") {
       toggleSidebar();
-    } else if (typeof toggleMobileSidebar === "function") {
-      toggleMobileSidebar();
     }
   };
 

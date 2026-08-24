@@ -1,9 +1,26 @@
+import { useState, useEffect } from "react";
 import { Link } from "react-router-dom";
 import { motion } from "motion/react";
 import { ShieldCheckIcon, UserIcon } from "lucide-react";
 import eyenitLogo from "../assets/eyenit_logo.png";
+import { checkAdminExists } from "../apis/fontApis";
 
 const WelcomePage = () => {
+  const [adminExists, setAdminExists] = useState(true);
+
+  useEffect(() => {
+    let isMounted = true;
+    checkAdminExists()
+      .then((res) => {
+        if (isMounted && res.data) {
+          setAdminExists(Boolean(res.data.exists));
+        }
+      })
+      .catch((err) => console.warn("Admin check:", err));
+    return () => {
+      isMounted = false;
+    };
+  }, []);
   const portalOptions = [
     {
       to: "/login/admin",
@@ -186,16 +203,22 @@ const WelcomePage = () => {
           ))}
         </div>
 
-        {/* Quick link to create admin account */}
-        <motion.div variants={itemVariants} className="mt-6 text-center text-xs text-[#64748B]">
-          First time setting up?{" "}
-          <Link
-            to="/admin/register"
-            className="text-[#002185] font-bold hover:text-[#ff5500] hover:underline"
-          >
-            Create an Administrator Account
-          </Link>
-        </motion.div>
+        {/* Quick link to create admin account (only if unconfigured) */}
+        {!adminExists ? (
+          <motion.div variants={itemVariants} className="mt-6 text-center text-xs text-[#64748B]">
+            First time setting up?{" "}
+            <Link
+              to="/admin/register"
+              className="text-[#002185] font-bold hover:text-[#ff5500] hover:underline"
+            >
+              Create Primary Administrator Account
+            </Link>
+          </motion.div>
+        ) : (
+          <motion.div variants={itemVariants} className="mt-6 text-center text-xs text-[#94A3B8]">
+            Eyenit Ghana Employee Management & Payroll System
+          </motion.div>
+        )}
       </motion.div>
     </div>
   );

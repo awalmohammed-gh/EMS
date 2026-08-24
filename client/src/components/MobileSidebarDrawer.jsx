@@ -1,38 +1,43 @@
 import { useEffect, useRef, useCallback } from "react";
 import { useLocation, useNavigate } from "react-router-dom";
-import { X, LogOut, ShieldCheck, User, Menu } from "lucide-react";
+import { X, LogOut, ShieldCheck, User } from "lucide-react";
 import eyenitLogo from "../assets/eyenit_logo.png";
 import { useManagement } from "../context/ManagementContextProvider";
 
 /**
- * Mobile-first Sidebar Drawer Component
+ * MobileSidebarDrawer (MobileSidebar) Component
  * 
- * Provides an accessible, responsive overlay drawer for mobile & tablet screens,
- * featuring smooth slide-in/out transitions, a backdrop click-to-dismiss overlay,
- * keyboard ESC listener, body scroll locking, and an optional embedded hamburger toggle button.
+ * Provides an accessible, responsive overlay drawer for mobile & tablet screens (<1024px),
+ * with a fixed z-40 dark backdrop, a sliding z-50 drawer panel, window resize guards,
+ * body scroll locking, and smooth transitions.
  */
 export const MobileSidebarDrawer = ({
   isOpen: propIsOpen,
+  isMobileOpen: propIsMobileOpen,
   onClose: propOnClose,
   children,
   role: propRole,
-  showToggle = false,
 }) => {
   const { pathname } = useLocation();
   const navigate = useNavigate();
   const drawerRef = useRef(null);
 
   const context = useManagement();
+
+  // Support both isOpen and isMobileOpen prop naming conventions
   const isOpen =
-    propIsOpen !== undefined
+    propIsMobileOpen !== undefined
+      ? propIsMobileOpen
+      : propIsOpen !== undefined
       ? propIsOpen
       : context?.isSidebarOpen ?? context?.isMobileSidebarOpen ?? false;
+
   const contextOnClose = context?.closeSidebar || context?.closeMobileSidebar;
 
   const handleClose = useCallback(() => {
-    if (propOnClose) {
+    if (typeof propOnClose === "function") {
       propOnClose();
-    } else if (contextOnClose) {
+    } else if (typeof contextOnClose === "function") {
       contextOnClose();
     }
   }, [propOnClose, contextOnClose]);
@@ -42,8 +47,12 @@ export const MobileSidebarDrawer = ({
 
   // Determine active role
   const isAdmin =
-    (propRole || (pathname.startsWith("/admin") ? "admin" : (context?.role === "admin" && !pathname.startsWith("/employee") ? "admin" : "employee"))) ===
-    "admin";
+    (propRole ||
+      (pathname.startsWith("/admin")
+        ? "admin"
+        : context?.role === "admin" && !pathname.startsWith("/employee")
+        ? "admin"
+        : "employee")) === "admin";
 
   const userRoleTitle = isAdmin
     ? user?.role === "super_admin"
@@ -51,7 +60,7 @@ export const MobileSidebarDrawer = ({
       : "Administrator"
     : user?.position || "Staff Member";
 
-  // Prevent background body scrolling when drawer is open
+  // Prevent body scrolling when drawer is open
   useEffect(() => {
     if (isOpen) {
       document.body.style.overflow = "hidden";
@@ -74,7 +83,7 @@ export const MobileSidebarDrawer = ({
     return () => window.removeEventListener("keydown", handleKeyDown);
   }, [isOpen, handleClose]);
 
-  // Auto-dismiss on window resize to desktop (>= 1024px)
+  // Window Resize Guard: Reset isMobileOpen when viewport expands to desktop (>= 1024px)
   useEffect(() => {
     const handleResize = () => {
       if (window.innerWidth >= 1024 && isOpen) {
@@ -101,38 +110,24 @@ export const MobileSidebarDrawer = ({
 
   return (
     <>
-      {/* Optional Standalone Hamburger Menu Toggle */}
-      {showToggle && (
-        <button
-          type="button"
-          onClick={context?.toggleMobileSidebar}
-          aria-expanded={isOpen}
-          aria-controls="mobile-sidebar-drawer-panel"
-          aria-label="Toggle navigation menu"
-          className="lg:hidden inline-flex items-center justify-center p-2 rounded-xl border border-[#E2E8F0] bg-white text-[#002185] hover:bg-[#F8FAFC] hover:border-[#002185] transition-all cursor-pointer shadow-xs focus:outline-none focus:ring-2 focus:ring-[#002185]/20"
-        >
-          <Menu className="w-5 h-5" />
-        </button>
-      )}
-
-      {/* Dimmed Backdrop Overlay with transition */}
+      {/* Dark Backdrop Overlay: fixed inset-0 z-40 bg-black/50 (lg:hidden) */}
       <div
         id="mobile-sidebar-backdrop"
         onClick={handleClose}
         aria-hidden="true"
-        className={`lg:hidden fixed inset-0 z-[1001] bg-[#0F172A]/50 backdrop-blur-xs transition-opacity duration-300 ${
+        className={`lg:hidden fixed inset-0 z-40 bg-black/50 backdrop-blur-xs transition-opacity duration-300 ${
           isOpen ? "opacity-100 pointer-events-auto" : "opacity-0 pointer-events-none"
         }`}
       />
 
-      {/* Slide-over Drawer Panel */}
+      {/* Slide-out Drawer Panel: fixed inset-y-0 left-0 z-50 w-64 bg-white transition-transform duration-300 */}
       <aside
         id="mobile-sidebar-drawer-panel"
         ref={drawerRef}
         role="dialog"
         aria-modal="true"
         aria-label="Mobile Navigation"
-        className={`lg:hidden fixed inset-y-0 left-0 z-[1002] w-72 max-w-[85vw] bg-white border-r border-[#E2E8F0] shadow-2xl flex flex-col h-full transform transition-transform duration-300 ease-in-out ${
+        className={`lg:hidden fixed inset-y-0 left-0 z-50 w-64 sm:w-72 max-w-[85vw] bg-white border-r border-[#E2E8F0] shadow-2xl flex flex-col h-full transition-transform duration-300 ease-in-out ${
           isOpen ? "translate-x-0" : "-translate-x-full"
         }`}
       >
@@ -173,7 +168,7 @@ export const MobileSidebarDrawer = ({
           <span className="text-xs font-bold tracking-wide">{userRoleTitle}</span>
         </div>
 
-        {/* Navigation Items (Content injected from router or parent) */}
+        {/* Navigation Items */}
         <nav
           className="flex-1 px-3 py-3 space-y-1 overflow-y-auto"
           onClick={handleClose}
@@ -198,4 +193,6 @@ export const MobileSidebarDrawer = ({
   );
 };
 
+// Aliases for versatile imports
+export const MobileSidebar = MobileSidebarDrawer;
 export default MobileSidebarDrawer;

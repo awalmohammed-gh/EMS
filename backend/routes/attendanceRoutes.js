@@ -1,7 +1,16 @@
 import express from "express";
 
 import { employeeAuth } from "../middleware/employeeAuth.js";
-import { clockIn, clockOut, getAllAttendance, getCurrentEmployee, getEmployeeAttendance, getTodayAttendance } from "../controllers/employeeAttendance.js";
+import {
+  clockIn,
+  clockOut,
+  getAllAttendance,
+  getCurrentEmployee,
+  getEmployeeAttendance,
+  getTodayAttendance,
+  updateAttendanceRecord,
+  createManualAttendance,
+} from "../controllers/employeeAttendance.js";
 import { verifyAdmin } from "../middleware/authAdmin.js";
 
 const attendanceRouter = express.Router();
@@ -14,5 +23,7 @@ attendanceRouter.get("/now", employeeAuth, getTodayAttendance);
 
 // admin side
 attendanceRouter.get("/all", verifyAdmin, getAllAttendance);
+attendanceRouter.put("/record/:id", verifyAdmin, updateAttendanceRecord);
+attendanceRouter.post("/manual-record", verifyAdmin, createManualAttendance);
 
 export default attendanceRouter;

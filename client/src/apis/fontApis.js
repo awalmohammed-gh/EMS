@@ -49,6 +49,10 @@ export const deleteEmployee = (id) => {
 };
 
 // authentication & registration endpoints
+export const checkAdminExists = () => {
+  return api.get("/auth/admin/exists");
+};
+
 export const adminRegister = (data) => {
   return api.post("/auth/admin/register", data);
 };
@@ -71,6 +75,15 @@ export const getAuthMe = () => {
 
 export const employeeLogout = () => {
   return api.post("/auth/employee/logout");
+};
+
+// admin user & employee management
+export const createUserAccount = (data) => {
+  return api.post("/admin/create-user", data);
+};
+
+export const createEmployeeUser = (data) => {
+  return api.post("/admin/create-user", data);
 };
 
 // legacy aliases for backward compatibility
@@ -152,6 +165,15 @@ export const getAllAttendance = () =>{
 export const getNowAttendance = () =>{
   return api.get("/attendance/now");
 }
+
+export const updateAttendanceRecord = (id, data) => {
+  return api.put(`/attendance/record/${id}`, data);
+};
+
+export const createManualAttendanceRecord = (data) => {
+  return api.post("/attendance/manual-record", data);
+};
+
 
 
 //dashboard

@@ -30,6 +30,17 @@ const payrollSchema = new mongoose.Schema(
       min: 0,
     },
 
+    baseSalary: {
+      type: Number,
+      min: 0,
+    },
+
+    absentDaysDeduction: {
+      type: Number,
+      default: 0,
+      min: 0,
+    },
+
     allowances: {
       type: Number,
       default: 0,
@@ -54,6 +65,11 @@ const payrollSchema = new mongoose.Schema(
     netSalary: {
       type: Number,
       required: true,
+      min: 0,
+    },
+
+    netPay: {
+      type: Number,
       min: 0,
     },
 

@@ -122,6 +122,7 @@ export const Sidebar = ({
       {/* Mobile & Tablet Overlay Sidebar Drawer (Visible on screens < 1024px) */}
       <MobileSidebarDrawer
         isOpen={activeIsOpen}
+        isMobileOpen={activeIsOpen}
         onClose={handleClose}
       >
         {children}

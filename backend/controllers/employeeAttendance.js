@@ -32,7 +32,7 @@ const resolveEmployeeObjectId = async (idOrKey) => {
   }
 };
 
-// Clock in handler
+// Clock in handler - Automatic real-time recording
 export const clockIn = async (req, res) => {
   try {
     let employeeId = req.employee?.id || req.employee?._id;
@@ -46,13 +46,15 @@ export const clockIn = async (req, res) => {
       });
     }
 
-    // Lookup employee details for rich notification
+    // Lookup employee details for rich notification & response
     let employeeDoc = null;
     if (isValidObjectId(employeeId)) {
       try {
-        employeeDoc = await Employee.findById(employeeId).select("fullName employeeId department position").lean();
+        employeeDoc = await Employee.findById(employeeId)
+          .select("fullName employeeId department position email avatar profile_picture")
+          .lean();
       } catch (err) {
-        console.warn("Could not fetch employee details for clockIn notification:", err.message);
+        console.warn("Could not fetch employee details for clockIn:", err.message);
       }
     }
 
@@ -60,75 +62,80 @@ export const clockIn = async (req, res) => {
     const key = `${employeeId}_${today}`;
     const now = new Date();
 
-    // Determine status (8:30 AM threshold)
+    // Determine status (8:30 AM threshold for standard workday)
     const startTime = new Date();
     startTime.setHours(8, 30, 0, 0);
     const status = now <= startTime ? "On Time" : "Late";
 
-    // 1. Check live in-memory store
-    let liveRecord = liveAttendanceStore.get(key);
-    if (liveRecord && liveRecord.clockIn) {
+    // 1. Check MongoDB for existing record today
+    let existingDoc = null;
+    if (isValidObjectId(employeeId)) {
+      try {
+        existingDoc = await Attendance.findOne({
+          employee: employeeId,
+          date: today,
+        }).populate("employee", "fullName employeeId department position email avatar").lean();
+      } catch (dbErr) {
+        console.warn("DB check in clockIn:", dbErr.message);
+      }
+    }
+
+    if (existingDoc && existingDoc.clockIn) {
+      liveAttendanceStore.set(key, existingDoc);
       return res.status(200).json({
         success: true,
         alreadyClockedIn: true,
         message: "You have already clocked in today.",
-        attendance: liveRecord,
+        attendance: existingDoc,
+        hasClockedIn: true,
+        hasClockedOut: Boolean(existingDoc.clockOut),
       });
     }
 
-    // 2. Check MongoDB
+    // 2. Atomically create or update attendance record in MongoDB
+    let savedRecord = null;
     if (isValidObjectId(employeeId)) {
       try {
-        const existingAttendance = await Attendance.findOne({
-          employee: employeeId,
-          date: today,
-        }).lean();
+        savedRecord = await Attendance.findOneAndUpdate(
+          { employee: employeeId, date: today },
+          {
+            $set: {
+              clockIn: now,
+              status: status,
+              workHours: 0,
+            },
+            $setOnInsert: {
+              employee: employeeId,
+              date: today,
+              clockOut: null,
+              notes: "",
+            },
+          },
+          { upsert: true, new: true, setDefaultsOnInsert: true }
+        ).populate("employee", "fullName employeeId department position email avatar");
 
-        if (existingAttendance && existingAttendance.clockIn) {
-          liveAttendanceStore.set(key, existingAttendance);
-          return res.status(200).json({
-            success: true,
-            alreadyClockedIn: true,
-            message: "You have already clocked in today.",
-            attendance: existingAttendance,
-          });
+        if (savedRecord && savedRecord.toObject) {
+          savedRecord = savedRecord.toObject();
         }
       } catch (dbErr) {
-        console.warn("DB check in clockIn skipped:", dbErr.message);
+        console.warn("DB upsert in clockIn:", dbErr.message);
       }
     }
 
-    // 3. Create new attendance record
-    let newRecord = {
-      _id: "att_" + Date.now(),
-      employee: employeeId,
-      date: today,
-      clockIn: now.toISOString(),
-      clockOut: null,
-      status,
-      workHours: 0,
-    };
-
-    // Attempt MongoDB save
-    if (isValidObjectId(employeeId)) {
-      try {
-        const dbCreated = await Attendance.create({
-          employee: employeeId,
-          date: today,
-          clockIn: now,
-          status,
-          workHours: 0,
-        });
-        if (dbCreated) {
-          newRecord = dbCreated.toObject ? dbCreated.toObject() : dbCreated;
-        }
-      } catch (dbErr) {
-        console.warn("DB create in clockIn:", dbErr.message);
-      }
+    if (!savedRecord) {
+      savedRecord = {
+        _id: "att_" + Date.now(),
+        employee: employeeDoc || { _id: employeeId, fullName: req.employee?.fullName || "Employee" },
+        date: today,
+        clockIn: now.toISOString(),
+        clockOut: null,
+        status,
+        workHours: 0,
+      };
     }
 
     // Update live memory store
-    liveAttendanceStore.set(key, newRecord);
+    liveAttendanceStore.set(key, savedRecord);
 
     // Push automated notification record targeting Admins
     try {
@@ -164,8 +171,10 @@ export const clockIn = async (req, res) => {
     return res.status(201).json({
       success: true,
       alreadyClockedIn: false,
-      message: "Clocked in successfully.",
-      attendance: newRecord,
+      message: `Clock in successful (${status})!`,
+      attendance: savedRecord,
+      hasClockedIn: true,
+      hasClockedOut: false,
     });
   } catch (error) {
     return res.status(500).json({
@@ -175,7 +184,7 @@ export const clockIn = async (req, res) => {
   }
 };
 
-// Clock out handler
+// Clock out handler - Automatic real-time recording
 export const clockOut = async (req, res) => {
   try {
     let employeeId = req.employee?.id || req.employee?._id;
@@ -193,7 +202,9 @@ export const clockOut = async (req, res) => {
     let employeeDoc = null;
     if (isValidObjectId(employeeId)) {
       try {
-        employeeDoc = await Employee.findById(employeeId).select("fullName employeeId department position").lean();
+        employeeDoc = await Employee.findById(employeeId)
+          .select("fullName employeeId department position email avatar profile_picture")
+          .lean();
       } catch (err) {
         console.warn("Could not fetch employee details for clockOut notification:", err.message);
       }
@@ -203,29 +214,22 @@ export const clockOut = async (req, res) => {
     const key = `${employeeId}_${today}`;
     const now = new Date();
 
-    let record = liveAttendanceStore.get(key);
-
-    // If not in memory, check MongoDB
-    if (!record && isValidObjectId(employeeId)) {
+    // Check MongoDB for clock-in record
+    let record = null;
+    if (isValidObjectId(employeeId)) {
       try {
-        const dbRecord = await Attendance.findOne({
+        record = await Attendance.findOne({
           employee: employeeId,
           date: today,
-        });
-        if (dbRecord) {
-          record = {
-            _id: dbRecord._id.toString(),
-            employee: employeeId,
-            date: dbRecord.date,
-            clockIn: dbRecord.clockIn ? new Date(dbRecord.clockIn).toISOString() : null,
-            clockOut: dbRecord.clockOut ? new Date(dbRecord.clockOut).toISOString() : null,
-            status: dbRecord.status || "On Time",
-            workHours: dbRecord.workHours || 0,
-          };
-        }
+        }).populate("employee", "fullName employeeId department position email avatar");
       } catch (dbErr) {
-        console.warn("DB search in clockOut skipped:", dbErr.message);
+        console.warn("DB search in clockOut:", dbErr.message);
       }
+    }
+
+    // Fallback to memory if DB query failed
+    if (!record) {
+      record = liveAttendanceStore.get(key);
     }
 
     if (!record || !record.clockIn) {
@@ -236,36 +240,54 @@ export const clockOut = async (req, res) => {
     }
 
     if (record.clockOut) {
-      return res.status(400).json({
-        success: false,
+      return res.status(200).json({
+        success: true,
+        alreadyClockedOut: true,
         message: "You have already clocked out today.",
         attendance: record,
+        hasClockedIn: true,
+        hasClockedOut: true,
       });
     }
 
-    // Calculate hours worked
+    // Calculate hours worked accurately
     const clockInTime = new Date(record.clockIn);
     const diffMs = Math.max(0, now.getTime() - clockInTime.getTime());
-    const hoursWorked = Math.max(0.1, Number((diffMs / (1000 * 60 * 60)).toFixed(2)));
+    const hoursWorked = Math.max(0.01, Number((diffMs / (1000 * 60 * 60)).toFixed(2)));
 
-    record.clockOut = now.toISOString();
-    record.workHours = hoursWorked;
-
-    // Update MongoDB if available
+    // Atomically persist clock-out to MongoDB
+    let updatedRecord = null;
     if (isValidObjectId(employeeId)) {
       try {
-        await Attendance.findOneAndUpdate(
+        updatedRecord = await Attendance.findOneAndUpdate(
           { employee: employeeId, date: today },
-          { clockOut: now, workHours: hoursWorked },
-          { new: true },
-        );
+          {
+            $set: {
+              clockOut: now,
+              workHours: hoursWorked,
+            },
+          },
+          { new: true }
+        ).populate("employee", "fullName employeeId department position email avatar");
+
+        if (updatedRecord && updatedRecord.toObject) {
+          updatedRecord = updatedRecord.toObject();
+        }
       } catch (dbErr) {
         console.warn("DB update in clockOut:", dbErr.message);
       }
     }
 
+    if (!updatedRecord) {
+      updatedRecord = {
+        ...(record.toObject ? record.toObject() : record),
+        clockOut: now.toISOString(),
+        workHours: hoursWorked,
+      };
+    }
+
     // Update live memory store
-    liveAttendanceStore.set(key, record);
+    liveAttendanceStore.set(key, updatedRecord);
 
     // Push automated notification record targeting Admins
     try {
@@ -300,8 +322,10 @@ export const clockOut = async (req, res) => {
 
     return res.status(200).json({
       success: true,
-      message: "Clocked out successfully.",
-      attendance: record,
+      message: `Clock out successful (${hoursWorked} hrs recorded)!`,
+      attendance: updatedRecord,
+      hasClockedIn: true,
+      hasClockedOut: true,
     });
   } catch (error) {
     return res.status(500).json({
@@ -358,7 +382,6 @@ export const getEmployeeAttendance = async (req, res) => {
     let employeeId = req.employee?.id || req.employee?._id;
     let attendance = [];
 
-    // If ID is not an ObjectId, lookup employee document to get real ObjectId
     if (employeeId && !isValidObjectId(employeeId)) {
       const empDoc = await Employee.findOne({
         $or: [{ employeeId: employeeId }, { email: employeeId }],
@@ -372,7 +395,10 @@ export const getEmployeeAttendance = async (req, res) => {
       try {
         const dbAtt = await Attendance.find({
           employee: employeeId,
-        }).sort({ date: -1 }).lean();
+        })
+          .populate("employee", "fullName department position employeeId email avatar")
+          .sort({ date: -1, createdAt: -1 })
+          .lean();
 
         if (dbAtt) {
           attendance = dbAtt;
@@ -394,14 +420,14 @@ export const getEmployeeAttendance = async (req, res) => {
   }
 };
 
-// Get all attendance for admin
+// Get all attendance for admin - Live automated database sync
 export const getAllAttendance = async (req, res) => {
   try {
     let attendance = [];
 
     try {
       const dbAtt = await Attendance.find({})
-        .populate("employee", "fullName department position employeeId email")
+        .populate("employee", "fullName department position employeeId email avatar")
         .sort({ date: -1, createdAt: -1 })
         .lean();
 
@@ -446,13 +472,17 @@ export const getTodayAttendance = async (req, res) => {
     if (isValidObjectId(employeeId)) {
       try {
         if (!employee) {
-          employee = await Employee.findById(employeeId).select("fullName position department employeeId").lean();
+          employee = await Employee.findById(employeeId)
+            .select("fullName position department employeeId email avatar profile_picture")
+            .lean();
         }
 
         const dbAtt = await Attendance.findOne({
           employee: employeeId,
           date: today,
-        }).lean();
+        })
+          .populate("employee", "fullName department position employeeId email avatar")
+          .lean();
 
         if (dbAtt) {
           attendance = dbAtt;
@@ -474,6 +504,105 @@ export const getTodayAttendance = async (req, res) => {
     });
   } catch (error) {
     res.status(500).json({
+      success: false,
+      message: error.message,
+    });
+  }
+};
+
+// Admin manual override or retroactive adjustment (optional admin tool)
+export const updateAttendanceRecord = async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { clockIn, clockOut, status, notes, workHours } = req.body;
+
+    if (!isValidObjectId(id)) {
+      return res.status(400).json({
+        success: false,
+        message: "Invalid attendance record ID.",
+      });
+    }
+
+    const updateFields = {};
+    if (clockIn !== undefined) updateFields.clockIn = clockIn ? new Date(clockIn) : null;
+    if (clockOut !== undefined) updateFields.clockOut = clockOut ? new Date(clockOut) : null;
+    if (status !== undefined) updateFields.status = status;
+    if (notes !== undefined) updateFields.notes = notes;
+    if (workHours !== undefined) updateFields.workHours = Number(workHours);
+
+    const updated = await Attendance.findByIdAndUpdate(id, { $set: updateFields }, { new: true })
+      .populate("employee", "fullName department position employeeId email avatar")
+      .lean();
+
+    if (!updated) {
+      return res.status(404).json({
+        success: false,
+        message: "Attendance record not found.",
+      });
+    }
+
+    return res.status(200).json({
+      success: true,
+      message: "Attendance record updated successfully.",
+      attendance: updated,
+    });
+  } catch (error) {
+    return res.status(500).json({
+      success: false,
+      message: error.message,
+    });
+  }
+};
+
+// Admin manual entry creation
+export const createManualAttendance = async (req, res) => {
+  try {
+    const { employeeId, date, clockIn, clockOut, status, notes } = req.body;
+
+    if (!employeeId || !date) {
+      return res.status(400).json({
+        success: false,
+        message: "Employee ID and Date are required.",
+      });
+    }
+
+    const resolvedEmpId = await resolveEmployeeObjectId(employeeId);
+    if (!resolvedEmpId) {
+      return res.status(404).json({
+        success: false,
+        message: "Employee not found.",
+      });
+    }
+
+    let calculatedHours = 0;
+    if (clockIn && clockOut) {
+      const inTime = new Date(clockIn);
+      const outTime = new Date(clockOut);
+      const diff = Math.max(0, outTime.getTime() - inTime.getTime());
+      calculatedHours = Number((diff / (1000 * 60 * 60)).toFixed(2));
+    }
+
+    const record = await Attendance.findOneAndUpdate(
+      { employee: resolvedEmpId, date },
+      {
+        $set: {
+          clockIn: clockIn ? new Date(clockIn) : null,
+          clockOut: clockOut ? new Date(clockOut) : null,
+          status: status || "Present",
+          notes: notes || "Admin manual entry",
+          workHours: calculatedHours,
+        },
+      },
+      { upsert: true, new: true, setDefaultsOnInsert: true }
+    ).populate("employee", "fullName department position employeeId email avatar");
+
+    return res.status(201).json({
+      success: true,
+      message: "Manual attendance record saved successfully.",
+      attendance: record,
+    });
+  } catch (error) {
+    return res.status(500).json({
       success: false,
       message: error.message,
     });

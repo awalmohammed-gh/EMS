@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import {
   ShieldCheck,
@@ -9,9 +9,10 @@ import {
   EyeOff,
   ArrowLeft,
   CheckCircle2,
+  AlertTriangle,
 } from "lucide-react";
 import eyenitLogo from "../../assets/eyenit_logo.png";
-import { adminRegister } from "../../apis/fontApis";
+import { adminRegister, checkAdminExists } from "../../apis/fontApis";
 import { useManagement } from "../../context/ManagementContextProvider";
 import ErrorMessage from "../../ui/ErrorMessage";
 import Loading from "../../ui/Loading";
@@ -27,8 +28,37 @@ export const AdminRegister = () => {
   });
   const [error, setError] = useState(null);
   const [isLoading, setIsLoading] = useState(false);
+  const [isCheckingSetup, setIsCheckingSetup] = useState(true);
+  const [isLockedOut, setIsLockedOut] = useState(false);
   const { setShowToast, setUser, setRole } = useManagement();
   const navigate = useNavigate();
+
+  useEffect(() => {
+    let isMounted = true;
+    const verifySingleAdminPolicy = async () => {
+      try {
+        const res = await checkAdminExists();
+        if (isMounted && res.data?.exists) {
+          setIsLockedOut(true);
+          setShowToast({
+            show: true,
+            message: "Admin account configured. Please sign in to manage accounts.",
+            type: "info",
+          });
+          navigate("/admin/login", { replace: true, state: { lockedOut: true } });
+        }
+      } catch (err) {
+        console.warn("Error checking admin status:", err);
+      } finally {
+        if (isMounted) setIsCheckingSetup(false);
+      }
+    };
+
+    verifySingleAdminPolicy();
+    return () => {
+      isMounted = false;
+    };
+  }, [navigate, setShowToast]);
 
   const handleInputChange = (e) => {
     const { name, value } = e.target;
@@ -84,7 +114,7 @@ export const AdminRegister = () => {
 
         setShowToast({
           show: true,
-          message: "Admin account registered successfully! Welcome to the dashboard.",
+          message: "Primary Admin account registered successfully! Welcome to the dashboard.",
           type: "success",
         });
 
@@ -93,18 +123,57 @@ export const AdminRegister = () => {
         setError(res.data?.message || "Registration failed. Please try again.");
       }
     } catch (err) {
+      const statusCode = err.response?.status;
       const msg =
         err.response?.data?.message ||
         err.message ||
         "An error occurred while creating the admin account.";
+
+      if (statusCode === 403) {
+        setIsLockedOut(true);
+        setShowToast({
+          show: true,
+          message: "Admin account configured. Please sign in to manage accounts.",
+          type: "error",
+        });
+        setTimeout(() => {
+          navigate("/admin/login", { replace: true });
+        }, 1200);
+      }
+
       setError(msg);
     } finally {
       setIsLoading(false);
     }
   };
 
-  if (isLoading) {
+  if (isLoading || isCheckingSetup) {
     return <Loading />;
+  }
+
+  if (isLockedOut) {
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-[#F8FAFC] p-4 sm:p-6 relative">
+        <div className="w-full max-w-md my-8 bg-white p-8 rounded-2xl shadow-lg border border-[#E2E8F0] text-center">
+          <div className="w-14 h-14 mx-auto mb-4 rounded-2xl bg-amber-50 border border-amber-200 flex items-center justify-center text-amber-600">
+            <AlertTriangle className="w-7 h-7" />
+          </div>
+          <h2 className="text-xl font-bold text-[#002185] mb-2">
+            Registration Locked
+          </h2>
+          <p className="text-sm text-[#64748B] mb-6">
+            Admin account configured. Please sign in to manage accounts.
+          </p>
+          <Link
+            to="/admin/login"
+            className="w-full inline-flex items-center justify-center gap-2 bg-[#002185] hover:bg-[#001760] text-white font-bold py-3 px-4 rounded-xl transition-all"
+          >
+            <ShieldCheck className="w-4 h-4" />
+            Proceed to Admin Login
+          </Link>
+        </div>
+      </div>
+    );
   }
 
   return (

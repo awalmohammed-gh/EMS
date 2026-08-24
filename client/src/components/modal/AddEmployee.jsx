@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { useManagement } from "../../context/ManagementContextProvider";
-import { employeeAccount } from "../../apis/fontApis";
+import { createUserAccount } from "../../apis/fontApis";
 import {
   X,
   User,
@@ -12,6 +12,7 @@ import {
   ChevronDown,
   Mail,
   Lock,
+  Shield,
 } from "lucide-react";
 
 export const AddEmployee = ({ onEmployeeAdded }) => {
@@ -41,10 +42,17 @@ export const AddEmployee = ({ onEmployeeAdded }) => {
   const handleSubmit = async (e) => {
     e.preventDefault();
 
-    if (!employeeForm.fullName || !employeeForm.email || !employeeForm.phone || !employeeForm.department || !employeeForm.position) {
+    if (
+      !employeeForm.fullName ||
+      !employeeForm.email ||
+      !employeeForm.phone ||
+      !employeeForm.department ||
+      !employeeForm.position ||
+      !employeeForm.password
+    ) {
       setShowToast({
         show: true,
-        message: "Please fill in all required employee fields.",
+        message: "Please fill in all required user fields.",
         type: "error",
       });
       return;
@@ -52,12 +60,24 @@ export const AddEmployee = ({ onEmployeeAdded }) => {
 
     try {
       setIsSubmitting(true);
-      const { data } = await employeeAccount(employeeForm);
+      const { data } = await createUserAccount({
+        employeeId: employeeForm.employeeId,
+        fullName: employeeForm.fullName,
+        email: employeeForm.email,
+        password: employeeForm.password,
+        phone: employeeForm.phone,
+        department: employeeForm.department,
+        position: employeeForm.position,
+        employmentDate: employeeForm.employmentDate,
+        role: employeeForm.role,
+      });
 
       if (data.success) {
         setShowToast({
           show: true,
-          message: data.message || `Employee account for ${employeeForm.fullName} registered successfully!`,
+          message:
+            data.message ||
+            `Account for ${employeeForm.fullName} (${employeeForm.role.toUpperCase()}) created successfully!`,
           type: "success",
         });
         if (onEmployeeAdded) {
@@ -67,15 +87,18 @@ export const AddEmployee = ({ onEmployeeAdded }) => {
       } else {
         setShowToast({
           show: true,
-          message: data.message || "Failed to create employee account.",
+          message: data.message || "Failed to create user account.",
           type: "error",
         });
       }
     } catch (error) {
-      console.error("Error creating employee:", error);
+      console.error("Error creating user account:", error);
       setShowToast({
         show: true,
-        message: error.response?.data?.message || error.message || "Failed to create employee.",
+        message:
+          error.response?.data?.message ||
+          error.message ||
+          "Failed to create user account.",
         type: "error",
       });
     } finally {
@@ -105,10 +128,10 @@ export const AddEmployee = ({ onEmployeeAdded }) => {
               </div>
               <div>
                 <h2 className="text-lg font-bold text-[#002185] leading-tight">
-                  Add New Staff Member
+                  Add Staff & Assign Role
                 </h2>
                 <p className="text-xs text-[#64748B]">
-                  Register an employee with contact details, role, and department
+                  Admin provisioned account creation with explicit system role assignment
                 </p>
               </div>
             </div>
@@ -127,11 +150,37 @@ export const AddEmployee = ({ onEmployeeAdded }) => {
             onSubmit={handleSubmit}
             className="flex-1 overflow-y-auto px-6 py-6 space-y-4"
           >
+            {/* Role Assignment Selector */}
+            <div className="p-3.5 bg-[#F8FAFC] border border-[#E2E8F0] rounded-xl">
+              <label className="mb-1.5 block text-xs font-bold text-[#002185] uppercase tracking-wider flex items-center gap-1.5">
+                <Shield className="w-3.5 h-3.5 text-[#002185]" />
+                Assigned Role <span className="text-[#DC2626]">*</span>
+              </label>
+              <div className="relative">
+                <select
+                  id="add-employee-role-select"
+                  name="role"
+                  value={employeeForm.role}
+                  onChange={handleChange}
+                  className="w-full pl-3.5 pr-9 py-2 border border-[#CBD5E1] rounded-lg bg-[#FFFFFF] text-[#0F172A] text-xs font-bold hover:border-[#ff5500] focus:outline-none focus:ring-2 focus:ring-[#002185]/20 focus:border-[#002185] appearance-none cursor-pointer"
+                  required
+                >
+                  <option value="employee">Employee / Standard Staff (Self-Service Attendance & Payslips)</option>
+                  <option value="manager">Manager (Departmental Oversight & Approvals)</option>
+                  <option value="hr">HR Specialist (Staff Directory & Onboarding)</option>
+                  <option value="admin">Administrator (Full System & Role Privileges)</option>
+                </select>
+                <div className="absolute inset-y-0 right-0 pr-3 flex items-center pointer-events-none">
+                  <ChevronDown className="h-4 w-4 text-[#94A3B8]" />
+                </div>
+              </div>
+            </div>
+
             {/* Employee ID and Full Name */}
             <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
               <div>
                 <label className="mb-1.5 block text-xs font-bold text-[#002185]">
-                  Employee ID
+                  Employee ID <span className="text-[#DC2626]">*</span>
                 </label>
                 <div className="relative">
                   <div className="absolute inset-y-0 left-0 pl-3.5 flex items-center pointer-events-none">
@@ -151,7 +200,7 @@ export const AddEmployee = ({ onEmployeeAdded }) => {
 
               <div className="sm:col-span-2">
                 <label className="mb-1.5 block text-xs font-bold text-[#002185]">
-                  Full Name
+                  Full Name <span className="text-[#DC2626]">*</span>
                 </label>
                 <div className="relative">
                   <div className="absolute inset-y-0 left-0 pl-3.5 flex items-center pointer-events-none">
@@ -174,7 +223,7 @@ export const AddEmployee = ({ onEmployeeAdded }) => {
             <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
               <div>
                 <label className="mb-1.5 block text-xs font-bold text-[#002185]">
-                  Email Address
+                  Email Address <span className="text-[#DC2626]">*</span>
                 </label>
                 <div className="relative">
                   <div className="absolute inset-y-0 left-0 pl-3.5 flex items-center pointer-events-none">
@@ -194,7 +243,7 @@ export const AddEmployee = ({ onEmployeeAdded }) => {
 
               <div>
                 <label className="mb-1.5 block text-xs font-bold text-[#002185]">
-                  Phone Number
+                  Phone Number <span className="text-[#DC2626]">*</span>
                 </label>
                 <div className="relative">
                   <div className="absolute inset-y-0 left-0 pl-3.5 flex items-center pointer-events-none">
@@ -217,7 +266,7 @@ export const AddEmployee = ({ onEmployeeAdded }) => {
             <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
               <div>
                 <label className="mb-1.5 block text-xs font-bold text-[#002185]">
-                  Department
+                  Department <span className="text-[#DC2626]">*</span>
                 </label>
                 <div className="relative">
                   <div className="absolute inset-y-0 left-0 pl-3.5 flex items-center pointer-events-none">
@@ -245,7 +294,7 @@ export const AddEmployee = ({ onEmployeeAdded }) => {
 
               <div>
                 <label className="mb-1.5 block text-xs font-bold text-[#002185]">
-                  Position / Role
+                  Position / Title <span className="text-[#DC2626]">*</span>
                 </label>
                 <div className="relative">
                   <div className="absolute inset-y-0 left-0 pl-3.5 flex items-center pointer-events-none">
@@ -256,7 +305,7 @@ export const AddEmployee = ({ onEmployeeAdded }) => {
                     name="position"
                     value={employeeForm.position}
                     onChange={handleChange}
-                    placeholder="e.g. Senior Frontend Engineer"
+                    placeholder="e.g. Senior Software Engineer"
                     className="w-full pl-10 pr-3 py-2 border border-[#E2E8F0] rounded-lg bg-[#FFFFFF] text-[#0F172A] text-xs hover:border-[#ff5500] focus:outline-none focus:ring-1 focus:ring-[#002185]"
                     required
                   />
@@ -264,7 +313,7 @@ export const AddEmployee = ({ onEmployeeAdded }) => {
               </div>
             </div>
 
-            {/* Employment Date & Default Password */}
+            {/* Employment Date & Default Temporary Password */}
             <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
               <div>
                 <label className="mb-1.5 block text-xs font-bold text-[#002185]">
@@ -287,7 +336,7 @@ export const AddEmployee = ({ onEmployeeAdded }) => {
 
               <div>
                 <label className="mb-1.5 block text-xs font-bold text-[#002185]">
-                  Initial Login Password
+                  Temporary Password <span className="text-[#DC2626]">*</span>
                 </label>
                 <div className="relative">
                   <div className="absolute inset-y-0 left-0 pl-3.5 flex items-center pointer-events-none">
@@ -324,7 +373,7 @@ export const AddEmployee = ({ onEmployeeAdded }) => {
               className="px-5 py-2 text-xs font-bold text-white bg-[#002185] hover:bg-[#ff5500] rounded-xl transition-all shadow-sm flex items-center gap-2 cursor-pointer disabled:opacity-50"
             >
               <UserPlus className="w-4 h-4" />
-              <span>{isSubmitting ? "Creating..." : "Save to Directory"}</span>
+              <span>{isSubmitting ? "Creating Account..." : "Save to Directory"}</span>
             </button>
           </div>
         </div>

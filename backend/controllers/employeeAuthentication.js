@@ -2,8 +2,9 @@ import jwt from "jsonwebtoken";
 import bcrypt from "bcryptjs";
 import mongoose from "mongoose";
 import { Employee } from "../models/employeeModel.js";
+import { Admin } from "../models/Admin.js";
 
-// Create Employee Account
+// Create Employee / Staff User Account with Role Assignment (Admin-Restricted)
 export const createEmployeeAccount = async (req, res) => {
   try {
     const {
@@ -18,37 +19,48 @@ export const createEmployeeAccount = async (req, res) => {
       role,
     } = req.body;
 
+    const assignedRole = (role || "employee").toLowerCase().trim();
+    const cleanEmail = (email || "").toLowerCase().trim();
+    const name = (fullName || "").trim();
+    const id = (employeeId || `EMP00${Math.floor(Math.random() * 900) + 100}`).trim();
+
     // Validate input
     if (
-      !employeeId ||
-      !fullName ||
-      !email ||
+      !id ||
+      !name ||
+      !cleanEmail ||
       !password ||
       !phone ||
       !department ||
-      !position ||
-      !employmentDate
+      !position
     ) {
       return res.status(400).json({
         success: false,
-        message: "All fields are required.",
+        message: "All fields are required (Employee ID, Full Name, Email, Password, Phone, Department, Position).",
       });
     }
 
-    // Check if email or employee ID already exists in DB
-    const existingEmail = await Employee.findOne({ email });
+    if (password.length < 6) {
+      return res.status(400).json({
+        success: false,
+        message: "Password must be at least 6 characters long.",
+      });
+    }
+
+    // Check if email or employee ID already exists in Employee DB
+    const existingEmail = await Employee.findOne({ email: cleanEmail });
     if (existingEmail) {
       return res.status(409).json({
         success: false,
-        message: "Email already exists in database.",
+        message: "An employee with this email address already exists in the system.",
       });
     }
 
-    const existingEmployeeId = await Employee.findOne({ employeeId });
+    const existingEmployeeId = await Employee.findOne({ employeeId: id });
     if (existingEmployeeId) {
       return res.status(409).json({
         success: false,
-        message: "Employee ID already exists in database.",
+        message: `Employee ID "${id}" is already assigned to another staff member.`,
       });
     }
 
@@ -57,25 +69,38 @@ export const createEmployeeAccount = async (req, res) => {
 
     // Create real MongoDB employee record with default active status and assigned role
     const employee = await Employee.create({
-      employeeId,
-      fullName,
-      email,
+      employeeId: id,
+      fullName: name,
+      email: cleanEmail,
       password: hashedPassword,
       phone,
       department,
       position,
-      employmentDate: new Date(employmentDate),
-      role: role || "employee",
+      employmentDate: employmentDate ? new Date(employmentDate) : new Date(),
+      role: assignedRole,
       status: "active",
       isActive: true,
     });
+
+    // If an administrator role is assigned, also ensure Admin account entry exists
+    if (assignedRole === "admin") {
+      const existingAdmin = await Admin.findOne({ email: cleanEmail });
+      if (!existingAdmin) {
+        await Admin.create({
+          full_name: name,
+          email: cleanEmail,
+          password_hash: hashedPassword,
+          role: "admin",
+        });
+      }
+    }
 
     const safeEmployee = employee.toObject ? employee.toObject() : employee;
     delete safeEmployee.password;
 
     res.status(201).json({
       success: true,
-      message: "Employee account created successfully in database.",
+      message: `Account for ${name} (${assignedRole.toUpperCase()}) created successfully.`,
       employee: safeEmployee,
     });
   } catch (error) {

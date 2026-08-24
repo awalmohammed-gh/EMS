@@ -140,6 +140,14 @@ const EmployeeDashboard = () => {
           type: "success",
         });
 
+        try {
+          const bc = new BroadcastChannel("eyenit_attendance_sync");
+          bc.postMessage({ type: "clock_in", timestamp: Date.now() });
+          bc.close();
+        } catch {
+          // Fallback
+        }
+
         await fetchEmployeeDashboardData();
       } else {
         setIsError(data.message || "Clock in failed.");
@@ -198,6 +206,14 @@ const EmployeeDashboard = () => {
           message: data.message || "Clock out successful!",
           type: "success",
         });
+
+        try {
+          const bc = new BroadcastChannel("eyenit_attendance_sync");
+          bc.postMessage({ type: "clock_out", timestamp: Date.now() });
+          bc.close();
+        } catch {
+          // Fallback
+        }
 
         await fetchEmployeeDashboardData();
       } else {

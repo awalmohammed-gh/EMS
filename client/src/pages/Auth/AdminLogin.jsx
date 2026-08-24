@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import {
   ShieldCheck,
@@ -8,9 +8,10 @@ import {
   EyeOff,
   ArrowLeft,
   UserPlus,
+  Info,
 } from "lucide-react";
 import eyenitLogo from "../../assets/eyenit_logo.png";
-import { adminLogin } from "../../apis/fontApis";
+import { adminLogin, checkAdminExists } from "../../apis/fontApis";
 import { useManagement } from "../../context/ManagementContextProvider";
 import ErrorMessage from "../../ui/ErrorMessage";
 import Loading from "../../ui/Loading";
@@ -23,8 +24,31 @@ export const AdminLogin = () => {
   });
   const [error, setError] = useState(null);
   const [isLoading, setIsLoading] = useState(false);
+  const [isCheckingSetup, setIsCheckingSetup] = useState(true);
+  const [adminExists, setAdminExists] = useState(true);
   const { setShowToast, setUser, setRole } = useManagement();
   const navigate = useNavigate();
+
+  useEffect(() => {
+    let isMounted = true;
+    const verifyAdminSetup = async () => {
+      try {
+        const res = await checkAdminExists();
+        if (isMounted && res.data) {
+          setAdminExists(Boolean(res.data.exists));
+        }
+      } catch (err) {
+        console.warn("Could not verify admin existence:", err);
+      } finally {
+        if (isMounted) setIsCheckingSetup(false);
+      }
+    };
+
+    verifyAdminSetup();
+    return () => {
+      isMounted = false;
+    };
+  }, []);
 
   const handleInputChange = (e) => {
     const { name, value } = e.target;
@@ -84,7 +108,7 @@ export const AdminLogin = () => {
     }
   };
 
-  if (isLoading) {
+  if (isLoading || isCheckingSetup) {
     return <Loading />;
   }
 
@@ -117,6 +141,39 @@ export const AdminLogin = () => {
           </p>
         </div>
 
+        {/* Admin Configured Status Banner */}
+        {adminExists ? (
+          <div className="mb-5 p-3.5 rounded-xl bg-[#002185]/5 border border-[#002185]/20 flex items-center gap-3">
+            <div className="w-8 h-8 rounded-lg bg-[#002185] text-white flex items-center justify-center shrink-0">
+              <ShieldCheck className="w-4 h-4" />
+            </div>
+            <div className="flex-1">
+              <p className="text-xs font-bold text-[#002185]">
+                Admin account configured.
+              </p>
+              <p className="text-[11px] text-[#475569]">
+                Please sign in to manage accounts and system settings.
+              </p>
+            </div>
+          </div>
+        ) : (
+          <div className="mb-5 p-3.5 rounded-xl bg-amber-50 border border-amber-200 flex items-center justify-between gap-3">
+            <div className="flex items-center gap-2.5">
+              <Info className="w-5 h-5 text-amber-600 shrink-0" />
+              <div>
+                <p className="text-xs font-bold text-amber-900">Setup Required</p>
+                <p className="text-[11px] text-amber-700">No admin account found.</p>
+              </div>
+            </div>
+            <Link
+              to="/admin/register"
+              className="px-3 py-1.5 bg-[#002185] text-white rounded-lg text-xs font-bold hover:bg-[#ff5500] transition-colors"
+            >
+              Create Admin
+            </Link>
+          </div>
+        )}
+
         {/* Error Alert */}
         {error && (
           <div className="mb-5">
@@ -145,7 +202,7 @@ export const AdminLogin = () => {
                   name="email"
                   value={formData.email}
                   onChange={handleInputChange}
-                  placeholder="eyenitgh.com"
+                  placeholder="admin@eyenitgh.com"
                   required
                   className="w-full pl-10 pr-3.5 py-2.5 bg-[#F8FAFC] border border-[#CBD5E1] rounded-xl text-[#0F172A] text-sm placeholder-[#94A3B8] focus:outline-none focus:ring-2 focus:ring-[#002185]/20 focus:border-[#002185] transition-all"
                 />
@@ -201,18 +258,24 @@ export const AdminLogin = () => {
             </button>
           </form>
 
-          {/* Link to Admin Registration */}
+          {/* Registration Section or Lockout Guidance */}
           <div className="mt-6 pt-5 border-t border-[#F1F5F9] text-center">
-            <p className="text-sm text-[#64748B]">
-              Need to create a new Admin account?{" "}
-              <Link
-                to="/admin/register"
-                className="text-[#002185] font-bold hover:text-[#ff5500] hover:underline inline-flex items-center gap-1"
-              >
-                <UserPlus className="w-3.5 h-3.5" />
-                Register Admin
-              </Link>
-            </p>
+            {adminExists ? (
+              <p className="text-xs text-[#64748B]">
+                <span className="font-semibold text-[#002185]">Security Note:</span> Self-registration is restricted. Staff members and additional accounts are provisioned from inside the Admin Dashboard.
+              </p>
+            ) : (
+              <p className="text-sm text-[#64748B]">
+                Need to create the primary Admin account?{" "}
+                <Link
+                  to="/admin/register"
+                  className="text-[#002185] font-bold hover:text-[#ff5500] hover:underline inline-flex items-center gap-1"
+                >
+                  <UserPlus className="w-3.5 h-3.5" />
+                  Register Admin
+                </Link>
+              </p>
+            )}
           </div>
         </div>
       </div>
