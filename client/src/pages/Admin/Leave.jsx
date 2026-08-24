@@ -18,7 +18,7 @@ import {
 } from "lucide-react";
 import { allLeaves, updateStatus } from "../../apis/fontApis";
 import { useManagement } from "../../context/ManagementContextProvider";
-import PendingLeavesDashboard from "../../components/PendingLeavesDashboard";
+import LeaveApprovalWorkflow from "../../components/LeaveApprovalWorkflow";
 import Loading from "../../ui/Loading";
 import ErrorMessage from "../../ui/ErrorMessage";
 
@@ -347,9 +347,10 @@ export const Leave = () => {
         </div>
       </div>
 
-      {/* Tab 1: Dedicated Status Dashboard for Pending Leave Requests */}
+      {/* Tab 1: Automated Leave Approval Workflow Hub */}
       {activeTab === "pending" && (
-        <PendingLeavesDashboard
+        <LeaveApprovalWorkflow
+          allRequests={requests}
           pendingRequests={pendingList}
           onUpdateStatus={handleStatusChange}
           updatingId={updatingStatus}

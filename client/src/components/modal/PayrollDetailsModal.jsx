@@ -498,19 +498,28 @@ export const PayrollDetailsModal = ({ payrollId, initialData, onClose, onRefresh
                       </div>
                       <div className="p-4 divide-y divide-[#F1F5F9] text-xs">
                         <div className="py-2.5 flex items-center justify-between">
-                          <span className="text-[#64748B]">Gross Salary (Base Salary)</span>
+                          <span className="text-[#64748B]">Base Monthly Salary</span>
                           <span className="font-semibold text-[#0F172A]">
                             {formatCurrency(basicSalary)}
                           </span>
                         </div>
-                        {allowances > 0 && (
+                        {Array.isArray(payroll?.earnings) && payroll.earnings.length > 0 ? (
+                          payroll.earnings.map((item, idx) => (
+                            <div key={idx} className="py-2.5 flex items-center justify-between">
+                              <span className="text-[#64748B]">{item.description || item.name}</span>
+                              <span className="font-semibold text-[#16A34A]">
+                                +{formatCurrency(item.amount)}
+                              </span>
+                            </div>
+                          ))
+                        ) : allowances > 0 ? (
                           <div className="py-2.5 flex items-center justify-between">
                             <span className="text-[#64748B]">Allowances & Bonuses</span>
                             <span className="font-semibold text-[#16A34A]">
                               +{formatCurrency(allowances)}
                             </span>
                           </div>
-                        )}
+                        ) : null}
                       </div>
                     </div>
 
@@ -526,15 +535,41 @@ export const PayrollDetailsModal = ({ payrollId, initialData, onClose, onRefresh
                         </span>
                       </div>
                       <div className="p-4 divide-y divide-[#F1F5F9] text-xs">
-                        <div className="py-2.5 flex items-center justify-between">
-                          <div>
-                            <span className="text-[#64748B] block font-medium">Absenteeism Deductions</span>
-                            <span className="text-[10px] text-[#94A3B8]">Deductions triggered only on absent status</span>
+                        {Number(payroll?.absentDaysDeduction) > 0 && (
+                          <div className="py-2.5 flex items-center justify-between">
+                            <div>
+                              <span className="text-[#64748B] block font-medium">Absence Deduction</span>
+                              <span className="text-[10px] text-[#94A3B8]">Deductions triggered on unexcused absent status</span>
+                            </div>
+                            <span className="font-semibold text-[#DC2626]">
+                              -{formatCurrency(payroll.absentDaysDeduction)}
+                            </span>
                           </div>
-                          <span className="font-semibold text-[#DC2626]">
-                            -{formatCurrency(deductions)}
-                          </span>
-                        </div>
+                        )}
+                        {Array.isArray(payroll?.deductions) && payroll.deductions.length > 0 ? (
+                          payroll.deductions.map((item, idx) => (
+                            <div key={idx} className="py-2.5 flex items-center justify-between">
+                              <span className="text-[#64748B]">{item.description || item.name}</span>
+                              <span className="font-semibold text-[#DC2626]">
+                                -{formatCurrency(item.amount)}
+                              </span>
+                            </div>
+                          ))
+                        ) : deductions > 0 && !payroll?.absentDaysDeduction ? (
+                          <div className="py-2.5 flex items-center justify-between">
+                            <div>
+                              <span className="text-[#64748B] block font-medium">Deductions</span>
+                              <span className="text-[10px] text-[#94A3B8]">Standard statutory deductions</span>
+                            </div>
+                            <span className="font-semibold text-[#DC2626]">
+                              -{formatCurrency(deductions)}
+                            </span>
+                          </div>
+                        ) : !payroll?.absentDaysDeduction && deductions === 0 ? (
+                          <div className="py-2.5 text-[#94A3B8] italic text-center">
+                            No deductions recorded
+                          </div>
+                        ) : null}
                       </div>
                     </div>
                   </div>

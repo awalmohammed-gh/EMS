@@ -112,26 +112,47 @@ export const getDashboardOverview = async (req, res) => {
         }));
       }
 
-      const payrollSummary = await Payroll.aggregate([
-        {
-          $group: {
-            _id: null,
-            totalPayroll: { $sum: "$netSalary" },
-            paidPayroll: {
-              $sum: { $cond: [{ $eq: ["$status", "Paid"] }, "$netSalary", 0] },
-            },
-            pendingPayroll: {
-              $sum: {
-                $cond: [{ $eq: ["$status", "Pending"] }, "$netSalary", 0],
-              },
-            },
-          },
-        },
-      ]);
+      let totalPayrollDisbursed = 0;
+      let pendingDisbursements = 0;
+      let totalPayrollAmount = 0;
+      let employeesPaidCount = 0;
+      let pendingCount = 0;
 
-      if (payrollSummary.length > 0) {
-        payroll = payrollSummary[0];
+      const payrollRecords = await Payroll.find({}).lean();
+      if (payrollRecords && payrollRecords.length > 0) {
+        payrollRecords.forEach((rec) => {
+          const amount = Number(
+            rec.netPay !== undefined
+              ? rec.netPay
+              : rec.netSalary !== undefined
+              ? rec.netSalary
+              : rec.basicSalary || 0
+          );
+          const st = (rec.status || "").toLowerCase().trim();
+          totalPayrollAmount += amount;
+          if (st === "paid") {
+            totalPayrollDisbursed += amount;
+            employeesPaidCount += 1;
+          } else if (st === "pending" || st === "draft" || st === "unpaid") {
+            pendingDisbursements += amount;
+            pendingCount += 1;
+          }
+        });
       }
+
+      payroll = {
+        totalPayroll: parseFloat(totalPayrollAmount.toFixed(2)),
+        totalPayrollDisbursed: parseFloat(totalPayrollDisbursed.toFixed(2)),
+        monthlyPayrollTotal: parseFloat(totalPayrollDisbursed.toFixed(2)),
+        paidPayroll: parseFloat(totalPayrollDisbursed.toFixed(2)),
+        paid: parseFloat(totalPayrollDisbursed.toFixed(2)),
+        pendingPayroll: parseFloat(pendingDisbursements.toFixed(2)),
+        pending: parseFloat(pendingDisbursements.toFixed(2)),
+        pendingDisbursements: parseFloat(pendingDisbursements.toFixed(2)),
+        employeesPaidCount,
+        totalEmployeesPaid: employeesPaidCount,
+        totalEmployees: dbActiveCount || totalEmployees,
+      };
 
       const dbDepartments = await Employee.aggregate([
         { $group: { _id: "$department", total: { $sum: 1 } } },
@@ -230,10 +251,15 @@ export const getDashboardOverview = async (req, res) => {
           pendingLeaves,
         },
         payroll: {
-          totalEmployees,
+          totalEmployees: payroll.totalEmployees || totalEmployees,
           totalPayroll: payroll.totalPayroll || 0,
-          paid: payroll.paidPayroll || 0,
-          pending: payroll.pendingPayroll || 0,
+          totalPayrollDisbursed: payroll.totalPayrollDisbursed || 0,
+          monthlyPayrollTotal: payroll.monthlyPayrollTotal || 0,
+          paid: payroll.paid || 0,
+          pending: payroll.pending || 0,
+          pendingDisbursements: payroll.pendingDisbursements || 0,
+          employeesPaidCount: payroll.employeesPaidCount || 0,
+          totalEmployeesPaid: payroll.totalEmployeesPaid || 0,
         },
         attendance: {
           totalEmployees,

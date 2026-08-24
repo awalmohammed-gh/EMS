@@ -22,15 +22,18 @@ import PayslipsModal from "../../components/modal/PayslipsModal";
 import PayrollDetailsModal from "../../components/modal/PayrollDetailsModal";
 import PayrollSummaryCalculator from "../../components/PayrollSummaryCalculator";
 import { getAllPayslips, updatePayrollStatus, deletePayroll } from "../../apis/fontApis";
+import {
+  List,
+} from "lucide-react";
 import Loading from "../../ui/Loading";
 import ErrorMessage from "../../ui/ErrorMessage";
 
 const Payslips = () => {
   const navigate = useNavigate();
+  const [activeViewTab, setActiveViewTab] = useState("records"); // "records" | "calculator"
   const [search, setSearch] = useState("");
   const [filterStatus, setFilterStatus] = useState("All");
   const [filterMonth, setFilterMonth] = useState("All Months");
-  const [showCalculator, setShowCalculator] = useState(false);
   const { showPayslipsModal, setShowPayslipsModal, setShowToast } = useManagement();
   const [payslips, setPayslips] = useState([]);
   const [isLoading, setIsLoading] = useState(false);
@@ -364,22 +367,13 @@ const Payslips = () => {
         <div className="flex flex-col lg:flex-row items-start lg:items-center justify-between gap-4">
           <div>
             <h1 className="text-2xl font-bold text-[#002185] tracking-tight">
-              Payroll
+              Payroll Management
             </h1>
             <p className="text-sm text-[#64748B] mt-1">
-              Calculate salaries based on attendance, generate pay slips, and export monthly payroll reports.
+              Employee payroll table, payslip generation, and attendance-based salary calculations with fixed absence deductions.
             </p>
           </div>
           <div className="flex items-center gap-2.5 flex-wrap">
-            <button
-              type="button"
-              onClick={() => setShowCalculator(!showCalculator)}
-              className="px-3.5 py-2.5 bg-[#F8FAFC] border border-[#002185] text-[#002185] hover:bg-[#002185] hover:text-white rounded-xl transition-all duration-200 text-xs font-bold flex items-center gap-2 shadow-xs cursor-pointer"
-            >
-              <Calculator className="w-4 h-4 text-[#ff5500]" />
-              {showCalculator ? "Hide Calculator" : "Attendance Calculator"}
-            </button>
-
             <button
               type="button"
               onClick={handleExportReport}
@@ -387,7 +381,7 @@ const Payslips = () => {
               title="Export filtered records to CSV"
             >
               <Download className="w-4 h-4 text-[#002185]" />
-              Export Report
+              Export CSV
             </button>
 
             <div className="text-xs text-[#64748B] bg-[#FFFFFF] px-3.5 py-2.5 rounded-xl border border-[#E2E8F0] shadow-xs flex items-center gap-1.5 font-medium">
@@ -408,8 +402,37 @@ const Payslips = () => {
           </div>
         </div>
 
-        {/* Dynamic Payroll & Attendance Calculator Drawer/Card */}
-        {showCalculator && (
+        {/* Primary View Switcher Tabs */}
+        <div className="flex items-center p-1.5 bg-[#F8FAFC] border border-[#E2E8F0] rounded-2xl self-start">
+          <button
+            type="button"
+            onClick={() => setActiveViewTab("records")}
+            className={`flex items-center gap-2 px-4 py-2 rounded-xl text-xs font-bold transition-all cursor-pointer ${
+              activeViewTab === "records"
+                ? "bg-[#002185] text-white shadow-xs"
+                : "text-[#64748B] hover:text-[#002185]"
+            }`}
+          >
+            <List className="w-3.5 h-3.5" />
+            <span>Payroll Records ({payslips.length})</span>
+          </button>
+
+          <button
+            type="button"
+            onClick={() => setActiveViewTab("calculator")}
+            className={`flex items-center gap-2 px-4 py-2 rounded-xl text-xs font-bold transition-all cursor-pointer ${
+              activeViewTab === "calculator"
+                ? "bg-[#002185] text-white shadow-xs"
+                : "text-[#64748B] hover:text-[#002185]"
+            }`}
+          >
+            <Calculator className="w-3.5 h-3.5 text-[#ff5500]" />
+            <span>Attendance & Salary Calculator</span>
+          </button>
+        </div>
+
+        {/* Dynamic Payroll & Attendance Calculator */}
+        {activeViewTab === "calculator" && (
           <div className="animate-in fade-in slide-in-from-top-4 duration-200">
             <PayrollSummaryCalculator
               onApplyCalculatedValues={(_calculatedData) => {
@@ -428,8 +451,8 @@ const Payslips = () => {
           />
         )}
 
-        {/* KPI Metric Cards */}
-        {!error && (
+        {/* Tab 3: Records Table View */}
+        {activeViewTab === "records" && !error && (
           <>
             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3.5">
               <div className="bg-[#FFFFFF] border border-[#E2E8F0] rounded-xl p-4 sm:p-5 shadow-xs">

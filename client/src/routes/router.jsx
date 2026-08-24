@@ -24,6 +24,7 @@ import EmployeeSettings from "../pages/Employees/EmployeeSettings";
 import EmployeeDashboard from "../pages/Employees/EmployeeDashboard";
 import AdminDashboard from "../pages/Admin/AdminDashboard";
 import Leave from "../pages/Admin/Leave";
+import AdminAnnouncements from "../pages/Admin/Announcements";
 
 export const router = createBrowserRouter(
   createRoutesFromElements(
@@ -52,8 +53,10 @@ export const router = createBrowserRouter(
           <Route path="leave" element={<Leave />} />
           <Route path="payroll" element={<Payslips />} />
           <Route path="payslips" element={<Payslips />} />
+          <Route path="announcements" element={<AdminAnnouncements />} />
           <Route path="settings" element={<Settings />} />
         </Route>
+        <Route path="/admin/announcements" element={<Navigate to="/admin/dashboard/announcements" replace />} />
         <Route path="/print-payslips/:id" element={<PrintPayslips />} />
       </Route>
 

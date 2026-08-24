@@ -57,6 +57,62 @@ const EmployeePayslipsModal = ({ payslip, onClose }) => {
 
     const logoBase64 = logo;
 
+    const baseSalary = Number(
+      payslip.baseSalary !== undefined
+        ? payslip.baseSalary
+        : payslip.basicSalary || 0
+    );
+    const earningsList = Array.isArray(payslip.earnings) ? payslip.earnings : [];
+    const deductionsList = Array.isArray(payslip.deductions)
+      ? payslip.deductions
+      : typeof payslip.deductions === "number" && payslip.deductions > 0
+      ? [{ description: "Deductions", amount: payslip.deductions }]
+      : [];
+    const absentDeduction = Number(payslip.absentDaysDeduction || 0);
+
+    const earningsRowsHTML =
+      earningsList.length > 0
+        ? earningsList
+            .map(
+              (item) => `
+          <tr style="border-bottom: 1px solid #E2E8F0;">
+            <td style="padding: 10px 14px; color:#334155;">${item.description || item.name || "Allowance"}</td>
+            <td style="padding: 10px 14px; text-align:right; font-weight:600; color:#16A34A;">+${formatCurrency(item.amount)}</td>
+          </tr>`
+            )
+            .join("")
+        : `
+          <tr style="border-bottom: 1px solid #E2E8F0;">
+            <td colspan="2" style="padding: 8px 14px; color:#94A3B8; font-style: italic; font-size: 12px;">No additional earnings recorded</td>
+          </tr>`;
+
+    const deductionsRowsHTML =
+      deductionsList.length > 0 || absentDeduction > 0
+        ? `
+          ${
+            absentDeduction > 0
+              ? `
+          <tr style="border-bottom: 1px solid #E2E8F0;">
+            <td style="padding: 10px 14px; color:#334155;">Absence Deduction</td>
+            <td style="padding: 10px 14px; text-align:right; font-weight:600; color:#DC2626;">-${formatCurrency(absentDeduction)}</td>
+          </tr>`
+              : ""
+          }
+          ${deductionsList
+            .map(
+              (item) => `
+          <tr style="border-bottom: 1px solid #E2E8F0;">
+            <td style="padding: 10px 14px; color:#334155;">${item.description || item.name || "Deduction"}</td>
+            <td style="padding: 10px 14px; text-align:right; font-weight:600; color:#DC2626;">-${formatCurrency(item.amount)}</td>
+          </tr>`
+            )
+            .join("")}
+        `
+        : `
+          <tr style="border-bottom: 1px solid #E2E8F0;">
+            <td colspan="2" style="padding: 8px 14px; color:#94A3B8; font-style: italic; font-size: 12px;">No additional deductions recorded (100% Attendance)</td>
+          </tr>`;
+
     return `
       <div style="width: 750px; padding: 40px; font-family: Arial, Helvetica, sans-serif; color: #0F172A; background: #ffffff; box-sizing: border-box; position: relative; overflow: hidden;">
         
@@ -135,28 +191,36 @@ const EmployeePayslipsModal = ({ payslip, onClose }) => {
             </table>
           </div>
 
-          <!-- Salary Breakdown -->
+          <!-- Dynamic Salary Breakdown -->
           <div>
             <div style="font-size: 11px; font-weight: bold; text-transform: uppercase; letter-spacing: 1px; color: #64748B; margin-bottom: 10px;">
               Salary Breakdown
             </div>
             <table style="width:100%; border-collapse: collapse; font-size: 13px; border: 1px solid #E2E8F0;">
-              <tr style="border-bottom: 1px solid #E2E8F0;">
-                <td style="padding: 12px 14px; color:#334155;">Basic Salary</td>
-                <td style="padding: 12px 14px; text-align:right; font-weight:600; color:#0F172A;">${formatCurrency(payslip.basicSalary)}</td>
-              </tr>
-              <tr style="border-bottom: 1px solid #E2E8F0;">
-                <td style="padding: 12px 14px; color:#334155;">Allowances</td>
-                <td style="padding: 12px 14px; text-align:right; font-weight:600; color:#16A34A;">+${formatCurrency(payslip.allowances)}</td>
-              </tr>
-              <tr style="border-bottom: 1px solid #E2E8F0;">
-                <td style="padding: 12px 14px; color:#334155;">Deductions</td>
-                <td style="padding: 12px 14px; text-align:right; font-weight:600; color:#DC2626;">-${formatCurrency(payslip.deductions)}</td>
-              </tr>
-              <tr style="background:#F8FAFC;">
-                <td style="padding: 16px 14px; font-weight:bold; color:#002185; font-size:15px;">NET SALARY</td>
-                <td style="padding: 16px 14px; text-align:right; font-weight:bold; color:#002185; font-size:18px;">${formatCurrency(payslip.netSalary)}</td>
-              </tr>
+              <thead>
+                <tr style="background:#F8FAFC; border-bottom: 1px solid #E2E8F0;">
+                  <th style="padding: 10px 14px; text-align:left; color:#002185; font-size:11px; text-transform:uppercase;">Item Description</th>
+                  <th style="padding: 10px 14px; text-align:right; color:#002185; font-size:11px; text-transform:uppercase;">Amount (GHS)</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr style="border-bottom: 1px solid #E2E8F0;">
+                  <td style="padding: 12px 14px; font-weight:600; color:#0F172A;">Basic Salary</td>
+                  <td style="padding: 12px 14px; text-align:right; font-weight:600; color:#002185;">${formatCurrency(baseSalary)}</td>
+                </tr>
+                <tr style="background:#F1F5F9;">
+                  <td colspan="2" style="padding: 6px 14px; font-size:11px; font-weight:bold; color:#16A34A; text-transform:uppercase;">Additional Earnings & Allowances</td>
+                </tr>
+                ${earningsRowsHTML}
+                <tr style="background:#F1F5F9;">
+                  <td colspan="2" style="padding: 6px 14px; font-size:11px; font-weight:bold; color:#DC2626; text-transform:uppercase;">Deductions & Adjustments</td>
+                </tr>
+                ${deductionsRowsHTML}
+                <tr style="background:#F8FAFC; border-top: 2px solid #E2E8F0;">
+                  <td style="padding: 16px 14px; font-weight:bold; color:#002185; font-size:15px;">NET SALARY</td>
+                  <td style="padding: 16px 14px; text-align:right; font-weight:bold; color:#002185; font-size:18px;">${formatCurrency(payslip.netSalary)}</td>
+                </tr>
+              </tbody>
             </table>
           </div>
         </div>
@@ -360,50 +424,146 @@ const EmployeePayslipsModal = ({ payslip, onClose }) => {
             </div>
           </div>
 
-          {/* Salary Breakdown */}
+          {/* Dynamic Salary Breakdown */}
           <div>
-            <h3 className="mb-3 text-xs font-semibold uppercase tracking-wider text-[#64748B]">
-              Salary Breakdown
-            </h3>
+            <div className="flex items-center justify-between mb-3">
+              <h3 className="text-xs font-semibold uppercase tracking-wider text-[#64748B]">
+                Salary Breakdown & Custom Items
+              </h3>
+              <span className="text-[11px] font-medium text-[#64748B]">Admin Verified</span>
+            </div>
 
-            <div className="overflow-hidden rounded-lg border border-[#E2E8F0] bg-[#FFFFFF] transition-all duration-200">
+            <div className="overflow-hidden rounded-xl border border-[#E2E8F0] bg-[#FFFFFF] transition-all duration-200">
               {/* Basic Salary */}
-              <div className="flex items-center justify-between border-b border-[#E2E8F0] px-4 py-4">
+              <div className="flex items-center justify-between border-b border-[#E2E8F0] px-4 py-3.5 bg-[#F8FAFC]">
                 <div className="flex items-center gap-2">
-                  <BanknoteIcon className="h-4 w-4 text-[#64748B]" />
-                  <span className="text-sm text-[#334155]">Basic Salary</span>
+                  <BanknoteIcon className="h-4 w-4 text-[#002185]" />
+                  <span className="text-sm font-semibold text-[#0F172A]">Base Salary</span>
                 </div>
-                <span className="text-sm font-medium text-[#002185] tabular-nums">
-                  {formatCurrency(payslip.basicSalary)}
+                <span className="text-sm font-bold text-[#002185] tabular-nums">
+                  {formatCurrency(
+                    payslip.baseSalary !== undefined
+                      ? payslip.baseSalary
+                      : payslip.basicSalary || 0
+                  )}
                 </span>
               </div>
 
-              {/* Allowances */}
-              <div className="flex items-center justify-between border-b border-[#E2E8F0] px-4 py-4">
-                <div className="flex items-center gap-2">
-                  <BanknoteIcon className="h-4 w-4 text-[#16A34A]" />
-                  <span className="text-sm text-[#334155]">Allowances</span>
+              {/* Dynamic Earnings Section */}
+              <div className="border-b border-[#E2E8F0]">
+                <div className="px-4 py-2 bg-[#F1F5F9]/60 text-[11px] font-bold text-[#16A34A] uppercase tracking-wider flex items-center justify-between">
+                  <span>Additional Earnings & Allowances</span>
+                  <span>
+                    +
+                    {formatCurrency(
+                      Array.isArray(payslip.earnings)
+                        ? payslip.earnings.reduce(
+                            (sum, item) => sum + Number(item.amount || 0),
+                            0
+                          )
+                        : Number(payslip.allowances || 0)
+                    )}
+                  </span>
                 </div>
-                <span className="text-sm font-medium text-[#16A34A] tabular-nums">
-                  +{formatCurrency(payslip.allowances)}
-                </span>
+                {Array.isArray(payslip.earnings) && payslip.earnings.length > 0 ? (
+                  payslip.earnings.map((item, idx) => (
+                    <div
+                      key={idx}
+                      className="flex items-center justify-between border-b last:border-b-0 border-[#F1F5F9] px-4 py-3 hover:bg-[#F8FAFC] transition-colors"
+                    >
+                      <span className="text-sm text-[#334155]">
+                        {item.description || item.name || `Allowance #${idx + 1}`}
+                      </span>
+                      <span className="text-sm font-medium text-[#16A34A] tabular-nums">
+                        +{formatCurrency(item.amount)}
+                      </span>
+                    </div>
+                  ))
+                ) : (
+                  <div className="px-4 py-3 text-xs text-[#94A3B8] italic bg-white">
+                    No additional earnings recorded
+                  </div>
+                )}
               </div>
 
-              {/* Deductions */}
-              <div className="flex items-center justify-between border-b border-[#E2E8F0] px-4 py-4">
-                <div className="flex items-center gap-2">
-                  <BanknoteIcon className="h-4 w-4 text-[#DC2626]" />
-                  <span className="text-sm text-[#334155]">Deductions</span>
+              {/* Dynamic Deductions Section */}
+              <div className="border-b border-[#E2E8F0]">
+                <div className="px-4 py-2 bg-[#F1F5F9]/60 text-[11px] font-bold text-[#DC2626] uppercase tracking-wider flex items-center justify-between">
+                  <span>Deductions & Adjustments</span>
+                  <span>
+                    -
+                    {formatCurrency(
+                      (Array.isArray(payslip.deductions)
+                        ? payslip.deductions.reduce(
+                            (sum, item) => sum + Number(item.amount || 0),
+                            0
+                          )
+                        : Number(payslip.deductions || 0)) +
+                        Number(payslip.absentDaysDeduction || 0)
+                    )}
+                  </span>
                 </div>
-                <span className="text-sm font-medium text-[#DC2626] tabular-nums">
-                  -{formatCurrency(payslip.deductions)}
-                </span>
+
+                {/* Absence Deduction if present */}
+                {Number(payslip.absentDaysDeduction) > 0 && (
+                  <div className="flex items-center justify-between border-b border-[#F1F5F9] px-4 py-3 hover:bg-[#FEF2F2]/30 transition-colors">
+                    <div>
+                      <span className="text-sm font-medium text-[#DC2626]">
+                        Absence Deduction
+                      </span>
+                      <span className="block text-[10px] text-[#94A3B8]">
+                        Triggered on unexcused absent status
+                      </span>
+                    </div>
+                    <span className="text-sm font-semibold text-[#DC2626] tabular-nums">
+                      -{formatCurrency(payslip.absentDaysDeduction)}
+                    </span>
+                  </div>
+                )}
+
+                {/* Dynamic deductions mapped strictly from Admin inputs */}
+                {Array.isArray(payslip.deductions) &&
+                payslip.deductions.length > 0 ? (
+                  payslip.deductions.map((item, idx) => (
+                    <div
+                      key={idx}
+                      className="flex items-center justify-between border-b last:border-b-0 border-[#F1F5F9] px-4 py-3 hover:bg-[#F8FAFC] transition-colors"
+                    >
+                      <span className="text-sm text-[#334155]">
+                        {item.description || item.name || `Deduction #${idx + 1}`}
+                      </span>
+                      <span className="text-sm font-medium text-[#DC2626] tabular-nums">
+                        -{formatCurrency(item.amount)}
+                      </span>
+                    </div>
+                  ))
+                ) : !payslip.absentDaysDeduction &&
+                  !(typeof payslip.deductions === "number" && payslip.deductions > 0) ? (
+                  <div className="px-4 py-3 text-xs text-[#94A3B8] italic bg-white">
+                    No additional deductions recorded (100% Attendance)
+                  </div>
+                ) : typeof payslip.deductions === "number" &&
+                  payslip.deductions > 0 ? (
+                  <div className="flex items-center justify-between px-4 py-3">
+                    <span className="text-sm text-[#334155]">Deductions</span>
+                    <span className="text-sm font-medium text-[#DC2626] tabular-nums">
+                      -{formatCurrency(payslip.deductions)}
+                    </span>
+                  </div>
+                ) : null}
               </div>
 
-              {/* Net Salary */}
+              {/* Net Salary Summary Box */}
               <div className="flex items-center justify-between bg-[#F8FAFC] px-4 py-5">
-                <span className="font-semibold text-[#002185]">Net Salary</span>
-                <span className="text-xl font-bold text-[#002185] tabular-nums">
+                <div>
+                  <span className="font-bold text-[#002185] block">
+                    Net Payable Salary
+                  </span>
+                  <span className="text-[11px] text-[#64748B]">
+                    Base + Total Earnings - Total Deductions
+                  </span>
+                </div>
+                <span className="text-2xl font-black text-[#002185] tabular-nums">
                   {formatCurrency(payslip.netSalary)}
                 </span>
               </div>

@@ -17,8 +17,8 @@ import {
   CalendarDays,
   ArrowRight,
   X,
-  RefreshCw,
   Edit3,
+  BarChart3,
 } from "lucide-react";
 import { useManagement } from "../../context/ManagementContextProvider";
 import Loading from "../../ui/Loading";
@@ -29,14 +29,16 @@ import {
   updateAttendanceRecord,
   createManualAttendanceRecord,
   allEmployees,
+  allLeaves,
 } from "../../apis/fontApis";
 import WeeklyAttendanceChart from "../../components/WeeklyAttendanceChart";
+import AttendanceMonthlyCalendar from "../../components/AttendanceMonthlyCalendar";
 
 const Attendance = () => {
   const [attendance, setAttendance] = useState([]);
   const [employeesList, setEmployeesList] = useState([]);
+  const [leaveRequests, setLeaveRequests] = useState([]);
   const [isLoading, setIsLoading] = useState(false);
-  const [isRefreshing, setIsRefreshing] = useState(false);
   const [isError, setIsError] = useState(null);
   const [searchTerm, setSearchTerm] = useState("");
   const [statusFilter, setStatusFilter] = useState("All");
@@ -45,6 +47,7 @@ const Attendance = () => {
   const [currentPage, setCurrentPage] = useState(1);
   const [itemsPerPage] = useState(10);
   const [lastSyncTime, setLastSyncTime] = useState(new Date());
+  const [visualizationTab, setVisualizationTab] = useState("calendar"); // 'calendar' | 'trends' | 'both'
 
   // Modal states
   const [selectedAttendance, setSelectedAttendance] = useState(null);
@@ -69,8 +72,6 @@ const Attendance = () => {
     try {
       if (!silent) {
         setIsLoading(true);
-      } else {
-        setIsRefreshing(true);
       }
       setIsError(null);
       const { data } = await getAllAttendance();
@@ -92,7 +93,6 @@ const Attendance = () => {
       if (!silent) {
         setIsLoading(false);
       }
-      setIsRefreshing(false);
     }
   };
 
@@ -108,10 +108,29 @@ const Attendance = () => {
     }
   };
 
+  // Fetch leave requests to track monthly leaves and absences
+  const fetchLeaves = async () => {
+    try {
+      const { data } = await allLeaves();
+      if (data && data.success) {
+        let leaves = [];
+        if (Array.isArray(data.leaves)) {
+          leaves = data.leaves;
+        } else if (Array.isArray(data.data)) {
+          leaves = data.data;
+        }
+        setLeaveRequests(leaves);
+      }
+    } catch (err) {
+      console.warn("Could not fetch leave requests:", err.message);
+    }
+  };
+
   // Initial fetch and automatic real-time sync
   useEffect(() => {
     fetchAttendance();
     fetchEmployees();
+    fetchLeaves();
 
     // Auto-refresh interval every 4 seconds for real-time employee clock-in/out updates
     const interval = setInterval(() => {
@@ -451,13 +470,13 @@ const Attendance = () => {
   };
 
   // Open adjustment modal for a new manual override
-  const handleOpenNewOverrideModal = () => {
+  const handleOpenNewOverrideModal = (overrideDate = null) => {
     const firstEmp = employeesList[0];
     setAdjustmentFormData({
       id: "",
       employeeId: firstEmp ? (firstEmp.employeeId || firstEmp._id) : "",
       employeeName: firstEmp ? firstEmp.fullName : "",
-      date: new Date().toISOString().split("T")[0],
+      date: typeof overrideDate === "string" && overrideDate ? overrideDate : new Date().toISOString().split("T")[0],
       clockIn: "08:30",
       clockOut: "17:00",
       status: "Present",
@@ -500,16 +519,6 @@ const Attendance = () => {
           </div>
 
           <div className="flex items-center gap-2.5">
-            <button
-              onClick={() => fetchAttendance(true)}
-              disabled={isRefreshing}
-              className="flex items-center gap-1.5 px-3 py-2 text-xs font-medium text-[#002185] bg-[#FFFFFF] border border-[#E2E8F0] rounded-xl hover:bg-[#F8FAFC] transition-colors shadow-xs"
-              title="Refresh live attendance"
-            >
-              <RefreshCw className={`w-3.5 h-3.5 text-[#ff5500] ${isRefreshing ? "animate-spin" : ""}`} />
-              <span className="hidden sm:inline">Sync Now</span>
-            </button>
-
             <button
               onClick={handleOpenNewOverrideModal}
               className="flex items-center gap-1.5 px-3.5 py-2 text-xs font-semibold text-[#002185] bg-[#F8FAFC] border border-[#E2E8F0] rounded-xl hover:bg-[#E2E8F0]/60 transition-colors shadow-xs"
@@ -639,12 +648,93 @@ const Attendance = () => {
           </div>
         </div>
 
-        {/* Real-time Recharts Attendance Analytics Chart */}
-        <WeeklyAttendanceChart
-          attendanceLogs={attendance}
-          title="Live Weekly Attendance Trends & Punctuality"
-          subtitle="Real-time breakdown of employee check-in punctuality, tardiness, and logged hours"
-        />
+        {/* VISUALIZATION SECTION: Monthly Calendar & Weekly Analytics Switcher */}
+        <div className="space-y-4">
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 bg-[#FFFFFF] border border-[#E2E8F0] p-3 sm:p-4 rounded-2xl shadow-xs">
+            <div className="flex items-center gap-2.5">
+              <div className="w-8 h-8 rounded-lg bg-[#002185]/10 text-[#002185] flex items-center justify-center font-bold">
+                <CalendarDays className="w-4 h-4" />
+              </div>
+              <div>
+                <h3 className="text-sm font-bold text-[#002185]">
+                  Attendance Visualizations & Heatmaps
+                </h3>
+                <p className="text-xs text-[#64748B]">
+                  Switch between monthly calendar patterns and weekly trend charts
+                </p>
+              </div>
+            </div>
+
+            {/* View Switcher Tabs */}
+            <div className="flex items-center bg-[#F8FAFC] border border-[#E2E8F0] rounded-xl p-1 shadow-2xs self-start sm:self-auto">
+              <button
+                type="button"
+                onClick={() => setVisualizationTab("calendar")}
+                className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all cursor-pointer flex items-center gap-1.5 ${
+                  visualizationTab === "calendar"
+                    ? "bg-[#002185] text-white shadow-xs"
+                    : "text-[#64748B] hover:text-[#002185]"
+                }`}
+              >
+                <Calendar className="w-3.5 h-3.5" />
+                <span>Monthly Calendar</span>
+              </button>
+
+              <button
+                type="button"
+                onClick={() => setVisualizationTab("trends")}
+                className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all cursor-pointer flex items-center gap-1.5 ${
+                  visualizationTab === "trends"
+                    ? "bg-[#002185] text-white shadow-xs"
+                    : "text-[#64748B] hover:text-[#002185]"
+                }`}
+              >
+                <BarChart3 className="w-3.5 h-3.5" />
+                <span>Weekly Trends</span>
+              </button>
+
+              <button
+                type="button"
+                onClick={() => setVisualizationTab("both")}
+                className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all cursor-pointer flex items-center gap-1.5 ${
+                  visualizationTab === "both"
+                    ? "bg-[#002185] text-white shadow-xs"
+                    : "text-[#64748B] hover:text-[#002185]"
+                }`}
+              >
+                <span>Split View</span>
+              </button>
+            </div>
+          </div>
+
+          {/* Monthly Attendance Calendar Component */}
+          {(visualizationTab === "calendar" || visualizationTab === "both") && (
+            <AttendanceMonthlyCalendar
+              attendanceLogs={attendance}
+              employeesList={employeesList}
+              leaveRequests={leaveRequests}
+              onSelectDate={(date) => {
+                setDateFilter(date);
+                setCurrentPage(1);
+                setShowToast({
+                  show: true,
+                  message: `Filtering table records for ${date}`,
+                  type: "info",
+                });
+              }}
+              onOpenOverride={(date) => handleOpenNewOverrideModal(date)}
+            />
+          )}
+
+          {/* Real-time Recharts Attendance Analytics Chart */}
+          {(visualizationTab === "trends" || visualizationTab === "both") && (
+            <WeeklyAttendanceChart
+              attendanceLogs={attendance}
+              title="Live Weekly Attendance Trends & Punctuality"
+              subtitle="Real-time breakdown of employee check-in punctuality, tardiness, and logged hours"
+            />
+          )}
+        </div>
 
         {/* Filters and Search Bar */}
         <div className="flex flex-col lg:flex-row items-start lg:items-center justify-between gap-3 bg-[#FFFFFF] rounded-2xl border border-[#E2E8F0] p-4 shadow-xs">

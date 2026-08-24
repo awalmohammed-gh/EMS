@@ -3,6 +3,7 @@ import {
   markNotificationAsRead as apiMarkNotificationAsRead,
   markAllNotificationsAsRead as apiMarkAllNotificationsAsRead,
   deleteNotification as apiDeleteNotification,
+  deleteAllNotifications as apiDeleteAllNotifications,
 } from "../apis/fontApis";
 import { useState, useEffect, useCallback } from "react";
 
@@ -92,13 +93,23 @@ export const notificationService = {
       const data = response?.data;
 
       if (data?.success && Array.isArray(data.notifications)) {
-        const normalizedItems = data.notifications.map((item) => ({
-          ...item,
-          id: String(item._id || item.id),
-          _id: String(item._id || item.id),
-          is_read: Boolean(item.is_read),
-          timestamp: item.created_at || item.createdAt || new Date().toISOString(),
-        }));
+        // Robust de-duplication by document _id
+        const seenIds = new Set();
+        const normalizedItems = [];
+
+        for (const item of data.notifications) {
+          const id = String(item._id || item.id);
+          if (!seenIds.has(id)) {
+            seenIds.add(id);
+            normalizedItems.push({
+              ...item,
+              id,
+              _id: id,
+              is_read: Boolean(item.is_read !== undefined ? item.is_read : item.isRead),
+              timestamp: item.created_at || item.createdAt || new Date().toISOString(),
+            });
+          }
+        }
 
         const metrics = computeMetrics(normalizedItems);
         notificationCache[role] = {
@@ -238,6 +249,30 @@ export const notificationService = {
   },
 
   /**
+   * Delete / clear all notifications for a role (optimistic local removal + backend sync)
+   */
+  async deleteAllNotifications(options = {}) {
+    const role = options.role === "admin" ? "admin" : "employee";
+
+    // Optimistic local removal
+    if (notificationCache[role]) {
+      notificationCache[role].items = [];
+      notificationCache[role].metrics = { all: 0, leave: 0, payroll: 0, system: 0, unread: 0 };
+      notificationCache[role].unreadCount = 0;
+      notifySubscribers(role);
+    }
+
+    try {
+      await apiDeleteAllNotifications({ role, ...(options.userId ? { user_id: options.userId } : {}) });
+      return { success: true };
+    } catch (error) {
+      console.error("[NotificationService] Error deleting all notifications:", error);
+      this.getNotifications({ role, userId: options.userId });
+      return { success: false, error: error.message };
+    }
+  },
+
+  /**
    * Subscribe to notification updates
    * @param {Function} listener callback function
    * @returns {Function} unsubscribe function
@@ -348,6 +383,11 @@ export const useNotificationManager = (role = "admin", options = {}) => {
     [normalizedRole, userId]
   );
 
+  const deleteAllNotifications = useCallback(
+    () => notificationService.deleteAllNotifications({ role: normalizedRole, userId }),
+    [normalizedRole, userId]
+  );
+
   return {
     notifications,
     unreadCount,
@@ -357,6 +397,8 @@ export const useNotificationManager = (role = "admin", options = {}) => {
     markAsRead,
     markAllAsRead,
     deleteNotification,
+    deleteAllNotifications,
+    deleteAll: deleteAllNotifications,
   };
 };
 

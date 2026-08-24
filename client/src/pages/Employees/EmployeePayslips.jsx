@@ -123,6 +123,62 @@ const EmployeePayslips = () => {
     // Convert logo to base64 for inline use in HTML
     const logoBase64 = logo;
 
+    const baseSalary = Number(
+      payslip.baseSalary !== undefined
+        ? payslip.baseSalary
+        : payslip.basicSalary || 0
+    );
+    const earningsList = Array.isArray(payslip.earnings) ? payslip.earnings : [];
+    const deductionsList = Array.isArray(payslip.deductions)
+      ? payslip.deductions
+      : typeof payslip.deductions === "number" && payslip.deductions > 0
+      ? [{ description: "Deductions", amount: payslip.deductions }]
+      : [];
+    const absentDeduction = Number(payslip.absentDaysDeduction || 0);
+
+    const earningsRowsHTML =
+      earningsList.length > 0
+        ? earningsList
+            .map(
+              (item) => `
+          <tr style="border-bottom: 1px solid #E2E8F0;">
+            <td style="padding: 10px 14px; color:#334155;">${item.description || item.name || "Allowance"}</td>
+            <td style="padding: 10px 14px; text-align:right; font-weight:600; color:#16A34A;">+${formatCurrency(item.amount)}</td>
+          </tr>`
+            )
+            .join("")
+        : `
+          <tr style="border-bottom: 1px solid #E2E8F0;">
+            <td colspan="2" style="padding: 8px 14px; color:#94A3B8; font-style: italic; font-size: 12px;">No additional earnings recorded</td>
+          </tr>`;
+
+    const deductionsRowsHTML =
+      deductionsList.length > 0 || absentDeduction > 0
+        ? `
+          ${
+            absentDeduction > 0
+              ? `
+          <tr style="border-bottom: 1px solid #E2E8F0;">
+            <td style="padding: 10px 14px; color:#334155;">Absence Deduction</td>
+            <td style="padding: 10px 14px; text-align:right; font-weight:600; color:#DC2626;">-${formatCurrency(absentDeduction)}</td>
+          </tr>`
+              : ""
+          }
+          ${deductionsList
+            .map(
+              (item) => `
+          <tr style="border-bottom: 1px solid #E2E8F0;">
+            <td style="padding: 10px 14px; color:#334155;">${item.description || item.name || "Deduction"}</td>
+            <td style="padding: 10px 14px; text-align:right; font-weight:600; color:#DC2626;">-${formatCurrency(item.amount)}</td>
+          </tr>`
+            )
+            .join("")}
+        `
+        : `
+          <tr style="border-bottom: 1px solid #E2E8F0;">
+            <td colspan="2" style="padding: 8px 14px; color:#94A3B8; font-style: italic; font-size: 12px;">No additional deductions recorded (100% Attendance)</td>
+          </tr>`;
+
     return `
     <div style="width: 750px; padding: 40px; font-family: Arial, Helvetica, sans-serif; color: #0F172A; background: #ffffff; box-sizing: border-box; position: relative; overflow: hidden;">
       
@@ -201,28 +257,36 @@ const EmployeePayslips = () => {
           </table>
         </div>
 
-        <!-- Salary Breakdown -->
+        <!-- Dynamic Salary Breakdown -->
         <div>
           <div style="font-size: 11px; font-weight: bold; text-transform: uppercase; letter-spacing: 1px; color: #64748B; margin-bottom: 10px;">
             Salary Breakdown
           </div>
           <table style="width:100%; border-collapse: collapse; font-size: 13px; border: 1px solid #E2E8F0;">
-            <tr style="border-bottom: 1px solid #E2E8F0;">
-              <td style="padding: 12px 14px; color:#334155;">Basic Salary</td>
-              <td style="padding: 12px 14px; text-align:right; font-weight:600; color:#0F172A;">${formatCurrency(payslip.basicSalary)}</td>
-            </tr>
-            <tr style="border-bottom: 1px solid #E2E8F0;">
-              <td style="padding: 12px 14px; color:#334155;">Allowances</td>
-              <td style="padding: 12px 14px; text-align:right; font-weight:600; color:#16A34A;">+${formatCurrency(payslip.allowances)}</td>
-            </tr>
-            <tr style="border-bottom: 1px solid #E2E8F0;">
-              <td style="padding: 12px 14px; color:#334155;">Deductions</td>
-              <td style="padding: 12px 14px; text-align:right; font-weight:600; color:#DC2626;">-${formatCurrency(payslip.deductions)}</td>
-            </tr>
-            <tr style="background:#F8FAFC;">
-              <td style="padding: 16px 14px; font-weight:bold; color:#002185; font-size:15px;">NET SALARY</td>
-              <td style="padding: 16px 14px; text-align:right; font-weight:bold; color:#002185; font-size:18px;">${formatCurrency(payslip.netSalary)}</td>
-            </tr>
+            <thead>
+              <tr style="background:#F8FAFC; border-bottom: 1px solid #E2E8F0;">
+                <th style="padding: 10px 14px; text-align:left; color:#002185; font-size:11px; text-transform:uppercase;">Item Description</th>
+                <th style="padding: 10px 14px; text-align:right; color:#002185; font-size:11px; text-transform:uppercase;">Amount (GHS)</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr style="border-bottom: 1px solid #E2E8F0;">
+                <td style="padding: 12px 14px; font-weight:600; color:#0F172A;">Basic Salary</td>
+                <td style="padding: 12px 14px; text-align:right; font-weight:600; color:#002185;">${formatCurrency(baseSalary)}</td>
+              </tr>
+              <tr style="background:#F1F5F9;">
+                <td colspan="2" style="padding: 6px 14px; font-size:11px; font-weight:bold; color:#16A34A; text-transform:uppercase;">Additional Earnings & Allowances</td>
+              </tr>
+              ${earningsRowsHTML}
+              <tr style="background:#F1F5F9;">
+                <td colspan="2" style="padding: 6px 14px; font-size:11px; font-weight:bold; color:#DC2626; text-transform:uppercase;">Deductions & Adjustments</td>
+              </tr>
+              ${deductionsRowsHTML}
+              <tr style="background:#F8FAFC; border-top: 2px solid #E2E8F0;">
+                <td style="padding: 16px 14px; font-weight:bold; color:#002185; font-size:15px;">NET SALARY</td>
+                <td style="padding: 16px 14px; text-align:right; font-weight:bold; color:#002185; font-size:18px;">${formatCurrency(payslip.netSalary)}</td>
+              </tr>
+            </tbody>
           </table>
         </div>
       </div>
@@ -428,31 +492,82 @@ const EmployeePayslips = () => {
                 </div>
 
                 {/* Salary Breakdown */}
-                <div className="mt-4 grid grid-cols-2 sm:grid-cols-4 gap-3 bg-[#F8FAFC] rounded-lg p-3">
-                  <div>
-                    <p className="text-xs text-[#64748B]">Basic Salary</p>
-                    <p className="text-sm font-medium text-[#002185]">
-                      {formatCurrency(payslip.basicSalary)}
-                    </p>
+                <div className="mt-4 rounded-xl border border-[#E2E8F0] overflow-hidden">
+                  <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 bg-[#F8FAFC] p-3.5 border-b border-[#E2E8F0]">
+                    <div>
+                      <p className="text-xs text-[#64748B]">Base Salary</p>
+                      <p className="text-sm font-semibold text-[#002185]">
+                        {formatCurrency(
+                          payslip.baseSalary !== undefined
+                            ? payslip.baseSalary
+                            : payslip.basicSalary || 0
+                        )}
+                      </p>
+                    </div>
+                    <div>
+                      <p className="text-xs text-[#64748B]">Allowances & Bonuses</p>
+                      <p className="text-sm font-semibold text-[#16A34A]">
+                        +
+                        {formatCurrency(
+                          Array.isArray(payslip.earnings)
+                            ? payslip.earnings.reduce(
+                                (sum, item) => sum + Number(item.amount || 0),
+                                0
+                              )
+                            : Number(payslip.allowances || 0)
+                        )}
+                      </p>
+                    </div>
+                    <div>
+                      <p className="text-xs text-[#64748B]">Total Deductions</p>
+                      <p className="text-sm font-semibold text-[#DC2626]">
+                        -
+                        {formatCurrency(
+                          (Array.isArray(payslip.deductions)
+                            ? payslip.deductions.reduce(
+                                (sum, item) => sum + Number(item.amount || 0),
+                                0
+                              )
+                            : Number(payslip.deductions || 0)) +
+                            Number(payslip.absentDaysDeduction || 0)
+                        )}
+                      </p>
+                    </div>
+                    <div>
+                      <p className="text-xs text-[#64748B]">Net Salary</p>
+                      <p className="text-sm font-bold text-[#002185]">
+                        {formatCurrency(payslip.netSalary)}
+                      </p>
+                    </div>
                   </div>
-                  <div>
-                    <p className="text-xs text-[#64748B]">Allowances</p>
-                    <p className="text-sm font-medium text-[#16A34A]">
-                      +{formatCurrency(payslip.allowances)}
-                    </p>
-                  </div>
-                  <div>
-                    <p className="text-xs text-[#64748B]">Deductions</p>
-                    <p className="text-sm font-medium text-[#DC2626]">
-                      -{formatCurrency(payslip.deductions)}
-                    </p>
-                  </div>
-                  <div>
-                    <p className="text-xs text-[#64748B]">Net Salary</p>
-                    <p className="text-sm font-bold text-[#002185]">
-                      {formatCurrency(payslip.netSalary)}
-                    </p>
-                  </div>
+
+                  {/* Dynamic Items Pill Bar (if custom items exist) */}
+                  {(Array.isArray(payslip.earnings) && payslip.earnings.length > 0) ||
+                  (Array.isArray(payslip.deductions) && payslip.deductions.length > 0) ? (
+                    <div className="bg-white p-3 text-xs flex flex-wrap items-center gap-2">
+                      <span className="text-[11px] font-semibold text-[#64748B]">Custom Items:</span>
+                      {Array.isArray(payslip.earnings) &&
+                        payslip.earnings.map((item, idx) => (
+                          <span
+                            key={`earn-${idx}`}
+                            className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md bg-[#F0FDF4] text-[#166534] border border-[#BBF7D0] text-[11px]"
+                          >
+                            <span>{item.description || item.name}</span>
+                            <span className="font-semibold">+{formatCurrency(item.amount)}</span>
+                          </span>
+                        ))}
+                      {Array.isArray(payslip.deductions) &&
+                        payslip.deductions.map((item, idx) => (
+                          <span
+                            key={`ded-${idx}`}
+                            className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md bg-[#FEF2F2] text-[#991B1B] border border-[#FECACA] text-[11px]"
+                          >
+                            <span>{item.description || item.name}</span>
+                            <span className="font-semibold">-{formatCurrency(item.amount)}</span>
+                          </span>
+                        ))}
+                    </div>
+                  ) : null}
                 </div>
 
                 {/* Actions */}

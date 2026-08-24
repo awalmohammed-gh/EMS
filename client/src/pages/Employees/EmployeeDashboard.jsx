@@ -25,6 +25,8 @@ import Loading from "../../ui/Loading";
 import ErrorMessage from "../../ui/ErrorMessage";
 import { useManagement } from "../../context/ManagementContextProvider";
 import { useNavigate } from "react-router-dom";
+import EmployeeLeaveChart from "../../components/EmployeeLeaveChart";
+import AnnouncementBoard from "../../components/AnnouncementBoard";
 
 const EmployeeDashboard = () => {
   const [dashboardData, setDashboardData] = useState(null);
@@ -662,6 +664,9 @@ const EmployeeDashboard = () => {
         })}
       </div>
 
+      {/* Company Announcement Board */}
+      <AnnouncementBoard role="employee" />
+
       {/* Attendance Summary & Leave Balance */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
         {/* Attendance Summary */}
@@ -727,64 +732,77 @@ const EmployeeDashboard = () => {
         </div>
       </div>
 
-      {/* Recent Leave Requests & Latest Payslip */}
+      {/* Requests by Leave Type Chart (Live Database Records) & Recent Leave Requests */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+        {/* Dynamic Leave Type Distribution Chart */}
+        <EmployeeLeaveChart
+          onApplyLeave={() => {
+            navigate("/employee/dashboard/leave");
+            window.scrollTo({ top: 0, behavior: "smooth" });
+          }}
+        />
+
         {/* Recent Leave Requests */}
-        <div className="bg-[#FFFFFF] border border-[#E2E8F0] rounded-2xl p-6 shadow-sm hover:border-[#ff5500] transition-all duration-300">
-          <div className="flex items-center justify-between mb-4">
-            <h3 className="text-lg font-semibold text-[#002185] flex items-center gap-2">
-              <CalendarCheck className="w-5 h-5 text-[#ff5500]" />
-              Recent Leave Requests
-            </h3>
-            <button
-              onClick={() =>{navigate("/employee/dashboard/leave");scrollTo({top:0, behavior:"smooth"})}}
-              className="text-sm text-[#002185] hover:text-[#ff5500] font-medium transition-colors duration-300"
-            >
-              View All →
-            </button>
-          </div>
-          <div className="space-y-3">
-            {recentLeaves && recentLeaves.length > 0 ? (
-              recentLeaves.slice(0, 3).map((request, index) => (
-                <div
-                  key={index}
-                  className="flex items-center justify-between py-2 border-b border-[#E2E8F0] last:border-0"
-                >
-                  <div>
-                    <p className="text-sm font-medium text-[#002185]">
-                      {request.leaveType || "Leave Request"}
-                    </p>
-                    <p className="text-xs text-[#64748B]">
-                      {formatDate(request.startDate)} -{" "}
-                      {formatDate(request.endDate)} ({request.days || 0} days)
-                    </p>
-                  </div>
-                  <span
-                    className={`px-2 py-1 rounded-full text-xs font-medium ${getStatusColor(request.status)}`}
+        <div className="bg-[#FFFFFF] border border-[#E2E8F0] rounded-2xl p-6 shadow-sm hover:border-[#ff5500] transition-all duration-300 flex flex-col justify-between">
+          <div>
+            <div className="flex items-center justify-between mb-4">
+              <h3 className="text-lg font-semibold text-[#002185] flex items-center gap-2">
+                <CalendarCheck className="w-5 h-5 text-[#ff5500]" />
+                Recent Leave Requests
+              </h3>
+              <button
+                onClick={() =>{navigate("/employee/dashboard/leave");scrollTo({top:0, behavior:"smooth"})}}
+                className="text-sm text-[#002185] hover:text-[#ff5500] font-medium transition-colors duration-300"
+              >
+                View All →
+              </button>
+            </div>
+            <div className="space-y-3">
+              {recentLeaves && recentLeaves.length > 0 ? (
+                recentLeaves.slice(0, 4).map((request, index) => (
+                  <div
+                    key={index}
+                    className="flex items-center justify-between py-2 border-b border-[#E2E8F0] last:border-0"
                   >
-                    {request.status || "Pending"}
-                  </span>
+                    <div>
+                      <p className="text-sm font-medium text-[#002185]">
+                        {request.leaveType || "Leave Request"}
+                      </p>
+                      <p className="text-xs text-[#64748B]">
+                        {formatDate(request.startDate)} -{" "}
+                        {formatDate(request.endDate)} ({request.days || 0} days)
+                      </p>
+                    </div>
+                    <span
+                      className={`px-2 py-1 rounded-full text-xs font-medium ${getStatusColor(request.status)}`}
+                    >
+                      {request.status || "Pending"}
+                    </span>
+                  </div>
+                ))
+              ) : (
+                <div className="text-center py-8 text-[#64748B]">
+                  <CalendarCheck className="w-12 h-12 mx-auto mb-3 text-[#94A3B8]" />
+                  <p className="text-sm font-medium text-slate-700">No leave requests found</p>
+                  <p className="text-xs text-slate-400 mt-0.5">You have not submitted any time-off requests yet.</p>
+                  <button
+                    onClick={() =>{
+                      navigate("/employee/dashboard/leave");
+                      scrollTo({ top: 0, behavior: "smooth" });
+                    }}
+                    className="mt-3 inline-flex items-center gap-1.5 px-3 py-1.5 bg-[#002185] text-white rounded-lg text-xs font-semibold hover:bg-[#ff5500] transition-colors"
+                  >
+                    Apply for Leave →
+                  </button>
                 </div>
-              ))
-            ) : (
-              <div className="text-center py-8 text-[#64748B]">
-                <CalendarCheck className="w-12 h-12 mx-auto mb-3 text-[#94A3B8]" />
-                <p className="text-sm">No leave requests found</p>
-                <button
-                  onClick={() =>{
-                    navigate("/employee/dashboard/leave");
-                    scrollTo({ top: 0, behavior: "smooth" });
-                  }}
-                  className="mt-2 text-sm text-[#002185] hover:text-[#ff5500] font-medium"
-                >
-                  Apply for Leave →
-                </button>
-              </div>
-            )}
+              )}
+            </div>
           </div>
         </div>
+      </div>
 
-        {/* Latest Payslip */}
+      {/* Latest Payslip */}
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
         <div className="bg-[#FFFFFF] border border-[#E2E8F0] rounded-2xl p-6 shadow-sm hover:border-[#ff5500] transition-all duration-300">
           <div className="flex items-center justify-between mb-4">
             <h3 className="text-lg font-semibold text-[#002185] flex items-center gap-2">

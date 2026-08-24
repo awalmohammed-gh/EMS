@@ -4,6 +4,7 @@ import {
   markNotificationAsRead,
   markAllNotificationsAsRead,
   deleteNotification,
+  deleteAllNotifications,
   createNotification,
 } from "../controllers/notificationController.js";
 import { employeeAuth } from "../middleware/employeeAuth.js";
@@ -15,7 +16,11 @@ notificationRouter.get("/", employeeAuth, getNotifications);
 notificationRouter.patch("/read-all", employeeAuth, markAllNotificationsAsRead);
 notificationRouter.patch("/mark-all-read", employeeAuth, markAllNotificationsAsRead);
 notificationRouter.patch("/:id/read", employeeAuth, markNotificationAsRead);
+notificationRouter.put("/:id/read", employeeAuth, markNotificationAsRead);
+notificationRouter.delete("/clear-all", employeeAuth, deleteAllNotifications);
+notificationRouter.delete("/delete-all", employeeAuth, deleteAllNotifications);
 notificationRouter.delete("/:id", employeeAuth, deleteNotification);
+notificationRouter.delete("/", employeeAuth, deleteAllNotifications);
 notificationRouter.post("/", employeeAuth, createNotification);
 notificationRouter.post("/create", employeeAuth, createNotification);
 

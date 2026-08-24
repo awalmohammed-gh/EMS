@@ -1,5 +1,5 @@
 import { useState, useEffect } from "react";
-import { UserPlus, RefreshCw, Download, Check } from "lucide-react";
+import { UserPlus, Download, Check } from "lucide-react";
 import { allEmployees } from "../../apis/fontApis";
 import { EmployeeDirectory } from "../../components/EmployeeDirectory";
 import AddEmployee from "../../components/modal/AddEmployee";
@@ -109,16 +109,6 @@ const Employees = () => {
                 <span>Download CSV</span>
               </>
             )}
-          </button>
-
-          <button
-            type="button"
-            onClick={fetchEmployees}
-            disabled={isLoading}
-            className="px-3.5 py-2.5 rounded-xl border border-[#E2E8F0] hover:border-[#002185] text-xs font-bold text-[#002185] bg-white hover:bg-[#F8FAFC] transition-all flex items-center gap-2 shadow-xs cursor-pointer disabled:opacity-50"
-          >
-            <RefreshCw className={`w-3.5 h-3.5 ${isLoading ? "animate-spin text-[#ff5500]" : ""}`} />
-            <span>Sync Database</span>
           </button>
 
           <button

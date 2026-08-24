@@ -355,3 +355,143 @@ export const getEmployeeLeave = async (req, res) => {
   }
 };
 
+// Aggregation route: GET /api/leave/employee-stats
+// Filter strictly by the authenticated user's ID (req.user._id or req.employee.id)
+export const getLeaveEmployeeStats = async (req, res) => {
+  try {
+    const rawUserId =
+      req.user?._id ||
+      req.user?.id ||
+      req.employee?._id ||
+      req.employee?.id;
+
+    let employeeObjectId = null;
+
+    if (isValidObjectId(rawUserId)) {
+      employeeObjectId = new mongoose.Types.ObjectId(rawUserId);
+    } else if (rawUserId) {
+      try {
+        const emp = await Employee.findOne({
+          $or: [{ employeeId: rawUserId }, { email: rawUserId }],
+        })
+          .select("_id")
+          .lean();
+        if (emp && isValidObjectId(emp._id)) {
+          employeeObjectId = new mongoose.Types.ObjectId(emp._id);
+        }
+      } catch (err) {
+        console.warn("DB employee lookup in getLeaveEmployeeStats:", err.message);
+      }
+    }
+
+    const defaultStats = {
+      "Annual Leave": 0,
+      "Casual Leave": 0,
+      "Sick Leave": 0,
+      "Maternity/Study": 0,
+      total: 0,
+    };
+
+    if (!employeeObjectId) {
+      return res.status(200).json(defaultStats);
+    }
+
+    let aggregationResult = [];
+    try {
+      aggregationResult = await Leave.aggregate([
+        { $match: { employee: employeeObjectId } },
+        {
+          $group: {
+            _id: "$leaveType",
+            count: { $sum: 1 },
+          },
+        },
+      ]);
+    } catch (dbErr) {
+      console.warn("DB aggregation error in getLeaveEmployeeStats:", dbErr.message);
+    }
+
+    // Merge any live in-memory store records for this employee
+    if (liveLeaveStore.length > 0) {
+      const inMemoryMatching = liveLeaveStore.filter(
+        (l) =>
+          String(l.employee?._id) === String(employeeObjectId) ||
+          String(l.employee?._id) === String(rawUserId) ||
+          l.employee?.employeeId === rawUserId
+      );
+
+      if (inMemoryMatching.length > 0) {
+        const countsMap = {};
+        aggregationResult.forEach((item) => {
+          countsMap[item._id] = item.count;
+        });
+
+        inMemoryMatching.forEach((l) => {
+          const type = l.leaveType || "Annual Leave";
+          // avoid double counting if it has an ObjectId that was in DB
+          if (!isValidObjectId(l._id)) {
+            countsMap[type] = (countsMap[type] || 0) + 1;
+          }
+        });
+
+        aggregationResult = Object.entries(countsMap).map(([_id, count]) => ({
+          _id,
+          count,
+        }));
+      }
+    }
+
+    if (!aggregationResult || aggregationResult.length === 0) {
+      return res.status(200).json(defaultStats);
+    }
+
+    const stats = {
+      "Annual Leave": 0,
+      "Casual Leave": 0,
+      "Sick Leave": 0,
+      "Maternity/Study": 0,
+      total: 0,
+    };
+
+    let totalCount = 0;
+
+    aggregationResult.forEach((item) => {
+      const type = (item._id || "").trim();
+      const count = Number(item.count) || 0;
+      totalCount += count;
+
+      const lower = type.toLowerCase();
+      if (lower.includes("annual")) {
+        stats["Annual Leave"] += count;
+      } else if (lower.includes("casual")) {
+        stats["Casual Leave"] += count;
+      } else if (lower.includes("sick")) {
+        stats["Sick Leave"] += count;
+      } else if (
+        lower.includes("maternity") ||
+        lower.includes("study") ||
+        lower.includes("paternity")
+      ) {
+        stats["Maternity/Study"] += count;
+      } else {
+        // preserve other custom leave types if present
+        stats[type] = (stats[type] || 0) + count;
+      }
+    });
+
+    stats.total = totalCount;
+
+    return res.status(200).json(stats);
+  } catch (error) {
+    console.error("Error in getLeaveEmployeeStats:", error);
+    return res.status(200).json({
+      "Annual Leave": 0,
+      "Casual Leave": 0,
+      "Sick Leave": 0,
+      "Maternity/Study": 0,
+      total: 0,
+    });
+  }
+};
+
+

@@ -92,36 +92,25 @@ export const PayrollSummaryCalculator = ({
     ? customOvertimeHours
     : (summaryData?.workingDaysMetric?.overtimeHours ?? 3);
 
-  // Formula Calculations
-  const dailyRate = baseSalary / standardWorkingDays;
-  const hourlyRate = dailyRate / 8;
+  // Dynamic / Live Calculation based on Attendance & Actual Admin Data
+  const dailyRate = standardWorkingDays > 0 ? baseSalary / standardWorkingDays : 0;
   const payableDays = Math.min(standardWorkingDays, attendedDays + approvedLeaveDays);
   const unexcusedAbsences = Math.max(0, standardWorkingDays - payableDays);
-  const attendanceRate = Math.min(100, Math.round((payableDays / standardWorkingDays) * 100));
+  const attendanceRate = standardWorkingDays > 0 ? Math.min(100, Math.round((payableDays / standardWorkingDays) * 100)) : 100;
 
-  // Prorated Base Salary
-  const earnedBase = (payableDays / standardWorkingDays) * baseSalary;
-  
-  // Overtime Earnings
-  const overtimeBonus = overtimeHours * hourlyRate * 1.5;
+  // Fixed Absenteeism Deduction Rule: GH₵10.00 per absent day (unexcusedAbsences * 10)
+  const FIXED_ABSENCE_DEDUCTION_RATE = 10;
+  const absentDaysDeduction = Number((unexcusedAbsences * FIXED_ABSENCE_DEDUCTION_RATE).toFixed(2));
 
-  // Allowances
-  const allowances = {
-    housing: 350,
-    transport: 200,
-    punctuality: lateDays === 0 ? 150 : (lateDays <= 2 ? 80 : 0),
-  };
-  const totalAllowances = allowances.housing + allowances.transport + allowances.punctuality;
+  // Dynamic custom earnings / allowances (defaults to 0 unless added)
+  const [customEarnings, setCustomEarnings] = useState([]);
+  const [customDeductions, setCustomDeductions] = useState([]);
 
-  // Deductions
-  const latePenalty = lateDays * 25; // GHS 25 per unexcused late arrival
-  const unexcusedAbsenceDeduction = unexcusedAbsences * dailyRate;
-  const ssnitPension = (earnedBase + totalAllowances) * 0.055; // 5.5% Tier 1 SSNIT
-  const payeTax = (earnedBase + totalAllowances) * 0.08; // 8% standard bracket
-  const totalDeductions = latePenalty + ssnitPension + payeTax;
+  const totalDynamicEarnings = customEarnings.reduce((acc, item) => acc + Number(item.amount || 0), 0);
+  const totalDynamicDeductions = customDeductions.reduce((acc, item) => acc + Number(item.amount || 0), 0);
 
-  // Gross & Net
-  const grossEarnings = earnedBase + totalAllowances + overtimeBonus;
+  const totalDeductions = absentDaysDeduction + totalDynamicDeductions;
+  const grossEarnings = baseSalary + totalDynamicEarnings;
   const netSalary = Math.max(0, grossEarnings - totalDeductions);
 
   const formatCurrency = (val) => {
@@ -136,11 +125,15 @@ export const PayrollSummaryCalculator = ({
   const handleApply = () => {
     if (onApplyCalculatedValues) {
       onApplyCalculatedValues({
-        basicSalary: Number(earnedBase.toFixed(2)),
-        allowances: Number((totalAllowances + overtimeBonus).toFixed(2)),
-        deductions: Number(totalDeductions.toFixed(2)),
+        basicSalary: Number(baseSalary.toFixed(2)),
+        baseSalary: Number(baseSalary.toFixed(2)),
+        allowances: Number(totalDynamicEarnings.toFixed(2)),
+        earnings: customEarnings,
+        deductions: customDeductions,
+        absentDaysDeduction: Number(absentDaysDeduction.toFixed(2)),
+        totalDeductions: Number(totalDeductions.toFixed(2)),
         netSalary: Number(netSalary.toFixed(2)),
-        remarks: `Calculated based on ${attendedDays} attended days, ${approvedLeaveDays} approved leave days, and ${lateDays} late clock-ins for ${selectedMonth}.`,
+        remarks: `Attendance: ${attendedDays} attended, ${approvedLeaveDays} approved leave, ${unexcusedAbsences} absent day(s) for ${selectedMonth}.`,
       });
     }
   };
@@ -286,8 +279,8 @@ export const PayrollSummaryCalculator = ({
             <span className="text-2xl font-black text-[#002185]">{overtimeHours}</span>
             <span className="text-xs text-[#64748B]">hrs earned</span>
           </div>
-          <p className="text-[10px] text-[#16A34A] font-medium mt-1">
-            +{formatCurrency(overtimeBonus)} bonus pay
+          <p className="text-[10px] text-[#64748B] font-medium mt-1">
+            Logged outside standard shifts
           </p>
         </div>
       </div>
@@ -334,126 +327,117 @@ export const PayrollSummaryCalculator = ({
         </div>
       )}
 
-      {/* Main Calculation Breakdown Grid */}
+      {/* Main Dynamic Calculation Breakdown Grid */}
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-        {/* Left Column: Earnings Breakdown */}
+        {/* Left Column: Base Salary & Dynamic Earnings */}
         <div className="space-y-4">
           <div className="flex items-center justify-between border-b border-[#E2E8F0] pb-2">
             <span className="text-xs font-bold text-[#002185] uppercase tracking-wider flex items-center gap-1.5">
               <Banknote className="w-4 h-4 text-[#16A34A]" />
-              Gross Earnings Breakdown
+              Earnings Breakdown
             </span>
             <span className="text-xs font-bold text-[#16A34A]">{formatCurrency(grossEarnings)}</span>
           </div>
 
           <div className="space-y-2.5 text-xs">
-            {/* Prorated Base */}
-            <div className="flex items-center justify-between py-1.5 px-3 rounded-lg bg-[#F8FAFC]">
+            {/* Base Monthly Salary */}
+            <div className="flex items-center justify-between py-2 px-3 rounded-lg bg-[#F8FAFC]">
               <div>
-                <span className="font-medium text-[#0F172A]">Prorated Base Salary</span>
+                <span className="font-medium text-[#0F172A]">Base Monthly Salary</span>
                 <p className="text-[10px] text-[#64748B]">
-                  ({payableDays}/{standardWorkingDays} days @ {formatCurrency(dailyRate)}/day)
+                  Standard agreed monthly base rate
                 </p>
               </div>
-              <span className="font-bold text-[#002185]">{formatCurrency(earnedBase)}</span>
+              <span className="font-bold text-[#002185]">{formatCurrency(baseSalary)}</span>
             </div>
 
-            {/* Overtime Pay */}
-            <div className="flex items-center justify-between py-1.5 px-3 rounded-lg bg-[#F8FAFC]">
-              <div>
-                <span className="font-medium text-[#0F172A]">Overtime Compensation</span>
-                <p className="text-[10px] text-[#64748B]">
-                  ({overtimeHours} hrs @ 1.5x hourly rate)
-                </p>
+            {/* Dynamic Custom Earnings */}
+            {customEarnings.length > 0 ? (
+              customEarnings.map((item, idx) => (
+                <div key={idx} className="flex items-center justify-between py-2 px-3 rounded-lg bg-[#F0FDF4] border border-[#BBF7D0]">
+                  <div>
+                    <span className="font-medium text-[#166534]">{item.description || item.name || "Allowance"}</span>
+                    <p className="text-[10px] text-[#166534]/80">Admin Custom Allowance</p>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <span className="font-bold text-[#16A34A]">+{formatCurrency(item.amount)}</span>
+                    <button
+                      type="button"
+                      onClick={() => setCustomEarnings((prev) => prev.filter((_, i) => i !== idx))}
+                      className="text-xs text-rose-500 hover:text-rose-700 px-1 font-bold cursor-pointer"
+                    >
+                      ×
+                    </button>
+                  </div>
+                </div>
+              ))
+            ) : (
+              <div className="py-2 px-3 rounded-lg bg-[#F8FAFC] border border-dashed border-[#E2E8F0] text-center text-[11px] text-[#94A3B8] italic">
+                No additional earnings recorded
               </div>
-              <span className="font-bold text-[#16A34A]">+{formatCurrency(overtimeBonus)}</span>
-            </div>
-
-            {/* Allowances */}
-            <div className="flex items-center justify-between py-1.5 px-3 rounded-lg bg-[#F8FAFC]">
-              <div>
-                <span className="font-medium text-[#0F172A]">Housing & Utility Allowance</span>
-                <p className="text-[10px] text-[#64748B]">Standard monthly benefit</p>
-              </div>
-              <span className="font-bold text-[#002185]">+{formatCurrency(allowances.housing)}</span>
-            </div>
-
-            <div className="flex items-center justify-between py-1.5 px-3 rounded-lg bg-[#F8FAFC]">
-              <div>
-                <span className="font-medium text-[#0F172A]">Transport & Mobility</span>
-                <p className="text-[10px] text-[#64748B]">Commute subsidy</p>
-              </div>
-              <span className="font-bold text-[#002185]">+{formatCurrency(allowances.transport)}</span>
-            </div>
-
-            <div className="flex items-center justify-between py-1.5 px-3 rounded-lg bg-[#F8FAFC]">
-              <div>
-                <span className="font-medium text-[#0F172A]">Punctuality Performance Bonus</span>
-                <p className="text-[10px] text-[#64748B]">
-                  {lateDays === 0 ? "Perfect on-time record" : `${lateDays} late arrival(s)`}
-                </p>
-              </div>
-              <span className="font-bold text-[#16A34A]">+{formatCurrency(allowances.punctuality)}</span>
-            </div>
+            )}
           </div>
         </div>
 
-        {/* Middle Column: Deductions & Penalties */}
+        {/* Middle Column: Deductions (Absence & Dynamic Items) */}
         <div className="space-y-4">
           <div className="flex items-center justify-between border-b border-[#E2E8F0] pb-2">
             <span className="text-xs font-bold text-[#002185] uppercase tracking-wider flex items-center gap-1.5">
               <AlertTriangle className="w-4 h-4 text-[#DC2626]" />
-              Deductions & Adjustments
+              Deductions Breakdown
             </span>
             <span className="text-xs font-bold text-[#DC2626]">-{formatCurrency(totalDeductions)}</span>
           </div>
 
           <div className="space-y-2.5 text-xs">
-            {/* SSNIT Pension */}
-            <div className="flex items-center justify-between py-1.5 px-3 rounded-lg bg-[#F8FAFC]">
-              <div>
-                <span className="font-medium text-[#0F172A]">Tier 1 SSNIT Pension</span>
-                <p className="text-[10px] text-[#64748B]">5.5% Statutory contribution</p>
-              </div>
-              <span className="font-bold text-[#DC2626]">-{formatCurrency(ssnitPension)}</span>
-            </div>
-
-            {/* Income Tax */}
-            <div className="flex items-center justify-between py-1.5 px-3 rounded-lg bg-[#F8FAFC]">
-              <div>
-                <span className="font-medium text-[#0F172A]">Income Tax (PAYE)</span>
-                <p className="text-[10px] text-[#64748B]">8.0% Standard tax bracket</p>
-              </div>
-              <span className="font-bold text-[#DC2626]">-{formatCurrency(payeTax)}</span>
-            </div>
-
-            {/* Late Arrival Penalties */}
-            <div className="flex items-center justify-between py-1.5 px-3 rounded-lg bg-[#F8FAFC]">
-              <div>
-                <span className="font-medium text-[#0F172A]">Late Check-in Deduction</span>
-                <p className="text-[10px] text-[#64748B]">
-                  {lateDays > 0 ? `${lateDays} unexcused delay(s) @ GHS 25` : "Zero penalties"}
-                </p>
-              </div>
-              <span className="font-bold text-[#DC2626]">
-                {latePenalty > 0 ? `-${formatCurrency(latePenalty)}` : "GHS 0.00"}
-              </span>
-            </div>
-
-            {/* Unexcused Absences */}
-            {unexcusedAbsences > 0 && (
-              <div className="flex items-center justify-between py-1.5 px-3 rounded-lg bg-[#FEF2F2]">
+            {/* Absence Deduction */}
+            {unexcusedAbsences > 0 ? (
+              <div className="flex items-center justify-between py-2 px-3 rounded-lg bg-[#FEF2F2] border border-[#FECACA]">
                 <div>
-                  <span className="font-medium text-[#DC2626]">Unexcused Absence Penalty</span>
+                  <span className="font-medium text-[#DC2626]">Absent Days Deduction</span>
                   <p className="text-[10px] text-[#DC2626]/80">
-                    {unexcusedAbsences} unapproved absent day(s)
+                    {unexcusedAbsences} unexcused absent day(s) @ GH₵10.00/day
                   </p>
                 </div>
                 <span className="font-bold text-[#DC2626]">
-                  -{formatCurrency(unexcusedAbsenceDeduction)}
+                  -{formatCurrency(absentDaysDeduction)}
                 </span>
               </div>
+            ) : (
+              <div className="flex items-center justify-between py-2 px-3 rounded-lg bg-[#F0FDF4] border border-[#BBF7D0]">
+                <div>
+                  <span className="font-medium text-[#166534]">Absence Deduction</span>
+                  <p className="text-[10px] text-[#166534]/80">100% Attendance compliance recorded</p>
+                </div>
+                <span className="font-bold text-[#16A34A]">GHS 0.00</span>
+              </div>
             )}
+
+            {/* Dynamic Custom Deductions */}
+            {customDeductions.length > 0 ? (
+              customDeductions.map((item, idx) => (
+                <div key={idx} className="flex items-center justify-between py-2 px-3 rounded-lg bg-[#FEF2F2] border border-[#FECACA]">
+                  <div>
+                    <span className="font-medium text-[#991B1B]">{item.description || item.name || "Deduction"}</span>
+                    <p className="text-[10px] text-[#991B1B]/80">Admin Custom Adjustment</p>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <span className="font-bold text-[#DC2626]">-{formatCurrency(item.amount)}</span>
+                    <button
+                      type="button"
+                      onClick={() => setCustomDeductions((prev) => prev.filter((_, i) => i !== idx))}
+                      className="text-xs text-rose-500 hover:text-rose-700 px-1 font-bold cursor-pointer"
+                    >
+                      ×
+                    </button>
+                  </div>
+                </div>
+              ))
+            ) : unexcusedAbsences === 0 ? (
+              <div className="py-2 px-3 rounded-lg bg-[#F8FAFC] border border-dashed border-[#E2E8F0] text-center text-[11px] text-[#94A3B8] italic">
+                No additional deductions recorded
+              </div>
+            ) : null}
           </div>
         </div>
 
@@ -481,13 +465,21 @@ export const PayrollSummaryCalculator = ({
 
             <div className="mt-4 pt-3 border-t border-white/10 space-y-1.5 text-xs text-white/90">
               <div className="flex justify-between">
-                <span>Gross Earnings:</span>
-                <span className="font-semibold">{formatCurrency(grossEarnings)}</span>
+                <span>Base Salary:</span>
+                <span className="font-semibold">{formatCurrency(baseSalary)}</span>
               </div>
-              <div className="flex justify-between">
-                <span>Total Deductions:</span>
-                <span className="font-semibold text-rose-300">-{formatCurrency(totalDeductions)}</span>
-              </div>
+              {totalDynamicEarnings > 0 && (
+                <div className="flex justify-between">
+                  <span>Additional Earnings:</span>
+                  <span className="font-semibold text-emerald-300">+{formatCurrency(totalDynamicEarnings)}</span>
+                </div>
+              )}
+              {totalDeductions > 0 && (
+                <div className="flex justify-between">
+                  <span>Total Deductions:</span>
+                  <span className="font-semibold text-rose-300">-{formatCurrency(totalDeductions)}</span>
+                </div>
+              )}
             </div>
           </div>
 
@@ -506,7 +498,7 @@ export const PayrollSummaryCalculator = ({
             <button
               type="button"
               onClick={() => setShowFormulaDetails(!showFormulaDetails)}
-              className="w-full py-2 px-4 rounded-xl bg-white/10 hover:bg-white/20 text-white text-xs font-semibold transition-all flex items-center justify-center gap-1.5"
+              className="w-full py-2 px-4 rounded-xl bg-white/10 hover:bg-white/20 text-white text-xs font-semibold transition-all flex items-center justify-center gap-1.5 cursor-pointer"
             >
               <HelpCircle className="w-3.5 h-3.5" />
               <span>{showFormulaDetails ? "Hide Formula" : "View Calculation Formula"}</span>
@@ -527,19 +519,19 @@ export const PayrollSummaryCalculator = ({
               <strong className="text-[#002185]">Standard Working Days:</strong> Computed dynamically per calendar month (excluding weekends). Standard ~22 days.
             </li>
             <li>
-              <strong className="text-[#002185]">Daily & Hourly Rate:</strong> Daily Rate = Base Salary / Standard Days ({formatCurrency(dailyRate)}). Hourly Rate = Daily Rate / 8 ({formatCurrency(hourlyRate)}/hr).
+              <strong className="text-[#002185]">Daily Rate:</strong> Daily Rate = Base Salary / Standard Days ({formatCurrency(dailyRate)}).
             </li>
             <li>
               <strong className="text-[#002185]">Approved Paid Leave Rule:</strong> Annual, Sick, Maternity, and Compassionate leave requests with "Approved" status count as 100% payable working days.
             </li>
             <li>
-              <strong className="text-[#002185]">Prorated Base Salary:</strong> Earned Base = (Payable Days / Standard Days) * Base Salary.
+              <strong className="text-[#002185]">Absence Deduction:</strong> Unexcused absent days strictly deducted at a fixed rate of GH₵10.00 per absent day: <code>Unexcused Absences × GH₵10.00</code> ({formatCurrency(absentDaysDeduction)}).
             </li>
             <li>
-              <strong className="text-[#002185]">Punctuality & Late Penalties:</strong> Clock-ins after 8:30 AM are logged as Late and incur a GHS 25 deduction and forfeit punctuality bonus.
+              <strong className="text-[#002185]">Net Pay Formula:</strong> <code>Net Pay = Base Salary + Approved Allowances - (Absent Days × 10) - Custom Admin Deductions</code>.
             </li>
             <li>
-              <strong className="text-[#002185]">Overtime Multiplier:</strong> Work hours exceeding 8 hours/day earn 1.5x standard hourly rate.
+              <strong className="text-[#002185]">Dynamic Custom Items:</strong> Allowances and Deductions reflect only Admin-entered items with zero hardcoded assumptions.
             </li>
           </ul>
         </div>

@@ -39,67 +39,67 @@ const CustomBarTooltip = ({ active, payload, label }) => {
   const activeRatio = Math.round((activeCount / total) * 100);
 
   return (
-    <div className="bg-white p-3.5 rounded-2xl border border-[#E2E8F0] shadow-xl text-xs space-y-2 min-w-[200px] pointer-events-none">
-      <div className="flex items-center justify-between border-b border-[#E2E8F0] pb-2">
-        <div className="flex items-center gap-1.5 font-bold text-[#002185]">
+    <div className="bg-white dark:bg-slate-900 p-3.5 rounded-2xl border border-[#E2E8F0] dark:border-slate-700 shadow-xl text-xs space-y-2 min-w-[200px] pointer-events-none">
+      <div className="flex items-center justify-between border-b border-[#E2E8F0] dark:border-slate-800 pb-2">
+        <div className="flex items-center gap-1.5 font-bold text-[#002185] dark:text-blue-400">
           <Building2 className="w-3.5 h-3.5 text-[#ff5500]" />
           <span>{label || data.department}</span>
         </div>
-        <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-[#002185]/10 text-[#002185]">
+        <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-[#002185]/10 dark:bg-blue-950/50 text-[#002185] dark:text-blue-300">
           {total} Total Staff
         </span>
       </div>
 
       <div className="space-y-1.5">
         <div className="flex items-center justify-between">
-          <span className="flex items-center gap-1.5 text-[#64748B]">
+          <span className="flex items-center gap-1.5 text-[#64748B] dark:text-slate-400">
             <span className="w-2.5 h-2.5 rounded-full bg-[#16A34A]"></span>
             Active
           </span>
-          <span className="font-bold text-[#0F172A]">
+          <span className="font-bold text-[#0F172A] dark:text-white">
             {activeCount}{" "}
-            <span className="text-[#94A3B8] font-normal text-[10px]">
+            <span className="text-[#94A3B8] dark:text-slate-500 font-normal text-[10px]">
               ({Math.round((activeCount / total) * 100)}%)
             </span>
           </span>
         </div>
 
         <div className="flex items-center justify-between">
-          <span className="flex items-center gap-1.5 text-[#64748B]">
+          <span className="flex items-center gap-1.5 text-[#64748B] dark:text-slate-400">
             <span className="w-2.5 h-2.5 rounded-full bg-[#F59E0B]"></span>
             Inactive
           </span>
-          <span className="font-bold text-[#0F172A]">
+          <span className="font-bold text-[#0F172A] dark:text-white">
             {inactiveCount}{" "}
-            <span className="text-[#94A3B8] font-normal text-[10px]">
+            <span className="text-[#94A3B8] dark:text-slate-500 font-normal text-[10px]">
               ({Math.round((inactiveCount / total) * 100)}%)
             </span>
           </span>
         </div>
 
         <div className="flex items-center justify-between">
-          <span className="flex items-center gap-1.5 text-[#64748B]">
+          <span className="flex items-center gap-1.5 text-[#64748B] dark:text-slate-400">
             <span className="w-2.5 h-2.5 rounded-full bg-[#DC2626]"></span>
             Suspended
           </span>
-          <span className="font-bold text-[#0F172A]">
+          <span className="font-bold text-[#0F172A] dark:text-white">
             {suspendedCount}{" "}
-            <span className="text-[#94A3B8] font-normal text-[10px]">
+            <span className="text-[#94A3B8] dark:text-slate-500 font-normal text-[10px]">
               ({Math.round((suspendedCount / total) * 100)}%)
             </span>
           </span>
         </div>
       </div>
 
-      <div className="pt-2 border-t border-[#E2E8F0] flex items-center justify-between text-[11px]">
-        <span className="text-[#64748B]">Active Retention Rate</span>
+      <div className="pt-2 border-t border-[#E2E8F0] dark:border-slate-800 flex items-center justify-between text-[11px]">
+        <span className="text-[#64748B] dark:text-slate-400">Active Retention Rate</span>
         <span
           className={`font-bold ${
             activeRatio >= 80
-              ? "text-[#16A34A]"
+              ? "text-[#16A34A] dark:text-emerald-400"
               : activeRatio >= 50
-              ? "text-[#F59E0B]"
-              : "text-[#DC2626]"
+              ? "text-[#F59E0B] dark:text-amber-400"
+              : "text-[#DC2626] dark:text-red-400"
           }`}
         >
           {activeRatio}%
@@ -120,21 +120,21 @@ const CustomPieTooltip = ({ active, payload, totalCount }) => {
   const percentage = totalCount > 0 ? Math.round((count / totalCount) * 100) : 0;
 
   return (
-    <div className="bg-white p-3 rounded-xl border border-[#E2E8F0] shadow-lg text-xs space-y-1 min-w-[150px] pointer-events-none">
+    <div className="bg-white dark:bg-slate-900 p-3 rounded-xl border border-[#E2E8F0] dark:border-slate-700 shadow-lg text-xs space-y-1 min-w-[150px] pointer-events-none">
       <div className="flex items-center gap-1.5 font-bold">
         <span
           className="w-2.5 h-2.5 rounded-full"
           style={{ backgroundColor: entry.payload.fill }}
         ></span>
-        <span className="text-[#0F172A]">{entry.name} Status</span>
+        <span className="text-[#0F172A] dark:text-white">{entry.name} Status</span>
       </div>
-      <div className="flex items-center justify-between text-[#64748B] pt-1">
+      <div className="flex items-center justify-between text-[#64748B] dark:text-slate-400 pt-1">
         <span>Headcount:</span>
-        <span className="font-bold text-[#002185]">{count} employees</span>
+        <span className="font-bold text-[#002185] dark:text-blue-400">{count} employees</span>
       </div>
-      <div className="flex items-center justify-between text-[#64748B]">
+      <div className="flex items-center justify-between text-[#64748B] dark:text-slate-400">
         <span>Share:</span>
-        <span className="font-bold text-[#16A34A]">{percentage}% of total</span>
+        <span className="font-bold text-[#16A34A] dark:text-emerald-400">{percentage}% of total</span>
       </div>
     </div>
   );
@@ -232,18 +232,18 @@ export const DepartmentStatusVisualizer = ({
   return (
     <div className="space-y-6">
       {/* SECTION HEADER & QUICK METRICS */}
-      <div className="bg-white border border-[#E2E8F0] rounded-2xl p-6 shadow-xs">
-        <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4 pb-6 border-b border-[#E2E8F0]">
+      <div className="bg-white dark:bg-slate-800 border border-[#E2E8F0] dark:border-slate-700/60 rounded-2xl p-6 shadow-xs transition-colors duration-200">
+        <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4 pb-6 border-b border-[#E2E8F0] dark:border-slate-700/60">
           <div>
             <div className="flex items-center gap-2">
-              <div className="w-8 h-8 rounded-lg bg-[#002185]/10 flex items-center justify-center text-[#002185]">
+              <div className="w-8 h-8 rounded-lg bg-[#002185]/10 dark:bg-blue-950/50 flex items-center justify-center text-[#002185] dark:text-blue-400">
                 <Building2 className="w-4 h-4 text-[#ff5500]" />
               </div>
-              <h2 className="text-lg sm:text-xl font-bold text-[#002185] tracking-tight">
+              <h2 className="text-lg sm:text-xl font-bold text-[#002185] dark:text-white tracking-tight">
                 Workforce Department & Status Distribution
               </h2>
             </div>
-            <p className="text-xs text-[#64748B] mt-1">
+            <p className="text-xs text-[#64748B] dark:text-slate-300 mt-1">
               Interactive visualization of active, inactive, and suspended employees across organizational departments.
             </p>
           </div>
@@ -251,14 +251,14 @@ export const DepartmentStatusVisualizer = ({
           {/* Quick Filter & View Mode Controls */}
           <div className="flex flex-wrap items-center gap-2.5">
             {/* View Mode Switcher */}
-            <div className="inline-flex items-center p-1 bg-[#F8FAFC] rounded-xl border border-[#E2E8F0]">
+            <div className="inline-flex items-center p-1 bg-[#F8FAFC] dark:bg-slate-900/60 rounded-xl border border-[#E2E8F0] dark:border-slate-700/60">
               <button
                 type="button"
                 onClick={() => setViewMode("stacked")}
                 className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all cursor-pointer flex items-center gap-1.5 ${
                   viewMode === "stacked"
-                    ? "bg-[#002185] text-white shadow-xs"
-                    : "text-[#64748B] hover:text-[#002185]"
+                    ? "bg-[#002185] text-white dark:bg-blue-600 shadow-xs"
+                    : "text-[#64748B] dark:text-slate-400 hover:text-[#002185] dark:hover:text-white"
                 }`}
                 title="Stacked Bar View"
               >
@@ -270,8 +270,8 @@ export const DepartmentStatusVisualizer = ({
                 onClick={() => setViewMode("grouped")}
                 className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all cursor-pointer flex items-center gap-1.5 ${
                   viewMode === "grouped"
-                    ? "bg-[#002185] text-white shadow-xs"
-                    : "text-[#64748B] hover:text-[#002185]"
+                    ? "bg-[#002185] text-white dark:bg-blue-600 shadow-xs"
+                    : "text-[#64748B] dark:text-slate-400 hover:text-[#002185] dark:hover:text-white"
                 }`}
                 title="Side-by-side Grouped Bar View"
               >
@@ -283,8 +283,8 @@ export const DepartmentStatusVisualizer = ({
                 onClick={() => setViewMode("percent")}
                 className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all cursor-pointer flex items-center gap-1.5 ${
                   viewMode === "percent"
-                    ? "bg-[#002185] text-white shadow-xs"
-                    : "text-[#64748B] hover:text-[#002185]"
+                    ? "bg-[#002185] text-white dark:bg-blue-600 shadow-xs"
+                    : "text-[#64748B] dark:text-slate-400 hover:text-[#002185] dark:hover:text-white"
                 }`}
                 title="100% Normalized Percentage View"
               >
@@ -297,7 +297,7 @@ export const DepartmentStatusVisualizer = ({
             <button
               type="button"
               onClick={() => navigate("/admin/employees")}
-              className="px-3 py-2 rounded-xl bg-[#F1F5F9] hover:bg-[#002185] hover:text-white text-[#002185] text-xs font-bold transition-all flex items-center gap-1.5 cursor-pointer"
+              className="px-3 py-2 rounded-xl bg-[#F1F5F9] dark:bg-slate-700/60 hover:bg-[#002185] dark:hover:bg-blue-600 hover:text-white text-[#002185] dark:text-blue-300 text-xs font-bold transition-all flex items-center gap-1.5 cursor-pointer"
             >
               <span>Manage Roster</span>
               <ArrowRight className="w-3.5 h-3.5" />
@@ -307,16 +307,16 @@ export const DepartmentStatusVisualizer = ({
 
         {/* 4 Mini Stat Badges for Quick Status Overview */}
         <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 pt-6">
-          <div className="p-3.5 rounded-xl bg-[#F8FAFC] border border-[#E2E8F0] flex items-center justify-between">
+          <div className="p-3.5 rounded-xl bg-[#F8FAFC] dark:bg-slate-800/90 border border-[#E2E8F0] dark:border-slate-700/60 flex items-center justify-between">
             <div>
-              <span className="text-[11px] font-semibold text-[#64748B] uppercase tracking-wider block">
+              <span className="text-[11px] font-semibold text-[#64748B] dark:text-slate-400 uppercase tracking-wider block">
                 Total Roster
               </span>
-              <span className="text-xl font-black text-[#002185]">
+              <span className="text-xl font-black text-[#002185] dark:text-white">
                 {statusTotals.total}
               </span>
             </div>
-            <div className="w-9 h-9 rounded-xl bg-[#002185]/10 text-[#002185] flex items-center justify-center">
+            <div className="w-9 h-9 rounded-xl bg-[#002185]/10 dark:bg-blue-950/50 text-[#002185] dark:text-blue-300 flex items-center justify-center">
               <Users className="w-4 h-4" />
             </div>
           </div>
@@ -325,25 +325,25 @@ export const DepartmentStatusVisualizer = ({
             onClick={() => toggleStatusSeries("active")}
             className={`p-3.5 rounded-xl border transition-all cursor-pointer flex items-center justify-between ${
               visibleStatuses.active
-                ? "bg-[#F0FDF4] border-[#BBF7D0]"
-                : "bg-[#F8FAFC] border-[#E2E8F0] opacity-60"
+                ? "bg-[#F0FDF4] dark:bg-emerald-950/30 border-[#BBF7D0] dark:border-emerald-800/60"
+                : "bg-[#F8FAFC] dark:bg-slate-800/60 border-[#E2E8F0] dark:border-slate-700/60 opacity-60"
             }`}
             title="Click to toggle Active series in chart"
           >
             <div>
-              <span className="text-[11px] font-semibold text-[#16A34A] uppercase tracking-wider block">
+              <span className="text-[11px] font-semibold text-[#16A34A] dark:text-emerald-300 uppercase tracking-wider block">
                 Active Staff
               </span>
               <div className="flex items-baseline gap-1.5">
-                <span className="text-xl font-black text-[#16A34A]">
+                <span className="text-xl font-black text-[#16A34A] dark:text-emerald-400">
                   {statusTotals.active}
                 </span>
-                <span className="text-[11px] text-[#16A34A] font-bold">
-                  ({activeRate}%)
+                <span className="text-[11px] text-[#16A34A] dark:text-emerald-300 font-bold">
+                  ({activeRate}%){" "}
                 </span>
               </div>
             </div>
-            <div className="w-9 h-9 rounded-xl bg-[#16A34A]/10 text-[#16A34A] flex items-center justify-center">
+            <div className="w-9 h-9 rounded-xl bg-[#16A34A]/10 dark:bg-emerald-950/60 text-[#16A34A] dark:text-emerald-400 flex items-center justify-center">
               <UserCheck className="w-4 h-4" />
             </div>
           </div>
@@ -352,25 +352,25 @@ export const DepartmentStatusVisualizer = ({
             onClick={() => toggleStatusSeries("inactive")}
             className={`p-3.5 rounded-xl border transition-all cursor-pointer flex items-center justify-between ${
               visibleStatuses.inactive
-                ? "bg-[#FFFBEB] border-[#FDE68A]"
-                : "bg-[#F8FAFC] border-[#E2E8F0] opacity-60"
+                ? "bg-[#FFFBEB] dark:bg-amber-950/30 border-[#FDE68A] dark:border-amber-800/60"
+                : "bg-[#F8FAFC] dark:bg-slate-800/60 border-[#E2E8F0] dark:border-slate-700/60 opacity-60"
             }`}
             title="Click to toggle Inactive series in chart"
           >
             <div>
-              <span className="text-[11px] font-semibold text-[#D97706] uppercase tracking-wider block">
+              <span className="text-[11px] font-semibold text-[#D97706] dark:text-amber-300 uppercase tracking-wider block">
                 Inactive Staff
               </span>
               <div className="flex items-baseline gap-1.5">
-                <span className="text-xl font-black text-[#D97706]">
+                <span className="text-xl font-black text-[#D97706] dark:text-amber-400">
                   {statusTotals.inactive}
                 </span>
-                <span className="text-[11px] text-[#D97706] font-bold">
+                <span className="text-[11px] text-[#D97706] dark:text-amber-300 font-bold">
                   ({Math.round((statusTotals.inactive / statusTotals.total) * 100)}%)
                 </span>
               </div>
             </div>
-            <div className="w-9 h-9 rounded-xl bg-[#F59E0B]/10 text-[#D97706] flex items-center justify-center">
+            <div className="w-9 h-9 rounded-xl bg-[#F59E0B]/10 dark:bg-amber-950/60 text-[#D97706] dark:text-amber-400 flex items-center justify-center">
               <UserX className="w-4 h-4" />
             </div>
           </div>
@@ -379,25 +379,25 @@ export const DepartmentStatusVisualizer = ({
             onClick={() => toggleStatusSeries("suspended")}
             className={`p-3.5 rounded-xl border transition-all cursor-pointer flex items-center justify-between ${
               visibleStatuses.suspended
-                ? "bg-[#FEF2F2] border-[#FECACA]"
-                : "bg-[#F8FAFC] border-[#E2E8F0] opacity-60"
+                ? "bg-[#FEF2F2] dark:bg-red-950/30 border-[#FECACA] dark:border-red-800/60"
+                : "bg-[#F8FAFC] dark:bg-slate-800/60 border-[#E2E8F0] dark:border-slate-700/60 opacity-60"
             }`}
             title="Click to toggle Suspended series in chart"
           >
             <div>
-              <span className="text-[11px] font-semibold text-[#DC2626] uppercase tracking-wider block">
+              <span className="text-[11px] font-semibold text-[#DC2626] dark:text-red-300 uppercase tracking-wider block">
                 Suspended Staff
               </span>
               <div className="flex items-baseline gap-1.5">
-                <span className="text-xl font-black text-[#DC2626]">
+                <span className="text-xl font-black text-[#DC2626] dark:text-red-400">
                   {statusTotals.suspended}
                 </span>
-                <span className="text-[11px] text-[#DC2626] font-bold">
+                <span className="text-[11px] text-[#DC2626] dark:text-red-300 font-bold">
                   ({Math.round((statusTotals.suspended / statusTotals.total) * 100)}%)
                 </span>
               </div>
             </div>
-            <div className="w-9 h-9 rounded-xl bg-[#DC2626]/10 text-[#DC2626] flex items-center justify-center">
+            <div className="w-9 h-9 rounded-xl bg-[#DC2626]/10 dark:bg-red-950/60 text-[#DC2626] dark:text-red-400 flex items-center justify-center">
               <ShieldAlert className="w-4 h-4" />
             </div>
           </div>
@@ -407,14 +407,14 @@ export const DepartmentStatusVisualizer = ({
       {/* CHARTS CONTAINER GRID: BAR CHART (LEFT) & DONUT STATUS SHARE (RIGHT) */}
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
         {/* RECHARTS BAR CHART: Department by Status Distribution */}
-        <div className="lg:col-span-2 bg-white border border-[#E2E8F0] rounded-2xl p-6 shadow-xs flex flex-col justify-between">
+        <div className="lg:col-span-2 bg-white dark:bg-slate-800 border border-[#E2E8F0] dark:border-slate-700/60 rounded-2xl p-6 shadow-xs flex flex-col justify-between transition-colors duration-200">
           <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 mb-4">
             <div>
-              <h3 className="text-base font-bold text-[#002185] flex items-center gap-2">
+              <h3 className="text-base font-bold text-[#002185] dark:text-white flex items-center gap-2">
                 <BarChart3 className="w-4 h-4 text-[#ff5500]" />
                 <span>Department Breakdown</span>
               </h3>
-              <p className="text-xs text-[#64748B] mt-0.5">
+              <p className="text-xs text-[#64748B] dark:text-slate-300 mt-0.5">
                 {viewMode === "stacked"
                   ? "Stacked headcount by department"
                   : viewMode === "grouped"
@@ -430,8 +430,8 @@ export const DepartmentStatusVisualizer = ({
                 onClick={() => toggleStatusSeries("active")}
                 className={`inline-flex items-center gap-1 px-2 py-1 rounded-lg border transition-all cursor-pointer ${
                   visibleStatuses.active
-                    ? "bg-[#F0FDF4] border-[#86EFAC] text-[#16A34A] font-bold"
-                    : "bg-white border-[#E2E8F0] text-[#94A3B8] line-through"
+                    ? "bg-[#F0FDF4] dark:bg-emerald-950/40 border-[#86EFAC] dark:border-emerald-800 text-[#16A34A] dark:text-emerald-300 font-bold"
+                    : "bg-white dark:bg-slate-800 border-[#E2E8F0] dark:border-slate-700 text-[#94A3B8] dark:text-slate-500 line-through"
                 }`}
               >
                 <span className="w-2 h-2 rounded-full bg-[#16A34A]"></span>
@@ -442,8 +442,8 @@ export const DepartmentStatusVisualizer = ({
                 onClick={() => toggleStatusSeries("inactive")}
                 className={`inline-flex items-center gap-1 px-2 py-1 rounded-lg border transition-all cursor-pointer ${
                   visibleStatuses.inactive
-                    ? "bg-[#FFFBEB] border-[#FDE68A] text-[#D97706] font-bold"
-                    : "bg-white border-[#E2E8F0] text-[#94A3B8] line-through"
+                    ? "bg-[#FFFBEB] dark:bg-amber-950/40 border-[#FDE68A] dark:border-amber-800 text-[#D97706] dark:text-amber-300 font-bold"
+                    : "bg-white dark:bg-slate-800 border-[#E2E8F0] dark:border-slate-700 text-[#94A3B8] dark:text-slate-500 line-through"
                 }`}
               >
                 <span className="w-2 h-2 rounded-full bg-[#F59E0B]"></span>
@@ -454,8 +454,8 @@ export const DepartmentStatusVisualizer = ({
                 onClick={() => toggleStatusSeries("suspended")}
                 className={`inline-flex items-center gap-1 px-2 py-1 rounded-lg border transition-all cursor-pointer ${
                   visibleStatuses.suspended
-                    ? "bg-[#FEF2F2] border-[#FECACA] text-[#DC2626] font-bold"
-                    : "bg-white border-[#E2E8F0] text-[#94A3B8] line-through"
+                    ? "bg-[#FEF2F2] dark:bg-red-950/40 border-[#FECACA] dark:border-red-800 text-[#DC2626] dark:text-red-300 font-bold"
+                    : "bg-white dark:bg-slate-800 border-[#E2E8F0] dark:border-slate-700 text-[#94A3B8] dark:text-slate-500 line-through"
                 }`}
               >
                 <span className="w-2 h-2 rounded-full bg-[#DC2626]"></span>
@@ -472,14 +472,14 @@ export const DepartmentStatusVisualizer = ({
                 margin={{ top: 15, right: 15, left: -15, bottom: 25 }}
                 barGap={4}
               >
-                <CartesianGrid strokeDasharray="3 3" stroke="#F1F5F9" vertical={false} />
+                <CartesianGrid strokeDasharray="3 3" stroke="#334155" opacity={0.3} vertical={false} />
                 <XAxis
                   dataKey="department"
-                  stroke="#64748B"
+                  stroke="#94A3B8"
                   fontSize={11}
                   fontWeight={500}
                   tickLine={false}
-                  axisLine={{ stroke: "#E2E8F0" }}
+                  axisLine={{ stroke: "#475569" }}
                   interval={0}
                   angle={-15}
                   textAnchor="end"
@@ -495,7 +495,7 @@ export const DepartmentStatusVisualizer = ({
                 />
                 <Tooltip
                   content={<CustomBarTooltip viewMode={viewMode} />}
-                  cursor={{ fill: "rgba(0, 33, 133, 0.04)" }}
+                  cursor={{ fill: "rgba(59, 130, 246, 0.08)" }}
                 />
 
                 {/* Active Bar */}
@@ -551,21 +551,21 @@ export const DepartmentStatusVisualizer = ({
         </div>
 
         {/* RECHARTS DONUT CHART: Company-wide Employee Status Share */}
-        <div className="bg-white border border-[#E2E8F0] rounded-2xl p-6 shadow-xs flex flex-col justify-between">
+        <div className="bg-white dark:bg-slate-800 border border-[#E2E8F0] dark:border-slate-700/60 rounded-2xl p-6 shadow-xs flex flex-col justify-between transition-colors duration-200">
           <div className="flex items-center justify-between mb-2">
             <div className="flex items-center gap-2">
-              <div className="w-8 h-8 rounded-lg bg-[#002185]/10 flex items-center justify-center text-[#002185]">
+              <div className="w-8 h-8 rounded-lg bg-[#002185]/10 dark:bg-blue-950/50 flex items-center justify-center text-[#002185] dark:text-blue-400">
                 <PieChartIcon className="w-4 h-4 text-[#ff5500]" />
               </div>
-              <h3 className="text-base font-bold text-[#002185]">
+              <h3 className="text-base font-bold text-[#002185] dark:text-white">
                 Status Share
               </h3>
             </div>
-            <span className="text-xs font-bold px-2.5 py-1 rounded-full bg-[#16A34A]/10 text-[#16A34A]">
+            <span className="text-xs font-bold px-2.5 py-1 rounded-full bg-[#16A34A]/10 dark:bg-emerald-950/50 text-[#16A34A] dark:text-emerald-300">
               {activeRate}% Active
             </span>
           </div>
-          <p className="text-xs text-[#64748B] mb-2">
+          <p className="text-xs text-[#64748B] dark:text-slate-300 mb-2">
             Organizational macro status distribution
           </p>
 
@@ -596,17 +596,17 @@ export const DepartmentStatusVisualizer = ({
 
             {/* Centered Donut KPI */}
             <div className="absolute inset-0 flex flex-col items-center justify-center pointer-events-none">
-              <span className="text-2xl font-black text-[#002185]">
+              <span className="text-2xl font-black text-[#002185] dark:text-white">
                 {statusTotals.total}
               </span>
-              <span className="text-[10px] uppercase font-bold tracking-wider text-[#64748B]">
+              <span className="text-[10px] uppercase font-bold tracking-wider text-[#64748B] dark:text-slate-400">
                 Staff Total
               </span>
             </div>
           </div>
 
           {/* Interactive Legend with Detail Stats */}
-          <div className="space-y-2 pt-3 border-t border-[#E2E8F0]">
+          <div className="space-y-2 pt-3 border-t border-[#E2E8F0] dark:border-slate-700/60">
             {pieData.map((item, idx) => {
               const pct = statusTotals.total > 0
                 ? Math.round((item.value / statusTotals.total) * 100)
@@ -614,18 +614,18 @@ export const DepartmentStatusVisualizer = ({
               return (
                 <div
                   key={idx}
-                  className="flex items-center justify-between p-2 rounded-xl bg-[#F8FAFC] text-xs hover:bg-[#F1F5F9] transition-colors"
+                  className="flex items-center justify-between p-2 rounded-xl bg-[#F8FAFC] dark:bg-slate-800/90 border border-[#E2E8F0] dark:border-slate-700/40 text-xs hover:bg-[#F1F5F9] dark:hover:bg-slate-700/50 transition-colors"
                 >
                   <div className="flex items-center gap-2">
                     <span
                       className="w-2.5 h-2.5 rounded-full shrink-0"
                       style={{ backgroundColor: item.fill }}
                     ></span>
-                    <span className="font-semibold text-[#0F172A]">{item.name}</span>
+                    <span className="font-semibold text-[#0F172A] dark:text-white">{item.name}</span>
                   </div>
                   <div className="flex items-center gap-2">
-                    <span className="font-bold text-[#002185]">{item.value}</span>
-                    <span className="text-[10px] text-[#64748B] font-mono bg-white px-1.5 py-0.5 rounded border border-[#E2E8F0]">
+                    <span className="font-bold text-[#002185] dark:text-blue-400">{item.value}</span>
+                    <span className="text-[10px] text-[#64748B] dark:text-slate-400 font-mono bg-white dark:bg-slate-900 px-1.5 py-0.5 rounded border border-[#E2E8F0] dark:border-slate-700">
                       {pct}%
                     </span>
                   </div>
@@ -637,23 +637,23 @@ export const DepartmentStatusVisualizer = ({
       </div>
 
       {/* DEPARTMENT CARDS MATRIX: Quick overview of each department's status balance */}
-      <div className="bg-white border border-[#E2E8F0] rounded-2xl p-6 shadow-xs">
+      <div className="bg-white dark:bg-slate-800 border border-[#E2E8F0] dark:border-slate-700/60 rounded-2xl p-6 shadow-xs transition-colors duration-200">
         <div className="flex items-center justify-between mb-4">
           <div className="flex items-center gap-2">
-            <div className="w-8 h-8 rounded-lg bg-[#002185]/10 flex items-center justify-center text-[#002185]">
+            <div className="w-8 h-8 rounded-lg bg-[#002185]/10 dark:bg-blue-950/50 flex items-center justify-center text-[#002185] dark:text-blue-400">
               <Building2 className="w-4 h-4 text-[#ff5500]" />
             </div>
             <div>
-              <h3 className="text-base font-bold text-[#002185]">
+              <h3 className="text-base font-bold text-[#002185] dark:text-white">
                 Department Health & Composition Matrix
               </h3>
-              <p className="text-xs text-[#64748B]">
+              <p className="text-xs text-[#64748B] dark:text-slate-300">
                 Department-by-department status ratios and capacity metrics
               </p>
             </div>
           </div>
 
-          <span className="text-xs font-bold px-3 py-1 bg-[#F8FAFC] text-[#002185] rounded-xl border border-[#E2E8F0]">
+          <span className="text-xs font-bold px-3 py-1 bg-[#F8FAFC] dark:bg-slate-900/60 text-[#002185] dark:text-blue-300 rounded-xl border border-[#E2E8F0] dark:border-slate-700/60">
             {rawData.length} Active Departments
           </span>
         </div>
@@ -672,26 +672,26 @@ export const DepartmentStatusVisualizer = ({
                 onClick={() => setSelectedDept(dept.department === selectedDept ? null : dept.department)}
                 className={`p-4 rounded-xl border transition-all cursor-pointer ${
                   selectedDept === dept.department
-                    ? "border-[#002185] bg-[#002185]/5 shadow-sm"
-                    : "border-[#E2E8F0] bg-[#FFFFFF] hover:border-[#002185]/40 hover:shadow-xs"
+                    ? "border-[#002185] dark:border-blue-500 bg-[#002185]/5 dark:bg-blue-950/30 shadow-sm"
+                    : "border-[#E2E8F0] dark:border-slate-700/60 bg-[#FFFFFF] dark:bg-slate-800/90 hover:border-[#002185]/40 dark:hover:border-blue-500/50 hover:shadow-xs"
                 }`}
               >
                 <div className="flex items-start justify-between gap-2 mb-2.5">
                   <div className="min-w-0">
-                    <h4 className="text-sm font-bold text-[#0F172A] truncate">
+                    <h4 className="text-sm font-bold text-[#0F172A] dark:text-white truncate">
                       {dept.department || "General"}
                     </h4>
-                    <span className="text-[11px] text-[#64748B] font-medium">
+                    <span className="text-[11px] text-[#64748B] dark:text-slate-300 font-medium">
                       {deptTotal} Staff Registered
                     </span>
                   </div>
                   <span
                     className={`text-[10px] font-bold px-2 py-0.5 rounded-full border shrink-0 ${
                       activePercent >= 80
-                        ? "bg-[#F0FDF4] text-[#16A34A] border-[#BBF7D0]"
+                        ? "bg-[#F0FDF4] dark:bg-emerald-950/40 text-[#16A34A] dark:text-emerald-300 border-[#BBF7D0] dark:border-emerald-800"
                         : activePercent >= 50
-                        ? "bg-[#FFFBEB] text-[#D97706] border-[#FDE68A]"
-                        : "bg-[#FEF2F2] text-[#DC2626] border-[#FECACA]"
+                        ? "bg-[#FFFBEB] dark:bg-amber-950/40 text-[#D97706] dark:text-amber-300 border-[#FDE68A] dark:border-amber-800"
+                        : "bg-[#FEF2F2] dark:bg-red-950/40 text-[#DC2626] dark:text-red-300 border-[#FECACA] dark:border-red-800"
                     }`}
                   >
                     {activePercent}% Active
@@ -699,7 +699,7 @@ export const DepartmentStatusVisualizer = ({
                 </div>
 
                 {/* Micro Distribution Bar */}
-                <div className="w-full bg-[#E2E8F0] h-2 rounded-full overflow-hidden flex mb-2.5">
+                <div className="w-full bg-[#E2E8F0] dark:bg-slate-700 h-2 rounded-full overflow-hidden flex mb-2.5">
                   <div
                     style={{ width: `${(deptActive / deptTotal) * 100}%` }}
                     className="bg-[#16A34A] h-full"
@@ -718,16 +718,16 @@ export const DepartmentStatusVisualizer = ({
                 </div>
 
                 {/* Sub-counts */}
-                <div className="flex items-center justify-between text-[11px] pt-1 text-[#64748B]">
-                  <span className="flex items-center gap-1 font-semibold text-[#16A34A]">
+                <div className="flex items-center justify-between text-[11px] pt-1 text-[#64748B] dark:text-slate-300">
+                  <span className="flex items-center gap-1 font-semibold text-[#16A34A] dark:text-emerald-400">
                     <span className="w-1.5 h-1.5 rounded-full bg-[#16A34A]"></span>
                     {deptActive} Active
                   </span>
-                  <span className="flex items-center gap-1 font-semibold text-[#D97706]">
+                  <span className="flex items-center gap-1 font-semibold text-[#D97706] dark:text-amber-400">
                     <span className="w-1.5 h-1.5 rounded-full bg-[#F59E0B]"></span>
                     {deptInactive} Inactive
                   </span>
-                  <span className="flex items-center gap-1 font-semibold text-[#DC2626]">
+                  <span className="flex items-center gap-1 font-semibold text-[#DC2626] dark:text-red-400">
                     <span className="w-1.5 h-1.5 rounded-full bg-[#DC2626]"></span>
                     {deptSuspended} Suspended
                   </span>

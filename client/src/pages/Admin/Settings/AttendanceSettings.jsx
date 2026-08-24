@@ -1,146 +1,214 @@
-// components/admin/settings/AttendanceSettings.js
-import { useState } from "react";
-import {
-  Clock,
-  Timer,
-  AlarmClock,
-} from "lucide-react";
+import { useState, useEffect } from "react";
+import { Clock, CheckCircle2 } from "lucide-react";
+import { useManagement } from "../../../context/ManagementContextProvider";
+import { getSettings, updateAttendanceSettings } from "../../../apis/fontApis";
 
- const attendanceSettings = {
-  workingDays: ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday"],
+const defaultAttendance = {
   workStartTime: "08:00",
   workEndTime: "17:00",
-  breakDuration: 60,
-  lateAfterMinutes: 15,
-  overtimeEnabled: true,
+  gracePeriodMinutes: 15,
+  halfDayHours: 4,
+  overtimeThresholdHours: 8,
+  workingDays: ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday"],
 };
 
-const AttendanceSettings = () => {
-  const [attendance, setAttendance] = useState(attendanceSettings);
+const allDays = [
+  "Monday",
+  "Tuesday",
+  "Wednesday",
+  "Thursday",
+  "Friday",
+  "Saturday",
+  "Sunday",
+];
+
+const AttendanceSettings = ({ onSaveSuccess }) => {
+  const { setShowToast } = useManagement();
+  const [attendance, setAttendance] = useState(defaultAttendance);
+  const [isSaving, setIsSaving] = useState(false);
+
+  useEffect(() => {
+    let isMounted = true;
+    const fetchSettings = async () => {
+      try {
+        const res = await getSettings();
+        if (isMounted && res?.data?.success && res.data.settings?.attendance) {
+          setAttendance((prev) => ({
+            ...prev,
+            ...res.data.settings.attendance,
+          }));
+        }
+      } catch (err) {
+        console.warn("Failed to load attendance settings:", err?.message);
+      }
+    };
+    fetchSettings();
+    return () => {
+      isMounted = false;
+    };
+  }, []);
 
   const handleChange = (field, value) => {
     setAttendance((prev) => ({ ...prev, [field]: value }));
   };
 
-  const handleWorkingDayToggle = (day) => {
+  const handleDayToggle = (day) => {
     setAttendance((prev) => {
-      const currentDays = prev.workingDays;
-      const updatedDays = currentDays.includes(day)
-        ? currentDays.filter((d) => d !== day)
-        : [...currentDays, day];
-      return { ...prev, workingDays: updatedDays };
+      const current = prev.workingDays || [];
+      const updated = current.includes(day)
+        ? current.filter((d) => d !== day)
+        : [...current, day];
+      return { ...prev, workingDays: updated };
     });
   };
 
+  const handleSave = async (e) => {
+    if (e && typeof e.preventDefault === "function") {
+      e.preventDefault();
+    }
+
+    setIsSaving(true);
+    try {
+      const res = await updateAttendanceSettings(attendance);
+      if (res?.data?.success) {
+        setShowToast({
+          show: true,
+          message: "Attendance rules saved successfully!",
+          type: "success",
+        });
+        if (typeof onSaveSuccess === "function") {
+          onSaveSuccess();
+        }
+      }
+    } catch (err) {
+      console.error("Failed to save attendance settings:", err);
+      setShowToast({
+        show: true,
+        message: err?.response?.data?.message || "Failed to update attendance settings.",
+        type: "error",
+      });
+    } finally {
+      setIsSaving(false);
+    }
+  };
+
   return (
-    <div className="space-y-6">
-      <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+    <form onSubmit={handleSave} className="space-y-6">
+      <div className="grid grid-cols-1 gap-5 sm:grid-cols-2">
         <div>
-          <label className="mb-1.5 block text-sm font-medium text-[#002185]">
+          <label className="mb-1.5 block text-xs font-bold uppercase tracking-wider text-slate-700 dark:text-slate-300">
             Work Start Time
           </label>
           <div className="relative">
-            <Clock className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-[#64748B]" />
+            <Clock className="absolute left-3.5 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
             <input
               type="time"
               value={attendance.workStartTime}
               onChange={(e) => handleChange("workStartTime", e.target.value)}
-              className="w-full rounded-lg border border-[#E2E8F0] pl-10 pr-4 py-2.5 text-sm focus:border-[#ff5500] focus:outline-none focus:ring-2 focus:ring-[#ff5500]/30"
+              className="w-full rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 pl-10 pr-4 py-2.5 text-sm text-slate-900 dark:text-slate-100 focus:border-[#002185] dark:focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-[#002185]/20 dark:focus:ring-blue-500/20"
             />
           </div>
         </div>
+
         <div>
-          <label className="mb-1.5 block text-sm font-medium text-[#002185]">
+          <label className="mb-1.5 block text-xs font-bold uppercase tracking-wider text-slate-700 dark:text-slate-300">
             Work End Time
           </label>
           <div className="relative">
-            <Clock className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-[#64748B]" />
+            <Clock className="absolute left-3.5 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
             <input
               type="time"
               value={attendance.workEndTime}
               onChange={(e) => handleChange("workEndTime", e.target.value)}
-              className="w-full rounded-lg border border-[#E2E8F0] pl-10 pr-4 py-2.5 text-sm focus:border-[#ff5500] focus:outline-none focus:ring-2 focus:ring-[#ff5500]/30"
+              className="w-full rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 pl-10 pr-4 py-2.5 text-sm text-slate-900 dark:text-slate-100 focus:border-[#002185] dark:focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-[#002185]/20 dark:focus:ring-blue-500/20"
             />
           </div>
         </div>
+
         <div>
-          <label className="mb-1.5 block text-sm font-medium text-[#002185]">
-            Break Duration (Minutes)
+          <label className="mb-1.5 block text-xs font-bold uppercase tracking-wider text-slate-700 dark:text-slate-300">
+            Late Grace Period (Minutes)
           </label>
           <div className="relative">
-            <Timer className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-[#64748B]" />
+            <Clock className="absolute left-3.5 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
             <input
               type="number"
-              value={attendance.breakDuration}
+              min="0"
+              max="120"
+              value={attendance.gracePeriodMinutes}
               onChange={(e) =>
-                handleChange("breakDuration", parseInt(e.target.value))
+                handleChange("gracePeriodMinutes", parseInt(e.target.value) || 0)
               }
-              className="w-full rounded-lg border border-[#E2E8F0] pl-10 pr-4 py-2.5 text-sm focus:border-[#ff5500] focus:outline-none focus:ring-2 focus:ring-[#ff5500]/30"
+              className="w-full rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 pl-10 pr-4 py-2.5 text-sm text-slate-900 dark:text-slate-100 focus:border-[#002185] dark:focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-[#002185]/20 dark:focus:ring-blue-500/20"
             />
           </div>
         </div>
+
         <div>
-          <label className="mb-1.5 block text-sm font-medium text-[#002185]">
-            Late After (Minutes)
+          <label className="mb-1.5 block text-xs font-bold uppercase tracking-wider text-slate-700 dark:text-slate-300">
+            Overtime Threshold (Hours/Day)
           </label>
           <div className="relative">
-            <AlarmClock className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-[#64748B]" />
+            <Clock className="absolute left-3.5 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
             <input
               type="number"
-              value={attendance.lateAfterMinutes}
+              min="1"
+              max="24"
+              value={attendance.overtimeThresholdHours}
               onChange={(e) =>
-                handleChange("lateAfterMinutes", parseInt(e.target.value))
+                handleChange(
+                  "overtimeThresholdHours",
+                  parseInt(e.target.value) || 8
+                )
               }
-              className="w-full rounded-lg border border-[#E2E8F0] pl-10 pr-4 py-2.5 text-sm focus:border-[#ff5500] focus:outline-none focus:ring-2 focus:ring-[#ff5500]/30"
+              className="w-full rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 pl-10 pr-4 py-2.5 text-sm text-slate-900 dark:text-slate-100 focus:border-[#002185] dark:focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-[#002185]/20 dark:focus:ring-blue-500/20"
             />
-          </div>
-        </div>
-        <div className="sm:col-span-2">
-          <label className="mb-1.5 block text-sm font-medium text-[#002185]">
-            Working Days
-          </label>
-          <div className="flex flex-wrap gap-4">
-            {[
-              "Monday",
-              "Tuesday",
-              "Wednesday",
-              "Thursday",
-              "Friday",
-              "Saturday",
-              "Sunday",
-            ].map((day) => (
-              <label
-                key={day}
-                className="flex items-center gap-2 cursor-pointer"
-              >
-                <input
-                  type="checkbox"
-                  checked={attendance.workingDays.includes(day)}
-                  onChange={() => handleWorkingDayToggle(day)}
-                  className="w-4 h-4 text-[#ff5500] border-[#E2E8F0] rounded focus:ring-[#ff5500]"
-                />
-                <span className="text-sm text-[#334155]">{day}</span>
-              </label>
-            ))}
           </div>
         </div>
       </div>
 
-      {/* Overtime Toggle */}
-      <div className="bg-[#F8FAFC] p-4 rounded-lg border border-[#E2E8F0]">
-        <label className="flex items-center gap-3 cursor-pointer">
-          <input
-            type="checkbox"
-            checked={attendance.overtimeEnabled}
-            onChange={(e) => handleChange("overtimeEnabled", e.target.checked)}
-            className="w-4 h-4 text-[#ff5500] border-[#E2E8F0] rounded focus:ring-[#ff5500]"
-          />
-          <span className="text-sm text-[#334155]">
-            Enable Overtime Tracking
-          </span>
+      {/* Working Days */}
+      <div>
+        <label className="mb-2 block text-xs font-bold uppercase tracking-wider text-slate-700 dark:text-slate-300">
+          Official Working Days
         </label>
+        <div className="flex flex-wrap gap-2.5">
+          {allDays.map((day) => {
+            const isSelected = (attendance.workingDays || []).includes(day);
+            return (
+              <button
+                type="button"
+                key={day}
+                onClick={() => handleDayToggle(day)}
+                className={`px-4 py-2 rounded-xl text-xs font-bold transition cursor-pointer ${
+                  isSelected
+                    ? "bg-[#002185] text-white shadow-sm"
+                    : "bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300 hover:bg-slate-200 dark:hover:bg-slate-700"
+                }`}
+              >
+                {day}
+              </button>
+            );
+          })}
+        </div>
       </div>
-    </div>
+
+      {/* Action Buttons */}
+      <div className="flex items-center justify-end gap-3 pt-2">
+        <button
+          type="submit"
+          disabled={isSaving}
+          className="flex items-center gap-2 rounded-xl bg-[#002185] dark:bg-blue-600 px-5 py-2.5 text-xs font-bold text-white transition hover:bg-[#ff5500] dark:hover:bg-blue-700 shadow-sm disabled:opacity-50 cursor-pointer"
+        >
+          {isSaving ? (
+            <div className="h-4 w-4 animate-spin rounded-full border-2 border-white border-t-transparent" />
+          ) : (
+            <CheckCircle2 className="h-4 w-4" />
+          )}
+          <span>{isSaving ? "Saving Attendance..." : "Save Attendance Settings"}</span>
+        </button>
+      </div>
+    </form>
   );
 };
 

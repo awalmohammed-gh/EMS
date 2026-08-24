@@ -99,6 +99,15 @@ export const getAdminMe = () => {
 export const getAdminProfile = () => {
   return api.get("/admin/me");
 };
+export const updateAdminProfile = (data) => {
+  return api.put("/admin/profile", data);
+};
+export const changeAdminPassword = (data) => {
+  return api.put("/admin/change-password", data);
+};
+export const updateAdminSettings = (data) => {
+  return api.put("/admin/settings", data);
+};
 export const createAdminAccount = (data) => {
   return api.post("/auth/admin/register", data);
 };
@@ -135,6 +144,10 @@ export const deletePayroll = (id) => {
 
 export const exportPayrollReport = (params) => {
   return api.get("/pay/export", { params });
+};
+
+export const getPayrollAnalytics = (params) => {
+  return api.get("/pay/analytics", { params });
 };
 
 export const getEmployeePayslip = () => {
@@ -181,6 +194,14 @@ export const adminDashboardOverview = () =>{
   return api.get("/dashboard/admin-dashboard")
 }
 
+export const getAdminDashboardStats = () => {
+  return api.get("/admin/dashboard-stats");
+};
+
+export const getAdminPayrollSummary = () => {
+  return api.get("/admin/payroll/summary");
+};
+
 export const employeeDashboardOverview = () =>{
   return api.get("/dashboard/employee-dashboard");
 }
@@ -194,7 +215,7 @@ export const getNotifications = (params) => {
 };
 
 export const markNotificationAsRead = (id) => {
-  return api.patch(`/notifications/${id}/read`, {});
+  return api.put(`/notifications/${id}/read`, {});
 };
 
 export const markAllNotificationsAsRead = (params) => {
@@ -203,6 +224,10 @@ export const markAllNotificationsAsRead = (params) => {
 
 export const deleteNotification = (id) => {
   return api.delete(`/notifications/${id}`);
+};
+
+export const deleteAllNotifications = (params) => {
+  return api.delete("/notifications", { params });
 };
 
 
@@ -222,6 +247,51 @@ export const allLeaves = () => {
 
 export const updateStatus = (id, status, adminRemark = "") => {
   return api.put(`/leave/status/${id}`, { status, adminRemark });
+};
+
+export const getEmployeeLeaveStats = () => {
+  return api.get("/leave/employee-stats");
+};
+
+// announcements (Supporting both /admin/announcements and /announcements)
+export const getAdminAnnouncements = (params) => {
+  return api.get("/admin/announcements", { params });
+};
+
+export const createAdminAnnouncement = (data) => {
+  return api.post("/admin/announcements", data);
+};
+
+export const deleteAdminAnnouncement = (id) => {
+  return api.delete(`/admin/announcements/${id}`);
+};
+
+export const getAnnouncements = (params) => {
+  return api.get("/announcements", { params });
+};
+
+export const getAnnouncementById = (id, params) => {
+  return api.get(`/announcements/${id}`, { params });
+};
+
+export const getAdminAnnouncementById = (id, params) => {
+  return api.get(`/admin/announcements/${id}`, { params });
+};
+
+export const createAnnouncement = (data) => {
+  return api.post("/admin/announcements", data);
+};
+
+export const updateAnnouncement = (id, data) => {
+  return api.put(`/admin/announcements/${id}`, data);
+};
+
+export const togglePinAnnouncement = (id) => {
+  return api.patch(`/admin/announcements/${id}/pin`, {});
+};
+
+export const deleteAnnouncement = (id) => {
+  return api.delete(`/admin/announcements/${id}`);
 };
 
 // settings
@@ -252,4 +322,3 @@ export const updateAttendanceSettings = (data) => {
 export const updateSecuritySettings = (data) => {
   return api.put("/settings/security", data);
 };
-

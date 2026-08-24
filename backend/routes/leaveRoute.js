@@ -1,8 +1,13 @@
 import express from "express";
 import { employeeAuth } from "../middleware/employeeAuth.js";
-import { applyLeave, getAllLeaves, getEmployeeLeave, updateLeaveStatus } from "../controllers/leaveController.js";
+import {
+  applyLeave,
+  getAllLeaves,
+  getEmployeeLeave,
+  getLeaveEmployeeStats,
+  updateLeaveStatus,
+} from "../controllers/leaveController.js";
 import { verifyAdmin } from "../middleware/authAdmin.js";
-
 
 const leaveRouter = express.Router();
 
@@ -13,6 +18,9 @@ leaveRouter.post("/apply", employeeAuth, applyLeave);
 
 // Get logged-in employee's leave history
 leaveRouter.get("/my-leaves", employeeAuth, getEmployeeLeave);
+
+// Aggregated leave statistics strictly for authenticated employee
+leaveRouter.get("/employee-stats", employeeAuth, getLeaveEmployeeStats);
 
 // ================= Admin =================
 

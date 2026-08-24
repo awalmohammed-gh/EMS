@@ -101,11 +101,23 @@ export const getNotifications = async (req, res) => {
       .sort({ created_at: -1 })
       .lean();
 
-    const notifications = documents.map((doc) => ({
+    // Deduplicate by _id or announcementId for recipient
+    const seenMap = new Map();
+    const uniqueDocs = [];
+    for (const doc of documents) {
+      const docId = String(doc._id);
+      // Key deduplication on unique doc id
+      if (!seenMap.has(docId)) {
+        seenMap.set(docId, true);
+        uniqueDocs.push(doc);
+      }
+    }
+
+    const notifications = uniqueDocs.map((doc) => ({
       ...doc,
       id: String(doc._id),
       _id: String(doc._id),
-      is_read: Boolean(doc.is_read),
+      is_read: Boolean(doc.is_read !== undefined ? doc.is_read : doc.isRead),
       timestamp: doc.created_at || doc.createdAt,
     }));
 
@@ -160,12 +172,6 @@ export const markNotificationAsRead = async (req, res) => {
     if (mongoose.Types.ObjectId.isValid(id)) {
       updatedDoc = await Notification.findByIdAndUpdate(
         id,
-        { $set: { is_read: true } },
-        { new: true }
-      );
-    } else {
-      updatedDoc = await Notification.findOneAndUpdate(
-        { _id: id },
         { $set: { is_read: true } },
         { new: true }
       );
@@ -232,6 +238,48 @@ export const markAllNotificationsAsRead = async (req, res) => {
 };
 
 /**
+ * DELETE /api/notifications & /api/notifications/clear-all
+ * Deletes all notifications for the requesting role or user
+ */
+export const deleteAllNotifications = async (req, res) => {
+  try {
+    const queryRole = req.query.role || req.headers["x-role"] || "admin";
+    const userRole = req.employee?.role || (req.admin ? "admin" : queryRole);
+    const isAdmin = userRole === "admin" || queryRole === "admin";
+    const userId = String(
+      req.user?.id ||
+      req.employee?.id ||
+      req.admin?.id ||
+      req.query.user_id ||
+      req.headers["x-user-id"] ||
+      req.headers["x-employee-id"] ||
+      ""
+    );
+
+    const filter = isAdmin
+      ? { recipient_role: "admin" }
+      : {
+          recipient_role: "employee",
+          ...(userId ? { $or: [{ recipient_id: userId }, { recipient_id: "all_employees" }] } : {}),
+        };
+
+    const result = await Notification.deleteMany(filter);
+
+    return res.status(200).json({
+      success: true,
+      message: "All notifications removed successfully.",
+      deletedCount: result.deletedCount || 0,
+    });
+  } catch (error) {
+    console.error("Error in deleteAllNotifications:", error);
+    return res.status(500).json({
+      success: false,
+      message: error.message || "Failed to delete all notifications.",
+    });
+  }
+};
+
+/**
  * DELETE /api/notifications/:id
  * Deletes a notification document from the database
  */
@@ -247,8 +295,6 @@ export const deleteNotification = async (req, res) => {
 
     if (mongoose.Types.ObjectId.isValid(id)) {
       await Notification.findByIdAndDelete(id);
-    } else {
-      await Notification.deleteOne({ _id: id });
     }
 
     return res.status(200).json({

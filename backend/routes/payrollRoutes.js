@@ -9,6 +9,7 @@ import {
   updatePayrollStatus,
   deletePayroll,
   exportPayrollReport,
+  getPayrollAnalytics,
 } from "../controllers/payrollController.js";
 import { employeeAuth } from "../middleware/employeeAuth.js";
 
@@ -25,6 +26,10 @@ payrollRouter.get("/list", verifyAdmin, allPayslips);
 
 // Payroll export reports
 payrollRouter.get("/export", verifyAdmin, exportPayrollReport);
+
+// Payroll analytics for bar charts dashboard
+payrollRouter.get("/analytics", getPayrollAnalytics);
+payrollRouter.get("/admin/analytics", verifyAdmin, getPayrollAnalytics);
 
 // Employee payslips
 payrollRouter.get("/employee-payslip", employeeAuth, employeePayslips);

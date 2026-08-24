@@ -10,7 +10,6 @@ import {
   Copy,
   Check,
   Users,
-  RefreshCw,
   PhoneCall,
   X,
   ChevronRight,
@@ -304,17 +303,6 @@ export const EmployeeDirectory = ({
               <div className="text-sm font-bold text-[#002185]">{metrics.deptsCount}</div>
               <div className="text-[10px] text-[#64748B] font-medium uppercase">Depts</div>
             </div>
-            {onRefresh && (
-              <button
-                type="button"
-                onClick={onRefresh}
-                disabled={isLoading}
-                title="Sync and refresh directory from database"
-                className="p-2.5 rounded-xl border border-[#E2E8F0] hover:border-[#ff5500] hover:text-[#ff5500] text-[#64748B] bg-[#FFFFFF] transition-all cursor-pointer disabled:opacity-50"
-              >
-                <RefreshCw className={`w-4 h-4 ${isLoading ? "animate-spin text-[#ff5500]" : ""}`} />
-              </button>
-            )}
           </div>
         </div>
 

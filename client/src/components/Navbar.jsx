@@ -6,14 +6,14 @@ import {
   Settings,
   LogOut,
   ChevronDown,
-  ShieldCheck,
-  Building2,
   Calendar,
   ExternalLink,
   CheckCircle2,
-  Briefcase,
+  Sun,
+  Moon,
 } from "lucide-react";
 import { useManagement } from "../context/ManagementContextProvider";
+import { useTheme } from "../context/ThemeContext";
 import NotificationBell from "./NotificationBell";
 
 // Helper to extract dynamic initials from full name
@@ -27,39 +27,31 @@ const getInitials = (name, fallback = "EM") => {
 
 export const Navbar = ({
   role: propsRole,
-  isMobileOpen,
-  toggleMobileSidebar: propToggleMobileSidebar,
+  onToggleMobileMenu,
+  toggleMobileSidebar,
   onMenuClick,
   onToggleMenu,
 }) => {
   const location = useLocation();
   const navigate = useNavigate();
-  const {
-    user,
-    role: contextRole,
-    logout,
-    isSidebarOpen,
-    isMobileSidebarOpen,
-    toggleSidebar,
-    toggleMobileSidebar: contextToggleMobileSidebar,
-  } = useManagement();
+  const { user, role: contextRole, logout } = useManagement();
+  const { isDark, toggleTheme } = useTheme();
   const [isProfileMenuOpen, setIsProfileMenuOpen] = useState(false);
   const profileMenuRef = useRef(null);
 
-  const handleSidebarToggle = (e) => {
+  // Unified toggle handler prioritizing onToggleMobileMenu
+  const handleToggle = (e) => {
     if (e && typeof e.stopPropagation === "function") {
       e.stopPropagation();
     }
-    if (typeof propToggleMobileSidebar === "function") {
-      propToggleMobileSidebar();
+    if (typeof onToggleMobileMenu === "function") {
+      onToggleMobileMenu();
+    } else if (typeof toggleMobileSidebar === "function") {
+      toggleMobileSidebar();
     } else if (typeof onMenuClick === "function") {
       onMenuClick();
     } else if (typeof onToggleMenu === "function") {
       onToggleMenu();
-    } else if (typeof contextToggleMobileSidebar === "function") {
-      contextToggleMobileSidebar();
-    } else if (typeof toggleSidebar === "function") {
-      toggleSidebar();
     }
   };
 
@@ -74,7 +66,7 @@ export const Navbar = ({
       !isEmployeeRoute &&
       propsRole !== "employee");
 
-  // Derive current page context name from pathname
+  // Derive current page title from pathname
   const getPageTitle = () => {
     const path = location.pathname.toLowerCase();
     if (path.includes("/attendance")) return "Attendance";
@@ -120,7 +112,6 @@ export const Navbar = ({
   };
 
   // Role-specific Data Resolution
-  // 1. Employee data (dynamic from logged-in user)
   const employeeFullName = (
     user?.fullName ||
     user?.full_name ||
@@ -129,74 +120,56 @@ export const Navbar = ({
   ).trim();
   const employeeEmail = user?.email || "awalm8043@gmail.com";
   const employeePosition = user?.position || user?.job_title || "Frontend Developer";
-  const employeeDepartment = user?.department || "Engineering";
   const employeeInitials = getInitials(employeeFullName, "MA");
 
-  // 2. Admin data (hardcoded 'Super Admin' with 'SA' avatar and no email)
   const adminTitle = "Super Admin";
-  const adminDepartment = "Executive Management";
   const adminInitials = "SA";
 
   return (
     <header
       id="unified-dashboard-navbar"
-      className="sticky top-0 z-[1000] w-full bg-white/95 backdrop-blur-md border-b border-[#E2E8F0] shadow-xs transition-all duration-200"
-      style={{ position: "sticky", top: 0, zIndex: 1000 }}
+      className="sticky top-0 z-30 w-full bg-white/95 dark:bg-slate-900/95 backdrop-blur-md border-b border-[#E2E8F0] dark:border-slate-800 shadow-xs transition-colors duration-200"
     >
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
         <div className="flex items-center justify-between h-16">
-          {/* Left Section: Mobile Menu Toggle + Breadcrumbs/Page Context */}
+          {/* Left Section: Mobile Hamburger Toggle + Page Title */}
           <div className="flex items-center gap-3">
-            {/* Hamburger / Menu Icon Button (Visible on mobile/tablet < 1024px) */}
+            {/* Hamburger Button (lg:hidden) */}
             <button
-              id="mobile-sidebar-toggle-btn"
+              id="mobile-menu-toggle-button"
               type="button"
-              onClick={handleSidebarToggle}
-              aria-expanded={isMobileOpen ?? isSidebarOpen ?? isMobileSidebarOpen}
-              aria-controls="mobile-sidebar-drawer-panel"
-              className="lg:hidden inline-flex items-center justify-center p-2.5 -ml-1.5 rounded-xl border border-[#E2E8F0] bg-white hover:bg-[#F8FAFC] text-[#002185] hover:border-[#002185] transition-all cursor-pointer shadow-xs focus:outline-none focus:ring-2 focus:ring-[#002185]/20 shrink-0"
-              aria-label="Toggle navigation drawer"
+              onClick={handleToggle}
+              className="p-2 lg:hidden text-gray-700 dark:text-slate-200 hover:text-[#002185] dark:hover:text-blue-400 hover:bg-gray-100 dark:hover:bg-slate-800 rounded-xl transition-all cursor-pointer inline-flex items-center justify-center -ml-1 border border-transparent hover:border-gray-200 dark:hover:border-slate-700"
+              aria-label="Toggle mobile menu"
             >
-              <Menu className="w-5 h-5" />
+              <Menu className="w-6 h-6" />
             </button>
 
             <div>
-              {/* Breadcrumb Tag Header (Top Left) */}
-              <div className="flex items-center gap-2">
-                {isAdmin ? (
-                  <>
-                    <span className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-md text-[11px] font-bold tracking-wide uppercase bg-[#002185]/10 text-[#002185] border border-[#002185]/20">
-                      <ShieldCheck className="w-3.5 h-3.5 text-[#002185]" />
-                      Super Admin
-                    </span>
-                    <span className="hidden sm:inline text-xs text-[#94A3B8]">•</span>
-                    <span className="hidden sm:inline text-xs font-semibold text-[#64748B] flex items-center gap-1">
-                      <Building2 className="w-3.5 h-3.5 text-[#64748B]" />
-                      {adminDepartment}
-                    </span>
-                  </>
-                ) : (
-                  <>
-                    <span className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-md text-[11px] font-bold tracking-wide uppercase bg-[#ff5500]/10 text-[#ff5500] border border-[#ff5500]/20">
-                      <Briefcase className="w-3.5 h-3.5 text-[#ff5500]" />
-                      {employeePosition}
-                    </span>
-                    <span className="hidden sm:inline text-xs text-[#94A3B8]">•</span>
-                    <span className="hidden sm:inline text-xs font-semibold text-[#64748B] flex items-center gap-1">
-                      <Building2 className="w-3.5 h-3.5 text-[#64748B]" />
-                      {employeeDepartment}
-                    </span>
-                  </>
-                )}
-              </div>
-              <h1 className="text-base sm:text-lg font-bold text-[#0F172A] tracking-tight truncate max-w-[170px] sm:max-w-xs md:max-w-md">
+              <h1 className="text-base sm:text-lg font-bold text-[#0F172A] dark:text-slate-100 tracking-tight truncate max-w-[170px] sm:max-w-xs md:max-w-md">
                 {getPageTitle()}
               </h1>
             </div>
           </div>
 
-          {/* Right Section: Notification Bell + User Profile Badge */}
+          {/* Right Section: Theme Toggle + Notification Bell + User Profile Menu */}
           <div className="flex items-center gap-2 sm:gap-3.5">
+            {/* Theme Toggle Switch */}
+            <button
+              id="navbar-theme-toggle-btn"
+              type="button"
+              onClick={toggleTheme}
+              className="p-2 rounded-xl border border-gray-200 dark:border-slate-700 bg-gray-50/90 dark:bg-slate-800 text-gray-700 dark:text-amber-400 hover:bg-gray-100 dark:hover:bg-slate-700/80 transition-all duration-200 cursor-pointer flex items-center justify-center shadow-2xs group"
+              aria-label={isDark ? "Switch to light mode" : "Switch to dark mode"}
+              title={isDark ? "Switch to light mode" : "Switch to dark mode"}
+            >
+              {isDark ? (
+                <Sun className="w-4 h-4 transition-transform duration-300 group-hover:rotate-45" />
+              ) : (
+                <Moon className="w-4 h-4 text-[#002185] transition-transform duration-300 group-hover:-rotate-12" />
+              )}
+            </button>
+
             {/* Notification Bell */}
             <div className="relative shrink-0">
               <NotificationBell
@@ -213,23 +186,23 @@ export const Navbar = ({
                 onClick={() => setIsProfileMenuOpen(!isProfileMenuOpen)}
                 aria-expanded={isProfileMenuOpen}
                 aria-haspopup="true"
-                className={`flex items-center gap-2 sm:gap-2.5 p-1 sm:px-2.5 sm:py-1.5 rounded-xl border transition-all duration-200 cursor-pointer ${
+                className={`flex items-center gap-2 sm:gap-2.5 p-1 sm:px-2.5 sm:py-1.5 rounded-xl border transition-all duration-300 cursor-pointer ${
                   isProfileMenuOpen
-                    ? "bg-[#F8FAFC] border-[#002185] shadow-xs"
-                    : "bg-white border-[#E2E8F0] hover:bg-[#F8FAFC] hover:border-[#CBD5E1]"
+                    ? "bg-[#F8FAFC] dark:bg-slate-800 border-[#002185] dark:border-blue-500 shadow-md scale-[1.02]"
+                    : "bg-white dark:bg-slate-900 border-[#E2E8F0] dark:border-slate-700 hover:bg-[#F8FAFC] dark:hover:bg-slate-800 hover:border-[#CBD5E1] dark:hover:border-slate-600 hover:shadow-sm"
                 }`}
               >
                 {/* Dynamic Avatar with Initials */}
                 <div className="relative shrink-0">
                   {isAdmin ? (
-                    <div className="w-8 h-8 sm:w-9 sm:h-9 rounded-xl bg-[#002185] text-white flex items-center justify-center font-bold text-xs sm:text-sm shadow-xs border border-[#002185]/20 select-none">
+                    <div className="w-8 h-8 sm:w-9 sm:h-9 rounded-xl bg-gradient-to-br from-[#002185] to-[#001566] text-white flex items-center justify-center font-bold text-xs sm:text-sm shadow-md border border-[#002185]/20 select-none ring-2 ring-[#002185]/10">
                       {adminInitials}
                     </div>
                   ) : user?.avatar || user?.profile_image_url || user?.profile_picture ? (
                     <img
                       src={user.avatar || user.profile_image_url || user.profile_picture}
                       alt={employeeFullName}
-                      className="w-8 h-8 sm:w-9 sm:h-9 rounded-xl object-cover border border-[#E2E8F0] shadow-xs"
+                      className="w-8 h-8 sm:w-9 sm:h-9 rounded-xl object-cover border-2 border-[#E2E8F0] dark:border-slate-700 shadow-md"
                       onError={(e) => {
                         e.currentTarget.style.display = "none";
                         const fallback = e.currentTarget.nextElementSibling;
@@ -237,28 +210,26 @@ export const Navbar = ({
                       }}
                     />
                   ) : (
-                    <div className="w-8 h-8 sm:w-9 sm:h-9 rounded-xl bg-[#ff5500] text-white flex items-center justify-center font-bold text-xs sm:text-sm shadow-xs border border-[#ff5500]/20 select-none">
+                    <div className="w-8 h-8 sm:w-9 sm:h-9 rounded-xl bg-gradient-to-br from-[#ff5500] to-[#e64a00] text-white flex items-center justify-center font-bold text-xs sm:text-sm shadow-md border border-[#ff5500]/20 select-none ring-2 ring-[#ff5500]/10">
                       {employeeInitials}
                     </div>
                   )}
-                  <span className="absolute -bottom-0.5 -right-0.5 w-2.5 h-2.5 bg-[#16A34A] border-2 border-white rounded-full"></span>
+                  <span className="absolute -bottom-0.5 -right-0.5 w-2.5 h-2.5 bg-gradient-to-br from-[#16A34A] to-[#15803D] border-2 border-white dark:border-slate-900 rounded-full shadow-sm"></span>
                 </div>
 
                 {/* Profile Display Text (Right Side) */}
                 <div className="hidden sm:block text-left max-w-[130px] md:max-w-[170px] lg:max-w-[200px]">
                   {isAdmin ? (
-                    // Admin: Primary label 'Super Admin', NO email line
-                    <p className="text-xs font-bold text-[#0F172A] truncate leading-tight">
+                    <p className="text-xs font-bold text-[#0F172A] dark:text-slate-100 truncate leading-tight">
                       {adminTitle}
                     </p>
                   ) : (
-                    // Employee: Top line = Full Name, Bottom line = Email Address
                     <>
-                      <p className="text-xs font-bold text-[#0F172A] truncate leading-tight">
+                      <p className="text-xs font-bold text-[#0F172A] dark:text-slate-100 truncate leading-tight">
                         {employeeFullName}
                       </p>
                       <p
-                        className="text-[11px] text-[#64748B] font-medium truncate leading-tight mt-0.5"
+                        className="text-[11px] text-[#64748B] dark:text-slate-400 font-medium truncate leading-tight mt-0.5"
                         title={employeeEmail}
                       >
                         {employeeEmail}
@@ -269,8 +240,8 @@ export const Navbar = ({
 
                 {/* Dropdown Chevron */}
                 <ChevronDown
-                  className={`w-4 h-4 text-[#64748B] transition-transform duration-200 shrink-0 ${
-                    isProfileMenuOpen ? "rotate-180 text-[#002185]" : ""
+                  className={`w-4 h-4 text-[#64748B] dark:text-slate-400 transition-all duration-300 shrink-0 ${
+                    isProfileMenuOpen ? "rotate-180 text-[#002185] dark:text-blue-400" : ""
                   }`}
                 />
               </button>
@@ -279,42 +250,42 @@ export const Navbar = ({
               {isProfileMenuOpen && (
                 <div
                   id="user-profile-dropdown-menu"
-                  className="absolute right-0 mt-2 w-72 sm:w-80 bg-white rounded-2xl border border-[#E2E8F0] shadow-xl z-[1001] py-2 animate-in fade-in slide-in-from-top-2 duration-150"
+                  className="absolute right-0 mt-2 w-72 sm:w-80 bg-white dark:bg-slate-900 rounded-2xl border border-[#E2E8F0] dark:border-slate-800 shadow-2xl z-[1001] py-2 animate-in fade-in slide-in-from-top-2 duration-200 overflow-hidden"
                   role="menu"
                   aria-orientation="vertical"
                 >
                   {/* Dropdown Header Card */}
-                  <div className="px-4 py-3 border-b border-[#F1F5F9] bg-[#F8FAFC]">
+                  <div className="px-4 py-3.5 border-b border-[#F1F5F9] dark:border-slate-800 bg-gradient-to-r from-[#F8FAFC] to-white dark:from-slate-850 dark:to-slate-900">
                     <div className="flex items-center gap-3">
                       {isAdmin ? (
-                        <div className="w-11 h-11 rounded-xl bg-[#002185] text-white flex items-center justify-center font-bold text-sm border border-[#002185]/20 shrink-0 shadow-xs">
+                        <div className="w-11 h-11 rounded-xl bg-gradient-to-br from-[#002185] to-[#001566] text-white flex items-center justify-center font-bold text-sm border border-[#002185]/20 shrink-0 shadow-md ring-2 ring-[#002185]/10">
                           {adminInitials}
                         </div>
                       ) : (
-                        <div className="w-11 h-11 rounded-xl bg-[#ff5500] text-white flex items-center justify-center font-bold text-sm border border-[#ff5500]/20 shrink-0 shadow-xs">
+                        <div className="w-11 h-11 rounded-xl bg-gradient-to-br from-[#ff5500] to-[#e64a00] text-white flex items-center justify-center font-bold text-sm border border-[#ff5500]/20 shrink-0 shadow-md ring-2 ring-[#ff5500]/10">
                           {employeeInitials}
                         </div>
                       )}
                       <div className="min-w-0 flex-1">
-                        <p className="text-sm font-bold text-[#0F172A] truncate">
+                        <p className="text-sm font-bold text-[#0F172A] dark:text-slate-100 truncate">
                           {isAdmin ? adminTitle : employeeFullName}
                         </p>
                         {!isAdmin && (
-                          <p className="text-xs text-[#64748B] truncate mt-0.5">
+                          <p className="text-xs text-[#64748B] dark:text-slate-400 truncate mt-0.5">
                             {employeeEmail}
                           </p>
                         )}
-                        <div className="flex items-center gap-1.5 mt-1.5">
+                        <div className="flex items-center gap-2 mt-1.5">
                           <span
-                            className={`text-[10px] font-bold px-2 py-0.5 rounded-full ${
+                            className={`text-[10px] font-bold px-2.5 py-0.5 rounded-full ${
                               isAdmin
-                                ? "bg-[#002185] text-white"
-                                : "bg-[#ff5500] text-white"
+                                ? "bg-gradient-to-r from-[#002185] to-[#001566] text-white shadow-sm"
+                                : "bg-gradient-to-r from-[#ff5500] to-[#e64a00] text-white shadow-sm"
                             }`}
                           >
                             {isAdmin ? "Super Admin" : employeePosition}
                           </span>
-                          <span className="text-[10px] text-[#64748B] font-medium flex items-center gap-1">
+                          <span className="text-[10px] text-[#64748B] dark:text-slate-400 font-medium flex items-center gap-1">
                             <CheckCircle2 className="w-3 h-3 text-[#16A34A]" />
                             Active
                           </span>
@@ -324,23 +295,14 @@ export const Navbar = ({
                   </div>
 
                   {/* Contextual Meta Information */}
-                  <div className="px-4 py-2.5 border-b border-[#F1F5F9] text-xs text-[#64748B] space-y-1.5">
-                    <div className="flex items-center justify-between">
-                      <span className="flex items-center gap-1.5">
-                        <Building2 className="w-3.5 h-3.5 text-[#94A3B8]" />
-                        Department
-                      </span>
-                      <span className="font-semibold text-[#0F172A]">
-                        {isAdmin ? adminDepartment : employeeDepartment}
-                      </span>
-                    </div>
+                  <div className="px-4 py-3 border-b border-[#F1F5F9] dark:border-slate-800 text-xs text-[#64748B] dark:text-slate-400 space-y-2 bg-white dark:bg-slate-900">
                     {!isAdmin && user?.employeeId && (
                       <div className="flex items-center justify-between">
-                        <span className="flex items-center gap-1.5">
+                        <span className="flex items-center gap-2">
                           <User className="w-3.5 h-3.5 text-[#94A3B8]" />
                           Employee ID
                         </span>
-                        <span className="font-semibold text-[#002185]">
+                        <span className="font-semibold text-[#002185] dark:text-blue-400">
                           {user.employeeId}
                         </span>
                       </div>
@@ -356,10 +318,10 @@ export const Navbar = ({
                           : "/employee/dashboard/settings"
                       }
                       onClick={() => setIsProfileMenuOpen(false)}
-                      className="flex items-center gap-2.5 px-4 py-2 text-xs font-semibold text-[#0F172A] hover:bg-[#F8FAFC] hover:text-[#002185] transition-colors"
+                      className="flex items-center gap-3 px-4 py-2.5 text-xs font-semibold text-[#0F172A] dark:text-slate-200 hover:bg-[#F8FAFC] dark:hover:bg-slate-800 hover:text-[#002185] dark:hover:text-blue-400 transition-all duration-200 border-l-2 border-transparent hover:border-[#002185] dark:hover:border-blue-400"
                       role="menuitem"
                     >
-                      <Settings className="w-4 h-4 text-[#64748B]" />
+                      <Settings className="w-4 h-4 text-[#64748B] dark:text-slate-400" />
                       <span>Profile & Account Settings</span>
                     </Link>
 
@@ -370,10 +332,10 @@ export const Navbar = ({
                           : "/employee/dashboard/leave"
                       }
                       onClick={() => setIsProfileMenuOpen(false)}
-                      className="flex items-center gap-2.5 px-4 py-2 text-xs font-semibold text-[#0F172A] hover:bg-[#F8FAFC] hover:text-[#002185] transition-colors"
+                      className="flex items-center gap-3 px-4 py-2.5 text-xs font-semibold text-[#0F172A] dark:text-slate-200 hover:bg-[#F8FAFC] dark:hover:bg-slate-800 hover:text-[#002185] dark:hover:text-blue-400 transition-all duration-200 border-l-2 border-transparent hover:border-[#002185] dark:hover:border-blue-400"
                       role="menuitem"
                     >
-                      <Calendar className="w-4 h-4 text-[#64748B]" />
+                      <Calendar className="w-4 h-4 text-[#64748B] dark:text-slate-400" />
                       <span>Leave & Time Off</span>
                     </Link>
 
@@ -384,23 +346,23 @@ export const Navbar = ({
                           : "/admin/dashboard"
                       }
                       onClick={() => setIsProfileMenuOpen(false)}
-                      className="flex items-center justify-between px-4 py-2 text-xs font-semibold text-[#64748B] hover:bg-[#F8FAFC] hover:text-[#002185] transition-colors"
+                      className="flex items-center justify-between px-4 py-2.5 text-xs font-semibold text-[#64748B] dark:text-slate-300 hover:bg-[#F8FAFC] dark:hover:bg-slate-800 hover:text-[#002185] dark:hover:text-blue-400 transition-all duration-200 border-l-2 border-transparent hover:border-[#002185] dark:hover:border-blue-400"
                       role="menuitem"
                     >
-                      <span className="flex items-center gap-2.5">
-                        <ExternalLink className="w-4 h-4 text-[#64748B]" />
+                      <span className="flex items-center gap-3">
+                        <ExternalLink className="w-4 h-4 text-[#64748B] dark:text-slate-400" />
                         <span>
                           {isAdmin ? "Switch to Employee View" : "Switch to Admin Portal"}
                         </span>
                       </span>
-                      <span className="text-[10px] bg-[#E2E8F0] text-[#475569] px-1.5 py-0.5 rounded">
+                      <span className="text-[10px] bg-[#E2E8F0] dark:bg-slate-800 text-[#475569] dark:text-slate-300 px-2 py-0.5 rounded-full font-medium">
                         Portal
                       </span>
                     </Link>
                   </div>
 
                   {/* Divider */}
-                  <div className="border-t border-[#F1F5F9] my-1" />
+                  <div className="border-t border-[#F1F5F9] dark:border-slate-800 my-1" />
 
                   {/* Logout Button */}
                   <div className="px-2 py-1">
@@ -408,10 +370,10 @@ export const Navbar = ({
                       id="navbar-logout-btn"
                       type="button"
                       onClick={handleLogout}
-                      className="w-full flex items-center gap-2.5 px-3 py-2 text-xs font-bold text-[#DC2626] hover:bg-[#FEF2F2] rounded-xl transition-colors cursor-pointer"
+                      className="w-full flex items-center gap-3 px-3 py-2.5 text-xs font-bold text-[#DC2626] dark:text-red-400 hover:bg-[#FEF2F2] dark:hover:bg-red-950/30 rounded-xl transition-all duration-200 group cursor-pointer"
                       role="menuitem"
                     >
-                      <LogOut className="w-4 h-4" />
+                      <LogOut className="w-4 h-4 group-hover:scale-110 transition-transform duration-200" />
                       <span>Log out of account</span>
                     </button>
                   </div>
@@ -426,4 +388,3 @@ export const Navbar = ({
 };
 
 export default Navbar;
-

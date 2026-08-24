@@ -7,7 +7,7 @@ import {
 } from "lucide-react";
 import Sidebar from "../../components/Sidebar";
 
-const EmployeeSidebar = ({ isMobileOpen, onClose }) => {
+const EmployeeSidebar = () => {
   const { pathname } = useLocation();
 
   const employeeLinks = [
@@ -35,7 +35,7 @@ const EmployeeSidebar = ({ isMobileOpen, onClose }) => {
   ];
 
   return (
-    <Sidebar isMobileOpen={isMobileOpen} onClose={onClose}>
+    <Sidebar role="employee">
       {/* Navigation Links */}
       <div className="flex-1 space-y-1.5">
         {employeeLinks.map((link) => {
@@ -45,20 +45,17 @@ const EmployeeSidebar = ({ isMobileOpen, onClose }) => {
               key={link.name}
               to={link.path}
               state={{ role: "employee" }}
-              onClick={() => {
-                if (typeof onClose === "function") onClose();
-              }}
-              className={`flex items-center px-3 py-2.5 rounded-lg text-sm font-medium transition-all duration-200 ${
+              className={`flex items-center px-3 py-2.5 rounded-xl text-sm font-medium transition-all duration-200 ${
                 isActive
-                  ? "bg-[#002185] text-white shadow-md shadow-[#002185]/20"
-                  : "text-[#64748B] hover:bg-[#002185]/10 hover:text-[#002185]"
+                  ? "bg-[#002185] text-white shadow-md shadow-[#002185]/20 dark:bg-blue-600"
+                  : "text-[#64748B] dark:text-slate-300 hover:bg-[#002185]/10 dark:hover:bg-slate-800 hover:text-[#002185] dark:hover:text-blue-400"
               }`}
             >
               <link.icon
                 className={`size-5 ${
                   isActive
                     ? "text-white"
-                    : "text-[#64748B] group-hover:text-[#ff5500]"
+                    : "text-[#64748B] dark:text-slate-400 group-hover:text-[#ff5500]"
                 }`}
               />
               <span className="ml-3">{link.name}</span>

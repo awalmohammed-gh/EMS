@@ -14,6 +14,7 @@ import leaveRouter from "./routes/leaveRoute.js";
 import settingsRouter from "./routes/adminSettingsRoute.js";
 import notificationRouter from "./routes/notificationRoutes.js";
 import authRouter from "./routes/authRoutes.js";
+import announcementRouter from "./routes/announcementRoutes.js";
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -58,6 +59,7 @@ app.use("/api/dashboard", dashboardRouter);
 app.use("/api/leave", leaveRouter);
 app.use("/api/settings", settingsRouter);
 app.use("/api/notifications", notificationRouter);
+app.use("/api/announcements", announcementRouter);
 
 // database offline fallback error handler for API routes
 app.use("/api", (err, req, res, next) => {

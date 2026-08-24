@@ -24,16 +24,20 @@ export const employeeAuth = (req, res, next) => {
           if (decoded.role === "admin" || decoded.role === "super_admin") {
             req.admin = decoded;
             req.employee = {
-              id: decoded.id || "admin_001",
+              _id: decoded.id || decoded._id || "admin_001",
+              id: decoded.id || decoded._id || "admin_001",
               employeeId: "ADMIN",
               role: decoded.role,
             };
+            req.user = req.employee;
           } else {
             req.employee = {
-              id: decoded.id,
+              _id: decoded.id || decoded._id,
+              id: decoded.id || decoded._id,
               employeeId: decoded.employeeId,
               role: decoded.role || "employee",
             };
+            req.user = req.employee;
           }
           return next();
         }
@@ -48,16 +52,19 @@ export const employeeAuth = (req, res, next) => {
 
     if (headerRole === "admin" || headerAdminId) {
       req.admin = { id: headerAdminId || "admin_001", role: "admin" };
-      req.employee = { id: headerAdminId || "admin_001", employeeId: "ADMIN", role: "admin" };
+      req.employee = { _id: headerAdminId || "admin_001", id: headerAdminId || "admin_001", employeeId: "ADMIN", role: "admin" };
+      req.user = req.employee;
       return next();
     }
 
     if (headerEmpId) {
       req.employee = {
+        _id: headerEmpId,
         id: headerEmpId,
         employeeId: headerEmpId,
         role: "employee",
       };
+      req.user = req.employee;
       return next();
     }
 
