@@ -1,6 +1,8 @@
 import express from "express";
 import {
   getSettings,
+  getPenaltySettings,
+  updatePenaltySettings,
   updateAttendanceSettings,
   updateCompanySettings,
   updateEmployeeSettings,
@@ -8,17 +10,19 @@ import {
   updatePayrollSettings,
   updateSecuritySettings,
 } from "../controllers/adminSettingsController.js";
-
+import { verifyAdmin } from "../middleware/authAdmin.js";
 
 const settingsRouter = express.Router();
 
 settingsRouter.get("/get-settings", getSettings);
+settingsRouter.get("/penalties", getPenaltySettings);
+settingsRouter.put("/penalties", verifyAdmin, updatePenaltySettings);
 
-settingsRouter.put("/company", updateCompanySettings);
-settingsRouter.put("/employee", updateEmployeeSettings);
-settingsRouter.put("/payroll", updatePayrollSettings);
-settingsRouter.put("/leave", updateLeaveSettings);
-settingsRouter.put("/attendance", updateAttendanceSettings);
-settingsRouter.put("/security", updateSecuritySettings);
+settingsRouter.put("/company", verifyAdmin, updateCompanySettings);
+settingsRouter.put("/employee", verifyAdmin, updateEmployeeSettings);
+settingsRouter.put("/payroll", verifyAdmin, updatePayrollSettings);
+settingsRouter.put("/leave", verifyAdmin, updateLeaveSettings);
+settingsRouter.put("/attendance", verifyAdmin, updateAttendanceSettings);
+settingsRouter.put("/security", verifyAdmin, updateSecuritySettings);
 
 export default settingsRouter;

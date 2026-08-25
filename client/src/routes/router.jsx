@@ -1,5 +1,5 @@
 import {
-  createBrowserRouter,
+  createHashRouter,
   createRoutesFromElements,
   Navigate,
   Route,
@@ -26,7 +26,7 @@ import AdminDashboard from "../pages/Admin/AdminDashboard";
 import Leave from "../pages/Admin/Leave";
 import AdminAnnouncements from "../pages/Admin/Announcements";
 
-export const router = createBrowserRouter(
+export const router = createHashRouter(
   createRoutesFromElements(
     <>
       {/* Public Routes */}
@@ -48,11 +48,11 @@ export const router = createBrowserRouter(
       <Route element={<ProtectedRoute allowRole="admin" />}>
         <Route path="/admin/dashboard" element={<AdminLayout />}>
           <Route index element={<AdminDashboard />} />
-          <Route path="attendance" element={<Attendance />} />
           <Route path="employees" element={<Employees />} />
-          <Route path="leave" element={<Leave />} />
+          <Route path="attendance" element={<Attendance />} />
           <Route path="payroll" element={<Payslips />} />
           <Route path="payslips" element={<Payslips />} />
+          <Route path="leave" element={<Leave />} />
           <Route path="announcements" element={<AdminAnnouncements />} />
           <Route path="settings" element={<Settings />} />
         </Route>

@@ -1,57 +1,80 @@
 import { useEffect } from "react";
+import { CheckCircle2, AlertCircle, AlertTriangle, Info, X } from "lucide-react";
 
 const Toaster = ({ message, type = "success", onClose }) => {
   useEffect(() => {
     const timer = setTimeout(() => {
       onClose();
-    }, 3000);
+    }, 4000);
 
     return () => clearTimeout(timer);
   }, [onClose]);
 
-  return ( 
+  const config = {
+    success: {
+      border: "border-emerald-500/30 dark:border-emerald-500/40",
+      bg: "bg-white dark:bg-slate-900",
+      iconBg: "bg-emerald-100 text-emerald-600 dark:bg-emerald-950/60 dark:text-emerald-400",
+      icon: <CheckCircle2 className="w-5 h-5" />,
+      accent: "text-emerald-700 dark:text-emerald-300",
+    },
+    error: {
+      border: "border-rose-500/30 dark:border-rose-500/40",
+      bg: "bg-white dark:bg-slate-900",
+      iconBg: "bg-rose-100 text-rose-600 dark:bg-rose-950/60 dark:text-rose-400",
+      icon: <AlertCircle className="w-5 h-5" />,
+      accent: "text-rose-700 dark:text-rose-300",
+    },
+    warning: {
+      border: "border-amber-500/30 dark:border-amber-500/40",
+      bg: "bg-white dark:bg-slate-900",
+      iconBg: "bg-amber-100 text-amber-600 dark:bg-amber-950/60 dark:text-amber-400",
+      icon: <AlertTriangle className="w-5 h-5" />,
+      accent: "text-amber-700 dark:text-amber-300",
+    },
+    info: {
+      border: "border-blue-500/30 dark:border-blue-500/40",
+      bg: "bg-white dark:bg-slate-900",
+      iconBg: "bg-blue-100 text-blue-600 dark:bg-blue-950/60 dark:text-blue-400",
+      icon: <Info className="w-5 h-5" />,
+      accent: "text-blue-700 dark:text-blue-300",
+    },
+  };
+
+  const style = config[type] || config.info;
+
+  return (
     <div
-      className={`fixed top-5 right-5 z-50 flex w-87.5 items-center justify-between rounded-lg border bg-white p-4 shadow-lg ${
-        type === "success"
-          ? "border-green-200"
-          : type === "error"
-            ? "border-red-200"
-            : type === "warning"
-              ? "border-yellow-200"
-              : "border-blue-200"
-      }`}
+      id="system-toaster-alert"
+      role="alert"
+      className={`fixed top-5 right-5 z-[9999] flex max-w-md w-auto min-w-[320px] items-center justify-between gap-3 rounded-2xl border-2 ${style.border} ${style.bg} p-4 shadow-2xl backdrop-blur-sm transition-all duration-300 animate-fade-in`}
     >
-      <div className="flex items-center gap-3">
+      <div className="flex items-center gap-3.5 min-w-0">
         {/* Status Icon */}
         <div
-          className={`flex h-10 w-10 items-center justify-center rounded-full ${
-            type === "success"
-              ? "bg-green-100 text-green-600"
-              : type === "error"
-                ? "bg-red-100 text-red-600"
-                : type === "warning"
-                  ? "bg-yellow-100 text-yellow-600"
-                  : "bg-blue-100 text-blue-600"
-          }`}
+          className={`flex h-9 w-9 shrink-0 items-center justify-center rounded-xl ${style.iconBg}`}
         >
-          {type === "success" && "✓"}
-          {type === "error" && "✕"}
-          {type === "warning" && "!"}
-          {type === "info" && "i"}
+          {style.icon}
         </div>
 
-        <p className="text-sm font-medium text-gray-700">{message}</p>
+        <p className="text-xs font-semibold text-slate-800 dark:text-slate-100 leading-snug break-words">
+          {message}
+        </p>
       </div>
 
       {/* Close Button */}
       <button
+        id="btn-close-system-toast"
+        type="button"
         onClick={onClose}
-        className="ml-4 text-xl text-gray-400 hover:text-gray-600"
+        className="ml-2 rounded-lg p-1 text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-800 transition cursor-pointer shrink-0"
+        title="Dismiss"
       >
-        ×
+        <X className="w-4 h-4" />
       </button>
     </div>
   );
 };
 
 export default Toaster;
+

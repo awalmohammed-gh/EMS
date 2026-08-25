@@ -46,6 +46,12 @@ const employeeSchema = new mongoose.Schema(
       required: true,
     },
 
+    baseSalary: {
+      type: Number,
+      default: 0,
+      min: 0,
+    },
+
     role: {
       type: String,
       enum: ["admin", "employee", "manager", "hr", "staff"],

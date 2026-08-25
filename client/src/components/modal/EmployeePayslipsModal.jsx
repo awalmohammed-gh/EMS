@@ -7,7 +7,10 @@ import {
   Download,
   FileText,
 } from "lucide-react";
-import logo from "../../assets/eyenit_logo.png";
+import {
+  downloadPayslipPDF,
+  printPayslipDocument,
+} from "../../utils/payslipPdfGenerator";
 
 const EmployeePayslipsModal = ({ payslip, onClose }) => {
   const formatCurrency = (amount) => {
@@ -47,242 +50,18 @@ const EmployeePayslipsModal = ({ payslip, onClose }) => {
     }
   };
 
-  // Build a clean, presentable HTML layout for the payslip with logo
-  const generatePayslipHTML = () => {
-    const currentDate = new Date().toLocaleDateString("en-GH", {
-      year: "numeric",
-      month: "long",
-      day: "numeric",
-    });
-
-    const logoBase64 = logo;
-
-    const baseSalary = Number(
-      payslip.baseSalary !== undefined
-        ? payslip.baseSalary
-        : payslip.basicSalary || 0
-    );
-    const earningsList = Array.isArray(payslip.earnings) ? payslip.earnings : [];
-    const deductionsList = Array.isArray(payslip.deductions)
-      ? payslip.deductions
-      : typeof payslip.deductions === "number" && payslip.deductions > 0
-      ? [{ description: "Deductions", amount: payslip.deductions }]
-      : [];
-    const absentDeduction = Number(payslip.absentDaysDeduction || 0);
-
-    const earningsRowsHTML =
-      earningsList.length > 0
-        ? earningsList
-            .map(
-              (item) => `
-          <tr style="border-bottom: 1px solid #E2E8F0;">
-            <td style="padding: 10px 14px; color:#334155;">${item.description || item.name || "Allowance"}</td>
-            <td style="padding: 10px 14px; text-align:right; font-weight:600; color:#16A34A;">+${formatCurrency(item.amount)}</td>
-          </tr>`
-            )
-            .join("")
-        : `
-          <tr style="border-bottom: 1px solid #E2E8F0;">
-            <td colspan="2" style="padding: 8px 14px; color:#94A3B8; font-style: italic; font-size: 12px;">No additional earnings recorded</td>
-          </tr>`;
-
-    const deductionsRowsHTML =
-      deductionsList.length > 0 || absentDeduction > 0
-        ? `
-          ${
-            absentDeduction > 0
-              ? `
-          <tr style="border-bottom: 1px solid #E2E8F0;">
-            <td style="padding: 10px 14px; color:#334155;">Absence Deduction</td>
-            <td style="padding: 10px 14px; text-align:right; font-weight:600; color:#DC2626;">-${formatCurrency(absentDeduction)}</td>
-          </tr>`
-              : ""
-          }
-          ${deductionsList
-            .map(
-              (item) => `
-          <tr style="border-bottom: 1px solid #E2E8F0;">
-            <td style="padding: 10px 14px; color:#334155;">${item.description || item.name || "Deduction"}</td>
-            <td style="padding: 10px 14px; text-align:right; font-weight:600; color:#DC2626;">-${formatCurrency(item.amount)}</td>
-          </tr>`
-            )
-            .join("")}
-        `
-        : `
-          <tr style="border-bottom: 1px solid #E2E8F0;">
-            <td colspan="2" style="padding: 8px 14px; color:#94A3B8; font-style: italic; font-size: 12px;">No additional deductions recorded (100% Attendance)</td>
-          </tr>`;
-
-    return `
-      <div style="width: 750px; padding: 40px; font-family: Arial, Helvetica, sans-serif; color: #0F172A; background: #ffffff; box-sizing: border-box; position: relative; overflow: hidden;">
-        
-        <!-- Background Blurred Logo -->
-        <div style="position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); opacity: 0.05; filter: blur(4px); pointer-events: none; z-index: 0;">
-          <img src="${logoBase64}" alt="" style="width: 500px; height: auto; display: block;" />
-        </div>
-        
-        <!-- Additional blurred logo for more coverage -->
-        <div style="position: absolute; top: 20%; left: 10%; opacity: 0.03; filter: blur(8px); pointer-events: none; z-index: 0; transform: rotate(-15deg);">
-          <img src="${logoBase64}" alt="" style="width: 300px; height: auto; display: block;" />
-        </div>
-        <div style="position: absolute; bottom: 15%; right: 5%; opacity: 0.03; filter: blur(8px); pointer-events: none; z-index: 0; transform: rotate(20deg);">
-          <img src="${logoBase64}" alt="" style="width: 350px; height: auto; display: block;" />
-        </div>
-
-        <!-- Main Content -->
-        <div style="position: relative; z-index: 1;">
-          
-          <!-- Header with Logo -->
-          <div style="display:flex; justify-content:space-between; align-items:center; border-bottom: 3px solid #002185; padding-bottom: 20px; margin-bottom: 28px;">
-            <div style="display:flex; align-items:center; gap: 12px;">
-              <div style="width: 140px; height: 140px; display: flex; align-items: center; justify-content: center;">
-                <img src="${logoBase64}" alt="EYENIT" style="width: 100%; height: auto; object-fit: contain;" />
-              </div>
-              <div>
-                <div style="font-size: 24px; font-weight: bold; color: #002185; letter-spacing: 1px;">PAYSLIP</div>
-                <div style="font-size: 12px; color: #64748B; margin-top: 4px;">Payslip No: ${payslip.payslipNumber || payslip.id || "N/A"}</div>
-              </div>
-            </div>
-            <div style="text-align:right; font-size: 12px; color:#64748B;">
-              <div>Date Generated</div>
-              <div style="font-weight:600; color:#0F172A; margin-top:2px;">${currentDate}</div>
-            </div>
-          </div>
-
-          <!-- Employee Info -->
-          <div style="margin-bottom: 26px;">
-            <div style="font-size: 11px; font-weight: bold; text-transform: uppercase; letter-spacing: 1px; color: #64748B; margin-bottom: 10px;">
-              Employee Information
-            </div>
-            <table style="width:100%; border-collapse: collapse; font-size: 13px;">
-              <tr>
-                <td style="padding: 6px 0; color:#64748B; width:22%;">Name</td>
-                <td style="padding: 6px 0; font-weight:600; color:#0F172A; width:28%;">${payslip.employeeName || "N/A"}</td>
-                <td style="padding: 6px 0; color:#64748B; width:22%;">Employee ID</td>
-                <td style="padding: 6px 0; font-weight:600; color:#0F172A;">${payslip.employeeId || "N/A"}</td>
-              </tr>
-              <tr>
-                <td style="padding: 6px 0; color:#64748B;">Department</td>
-                <td style="padding: 6px 0; font-weight:600; color:#0F172A;">${payslip.department || "N/A"}</td>
-                <td style="padding: 6px 0; color:#64748B;">Position</td>
-                <td style="padding: 6px 0; font-weight:600; color:#0F172A;">${payslip.position || "N/A"}</td>
-              </tr>
-            </table>
-          </div>
-
-          <!-- Payment Info -->
-          <div style="margin-bottom: 26px;">
-            <div style="font-size: 11px; font-weight: bold; text-transform: uppercase; letter-spacing: 1px; color: #64748B; margin-bottom: 10px;">
-              Payment Information
-            </div>
-            <table style="width:100%; border-collapse: collapse; font-size: 13px;">
-              <tr>
-                <td style="padding: 6px 0; color:#64748B; width:22%;">Pay Period</td>
-                <td style="padding: 6px 0; font-weight:600; color:#0F172A; width:28%;">${payslip.month || payslip.payMonth || "N/A"}</td>
-                <td style="padding: 6px 0; color:#64748B; width:22%;">Payment Date</td>
-                <td style="padding: 6px 0; font-weight:600; color:#0F172A;">${formatDate(payslip.paymentDate)}</td>
-              </tr>
-              <tr>
-                <td style="padding: 6px 0; color:#64748B;">Status</td>
-                <td style="padding: 6px 0; font-weight:600; color:#16A34A;">${payslip.status || "Paid"}</td>
-                <td></td>
-                <td></td>
-              </tr>
-            </table>
-          </div>
-
-          <!-- Dynamic Salary Breakdown -->
-          <div>
-            <div style="font-size: 11px; font-weight: bold; text-transform: uppercase; letter-spacing: 1px; color: #64748B; margin-bottom: 10px;">
-              Salary Breakdown
-            </div>
-            <table style="width:100%; border-collapse: collapse; font-size: 13px; border: 1px solid #E2E8F0;">
-              <thead>
-                <tr style="background:#F8FAFC; border-bottom: 1px solid #E2E8F0;">
-                  <th style="padding: 10px 14px; text-align:left; color:#002185; font-size:11px; text-transform:uppercase;">Item Description</th>
-                  <th style="padding: 10px 14px; text-align:right; color:#002185; font-size:11px; text-transform:uppercase;">Amount (GHS)</th>
-                </tr>
-              </thead>
-              <tbody>
-                <tr style="border-bottom: 1px solid #E2E8F0;">
-                  <td style="padding: 12px 14px; font-weight:600; color:#0F172A;">Basic Salary</td>
-                  <td style="padding: 12px 14px; text-align:right; font-weight:600; color:#002185;">${formatCurrency(baseSalary)}</td>
-                </tr>
-                <tr style="background:#F1F5F9;">
-                  <td colspan="2" style="padding: 6px 14px; font-size:11px; font-weight:bold; color:#16A34A; text-transform:uppercase;">Additional Earnings & Allowances</td>
-                </tr>
-                ${earningsRowsHTML}
-                <tr style="background:#F1F5F9;">
-                  <td colspan="2" style="padding: 6px 14px; font-size:11px; font-weight:bold; color:#DC2626; text-transform:uppercase;">Deductions & Adjustments</td>
-                </tr>
-                ${deductionsRowsHTML}
-                <tr style="background:#F8FAFC; border-top: 2px solid #E2E8F0;">
-                  <td style="padding: 16px 14px; font-weight:bold; color:#002185; font-size:15px;">NET SALARY</td>
-                  <td style="padding: 16px 14px; text-align:right; font-weight:bold; color:#002185; font-size:18px;">${formatCurrency(payslip.netSalary)}</td>
-                </tr>
-              </tbody>
-            </table>
-          </div>
-        </div>
-      </div>
-    `;
-  };
-
-  // Opens the styled payslip in a new window and triggers the print dialog.
-  const openPrintableWindow = (title) => {
-    const content = generatePayslipHTML();
-    const printWindow = window.open("", "_blank", "width=850,height=1000");
-    if (printWindow) {
-      printWindow.document.write(`
-        <html>
-          <head>
-            <title>${title}</title>
-            <style>
-              * { box-sizing: border-box; }
-              body {
-                font-family: Arial, Helvetica, sans-serif;
-                background: #f1f5f9;
-                display: flex;
-                justify-content: center;
-                padding: 30px 0;
-                margin: 0;
-              }
-              @media print {
-                body { background: white; padding: 0; margin: 0; }
-              }
-              @page {
-                size: A4;
-                margin: 0;
-              }
-            </style>
-          </head>
-          <body>
-            ${content}
-            <script>
-              window.onload = function() {
-                setTimeout(function() {
-                  window.print();
-                  setTimeout(function() {
-                    window.close();
-                  }, 1000);
-                }, 500);
-              }
-            </script>
-          </body>
-        </html>
-      `);
-      printWindow.document.close();
+  // Download official corporate PDF
+  const downloadPayslip = async () => {
+    try {
+      await downloadPayslipPDF(payslip);
+    } catch {
+      printPayslipDocument(payslip);
     }
-  };
-
-  // "Download" opens the print dialog so the user can choose "Save as PDF"
-  const downloadPayslip = () => {
-    openPrintableWindow(`Payslip - ${payslip.employeeName || "Employee"}`);
   };
 
   // Print payslip
   const printPayslip = () => {
-    openPrintableWindow(`Payslip - ${payslip.employeeName || "Employee"}`);
+    printPayslipDocument(payslip);
   };
 
   return (

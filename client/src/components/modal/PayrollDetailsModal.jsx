@@ -7,6 +7,7 @@ import {
   FileText,
   Printer,
   Trash2,
+  Download,
   CheckCircle2,
   Clock,
   AlertTriangle,
@@ -18,7 +19,8 @@ import {
 } from "lucide-react";
 import { getPayslipDetails, updatePayrollStatus, deletePayroll } from "../../apis/fontApis";
 import { useManagement } from "../../context/ManagementContextProvider";
-import logo from "../../assets/eyenit_logo.png";
+import OfficialPayslipDocument from "../OfficialPayslipDocument";
+import { downloadPayslipPDF, printPayslipDocument } from "../../utils/payslipPdfGenerator";
 
 export const PayrollDetailsModal = ({ payrollId, initialData, onClose, onRefresh }) => {
   const [payroll, setPayroll] = useState(initialData || null);
@@ -187,120 +189,6 @@ export const PayrollDetailsModal = ({ payrollId, initialData, onClose, onRefresh
           </span>
         );
     }
-  };
-
-  const handlePrintWindow = () => {
-    const printWindow = window.open("", "_blank");
-    if (!printWindow) {
-      window.print();
-      return;
-    }
-
-    const employeeName = payroll?.employee?.fullName || payroll?.employeeName || "Employee";
-    const employeeId = payroll?.employee?.employeeId || payroll?.employeeId || "EMP001";
-    const dept = payroll?.employee?.department || payroll?.department || "N/A";
-    const pos = payroll?.employee?.position || payroll?.position || "N/A";
-    const payMonth = payroll?.payMonth || payroll?.month || "August 2026";
-    const basic = Number(payroll?.basicSalary || 0);
-    const allow = Number(payroll?.allowances || 0);
-    const deduct = Number(payroll?.deductions || 0);
-    const net = Number(payroll?.netSalary || (basic + allow - deduct));
-    const payslipNum = payroll?.payslipNumber || payroll?.id || "PAY-2026";
-    const payDate = formatDate(payroll?.paymentDate);
-    const paymentMethod = payroll?.paymentMethod || "Bank Transfer";
-
-    printWindow.document.write(`
-      <!DOCTYPE html>
-      <html>
-        <head>
-          <title>Payslip - ${employeeName} (${payMonth})</title>
-          <style>
-            body { font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; padding: 40px; color: #0F172A; }
-            .container { max-width: 750px; margin: 0 auto; border: 1px solid #E2E8F0; padding: 32px; border-radius: 12px; }
-            .header { display: flex; justify-content: space-between; border-bottom: 2px solid #002185; padding-bottom: 16px; margin-bottom: 24px; }
-            .title { font-size: 24px; font-weight: bold; color: #002185; }
-            .subtitle { font-size: 13px; color: #64748B; margin-top: 4px; }
-            .grid { display: grid; grid-template-columns: 1fr 1fr; gap: 20px; margin-bottom: 24px; }
-            .section-title { font-size: 13px; font-weight: bold; text-transform: uppercase; color: #002185; margin-bottom: 10px; border-bottom: 1px solid #E2E8F0; padding-bottom: 4px; }
-            table { width: 100%; border-collapse: collapse; margin-bottom: 24px; font-size: 13px; }
-            th, td { padding: 10px 12px; text-align: left; }
-            th { background: #F8FAFC; color: #475569; font-weight: 600; }
-            tr:nth-child(even) { background: #FAFAFA; }
-            .net-box { background: #F0FDF4; border: 1px solid #BBF7D0; padding: 16px; border-radius: 8px; text-align: right; margin-top: 16px; }
-            .net-amount { font-size: 22px; font-weight: bold; color: #16A34A; }
-            @media print { body { padding: 0; } .container { border: none; } }
-          </style>
-        </head>
-        <body>
-          <div class="container">
-            <div class="header">
-              <div>
-                <div class="title">EYENIT LIMITED</div>
-                <div class="subtitle">Official Employee Monthly Payslip</div>
-              </div>
-              <div style="text-align: right;">
-                <div style="font-weight: bold; color: #002185;">${payslipNum}</div>
-                <div class="subtitle">Pay Period: ${payMonth}</div>
-              </div>
-            </div>
-
-            <div class="grid">
-              <div>
-                <div class="section-title">Employee Details</div>
-                <div><strong>Name:</strong> ${employeeName}</div>
-                <div><strong>Employee ID:</strong> ${employeeId}</div>
-                <div><strong>Department:</strong> ${dept}</div>
-                <div><strong>Position:</strong> ${pos}</div>
-              </div>
-              <div>
-                <div class="section-title">Payment Summary</div>
-                <div><strong>Payment Date:</strong> ${payDate}</div>
-                <div><strong>Payment Method:</strong> ${paymentMethod}</div>
-                <div><strong>Status:</strong> ${payroll?.status || "Paid"}</div>
-              </div>
-            </div>
-
-            <div class="section-title">Salary & Deductions Breakdown</div>
-            <table>
-              <thead>
-                <tr>
-                  <th>Description</th>
-                  <th style="text-align: right;">Amount (GHS)</th>
-                </tr>
-              </thead>
-              <tbody>
-                <tr>
-                  <td>Gross Salary (Base Salary)</td>
-                  <td style="text-align: right; font-weight: 600;">${basic.toFixed(2)}</td>
-                </tr>
-                ${allow > 0 ? `
-                <tr>
-                  <td>Allowances & Bonuses</td>
-                  <td style="text-align: right; font-weight: 600; color: #16A34A;">+${allow.toFixed(2)}</td>
-                </tr>` : ""}
-                <tr>
-                  <td>Absenteeism Deductions</td>
-                  <td style="text-align: right; font-weight: 600; color: #DC2626;">-${deduct.toFixed(2)}</td>
-                </tr>
-              </tbody>
-            </table>
-
-            <div class="net-box">
-              <div style="font-size: 12px; color: #166534; text-transform: uppercase; font-weight: bold;">Net Payable Amount</div>
-              <div class="net-amount">GHS ${net.toFixed(2)}</div>
-            </div>
-
-            <div style="margin-top: 32px; font-size: 11px; color: #94A3B8; text-align: center; border-top: 1px solid #E2E8F0; padding-top: 16px;">
-              This is a system-generated document from EYENIT HR & Payroll Management System.
-            </div>
-          </div>
-          <script>
-            window.onload = function() { window.print(); }
-          </script>
-        </body>
-      </html>
-    `);
-    printWindow.document.close();
   };
 
   const employee = payroll?.employee || {
@@ -663,91 +551,10 @@ export const PayrollDetailsModal = ({ payrollId, initialData, onClose, onRefresh
               {/* TAB 3: PRINT PREVIEW */}
               {activeTab === "print" && (
                 <div className="space-y-4 animate-in fade-in duration-150">
-                  <div className="border border-[#E2E8F0] rounded-2xl p-6 sm:p-8 bg-white relative shadow-sm overflow-hidden">
-                    {/* Watermark logo */}
-                    <div className="absolute top-1/2 left-1/2 transform -translate-x-1/2 -translate-y-1/2 opacity-5 pointer-events-none">
-                      <img src={logo} alt="" className="w-80 h-auto" />
-                    </div>
-
-                    <div className="relative z-10 space-y-6">
-                      <div className="flex items-center justify-between border-b-2 border-[#002185] pb-4">
-                        <div className="flex items-center gap-3">
-                          <img src={logo} alt="EYENIT" className="h-10 w-auto object-contain" />
-                          <div>
-                            <h3 className="text-lg font-bold text-[#002185] tracking-wide">EYENIT LIMITED</h3>
-                            <p className="text-xs text-[#64748B]">Official Employee Salary Slip</p>
-                          </div>
-                        </div>
-                        <div className="text-right text-xs">
-                          <span className="font-bold text-[#002185] block font-mono">
-                            {payroll?.payslipNumber || payroll?.id || "PAY-2026-08"}
-                          </span>
-                          <span className="text-[#64748B]">Period: {payroll?.payMonth || "August 2026"}</span>
-                        </div>
-                      </div>
-
-                      <div className="grid grid-cols-2 gap-4 text-xs">
-                        <div className="space-y-1">
-                          <span className="text-[#64748B] block font-semibold uppercase tracking-wider text-[10px]">Employee Information</span>
-                          <p className="font-bold text-[#0F172A] text-sm">{employee?.fullName}</p>
-                          <p className="text-[#64748B]">Employee ID: {employee?.employeeId}</p>
-                          <p className="text-[#64748B]">Department: {employee?.department}</p>
-                          <p className="text-[#64748B]">Position: {employee?.position}</p>
-                        </div>
-                        <div className="space-y-1 text-right sm:text-left">
-                          <span className="text-[#64748B] block font-semibold uppercase tracking-wider text-[10px]">Payment Summary</span>
-                          <p className="text-[#64748B]">Payment Date: <strong>{formatDate(payroll?.paymentDate)}</strong></p>
-                          <p className="text-[#64748B]">Payment Method: <strong>{payroll?.paymentMethod || "Bank Transfer"}</strong></p>
-                          <p className="text-[#64748B]">Status: <strong className="text-[#16A34A]">{payroll?.status || "Paid"}</strong></p>
-                        </div>
-                      </div>
-
-                      {/* Summary Table */}
-                      <table className="w-full text-xs border border-[#E2E8F0] rounded-lg overflow-hidden">
-                        <thead className="bg-[#F8FAFC] text-[#475569] font-bold">
-                          <tr>
-                            <th className="p-2.5 text-left border-b border-[#E2E8F0]">Earnings Item</th>
-                            <th className="p-2.5 text-right border-b border-[#E2E8F0]">Amount</th>
-                            <th className="p-2.5 text-left border-b border-[#E2E8F0]">Deductions Item</th>
-                            <th className="p-2.5 text-right border-b border-[#E2E8F0]">Amount</th>
-                          </tr>
-                        </thead>
-                        <tbody className="divide-y divide-[#E2E8F0]">
-                          <tr>
-                            <td className="p-2.5 text-[#0F172A]">Gross Salary (Base Salary)</td>
-                            <td className="p-2.5 text-right font-medium">{formatCurrency(basicSalary)}</td>
-                            <td className="p-2.5 text-[#0F172A]">Absenteeism Deductions</td>
-                            <td className="p-2.5 text-right font-medium text-[#DC2626]">-{formatCurrency(deductions)}</td>
-                          </tr>
-                          {allowances > 0 && (
-                            <tr>
-                              <td className="p-2.5 text-[#0F172A]">Allowances & Bonuses</td>
-                              <td className="p-2.5 text-right font-medium text-[#16A34A]">+{formatCurrency(allowances)}</td>
-                              <td className="p-2.5 text-[#64748B]">—</td>
-                              <td className="p-2.5 text-right font-medium text-[#64748B]">—</td>
-                            </tr>
-                          )}
-                          <tr className="bg-[#F8FAFC] font-bold">
-                            <td className="p-2.5 text-[#002185]">Total Gross Pay</td>
-                            <td className="p-2.5 text-right text-[#002185]">{formatCurrency(grossEarnings)}</td>
-                            <td className="p-2.5 text-[#DC2626]">Total Deductions</td>
-                            <td className="p-2.5 text-right text-[#DC2626]">-{formatCurrency(deductions)}</td>
-                          </tr>
-                        </tbody>
-                      </table>
-
-                      {/* Net Pay Box */}
-                      <div className="bg-[#F0FDF4] border border-[#BBF7D0] p-4 rounded-xl flex items-center justify-between">
-                        <div>
-                          <span className="text-xs font-bold text-[#166534] uppercase tracking-wider">Net Monthly Salary</span>
-                          <span className="text-[11px] text-[#166534] block">Direct employee net take-home pay</span>
-                        </div>
-                        <p className="text-2xl font-black text-[#16A34A]">
-                          {formatCurrency(netSalary)}
-                        </p>
-                      </div>
-                    </div>
-                  </div>
+                  <OfficialPayslipDocument
+                    payslip={payroll}
+                    showControls={false}
+                  />
                 </div>
               )}
             </>
@@ -805,8 +612,9 @@ export const PayrollDetailsModal = ({ payrollId, initialData, onClose, onRefresh
           </div>
 
           {/* Action Buttons */}
-          <div className="flex items-center gap-2 w-full sm:w-auto justify-end">
+          <div className="flex items-center gap-2 w-full sm:w-auto justify-end flex-wrap">
             <button
+              id="btn-modal-delete-payroll"
               type="button"
               onClick={handleDelete}
               disabled={isDeleting}
@@ -818,15 +626,27 @@ export const PayrollDetailsModal = ({ payrollId, initialData, onClose, onRefresh
             </button>
 
             <button
+              id="btn-modal-download-pdf"
               type="button"
-              onClick={handlePrintWindow}
-              className="px-4 py-2 bg-[#002185] hover:bg-[#ff5500] text-white rounded-xl text-xs font-bold flex items-center gap-1.5 shadow-sm transition cursor-pointer"
+              onClick={() => downloadPayslipPDF(payroll)}
+              className="px-3.5 py-2 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl text-xs font-bold flex items-center gap-1.5 shadow-xs transition cursor-pointer"
             >
-              <Printer className="w-3.5 h-3.5" />
-              <span>Print / Download Payslip</span>
+              <Download className="w-3.5 h-3.5" />
+              <span>Download PDF</span>
             </button>
 
             <button
+              id="btn-modal-print-payslip"
+              type="button"
+              onClick={() => printPayslipDocument(payroll)}
+              className="px-3.5 py-2 bg-[#002185] hover:bg-[#ff5500] text-white rounded-xl text-xs font-bold flex items-center gap-1.5 shadow-xs transition cursor-pointer"
+            >
+              <Printer className="w-3.5 h-3.5" />
+              <span>Print</span>
+            </button>
+
+            <button
+              id="btn-modal-close"
               type="button"
               onClick={onClose}
               className="px-4 py-2 bg-white border border-[#E2E8F0] hover:bg-[#F1F5F9] text-[#64748B] rounded-xl text-xs font-semibold transition cursor-pointer"

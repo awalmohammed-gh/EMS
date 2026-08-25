@@ -3,7 +3,10 @@ import { Employee } from "../models/employeeModel.js";
 import { Payroll } from "../models/payrollModel.js";
 import { Leave } from "../models/leaveModel.js";
 import { Attendance } from "../models/attendanceModel.js";
+import { CompanySettings } from "../models/CompanySettings.js";
+import { AuditLog } from "../models/AuditLog.js";
 import { liveAttendanceStore } from "./employeeAttendance.js";
+import { createNotificationRecord } from "./notificationController.js";
 
 const isValidObjectId = (id) =>
   id &&
@@ -26,14 +29,123 @@ const getWorkingDaysInMonth = (year = 2026, monthIndex = 7) => {
   return count > 0 ? count : 22;
 };
 
-// Calculate monthly salary breakdown based on real attendance (deductions ONLY on absent status)
+// Helper: Parse shift start time and evaluate lateness penalty based on CompanySettings
+export const evaluateLatenessPenalty = (clockInDate, workStartTime = "08:00", settings = {}) => {
+  if (!clockInDate) {
+    return { minutesLate: 0, penalty: 0, tier: "On Time", clockInFormatted: "--" };
+  }
+
+  let startHour = 8;
+  let startMinute = 0;
+
+  if (typeof workStartTime === "string" && workStartTime.trim()) {
+    const cleanTime = workStartTime.trim();
+    const isPM = /pm/i.test(cleanTime);
+    const isAM = /am/i.test(cleanTime);
+    const match = cleanTime.match(/(\d{1,2}):(\d{2})/);
+    if (match) {
+      let h = parseInt(match[1], 10);
+      const m = parseInt(match[2], 10);
+      if (isPM && h < 12) h += 12;
+      if (isAM && h === 12) h = 0;
+      startHour = h;
+      startMinute = m;
+    }
+  }
+
+  const clockIn = new Date(clockInDate);
+  if (isNaN(clockIn.getTime())) {
+    return { minutesLate: 0, penalty: 0, tier: "On Time", clockInFormatted: "--" };
+  }
+
+  const clockInHour = clockIn.getHours();
+  const clockInMinute = clockIn.getMinutes();
+
+  const startTotalMinutes = startHour * 60 + startMinute;
+  const clockInTotalMinutes = clockInHour * 60 + clockInMinute;
+  const minutesLate = clockInTotalMinutes - startTotalMinutes;
+
+  if (minutesLate <= 0) {
+    return {
+      minutesLate: 0,
+      penalty: 0,
+      tier: "On Time",
+      clockInFormatted: clockIn.toLocaleTimeString("en-GH", { hour: "2-digit", minute: "2-digit" }),
+    };
+  }
+
+  const t1 = Number(settings.lateTier1_amount || 0);
+  const t2 = Number(settings.lateTier2_amount || 0);
+  const t3 = Number(settings.lateTier3_amount || 0);
+  const t4 = Number(settings.lateTier4_amount || 0);
+  const t5 = Number(settings.lateTier5_amount || 0);
+  const t6 = Number(settings.lateTier6_amount || 0);
+
+  let penalty = 0;
+  let tier = "";
+
+  if (minutesLate >= 1 && minutesLate <= 30) {
+    penalty = t1;
+    tier = "1-30 mins late (Tier 1)";
+  } else if (minutesLate >= 31 && minutesLate <= 60) {
+    penalty = t2;
+    tier = "31-60 mins late (Tier 2)";
+  } else if (minutesLate >= 61 && minutesLate <= 120) {
+    penalty = t3;
+    tier = "1-2 hrs late (Tier 3)";
+  } else if (minutesLate >= 121 && minutesLate <= 180) {
+    penalty = t4;
+    tier = "2-3 hrs late (Tier 4)";
+  } else if (minutesLate >= 181 && minutesLate <= 240) {
+    penalty = t5;
+    tier = "3-4 hrs late (Tier 5)";
+  } else {
+    penalty = t6;
+    tier = "4-5+ hrs late (Tier 6)";
+  }
+
+  return {
+    minutesLate,
+    penalty,
+    tier,
+    clockInFormatted: clockIn.toLocaleTimeString("en-GH", { hour: "2-digit", minute: "2-digit" }),
+  };
+};
+
+// Calculate monthly salary breakdown based on real attendance (deductions for absence & lateness tiers)
 export const calculateMonthlyPayrollSummary = async (req, res) => {
   try {
-    const { employeeId, month, year, baseSalaryInput } = req.query;
+    let { employeeId, month, year, baseSalaryInput } = req.query;
+
+    // Security & Scope: If requested by standard employee, enforce that calculation targets only themselves
+    if (req.employee && (!req.admin || req.admin.role === "employee")) {
+      employeeId = req.employee.id || req.employee._id || req.employee.employeeId;
+    }
 
     const targetMonth = month || "August 2026";
     const targetYear = parseInt(year, 10) || 2026;
     const standardWorkingDays = getWorkingDaysInMonth(targetYear, 7); // Default ~22 days
+
+    // Fetch active CompanySettings for penalty rules
+    let companySettings = {
+      workStartTime: "08:00",
+      absenceDeductionRate: 10,
+      lateTier1_amount: 0,
+      lateTier2_amount: 0,
+      lateTier3_amount: 0,
+      lateTier4_amount: 0,
+      lateTier5_amount: 0,
+      lateTier6_amount: 0,
+    };
+
+    try {
+      const dbSettings = await CompanySettings.findOne().lean();
+      if (dbSettings) {
+        companySettings = { ...companySettings, ...dbSettings };
+      }
+    } catch (err) {
+      console.warn("DB settings query in calculateMonthlyPayrollSummary fallback:", err.message);
+    }
 
     let targetEmployee = null;
 
@@ -62,8 +174,8 @@ export const calculateMonthlyPayrollSummary = async (req, res) => {
       });
     }
 
-    const baseSalary = parseFloat(baseSalaryInput) || (targetEmployee.salary ? Number(targetEmployee.salary) : 4000);
-    const fixedAbsenceRate = 10.0; // GH₵10.00 / day fixed rate for unexcused absences
+    const baseSalary = parseFloat(baseSalaryInput) || (targetEmployee.baseSalary ? Number(targetEmployee.baseSalary) : targetEmployee.salary ? Number(targetEmployee.salary) : 4000);
+    const absenceRate = Number(companySettings.absenceDeductionRate !== undefined ? companySettings.absenceDeductionRate : 10.0);
     const dailyRate = parseFloat((baseSalary / standardWorkingDays).toFixed(2));
     const hourlyRate = parseFloat((dailyRate / 8).toFixed(2));
 
@@ -100,6 +212,8 @@ export const calculateMonthlyPayrollSummary = async (req, res) => {
     let lateDays = 0;
     let onTimeDays = 0;
     let totalWorkHours = 0;
+    let totalLatenessDeductions = 0;
+    const latenessDetails = [];
 
     attendanceRecords.forEach((record) => {
       const hrs = record.workHours || 8;
@@ -110,8 +224,41 @@ export const calculateMonthlyPayrollSummary = async (req, res) => {
         absentDays++;
       } else {
         presentDays++;
-        if (st === "late") {
+        // Check lateness
+        let isLate = st === "late";
+        let penaltyResult = null;
+
+        if (record.clockIn) {
+          penaltyResult = evaluateLatenessPenalty(record.clockIn, companySettings.workStartTime, companySettings);
+          if (penaltyResult.minutesLate > 0) {
+            isLate = true;
+          }
+        }
+
+        if (isLate) {
           lateDays++;
+          if (penaltyResult && penaltyResult.minutesLate > 0) {
+            totalLatenessDeductions += penaltyResult.penalty;
+            if (penaltyResult.penalty > 0 || penaltyResult.minutesLate > 0) {
+              latenessDetails.push({
+                date: record.date,
+                clockIn: penaltyResult.clockInFormatted,
+                minutesLate: penaltyResult.minutesLate,
+                tier: penaltyResult.tier,
+                penalty: penaltyResult.penalty,
+              });
+            }
+          } else {
+            const fallbackPenalty = Number(companySettings.lateTier1_amount || 0);
+            totalLatenessDeductions += fallbackPenalty;
+            latenessDetails.push({
+              date: record.date,
+              clockIn: "Late",
+              minutesLate: 15,
+              tier: "1-30 mins late (Tier 1)",
+              penalty: fallbackPenalty,
+            });
+          }
         } else {
           onTimeDays++;
         }
@@ -148,11 +295,12 @@ export const calculateMonthlyPayrollSummary = async (req, res) => {
       }
     });
 
-    // Fixed Absenteeism Deduction Rule: GH₵10.00 / day for each recorded absent day (status === 'absent')
-    // Net Pay = Base Salary + Approved Allowances - (Absent Days * 10) - Custom Admin Deductions
-    const absenceDeductions = parseFloat((absentDays * fixedAbsenceRate).toFixed(2));
+    // Dynamic Absenteeism Deduction Rule: absentDays * companySettings.absenceDeductionRate
+    const absenceDeductions = parseFloat((absentDays * absenceRate).toFixed(2));
+    const latenessDeductions = parseFloat(totalLatenessDeductions.toFixed(2));
+    const totalAttendanceDeductions = parseFloat((absenceDeductions + latenessDeductions).toFixed(2));
     const grossSalary = baseSalary;
-    const totalDeductions = absenceDeductions;
+    const totalDeductions = totalAttendanceDeductions;
     const netCalculatedSalary = parseFloat(Math.max(0, grossSalary - totalDeductions).toFixed(2));
 
     const summary = {
@@ -169,19 +317,35 @@ export const calculateMonthlyPayrollSummary = async (req, res) => {
         approvedPaidLeaveDays,
         approvedUnpaidLeaveDays,
       },
+      penaltySettings: companySettings,
       rates: {
         monthlyBaseSalary: baseSalary,
         dailyRate,
         hourlyRate,
-        fixedAbsenceRate,
+        fixedAbsenceRate: absenceRate,
+        absenceDeductionRate: absenceRate,
+        workStartTime: companySettings.workStartTime,
+        lateTier1_amount: companySettings.lateTier1_amount,
+        lateTier2_amount: companySettings.lateTier2_amount,
+        lateTier3_amount: companySettings.lateTier3_amount,
+        lateTier4_amount: companySettings.lateTier4_amount,
+        lateTier5_amount: companySettings.lateTier5_amount,
+        lateTier6_amount: companySettings.lateTier6_amount,
       },
       salaryCalculation: {
         grossSalary,
         basicSalary: baseSalary,
+        earnedBaseSalary: baseSalary,
+        overtimeBonus: 0,
         absentDays,
         absenceDeductions,
+        lateDays,
+        latenessDeductions,
+        latenessDetails,
+        totalAttendanceDeductions,
         deductions: {
           absenceDeduction: absenceDeductions,
+          latenessDeduction: latenessDeductions,
           total: totalDeductions,
         },
         allowances: {
@@ -191,8 +355,8 @@ export const calculateMonthlyPayrollSummary = async (req, res) => {
       },
       formulaExplanation: {
         baseSalaryFormula: "Full Standard Base Salary",
-        deductionsFormula: "Absent Days * 10 (GH₵10.00 per unexcused absent day)",
-        netSalaryFormula: "Base Salary + Approved Allowances - (Absent Days * 10) - Custom Admin Deductions",
+        deductionsFormula: `Absent Days * GH₵${absenceRate} + Lateness Tier Penalties (GH₵${latenessDeductions})`,
+        netSalaryFormula: "Base Salary + Approved Allowances - Total Absence Deductions - Total Lateness Penalties - Custom Admin Deductions",
       },
     };
 
@@ -221,6 +385,11 @@ export const generatePayroll = async (req, res) => {
       deductions,
       earnings,
       absentDaysDeduction,
+      latenessDeduction,
+      latenessPenalties,
+      originalAbsenceDeduction,
+      originalLatenessDeduction,
+      penaltyOverride,
       paymentMethod,
       remarks,
     } = req.body;
@@ -279,11 +448,39 @@ export const generatePayroll = async (req, res) => {
 
     const totalCustomEarnings = parsedEarnings.reduce((acc, curr) => acc + Number(curr.amount || 0), 0);
     const totalCustomDeductions = parsedDeductions.reduce((acc, curr) => acc + Number(curr.amount || 0), 0);
-    const finalAbsentDeduction = Number(absentDaysDeduction || 0);
+    
+    // Evaluate penalty overrides & waivers if provided
+    const origAbsence = Number(originalAbsenceDeduction !== undefined ? originalAbsenceDeduction : (absentDaysDeduction || 0));
+    const origLateness = Number(originalLatenessDeduction !== undefined ? originalLatenessDeduction : (latenessDeduction !== undefined ? latenessDeduction : (latenessPenalties || 0)));
+    
+    let finalAbsentDeduction = Number(absentDaysDeduction || 0);
+    let finalLatenessDeduction = Number(latenessDeduction !== undefined ? latenessDeduction : (latenessPenalties || 0));
+    let penaltyOverrideData = null;
+
+    if (penaltyOverride && penaltyOverride.isWaived) {
+      const waivedAbsence = Math.max(0, Number(penaltyOverride.waivedAbsenceDeduction || 0));
+      const waivedLateness = Math.max(0, Number(penaltyOverride.waivedLatenessDeduction || 0));
+      const totalWaived = Number(penaltyOverride.totalWaived || (waivedAbsence + waivedLateness));
+      
+      finalAbsentDeduction = Math.max(0, origAbsence - waivedAbsence);
+      finalLatenessDeduction = Math.max(0, origLateness - waivedLateness);
+
+      penaltyOverrideData = {
+        isWaived: true,
+        waivedAbsenceDeduction: waivedAbsence,
+        waivedLatenessDeduction: waivedLateness,
+        totalWaived,
+        reason: penaltyOverride.reason || "Manual penalty waiver approved by Administrator.",
+        waivedBy: req.admin?.fullName || req.admin?.full_name || "Administrator",
+        waivedAt: new Date(),
+      };
+    }
+
+    const totalAttendanceDeductions = finalAbsentDeduction + finalLatenessDeduction;
 
     const calculatedNetPay = Math.max(
       0,
-      parseFloat((finalBaseSalary + totalCustomEarnings - totalCustomDeductions - finalAbsentDeduction).toFixed(2))
+      parseFloat((finalBaseSalary + totalCustomEarnings - totalCustomDeductions - totalAttendanceDeductions).toFixed(2))
     );
 
     const payslipNumber = `PAY-${Date.now()}`;
@@ -329,11 +526,16 @@ export const generatePayroll = async (req, res) => {
       earnings: parsedEarnings,
       deductions: parsedDeductions,
       absentDaysDeduction: finalAbsentDeduction,
+      latenessDeduction: finalLatenessDeduction,
+      totalAttendanceDeductions,
+      originalAbsenceDeduction: origAbsence,
+      originalLatenessDeduction: origLateness,
+      penaltyOverride: penaltyOverrideData,
       allowances: totalCustomEarnings,
       netSalary: calculatedNetPay,
       netPay: calculatedNetPay,
       paymentMethod,
-      remarks: remarks || "Generated monthly salary disbursement.",
+      remarks: remarks || (penaltyOverrideData?.isWaived ? `Waived GH₵${penaltyOverrideData.totalWaived} penalties. Note: ${penaltyOverrideData.reason}` : "Generated monthly salary disbursement."),
       status: "Paid",
       createdAt: new Date().toISOString(),
     };
@@ -351,6 +553,11 @@ export const generatePayroll = async (req, res) => {
           earnings: parsedEarnings,
           deductions: parsedDeductions,
           absentDaysDeduction: finalAbsentDeduction,
+          latenessDeduction: finalLatenessDeduction,
+          totalAttendanceDeductions,
+          originalAbsenceDeduction: origAbsence,
+          originalLatenessDeduction: origLateness,
+          penaltyOverride: penaltyOverrideData,
           allowances: totalCustomEarnings,
           netSalary: calculatedNetPay,
           netPay: calculatedNetPay,
@@ -370,7 +577,101 @@ export const generatePayroll = async (req, res) => {
       }
     }
 
+    // Write audit log if penalties were waived or overridden
+    if (penaltyOverrideData?.isWaived) {
+      try {
+        await AuditLog.create({
+          action: "WAIVE_ATTENDANCE_PENALTY",
+          category: "Payroll",
+          performedBy: {
+            id: String(req.admin?.id || req.admin?._id || "admin_01"),
+            name: req.admin?.fullName || req.admin?.full_name || "Administrator",
+            email: req.admin?.email || "admin@eyenit.com",
+            role: req.admin?.role || "admin",
+          },
+          target: `${empDoc.fullName} (${empDoc.employeeId})`,
+          summary: `Waived GH₵${penaltyOverrideData.totalWaived} attendance deductions for ${empDoc.fullName} (${payMonth}). Reason: ${penaltyOverrideData.reason}`,
+          changes: [
+            { field: "waivedAbsenceDeduction", label: "Waived Absence Amount", oldValue: `GH₵${origAbsence}`, newValue: `GH₵${finalAbsentDeduction}` },
+            { field: "waivedLatenessDeduction", label: "Waived Lateness Amount", oldValue: `GH₵${origLateness}`, newValue: `GH₵${finalLatenessDeduction}` },
+          ],
+          metadata: {
+            employeeId: empDoc.employeeId,
+            payMonth,
+            reason: penaltyOverrideData.reason,
+          },
+          ipAddress: req.ip || "127.0.0.1",
+        });
+      } catch (auditErr) {
+        console.warn("AuditLog creation error for penalty waiver:", auditErr.message);
+      }
+    }
+
     livePayrollStore.unshift(newRecord);
+
+    // Push automated in-app notification to the affected employee for attendance deductions & penalties
+    try {
+      const targetEmpId = String(empDoc._id || empDoc.employeeId || empDoc.email || "");
+      const formattedTotalDeduct = Number(totalAttendanceDeductions || 0);
+
+      if (formattedTotalDeduct > 0) {
+        const breakdownParts = [];
+        if (finalAbsentDeduction > 0) {
+          breakdownParts.push(`GH₵${finalAbsentDeduction.toFixed(2)} absence deduction`);
+        }
+        if (finalLatenessDeduction > 0) {
+          breakdownParts.push(`GH₵${finalLatenessDeduction.toFixed(2)} lateness penalty`);
+        }
+        const detailStr = breakdownParts.length > 0 ? breakdownParts.join(" & ") : `GH₵${formattedTotalDeduct.toFixed(2)} penalty`;
+
+        await createNotificationRecord({
+          recipient_id: targetEmpId,
+          recipient_role: "employee",
+          sender_id: String(req.admin?.id || req.admin?._id || "admin"),
+          sender_role: "admin",
+          sender_name: req.admin?.fullName || "Payroll Administrator",
+          title: "⚠️ Attendance Deduction Applied to Payslip",
+          message: `An attendance deduction of GH₵${formattedTotalDeduct.toFixed(2)} (${detailStr}) has been applied to your ${payMonth} payslip. Net Pay: GH₵${calculatedNetPay.toFixed(2)}.`,
+          type: "payroll_alert",
+          category: "payroll",
+          priority: "high",
+          action_url: "/employee/dashboard/payslips",
+          action_label: "View Payslip",
+          metadata: {
+            payMonth,
+            payslipNumber,
+            totalAttendanceDeductions: formattedTotalDeduct,
+            absentDaysDeduction: finalAbsentDeduction,
+            latenessDeduction: finalLatenessDeduction,
+            netPay: calculatedNetPay,
+            paymentDate,
+          },
+        });
+      } else if (penaltyOverrideData?.isWaived && Number(penaltyOverrideData.totalWaived || 0) > 0) {
+        await createNotificationRecord({
+          recipient_id: targetEmpId,
+          recipient_role: "employee",
+          sender_id: String(req.admin?.id || req.admin?._id || "admin"),
+          sender_role: "admin",
+          sender_name: req.admin?.fullName || "Management",
+          title: "✅ Attendance Penalty Waived",
+          message: `Management approved a waiver of GH₵${Number(penaltyOverrideData.totalWaived).toFixed(2)} in attendance deductions for your ${payMonth} payslip. Reason: ${penaltyOverrideData.reason || "Approved exception"}`,
+          type: "payroll_alert",
+          category: "payroll",
+          priority: "medium",
+          action_url: "/employee/dashboard/payslips",
+          action_label: "View Payslip",
+          metadata: {
+            payMonth,
+            payslipNumber,
+            waivedAmount: penaltyOverrideData.totalWaived,
+            reason: penaltyOverrideData.reason,
+          },
+        });
+      }
+    } catch (notifErr) {
+      console.warn("Failed to create automated employee payslip notification:", notifErr.message);
+    }
 
     return res.status(201).json({
       success: true,
@@ -476,6 +777,25 @@ export const getPayrollById = async (req, res) => {
       });
     }
 
+    // Role-based authorization: Standard employees are strictly restricted to their own payslip
+    if (req.employee && (!req.admin || req.admin.role === "employee")) {
+      const authEmpId = String(req.employee.id || req.employee._id || "");
+      const authCode = String(req.employee.employeeId || "");
+      const recordEmpId = String(foundRecord.employee?._id || foundRecord.employee?.id || foundRecord.employee || "");
+      const recordCode = String(foundRecord.employee?.employeeId || foundRecord.employeeId || "");
+
+      const isOwner =
+        (authEmpId && (recordEmpId === authEmpId || recordCode === authEmpId)) ||
+        (authCode && (recordCode === authCode || recordEmpId === authCode));
+
+      if (!isOwner) {
+        return res.status(403).json({
+          success: false,
+          message: "Access restricted: You are only authorized to view your own personal payslips.",
+        });
+      }
+    }
+
     // Normalize employee object and structure
     const employeeData = foundRecord.employee || {
       fullName: foundRecord.employeeName || "Employee",
@@ -491,6 +811,8 @@ export const getPayrollById = async (req, res) => {
     const baseSalary = basicSalary;
     const allowances = Number(foundRecord.allowances || 0);
     const absentDaysDeduction = Number(foundRecord.absentDaysDeduction || 0);
+    const latenessDeduction = Number(foundRecord.latenessDeduction || 0);
+    const totalAttendanceDeductions = Number(foundRecord.totalAttendanceDeductions || (absentDaysDeduction + latenessDeduction));
 
     // Normalize dynamic earnings array
     let dynamicEarnings = [];
@@ -520,7 +842,7 @@ export const getPayrollById = async (req, res) => {
 
     const totalCustomEarnings = dynamicEarnings.reduce((acc, curr) => acc + Number(curr.amount || 0), 0);
     const totalCustomDeductions = dynamicDeductions.reduce((acc, curr) => acc + Number(curr.amount || 0), 0);
-    const totalDeductionsAmount = totalCustomDeductions + absentDaysDeduction;
+    const totalDeductionsAmount = totalCustomDeductions + totalAttendanceDeductions;
 
     const netSalary = Number(
       foundRecord.netPay !== undefined
@@ -549,6 +871,8 @@ export const getPayrollById = async (req, res) => {
       earnings: dynamicEarnings,
       deductions: dynamicDeductions,
       absentDaysDeduction,
+      latenessDeduction,
+      totalAttendanceDeductions,
       allowances: totalCustomEarnings,
       totalEarnings: totalCustomEarnings,
       totalDeductions: totalDeductionsAmount,
@@ -563,6 +887,8 @@ export const getPayrollById = async (req, res) => {
         basicSalary,
         baseSalary,
         absentDaysDeduction,
+        latenessDeduction,
+        totalAttendanceDeductions,
         absenteeismDeductions: absentDaysDeduction,
         allowances: totalCustomEarnings,
         totalEarnings: totalCustomEarnings,
@@ -577,6 +903,9 @@ export const getPayrollById = async (req, res) => {
           ...dynamicDeductions.map((d) => ({ label: d.description, amount: d.amount, type: "deduction" })),
           ...(absentDaysDeduction > 0
             ? [{ label: "Absence Deduction", amount: absentDaysDeduction, type: "absence" }]
+            : []),
+          ...(latenessDeduction > 0
+            ? [{ label: "Lateness Penalties", amount: latenessDeduction, type: "lateness" }]
             : []),
         ],
       },
@@ -804,8 +1133,10 @@ export const employeePayslips = async (req, res) => {
                   ? [{ description: "Deduction", amount: payslip.deductions }]
                   : []);
             const absDeduct = Number(payslip.absentDaysDeduction || 0);
+            const lateDeduct = Number(payslip.latenessDeduction || 0);
+            const totalAttDeduct = Number(payslip.totalAttendanceDeductions || (absDeduct + lateDeduct));
             const totalEarn = earn.reduce((acc, c) => acc + Number(c.amount || 0), 0) || Number(payslip.allowances || 0);
-            const totalDeduct = deduct.reduce((acc, c) => acc + Number(c.amount || 0), 0) + absDeduct;
+            const totalDeduct = deduct.reduce((acc, c) => acc + Number(c.amount || 0), 0) + totalAttDeduct;
             const net = Number(payslip.netPay !== undefined ? payslip.netPay : (payslip.netSalary !== undefined ? payslip.netSalary : Math.max(0, bSal + totalEarn - totalDeduct)));
 
             return {
@@ -823,6 +1154,8 @@ export const employeePayslips = async (req, res) => {
               earnings: earn,
               deductions: deduct,
               absentDaysDeduction: absDeduct,
+              latenessDeduction: lateDeduct,
+              totalAttendanceDeductions: totalAttDeduct,
               allowances: totalEarn,
               netSalary: net,
               netPay: net,
@@ -1113,3 +1446,143 @@ export const getPayrollAnalytics = async (req, res) => {
     });
   }
 };
+
+// Retrieve Processed Payroll Cycle History with status, expenditure & penalty totals
+export const getPayrollCycles = async (req, res) => {
+  try {
+    let allRecords = [...livePayrollStore];
+    try {
+      const dbRecords = await Payroll.find({})
+        .populate("employee", "fullName employeeId department position")
+        .sort({ paymentDate: -1, createdAt: -1 })
+        .lean();
+      if (dbRecords && dbRecords.length > 0) {
+        dbRecords.forEach((p) => {
+          if (!allRecords.some((item) => String(item._id) === String(p._id) || item.payslipNumber === p.payslipNumber)) {
+            allRecords.push(p);
+          }
+        });
+      }
+    } catch (err) {
+      console.warn("DB query for payroll cycles fallback:", err.message);
+    }
+
+    // Default seeded cycles if empty
+    if (allRecords.length === 0) {
+      const monthsSeed = ["August 2026", "July 2026", "June 2026", "May 2026", "April 2026", "March 2026"];
+      const seedCycles = monthsSeed.map((m, idx) => ({
+        month: m,
+        status: idx === 0 ? "Completed" : "Completed",
+        generatedDate: new Date(2026, 7 - idx, 25).toISOString().split("T")[0],
+        lastUpdated: new Date(2026, 7 - idx, 25).toISOString(),
+        employeeCount: 15,
+        grossExpenditure: 68500 - idx * 1200,
+        netExpenditure: 62450 - idx * 1100,
+        totalAbsenceDeductions: 840 - idx * 40,
+        totalLatenessPenalties: 620 - idx * 30,
+        totalAttendancePenalties: 1460 - idx * 70,
+        totalPenaltiesWaived: idx === 0 ? 150 : 80,
+        totalAllowances: 5400,
+        paidCount: 15,
+        pendingCount: 0,
+      }));
+
+      return res.status(200).json({
+        success: true,
+        cycles: seedCycles,
+        totalCycles: seedCycles.length,
+      });
+    }
+
+    // Group records by payMonth
+    const cycleMap = {};
+    allRecords.forEach((rec) => {
+      const rawMonth = rec.payMonth || rec.month || "August 2026";
+      const monthKey = rawMonth.trim();
+
+      if (!cycleMap[monthKey]) {
+        cycleMap[monthKey] = {
+          month: monthKey,
+          generatedDate: rec.paymentDate ? (new Date(rec.paymentDate).toISOString().split("T")[0]) : new Date().toISOString().split("T")[0],
+          lastUpdated: rec.updatedAt || rec.createdAt || new Date().toISOString(),
+          employeeCount: 0,
+          grossExpenditure: 0,
+          netExpenditure: 0,
+          totalAbsenceDeductions: 0,
+          totalLatenessPenalties: 0,
+          totalAttendancePenalties: 0,
+          totalPenaltiesWaived: 0,
+          totalAllowances: 0,
+          paidCount: 0,
+          pendingCount: 0,
+          items: [],
+        };
+      }
+
+      const bSal = Number(rec.baseSalary !== undefined ? rec.baseSalary : (rec.basicSalary || 0));
+      const allw = Number(rec.allowances || 0);
+      const absD = Number(rec.absentDaysDeduction || 0);
+      const lateD = Number(rec.latenessDeduction || 0);
+      const attD = Number(rec.totalAttendanceDeductions || (absD + lateD));
+      const net = Number(rec.netPay !== undefined ? rec.netPay : (rec.netSalary !== undefined ? rec.netSalary : (bSal + allw - attD)));
+      const waived = Number(rec.penaltyOverride?.totalWaived || (rec.penaltyOverride?.waivedAbsenceDeduction || 0) + (rec.penaltyOverride?.waivedLatenessDeduction || 0));
+      const isPaid = (rec.status || "").toLowerCase() === "paid";
+
+      cycleMap[monthKey].employeeCount += 1;
+      cycleMap[monthKey].grossExpenditure += (bSal + allw);
+      cycleMap[monthKey].netExpenditure += net;
+      cycleMap[monthKey].totalAbsenceDeductions += absD;
+      cycleMap[monthKey].totalLatenessPenalties += lateD;
+      cycleMap[monthKey].totalAttendancePenalties += attD;
+      cycleMap[monthKey].totalPenaltiesWaived += waived;
+      cycleMap[monthKey].totalAllowances += allw;
+
+      if (isPaid) {
+        cycleMap[monthKey].paidCount += 1;
+      } else {
+        cycleMap[monthKey].pendingCount += 1;
+      }
+
+      cycleMap[monthKey].items.push(rec);
+    });
+
+    const cyclesList = Object.values(cycleMap).map((cycle) => {
+      let cycleStatus = "Completed";
+      if (cycle.pendingCount > 0 && cycle.paidCount > 0) {
+        cycleStatus = "Partially Paid";
+      } else if (cycle.pendingCount > 0 && cycle.paidCount === 0) {
+        cycleStatus = "Pending";
+      } else if (cycle.employeeCount === 0) {
+        cycleStatus = "Draft";
+      }
+
+      return {
+        ...cycle,
+        status: cycleStatus,
+        grossExpenditure: parseFloat(cycle.grossExpenditure.toFixed(2)),
+        netExpenditure: parseFloat(cycle.netExpenditure.toFixed(2)),
+        totalAbsenceDeductions: parseFloat(cycle.totalAbsenceDeductions.toFixed(2)),
+        totalLatenessPenalties: parseFloat(cycle.totalLatenessPenalties.toFixed(2)),
+        totalAttendancePenalties: parseFloat(cycle.totalAttendancePenalties.toFixed(2)),
+        totalPenaltiesWaived: parseFloat(cycle.totalPenaltiesWaived.toFixed(2)),
+        totalAllowances: parseFloat(cycle.totalAllowances.toFixed(2)),
+      };
+    });
+
+    return res.status(200).json({
+      success: true,
+      cycles: cyclesList,
+      totalCycles: cyclesList.length,
+    });
+  } catch (error) {
+    console.error("Error in getPayrollCycles:", error);
+    return res.status(500).json({
+      success: false,
+      message: error.message || "Failed to retrieve payroll cycle history.",
+    });
+  }
+};
+
+// Retrieve 6-Month Attendance Penalty Impact Analytics on Total Payroll Cost
+export { getPenaltyImpactAnalytics } from "./analyticsController.js";
+

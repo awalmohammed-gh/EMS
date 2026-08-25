@@ -13,6 +13,7 @@ import {
   Mail,
   Lock,
   Shield,
+  Banknote,
 } from "lucide-react";
 
 export const AddEmployee = ({ onEmployeeAdded }) => {
@@ -27,6 +28,7 @@ export const AddEmployee = ({ onEmployeeAdded }) => {
     phone: "",
     department: "Software Engineering",
     position: "",
+    baseSalary: "2500.00",
     employmentDate: new Date().toISOString().split("T")[0],
     role: "employee",
   });
@@ -68,6 +70,7 @@ export const AddEmployee = ({ onEmployeeAdded }) => {
         phone: employeeForm.phone,
         department: employeeForm.department,
         position: employeeForm.position,
+        baseSalary: parseFloat(employeeForm.baseSalary) || 0,
         employmentDate: employeeForm.employmentDate,
         role: employeeForm.role,
       });
@@ -262,36 +265,37 @@ export const AddEmployee = ({ onEmployeeAdded }) => {
               </div>
             </div>
 
-            {/* Department & Position */}
-            <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-              <div>
-                <label className="mb-1.5 block text-xs font-bold text-[#002185]">
-                  Department <span className="text-[#DC2626]">*</span>
-                </label>
-                <div className="relative">
-                  <div className="absolute inset-y-0 left-0 pl-3.5 flex items-center pointer-events-none">
-                    <Building2 className="h-4 w-4 text-[#94A3B8]" />
-                  </div>
-                  <select
-                    name="department"
-                    value={employeeForm.department}
-                    onChange={handleChange}
-                    className="w-full pl-10 pr-9 py-2 border border-[#E2E8F0] rounded-lg bg-[#FFFFFF] text-[#0F172A] text-xs hover:border-[#ff5500] focus:outline-none focus:ring-1 focus:ring-[#002185] appearance-none cursor-pointer"
-                    required
-                  >
-                    <option value="Software Engineering">Software Engineering</option>
-                    <option value="Design & UX">Design & UX</option>
-                    <option value="Product & Marketing">Product & Marketing</option>
-                    <option value="Finance & Accounts">Finance & Accounts</option>
-                    <option value="Human Resources">Human Resources</option>
-                    <option value="Operations & Logistics">Operations & Logistics</option>
-                  </select>
-                  <div className="absolute inset-y-0 right-0 pr-3 flex items-center pointer-events-none">
-                    <ChevronDown className="h-4 w-4 text-[#94A3B8]" />
-                  </div>
+            {/* Department */}
+            <div>
+              <label className="mb-1.5 block text-xs font-bold text-[#002185]">
+                Department <span className="text-[#DC2626]">*</span>
+              </label>
+              <div className="relative">
+                <div className="absolute inset-y-0 left-0 pl-3.5 flex items-center pointer-events-none">
+                  <Building2 className="h-4 w-4 text-[#94A3B8]" />
+                </div>
+                <select
+                  name="department"
+                  value={employeeForm.department}
+                  onChange={handleChange}
+                  className="w-full pl-10 pr-9 py-2 border border-[#E2E8F0] rounded-lg bg-[#FFFFFF] text-[#0F172A] text-xs hover:border-[#ff5500] focus:outline-none focus:ring-1 focus:ring-[#002185] appearance-none cursor-pointer"
+                  required
+                >
+                  <option value="Software Engineering">Software Engineering</option>
+                  <option value="Design & UX">Design & UX</option>
+                  <option value="Product & Marketing">Product & Marketing</option>
+                  <option value="Finance & Accounts">Finance & Accounts</option>
+                  <option value="Human Resources">Human Resources</option>
+                  <option value="Operations & Logistics">Operations & Logistics</option>
+                </select>
+                <div className="absolute inset-y-0 right-0 pr-3 flex items-center pointer-events-none">
+                  <ChevronDown className="h-4 w-4 text-[#94A3B8]" />
                 </div>
               </div>
+            </div>
 
+            {/* Position & Basic Monthly Salary */}
+            <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
               <div>
                 <label className="mb-1.5 block text-xs font-bold text-[#002185]">
                   Position / Title <span className="text-[#DC2626]">*</span>
@@ -308,6 +312,28 @@ export const AddEmployee = ({ onEmployeeAdded }) => {
                     placeholder="e.g. Senior Software Engineer"
                     className="w-full pl-10 pr-3 py-2 border border-[#E2E8F0] rounded-lg bg-[#FFFFFF] text-[#0F172A] text-xs hover:border-[#ff5500] focus:outline-none focus:ring-1 focus:ring-[#002185]"
                     required
+                  />
+                </div>
+              </div>
+
+              <div>
+                <label className="mb-1.5 block text-xs font-bold text-[#002185]">
+                  Basic Monthly Salary (GH₵)
+                </label>
+                <div className="relative">
+                  <div className="absolute inset-y-0 left-0 pl-3.5 flex items-center pointer-events-none">
+                    <Banknote className="h-4 w-4 text-[#94A3B8]" />
+                  </div>
+                  <input
+                    id="input-employee-base-salary"
+                    type="number"
+                    step="0.01"
+                    min="0"
+                    name="baseSalary"
+                    value={employeeForm.baseSalary}
+                    onChange={handleChange}
+                    placeholder="e.g., 2500.00"
+                    className="w-full pl-10 pr-3 py-2 border border-[#E2E8F0] rounded-lg bg-[#FFFFFF] text-[#0F172A] text-xs hover:border-[#ff5500] focus:outline-none focus:ring-1 focus:ring-[#002185]"
                   />
                 </div>
               </div>

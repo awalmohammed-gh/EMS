@@ -41,6 +41,40 @@ const payrollSchema = new mongoose.Schema(
       min: 0,
     },
 
+    latenessDeduction: {
+      type: Number,
+      default: 0,
+      min: 0,
+    },
+
+    totalAttendanceDeductions: {
+      type: Number,
+      default: 0,
+      min: 0,
+    },
+
+    originalAbsenceDeduction: {
+      type: Number,
+      default: 0,
+      min: 0,
+    },
+
+    originalLatenessDeduction: {
+      type: Number,
+      default: 0,
+      min: 0,
+    },
+
+    penaltyOverride: {
+      isWaived: { type: Boolean, default: false },
+      waivedAbsenceDeduction: { type: Number, default: 0 },
+      waivedLatenessDeduction: { type: Number, default: 0 },
+      totalWaived: { type: Number, default: 0 },
+      reason: { type: String, default: "" },
+      waivedBy: { type: String, default: "" },
+      waivedAt: { type: Date },
+    },
+
     allowances: {
       type: Number,
       default: 0,

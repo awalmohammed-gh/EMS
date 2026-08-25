@@ -19,6 +19,7 @@ import {
   X,
   Edit3,
   BarChart3,
+  Fingerprint,
 } from "lucide-react";
 import { useManagement } from "../../context/ManagementContextProvider";
 import Loading from "../../ui/Loading";
@@ -33,6 +34,7 @@ import {
 } from "../../apis/fontApis";
 import WeeklyAttendanceChart from "../../components/WeeklyAttendanceChart";
 import AttendanceMonthlyCalendar from "../../components/AttendanceMonthlyCalendar";
+import BiometricBulkUploadModal from "../../components/BiometricBulkUploadModal";
 
 const Attendance = () => {
   const [attendance, setAttendance] = useState([]);
@@ -53,6 +55,7 @@ const Attendance = () => {
   const [selectedAttendance, setSelectedAttendance] = useState(null);
   const [showDetailsModal, setShowDetailsModal] = useState(false);
   const [showAdjustmentModal, setShowAdjustmentModal] = useState(false);
+  const [showBiometricModal, setShowBiometricModal] = useState(false);
   const [adjustmentFormData, setAdjustmentFormData] = useState({
     id: "",
     employeeId: "",
@@ -518,7 +521,17 @@ const Attendance = () => {
             </div>
           </div>
 
-          <div className="flex items-center gap-2.5">
+          <div className="flex items-center gap-2.5 flex-wrap">
+            <button
+              id="btn-biometric-bulk-upload"
+              onClick={() => setShowBiometricModal(true)}
+              className="flex items-center gap-1.5 px-3.5 py-2 text-xs font-semibold text-white bg-[#002185] hover:bg-[#ff5500] rounded-xl transition-all shadow-xs"
+              title="Bulk Upload Daily Attendance Logs (CSV)"
+            >
+              <Fingerprint className="w-3.5 h-3.5" />
+              <span>Biometric CSV Upload</span>
+            </button>
+
             <button
               onClick={handleOpenNewOverrideModal}
               className="flex items-center gap-1.5 px-3.5 py-2 text-xs font-semibold text-[#002185] bg-[#F8FAFC] border border-[#E2E8F0] rounded-xl hover:bg-[#E2E8F0]/60 transition-colors shadow-xs"
@@ -1338,6 +1351,21 @@ const Attendance = () => {
           </div>
         </div>
       )}
+
+      {/* Biometric Bulk CSV Upload Modal */}
+      <BiometricBulkUploadModal
+        isOpen={showBiometricModal}
+        onClose={() => setShowBiometricModal(false)}
+        employeesList={employeesList}
+        onSuccess={(result) => {
+          fetchAttendance(false);
+          setShowToast({
+            show: true,
+            message: `Biometric attendance imported: ${result.stats?.createdCount || 0} created, ${result.stats?.updatedCount || 0} updated!`,
+            type: "success",
+          });
+        }}
+      />
 
       {/* Toast Notification */}
       {showToast?.show && (

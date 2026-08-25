@@ -10,6 +10,7 @@ import {
   getTodayAttendance,
   updateAttendanceRecord,
   createManualAttendance,
+  bulkUploadBiometricAttendance,
 } from "../controllers/employeeAttendance.js";
 import { verifyAdmin } from "../middleware/authAdmin.js";
 
@@ -25,5 +26,7 @@ attendanceRouter.get("/now", employeeAuth, getTodayAttendance);
 attendanceRouter.get("/all", verifyAdmin, getAllAttendance);
 attendanceRouter.put("/record/:id", verifyAdmin, updateAttendanceRecord);
 attendanceRouter.post("/manual-record", verifyAdmin, createManualAttendance);
+attendanceRouter.post("/bulk-upload", verifyAdmin, bulkUploadBiometricAttendance);
+attendanceRouter.post("/biometric-upload", verifyAdmin, bulkUploadBiometricAttendance);
 
 export default attendanceRouter;

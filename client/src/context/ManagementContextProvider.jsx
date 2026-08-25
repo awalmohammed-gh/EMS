@@ -1,6 +1,7 @@
 import { createContext, useContext, useState, useEffect, useCallback } from "react";
 import { getAuthMe, getAdminMe, getEmployee, authLogout, adminLogout, employeeLogout } from "../apis/fontApis";
 import { notificationService } from "../services/notificationService";
+import Toaster from "../ui/Toaster";
 
 const ManagementContext = createContext();
 
@@ -273,6 +274,22 @@ export const ManagementContextProvider = ({ children }) => {
     });
   };
 
+  // Helper methods for flexible toast usage
+  const triggerToast = useCallback((message, type = "success") => {
+    setShowToast({
+      show: true,
+      message: typeof message === "string" ? message : (message?.message || "Notification"),
+      type: type || (message?.type || "success"),
+    });
+  }, []);
+
+  const toast = {
+    success: (msg) => triggerToast(msg, "success"),
+    error: (msg) => triggerToast(msg, "error"),
+    warning: (msg) => triggerToast(msg, "warning"),
+    info: (msg) => triggerToast(msg, "info"),
+  };
+
   const value = {
     user,
     setUser,
@@ -299,12 +316,21 @@ export const ManagementContextProvider = ({ children }) => {
     clockOut,
     showToast,
     setShowToast,
+    triggerToast,
+    toast,
     notificationService,
   };
 
   return (
     <ManagementContext.Provider value={value}>
       {children}
+      {showToast?.show && (
+        <Toaster
+          message={showToast.message}
+          type={showToast.type}
+          onClose={() => setShowToast({ show: false, message: "", type: "success" })}
+        />
+      )}
     </ManagementContext.Provider>
   );
 };
@@ -315,6 +341,19 @@ export const useManagement = () => {
     throw new Error("Check your context provider");
   }
   return context;
+};
+
+export const useToast = () => {
+  const context = useContext(ManagementContext);
+  if (!context) {
+    throw new Error("useToast must be used within ManagementContextProvider");
+  }
+  return {
+    showToast: context.triggerToast,
+    setShowToast: context.setShowToast,
+    toast: context.toast,
+    toastState: context.showToast,
+  };
 };
 
 export default ManagementContextProvider;

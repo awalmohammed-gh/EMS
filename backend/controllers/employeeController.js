@@ -28,6 +28,7 @@ export const employeeDetails = async (req, res) => {
       phone: emp.phone || "+233 24 000 0000",
       department: emp.department || "General",
       position: emp.position || "Staff Member",
+      baseSalary: Number(emp.baseSalary || 0),
       employmentType: emp.employmentType || "Full-time",
       employmentDate: emp.employmentDate || new Date(),
       role: emp.role || "employee",
@@ -59,7 +60,7 @@ export const employeeNameList = async (req, res) => {
     let employees = [];
     try {
       employees = await Employee.find({})
-        .select("_id employeeId fullName department position email phone")
+        .select("_id employeeId fullName department position email phone baseSalary")
         .sort({ fullName: 1 })
         .lean();
     } catch (dbErr) {

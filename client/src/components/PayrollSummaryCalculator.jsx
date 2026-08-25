@@ -98,9 +98,13 @@ export const PayrollSummaryCalculator = ({
   const unexcusedAbsences = Math.max(0, standardWorkingDays - payableDays);
   const attendanceRate = standardWorkingDays > 0 ? Math.min(100, Math.round((payableDays / standardWorkingDays) * 100)) : 100;
 
-  // Fixed Absenteeism Deduction Rule: GH₵10.00 per absent day (unexcusedAbsences * 10)
-  const FIXED_ABSENCE_DEDUCTION_RATE = 10;
-  const absentDaysDeduction = Number((unexcusedAbsences * FIXED_ABSENCE_DEDUCTION_RATE).toFixed(2));
+  // Dynamic Absenteeism Deduction Rule from CompanySettings (default GH₵10.00)
+  const absenceDeductionRate = Number(summaryData?.rates?.absenceDeductionRate || summaryData?.penaltySettings?.absenceDeductionRate || 10);
+  const absentDaysDeduction = Number((unexcusedAbsences * absenceDeductionRate).toFixed(2));
+
+  // Lateness Penalties from CompanySettings Tiers
+  const latenessPenalties = Number(summaryData?.salaryCalculation?.latenessDeductions || 0);
+  const totalAttendanceDeductions = absentDaysDeduction + latenessPenalties;
 
   // Dynamic custom earnings / allowances (defaults to 0 unless added)
   const [customEarnings, setCustomEarnings] = useState([]);
@@ -109,7 +113,7 @@ export const PayrollSummaryCalculator = ({
   const totalDynamicEarnings = customEarnings.reduce((acc, item) => acc + Number(item.amount || 0), 0);
   const totalDynamicDeductions = customDeductions.reduce((acc, item) => acc + Number(item.amount || 0), 0);
 
-  const totalDeductions = absentDaysDeduction + totalDynamicDeductions;
+  const totalDeductions = totalAttendanceDeductions + totalDynamicDeductions;
   const grossEarnings = baseSalary + totalDynamicEarnings;
   const netSalary = Math.max(0, grossEarnings - totalDeductions);
 
@@ -131,9 +135,11 @@ export const PayrollSummaryCalculator = ({
         earnings: customEarnings,
         deductions: customDeductions,
         absentDaysDeduction: Number(absentDaysDeduction.toFixed(2)),
+        latenessDeduction: Number(latenessPenalties.toFixed(2)),
+        totalAttendanceDeductions: Number(totalAttendanceDeductions.toFixed(2)),
         totalDeductions: Number(totalDeductions.toFixed(2)),
         netSalary: Number(netSalary.toFixed(2)),
-        remarks: `Attendance: ${attendedDays} attended, ${approvedLeaveDays} approved leave, ${unexcusedAbsences} absent day(s) for ${selectedMonth}.`,
+        remarks: `Attendance: ${attendedDays} attended, ${approvedLeaveDays} approved leave, ${unexcusedAbsences} absent day(s), GH₵${latenessPenalties.toFixed(2)} lateness penalties for ${selectedMonth}.`,
       });
     }
   };
@@ -396,7 +402,7 @@ export const PayrollSummaryCalculator = ({
                 <div>
                   <span className="font-medium text-[#DC2626]">Absent Days Deduction</span>
                   <p className="text-[10px] text-[#DC2626]/80">
-                    {unexcusedAbsences} unexcused absent day(s) @ GH₵10.00/day
+                    {unexcusedAbsences} unexcused absent day(s) @ GH₵{absenceDeductionRate}/day
                   </p>
                 </div>
                 <span className="font-bold text-[#DC2626]">
@@ -412,6 +418,21 @@ export const PayrollSummaryCalculator = ({
                 <span className="font-bold text-[#16A34A]">GHS 0.00</span>
               </div>
             )}
+
+            {/* Lateness Penalties */}
+            {latenessPenalties > 0 ? (
+              <div className="flex items-center justify-between py-2 px-3 rounded-lg bg-[#FFFBEB] border border-[#FDE68A]">
+                <div>
+                  <span className="font-medium text-[#B45309]">Lateness Tier Penalties</span>
+                  <p className="text-[10px] text-[#B45309]/80">
+                    {lateDays} late clock-in(s) evaluated against company penalty tiers
+                  </p>
+                </div>
+                <span className="font-bold text-[#DC2626]">
+                  -{formatCurrency(latenessPenalties)}
+                </span>
+              </div>
+            ) : null}
 
             {/* Dynamic Custom Deductions */}
             {customDeductions.length > 0 ? (

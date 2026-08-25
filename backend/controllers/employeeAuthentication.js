@@ -17,12 +17,14 @@ export const createEmployeeAccount = async (req, res) => {
       position,
       employmentDate,
       role,
+      baseSalary,
     } = req.body;
 
     const assignedRole = (role || "employee").toLowerCase().trim();
     const cleanEmail = (email || "").toLowerCase().trim();
     const name = (fullName || "").trim();
     const id = (employeeId || `EMP00${Math.floor(Math.random() * 900) + 100}`).trim();
+    const parsedBaseSalary = baseSalary !== undefined && baseSalary !== "" && !isNaN(Number(baseSalary)) ? Math.max(0, Number(baseSalary)) : 0;
 
     // Validate input
     if (
@@ -77,6 +79,7 @@ export const createEmployeeAccount = async (req, res) => {
       department,
       position,
       employmentDate: employmentDate ? new Date(employmentDate) : new Date(),
+      baseSalary: parsedBaseSalary,
       role: assignedRole,
       status: "active",
       isActive: true,

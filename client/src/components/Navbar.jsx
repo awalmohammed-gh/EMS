@@ -339,26 +339,22 @@ export const Navbar = ({
                       <span>Leave & Time Off</span>
                     </Link>
 
-                    <Link
-                      to={
-                        isAdmin
-                          ? "/employee/dashboard"
-                          : "/admin/dashboard"
-                      }
-                      onClick={() => setIsProfileMenuOpen(false)}
-                      className="flex items-center justify-between px-4 py-2.5 text-xs font-semibold text-[#64748B] dark:text-slate-300 hover:bg-[#F8FAFC] dark:hover:bg-slate-800 hover:text-[#002185] dark:hover:text-blue-400 transition-all duration-200 border-l-2 border-transparent hover:border-[#002185] dark:hover:border-blue-400"
-                      role="menuitem"
-                    >
-                      <span className="flex items-center gap-3">
-                        <ExternalLink className="w-4 h-4 text-[#64748B] dark:text-slate-400" />
-                        <span>
-                          {isAdmin ? "Switch to Employee View" : "Switch to Admin Portal"}
+                    {isAdmin && (
+                      <Link
+                        to="/employee/dashboard"
+                        onClick={() => setIsProfileMenuOpen(false)}
+                        className="flex items-center justify-between px-4 py-2.5 text-xs font-semibold text-[#64748B] dark:text-slate-300 hover:bg-[#F8FAFC] dark:hover:bg-slate-800 hover:text-[#002185] dark:hover:text-blue-400 transition-all duration-200 border-l-2 border-transparent hover:border-[#002185] dark:hover:border-blue-400"
+                        role="menuitem"
+                      >
+                        <span className="flex items-center gap-3">
+                          <ExternalLink className="w-4 h-4 text-[#64748B] dark:text-slate-400" />
+                          <span>Switch to Employee View</span>
                         </span>
-                      </span>
-                      <span className="text-[10px] bg-[#E2E8F0] dark:bg-slate-800 text-[#475569] dark:text-slate-300 px-2 py-0.5 rounded-full font-medium">
-                        Portal
-                      </span>
-                    </Link>
+                        <span className="text-[10px] bg-[#E2E8F0] dark:bg-slate-800 text-[#475569] dark:text-slate-300 px-2 py-0.5 rounded-full font-medium">
+                          Preview
+                        </span>
+                      </Link>
+                    )}
                   </div>
 
                   {/* Divider */}

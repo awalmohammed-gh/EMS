@@ -21,9 +21,14 @@ import { useManagement } from "../../context/ManagementContextProvider";
 import PayslipsModal from "../../components/modal/PayslipsModal";
 import PayrollDetailsModal from "../../components/modal/PayrollDetailsModal";
 import PayrollSummaryCalculator from "../../components/PayrollSummaryCalculator";
+import PayrollCycleHistory from "../../components/PayrollCycleHistory";
+import PenaltyPayrollImpactChart from "../../components/PenaltyPayrollImpactChart";
 import { getAllPayslips, updatePayrollStatus, deletePayroll } from "../../apis/fontApis";
+import { downloadPayslipPDF } from "../../utils/payslipPdfGenerator";
 import {
   List,
+  History,
+  TrendingDown,
 } from "lucide-react";
 import Loading from "../../ui/Loading";
 import ErrorMessage from "../../ui/ErrorMessage";
@@ -250,6 +255,26 @@ const Payslips = () => {
     }
   };
 
+  // Download PDF Action Handler
+  const handleDownloadPDF = async (payrollItem) => {
+    try {
+      setShowToast({
+        message: `Generating official payslip PDF for ${payrollItem?.employee?.fullName || payrollItem?.employeeName || "employee"}...`,
+        type: "success",
+        show: true,
+      });
+      await downloadPayslipPDF(payrollItem);
+    } catch (err) {
+      console.error("PDF generation failed:", err);
+      setShowToast({
+        message: "Failed to generate PDF. Opening print preview...",
+        type: "error",
+        show: true,
+      });
+      navigate(`/print-payslips/${payrollItem?._id || payrollItem?.id || payrollItem?.payslipNumber}`);
+    }
+  };
+
   // Delete Action
   const handleDelete = async (item) => {
     const targetId = item?._id || item?.id || item?.payslipNumber;
@@ -403,14 +428,15 @@ const Payslips = () => {
         </div>
 
         {/* Primary View Switcher Tabs */}
-        <div className="flex items-center p-1.5 bg-[#F8FAFC] border border-[#E2E8F0] rounded-2xl self-start">
+        <div className="flex items-center p-1.5 bg-[#F8FAFC] dark:bg-slate-800/80 border border-[#E2E8F0] dark:border-slate-800 rounded-2xl self-start flex-wrap gap-1">
           <button
+            id="tab-btn-records"
             type="button"
             onClick={() => setActiveViewTab("records")}
             className={`flex items-center gap-2 px-4 py-2 rounded-xl text-xs font-bold transition-all cursor-pointer ${
               activeViewTab === "records"
                 ? "bg-[#002185] text-white shadow-xs"
-                : "text-[#64748B] hover:text-[#002185]"
+                : "text-[#64748B] hover:text-[#002185] dark:text-slate-400"
             }`}
           >
             <List className="w-3.5 h-3.5" />
@@ -418,12 +444,41 @@ const Payslips = () => {
           </button>
 
           <button
+            id="tab-btn-cycles"
+            type="button"
+            onClick={() => setActiveViewTab("cycles")}
+            className={`flex items-center gap-2 px-4 py-2 rounded-xl text-xs font-bold transition-all cursor-pointer ${
+              activeViewTab === "cycles"
+                ? "bg-[#002185] text-white shadow-xs"
+                : "text-[#64748B] hover:text-[#002185] dark:text-slate-400"
+            }`}
+          >
+            <History className="w-3.5 h-3.5" />
+            <span>Cycle History</span>
+          </button>
+
+          <button
+            id="tab-btn-impact"
+            type="button"
+            onClick={() => setActiveViewTab("impact")}
+            className={`flex items-center gap-2 px-4 py-2 rounded-xl text-xs font-bold transition-all cursor-pointer ${
+              activeViewTab === "impact"
+                ? "bg-[#002185] text-white shadow-xs"
+                : "text-[#64748B] hover:text-[#002185] dark:text-slate-400"
+            }`}
+          >
+            <TrendingDown className="w-3.5 h-3.5" />
+            <span>Penalty Impact Analytics</span>
+          </button>
+
+          <button
+            id="tab-btn-calculator"
             type="button"
             onClick={() => setActiveViewTab("calculator")}
             className={`flex items-center gap-2 px-4 py-2 rounded-xl text-xs font-bold transition-all cursor-pointer ${
               activeViewTab === "calculator"
                 ? "bg-[#002185] text-white shadow-xs"
-                : "text-[#64748B] hover:text-[#002185]"
+                : "text-[#64748B] hover:text-[#002185] dark:text-slate-400"
             }`}
           >
             <Calculator className="w-3.5 h-3.5 text-[#ff5500]" />
@@ -439,6 +494,25 @@ const Payslips = () => {
                 setShowPayslipsModal(true);
               }}
             />
+          </div>
+        )}
+
+        {/* Payroll Cycle History */}
+        {activeViewTab === "cycles" && (
+          <div className="animate-in fade-in slide-in-from-top-4 duration-200">
+            <PayrollCycleHistory
+              onSelectCycle={(cycleMonth) => {
+                setFilterMonth(cycleMonth.split(" ")[0]);
+                setActiveViewTab("records");
+              }}
+            />
+          </div>
+        )}
+
+        {/* Penalty Impact Analytics Dashboard Chart */}
+        {activeViewTab === "impact" && (
+          <div className="animate-in fade-in slide-in-from-top-4 duration-200">
+            <PenaltyPayrollImpactChart />
           </div>
         )}
 
@@ -690,32 +764,69 @@ const Payslips = () => {
                         <div className="col-span-1 flex items-center justify-end gap-1 relative">
                           {/* Eye Icon ("View Details") */}
                           <button
+                            id={`btn-view-details-${pay?._id || index}`}
                             type="button"
-                            onClick={() => handleViewDetails(pay)}
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              handleViewDetails(pay);
+                            }}
                             className="p-1.5 text-[#002185] hover:text-[#ff5500] hover:bg-[#F1F5F9] rounded-lg transition-all duration-200 cursor-pointer"
-                            title="View Complete Payroll Details"
+                            title="View Complete Breakdown"
                           >
                             <Eye className="w-4 h-4" />
                           </button>
 
+                          {/* Download PDF Icon */}
+                          <button
+                            id={`btn-download-pdf-${pay?._id || index}`}
+                            type="button"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              handleDownloadPDF(pay);
+                            }}
+                            className="p-1.5 text-[#16A34A] hover:text-[#002185] hover:bg-[#F1F5F9] rounded-lg transition-all duration-200 cursor-pointer"
+                            title="Download PDF Payslip"
+                          >
+                            <Download className="w-4 h-4" />
+                          </button>
+
                           {/* Print Icon */}
                           <button
+                            id={`btn-print-payslip-${pay?._id || index}`}
                             type="button"
-                            onClick={() => navigate(`/print-payslips/${pay?._id || pay?.id || pay?.payslipNumber}`)}
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              navigate(`/print-payslips/${pay?._id || pay?.id || pay?.payslipNumber}`);
+                            }}
                             className="p-1.5 text-[#64748B] hover:text-[#002185] hover:bg-[#F1F5F9] rounded-lg transition-all duration-200 cursor-pointer"
                             title="Print Payslip Document"
                           >
                             <Printer className="w-4 h-4" />
                           </button>
 
+                          {/* Delete Icon */}
+                          <button
+                            id={`btn-delete-payslip-${pay?._id || index}`}
+                            type="button"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              handleDelete(pay);
+                            }}
+                            className="p-1.5 text-[#DC2626] hover:text-red-700 hover:bg-[#FEF2F2] rounded-lg transition-all duration-200 cursor-pointer"
+                            title="Delete Payroll Record"
+                          >
+                            <Trash2 className="w-4 h-4" />
+                          </button>
+
                           {/* More Options Dropdown */}
                           <button
                             type="button"
-                            onClick={() =>
+                            onClick={(e) => {
+                              e.stopPropagation();
                               setActiveMenuId(
                                 isMenuOpen ? null : (pay?._id || pay?.id || index)
-                              )
-                            }
+                              );
+                            }}
                             className="p-1.5 text-[#64748B] hover:text-[#002185] hover:bg-[#F1F5F9] rounded-lg transition-all duration-200 cursor-pointer"
                             title="More Options"
                           >
@@ -724,18 +835,38 @@ const Payslips = () => {
 
                           {/* Dropdown Menu Popup */}
                           {isMenuOpen && (
-                            <div className="absolute right-0 top-8 w-44 bg-white rounded-xl shadow-xl border border-[#E2E8F0] py-1.5 z-30 animate-in fade-in duration-150">
+                            <div
+                              onClick={(e) => e.stopPropagation()}
+                              className="absolute right-0 top-8 w-48 bg-white rounded-xl shadow-xl border border-[#E2E8F0] py-1.5 z-30 animate-in fade-in duration-150"
+                            >
                               <button
                                 type="button"
-                                onClick={() => handleViewDetails(pay)}
-                                className="w-full text-left px-3.5 py-1.5 text-xs text-[#0F172A] hover:bg-[#F8FAFC] flex items-center gap-2 cursor-pointer"
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  handleViewDetails(pay);
+                                }}
+                                className="w-full text-left px-3.5 py-1.5 text-xs text-[#0F172A] hover:bg-[#F8FAFC] flex items-center gap-2 cursor-pointer font-medium"
                               >
                                 <Eye className="w-3.5 h-3.5 text-[#002185]" />
                                 View Full Breakdown
                               </button>
                               <button
                                 type="button"
-                                onClick={() => handleQuickStatusUpdate(pay, "Paid")}
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  handleDownloadPDF(pay);
+                                }}
+                                className="w-full text-left px-3.5 py-1.5 text-xs text-[#16A34A] hover:bg-[#F0FDF4] flex items-center gap-2 cursor-pointer font-medium"
+                              >
+                                <Download className="w-3.5 h-3.5" />
+                                Download PDF
+                              </button>
+                              <button
+                                type="button"
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  handleQuickStatusUpdate(pay, "Paid");
+                                }}
                                 className="w-full text-left px-3.5 py-1.5 text-xs text-[#16A34A] hover:bg-[#F0FDF4] flex items-center gap-2 cursor-pointer"
                               >
                                 <CheckCircle2 className="w-3.5 h-3.5" />
@@ -743,7 +874,10 @@ const Payslips = () => {
                               </button>
                               <button
                                 type="button"
-                                onClick={() => handleQuickStatusUpdate(pay, "Pending")}
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  handleQuickStatusUpdate(pay, "Pending");
+                                }}
                                 className="w-full text-left px-3.5 py-1.5 text-xs text-[#F59E0B] hover:bg-[#FFFBEB] flex items-center gap-2 cursor-pointer"
                               >
                                 <Clock className="w-3.5 h-3.5" />
@@ -751,19 +885,23 @@ const Payslips = () => {
                               </button>
                               <button
                                 type="button"
-                                onClick={() =>
-                                  navigate(`/print-payslips/${pay?._id || pay?.id || pay?.payslipNumber}`)
-                                }
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  navigate(`/print-payslips/${pay?._id || pay?.id || pay?.payslipNumber}`);
+                                }}
                                 className="w-full text-left px-3.5 py-1.5 text-xs text-[#002185] hover:bg-[#F8FAFC] flex items-center gap-2 cursor-pointer"
                               >
                                 <Printer className="w-3.5 h-3.5" />
-                                Print / PDF Payslip
+                                Print Payslip View
                               </button>
                               <div className="border-t border-[#E2E8F0] my-1"></div>
                               <button
                                 type="button"
-                                onClick={() => handleDelete(pay)}
-                                className="w-full text-left px-3.5 py-1.5 text-xs text-[#DC2626] hover:bg-[#FEF2F2] flex items-center gap-2 cursor-pointer font-medium"
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  handleDelete(pay);
+                                }}
+                                className="w-full text-left px-3.5 py-1.5 text-xs text-[#DC2626] hover:bg-[#FEF2F2] flex items-center gap-2 cursor-pointer font-semibold"
                               >
                                 <Trash2 className="w-3.5 h-3.5" />
                                 Delete Record
@@ -783,7 +921,10 @@ const Payslips = () => {
                             <div>
                               <button
                                 type="button"
-                                onClick={() => handleViewDetails(pay)}
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  handleViewDetails(pay);
+                                }}
                                 className="text-sm font-bold text-[#002185] hover:text-[#ff5500] text-left cursor-pointer"
                               >
                                 {empName}
@@ -796,19 +937,47 @@ const Payslips = () => {
                           <div className="flex items-center gap-1">
                             <button
                               type="button"
-                              onClick={() => handleViewDetails(pay)}
-                              className="p-2 text-[#002185] hover:bg-[#F1F5F9] rounded-lg transition"
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                handleViewDetails(pay);
+                              }}
+                              className="p-2 text-[#002185] hover:bg-[#F1F5F9] rounded-lg transition cursor-pointer"
                               title="View Details"
                             >
                               <Eye className="w-4 h-4" />
                             </button>
                             <button
                               type="button"
-                              onClick={() => navigate(`/print-payslips/${pay?._id || pay?.id || pay?.payslipNumber}`)}
-                              className="p-2 text-[#64748B] hover:bg-[#F1F5F9] rounded-lg transition"
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                handleDownloadPDF(pay);
+                              }}
+                              className="p-2 text-[#16A34A] hover:bg-[#F0FDF4] rounded-lg transition cursor-pointer"
+                              title="Download PDF"
+                            >
+                              <Download className="w-4 h-4" />
+                            </button>
+                            <button
+                              type="button"
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                navigate(`/print-payslips/${pay?._id || pay?.id || pay?.payslipNumber}`);
+                              }}
+                              className="p-2 text-[#64748B] hover:bg-[#F1F5F9] rounded-lg transition cursor-pointer"
                               title="Print"
                             >
                               <Printer className="w-4 h-4" />
+                            </button>
+                            <button
+                              type="button"
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                handleDelete(pay);
+                              }}
+                              className="p-2 text-[#DC2626] hover:bg-[#FEF2F2] rounded-lg transition cursor-pointer"
+                              title="Delete"
+                            >
+                              <Trash2 className="w-4 h-4" />
                             </button>
                           </div>
                         </div>

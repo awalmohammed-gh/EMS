@@ -32,11 +32,6 @@ export const useAdminAuth = () => {
       }
 
       // 2. Check client-side stored session tokens and credentials
-      const token =
-        (typeof window !== "undefined" &&
-          (localStorage.getItem("adminToken") ||
-            localStorage.getItem("token"))) ||
-        null;
       const storedRole =
         typeof window !== "undefined"
           ? localStorage.getItem("userRole")
@@ -45,6 +40,23 @@ export const useAdminAuth = () => {
         typeof window !== "undefined"
           ? localStorage.getItem("adminData")
           : null;
+      const adminToken =
+        typeof window !== "undefined"
+          ? localStorage.getItem("adminToken")
+          : null;
+
+      // If actively logged in as standard employee without admin credentials, strictly deny admin access
+      if (storedRole === "employee" && !adminToken && !storedAdminData) {
+        setIsAuthorized(false);
+        setIsLoading(false);
+        return { adminExists: exists, isAuthorized: false };
+      }
+
+      const token =
+        adminToken ||
+        (typeof window !== "undefined" && storedRole === "admin"
+          ? localStorage.getItem("token")
+          : null);
 
       // If user is already set in context with admin role
       if (user && (user.role === "admin" || role === "admin")) {

@@ -12,8 +12,10 @@ import {
   getDashboardStats,
   getAdminPayrollSummary,
 } from "../controllers/adminController.js";
-import { getSettings } from "../controllers/adminSettingsController.js";
+import { getSettings, getPenaltySettings, updatePenaltySettings, getAuditLogs } from "../controllers/adminSettingsController.js";
 import { createEmployeeAccount } from "../controllers/employeeAuthentication.js";
+import { bulkUploadBiometricAttendance } from "../controllers/employeeAttendance.js";
+import { getPenaltyImpactAnalytics } from "../controllers/analyticsController.js";
 import {
   getAnnouncements,
   getAnnouncementById,
@@ -42,11 +44,23 @@ adminRouter.put("/profile", verifyAdmin, updateAdminProfile);
 adminRouter.put("/change-password", verifyAdmin, changeAdminPassword);
 adminRouter.put("/settings", verifyAdmin, updateAdminSettings);
 adminRouter.get("/settings", verifyAdmin, getSettings);
+adminRouter.get("/settings/penalties", verifyAdmin, getPenaltySettings);
+adminRouter.put("/settings/penalties", verifyAdmin, updatePenaltySettings);
+adminRouter.get("/audit-logs", verifyAdmin, getAuditLogs);
+adminRouter.get("/settings/audit-logs", verifyAdmin, getAuditLogs);
 
 // Live Admin Dashboard Stats and Payroll Summaries
 adminRouter.get("/dashboard-stats", verifyAdmin, getDashboardStats);
 adminRouter.get("/payroll/summary", verifyAdmin, getAdminPayrollSummary);
 adminRouter.get("/payroll-summary", verifyAdmin, getAdminPayrollSummary);
+
+// 6-Month Attendance Penalties & Payroll Cost Impact Analytics
+adminRouter.get("/analytics/penalty-impact", verifyAdmin, getPenaltyImpactAnalytics);
+adminRouter.get("/analytics/penalties-impact", verifyAdmin, getPenaltyImpactAnalytics);
+
+// Biometric Attendance Bulk Upload
+adminRouter.post("/attendance/bulk-upload", verifyAdmin, bulkUploadBiometricAttendance);
+adminRouter.post("/attendance/biometric-upload", verifyAdmin, bulkUploadBiometricAttendance);
 
 // Admin Announcement Endpoints (POST /api/admin/announcements, GET, DELETE, PUT)
 adminRouter.get("/announcements", verifyAdmin, getAnnouncements);

@@ -1,7 +1,9 @@
 import mongoose from "mongoose";
 import { Attendance } from "../models/attendanceModel.js";
 import { Employee } from "../models/employeeModel.js";
+import { CompanySettings } from "../models/CompanySettings.js";
 import { createNotificationRecord } from "./notificationController.js";
+import { evaluateLatenessPenalty } from "./payrollController.js";
 
 const isValidObjectId = (id) =>
   id &&
@@ -164,6 +166,51 @@ export const clockIn = async (req, res) => {
           clockIn: now.toISOString(),
         },
       });
+      // If late, also push an automated in-app notification directly to the employee
+      if (status === "Late") {
+        try {
+          let settingsDoc = null;
+          try {
+            settingsDoc = await CompanySettings.getSingletonSettings();
+          } catch {
+            settingsDoc = {};
+          }
+          const penaltyEval = evaluateLatenessPenalty(
+            now,
+            settingsDoc?.workStartTime || "08:00",
+            settingsDoc || {}
+          );
+          const penaltyAmount = penaltyEval.penalty || 0;
+          const minutesLate = penaltyEval.minutesLate || 0;
+          const tierName = penaltyEval.tier || "Late";
+
+          await createNotificationRecord({
+            recipient_id: String(employeeId),
+            recipient_role: "employee",
+            sender_id: "system",
+            sender_role: "system",
+            sender_name: "Attendance System",
+            title: "⚠️ Lateness Penalty Alert: Upcoming Payslip Impact",
+            message: `You clocked in late today at ${timeStr} (${minutesLate} min late). A penalty of GH₵${penaltyAmount.toFixed(
+              2
+            )} (${tierName}) will be deducted from your upcoming payslip.`,
+            type: "penalty_alert",
+            category: "payroll",
+            priority: "high",
+            action_url: "/employee/dashboard/payslips",
+            action_label: "View Payslip Impact",
+            metadata: {
+              date: today,
+              clockIn: now.toISOString(),
+              minutesLate,
+              penaltyAmount,
+              tier: tierName,
+            },
+          });
+        } catch (empNotifErr) {
+          console.error("Failed to push lateness alert to employee:", empNotifErr.message);
+        }
+      }
     } catch (notifErr) {
       console.error("Failed to push clock-in notification:", notifErr.message);
     }
@@ -541,6 +588,51 @@ export const updateAttendanceRecord = async (req, res) => {
       });
     }
 
+    // If status updated to Absent or Late, notify employee
+    if (status === "Absent" || status === "Late") {
+      try {
+        const targetEmpId = String(updated.employee?._id || updated.employee || "");
+        const settingsDoc = await CompanySettings.getSingletonSettings().catch(() => ({}));
+        if (status === "Absent") {
+          const rate = settingsDoc?.absenceDeductionRate || 10;
+          await createNotificationRecord({
+            recipient_id: targetEmpId,
+            recipient_role: "employee",
+            sender_id: String(req.admin?.id || "admin"),
+            sender_role: "admin",
+            sender_name: req.admin?.fullName || "HR Administrator",
+            title: "⚠️ Absence Recorded: Upcoming Payslip Deduction",
+            message: `An absence for ${updated.date} was recorded. A deduction of GH₵${rate.toFixed(2)} will be applied to your upcoming payslip.`,
+            type: "penalty_alert",
+            category: "payroll",
+            priority: "high",
+            action_url: "/employee/dashboard/payslips",
+            action_label: "View Payslip",
+            metadata: { date: updated.date, absenceDeductionRate: rate, status: "Absent" },
+          });
+        } else if (status === "Late" && updated.clockIn) {
+          const penaltyEval = evaluateLatenessPenalty(new Date(updated.clockIn), settingsDoc?.workStartTime || "08:00", settingsDoc || {});
+          await createNotificationRecord({
+            recipient_id: targetEmpId,
+            recipient_role: "employee",
+            sender_id: String(req.admin?.id || "admin"),
+            sender_role: "admin",
+            sender_name: req.admin?.fullName || "HR Administrator",
+            title: "⚠️ Lateness Penalty Alert: Upcoming Payslip Impact",
+            message: `A late clock-in for ${updated.date} was logged (${penaltyEval.minutesLate} min late). A penalty of GH₵${(penaltyEval.penalty || 0).toFixed(2)} will be deducted from your upcoming payslip.`,
+            type: "penalty_alert",
+            category: "payroll",
+            priority: "high",
+            action_url: "/employee/dashboard/payslips",
+            action_label: "View Payslip Impact",
+            metadata: { date: updated.date, clockIn: updated.clockIn, minutesLate: penaltyEval.minutesLate, penaltyAmount: penaltyEval.penalty, tier: penaltyEval.tier },
+          });
+        }
+      } catch (notifErr) {
+        console.warn("Failed to push update attendance alert:", notifErr.message);
+      }
+    }
+
     return res.status(200).json({
       success: true,
       message: "Attendance record updated successfully.",
@@ -596,6 +688,51 @@ export const createManualAttendance = async (req, res) => {
       { upsert: true, new: true, setDefaultsOnInsert: true }
     ).populate("employee", "fullName department position employeeId email avatar");
 
+    // If status is Absent or Late, notify employee about upcoming deduction
+    if (status === "Absent" || status === "Late") {
+      try {
+        const targetEmpId = String(resolvedEmpId || record?.employee?._id || record?.employee || "");
+        const settingsDoc = await CompanySettings.getSingletonSettings().catch(() => ({}));
+        if (status === "Absent") {
+          const rate = settingsDoc?.absenceDeductionRate || 10;
+          await createNotificationRecord({
+            recipient_id: targetEmpId,
+            recipient_role: "employee",
+            sender_id: String(req.admin?.id || "admin"),
+            sender_role: "admin",
+            sender_name: req.admin?.fullName || "HR Administrator",
+            title: "⚠️ Absence Recorded: Upcoming Payslip Deduction",
+            message: `An absence for ${date} was recorded by HR. A deduction of GH₵${rate.toFixed(2)} will be applied to your upcoming payslip.`,
+            type: "penalty_alert",
+            category: "payroll",
+            priority: "high",
+            action_url: "/employee/dashboard/payslips",
+            action_label: "View Payslip",
+            metadata: { date, absenceDeductionRate: rate, status: "Absent" },
+          });
+        } else if (status === "Late" && clockIn) {
+          const penaltyEval = evaluateLatenessPenalty(new Date(clockIn), settingsDoc?.workStartTime || "08:00", settingsDoc || {});
+          await createNotificationRecord({
+            recipient_id: targetEmpId,
+            recipient_role: "employee",
+            sender_id: String(req.admin?.id || "admin"),
+            sender_role: "admin",
+            sender_name: req.admin?.fullName || "HR Administrator",
+            title: "⚠️ Lateness Penalty Alert: Upcoming Payslip Impact",
+            message: `A late clock-in for ${date} was recorded (${penaltyEval.minutesLate} min late). A penalty of GH₵${(penaltyEval.penalty || 0).toFixed(2)} will be deducted from your upcoming payslip.`,
+            type: "penalty_alert",
+            category: "payroll",
+            priority: "high",
+            action_url: "/employee/dashboard/payslips",
+            action_label: "View Payslip Impact",
+            metadata: { date, clockIn, minutesLate: penaltyEval.minutesLate, penaltyAmount: penaltyEval.penalty, tier: penaltyEval.tier },
+          });
+        }
+      } catch (notifErr) {
+        console.warn("Failed to push manual attendance creation alert:", notifErr.message);
+      }
+    }
+
     return res.status(201).json({
       success: true,
       message: "Manual attendance record saved successfully.",
@@ -608,3 +745,225 @@ export const createManualAttendance = async (req, res) => {
     });
   }
 };
+
+/**
+ * Bulk upload daily attendance logs from biometric time-clocks (CSV import)
+ * Automatically updates individual employee attendance status, work hours & lateness for the period.
+ */
+export const bulkUploadBiometricAttendance = async (req, res) => {
+  try {
+    const { records, deviceId, autoCalculateStatus = true } = req.body;
+
+    if (!Array.isArray(records) || records.length === 0) {
+      return res.status(400).json({
+        success: false,
+        message: "No biometric attendance records provided in bulk payload.",
+      });
+    }
+
+    // 1. Fetch company settings for shift start time & lateness threshold
+    let settings = {
+      workStartTime: "08:00",
+      absenceDeductionRate: 10,
+    };
+    try {
+      const dbSettings = await CompanySettings.findOne().lean();
+      if (dbSettings) settings = { ...settings, ...dbSettings };
+    } catch (err) {
+      console.warn("Could not fetch company settings for bulk attendance:", err.message);
+    }
+
+    // 2. Fetch all employees for fast in-memory code/id/email lookup
+    let allEmployeesList = [];
+    try {
+      allEmployeesList = await Employee.find({}).select("_id employeeId email fullName").lean();
+    } catch (err) {
+      console.warn("Could not query employees list:", err.message);
+    }
+
+    const employeeLookup = new Map();
+    allEmployeesList.forEach((emp) => {
+      const idStr = emp._id.toString();
+      employeeLookup.set(idStr, emp);
+      if (emp.employeeId) employeeLookup.set(emp.employeeId.toUpperCase().trim(), emp);
+      if (emp.email) employeeLookup.set(emp.email.toLowerCase().trim(), emp);
+      if (emp.fullName) employeeLookup.set(emp.fullName.toLowerCase().trim(), emp);
+    });
+
+    let createdCount = 0;
+    let updatedCount = 0;
+    const errors = [];
+    const processedRecords = [];
+
+    for (let i = 0; i < records.length; i++) {
+      const raw = records[i];
+      const rowNum = i + 1;
+
+      const rawEmpId = String(raw.employeeId || raw.staffId || raw.id || raw.code || raw.badgeNo || "").trim();
+      const rawDate = String(raw.date || "").trim();
+
+      if (!rawEmpId || !rawDate) {
+        errors.push({
+          row: rowNum,
+          error: "Missing required Employee ID or Date.",
+          data: raw,
+        });
+        continue;
+      }
+
+      // Match employee
+      const matchedEmp =
+        employeeLookup.get(rawEmpId) ||
+        employeeLookup.get(rawEmpId.toUpperCase()) ||
+        employeeLookup.get(rawEmpId.toLowerCase());
+
+      if (!matchedEmp) {
+        errors.push({
+          row: rowNum,
+          error: `Employee with identifier "${rawEmpId}" not found in system.`,
+          data: raw,
+        });
+        continue;
+      }
+
+      // Normalize date (format to YYYY-MM-DD)
+      let normalizedDate = rawDate;
+      if (rawDate.includes("/")) {
+        const parts = rawDate.split("/");
+        if (parts.length === 3) {
+          if (parts[2].length === 4) {
+            // DD/MM/YYYY or MM/DD/YYYY -> normalize
+            const p0 = parseInt(parts[0], 10);
+            const p1 = parseInt(parts[1], 10);
+            const p2 = parseInt(parts[2], 10);
+            if (p0 > 12) {
+              // DD/MM/YYYY
+              normalizedDate = `${p2}-${String(p1).padStart(2, "0")}-${String(p0).padStart(2, "0")}`;
+            } else {
+              // MM/DD/YYYY or DD/MM/YYYY
+              normalizedDate = `${p2}-${String(p0).padStart(2, "0")}-${String(p1).padStart(2, "0")}`;
+            }
+          }
+        }
+      }
+
+      // Parse clockIn and clockOut
+      let clockInDate = null;
+      let clockOutDate = null;
+
+      if (raw.clockIn && raw.clockIn !== "--" && raw.clockIn !== "null") {
+        if (String(raw.clockIn).includes("T") || String(raw.clockIn).includes("-")) {
+          clockInDate = new Date(raw.clockIn);
+        } else {
+          // Time only e.g. "08:15" or "08:15:00"
+          const timeParts = String(raw.clockIn).trim().split(":");
+          const d = new Date(`${normalizedDate}T00:00:00`);
+          if (timeParts.length >= 2) {
+            d.setHours(parseInt(timeParts[0], 10) || 0, parseInt(timeParts[1], 10) || 0, parseInt(timeParts[2], 10) || 0);
+            clockInDate = d;
+          }
+        }
+      }
+
+      if (raw.clockOut && raw.clockOut !== "--" && raw.clockOut !== "null") {
+        if (String(raw.clockOut).includes("T") || String(raw.clockOut).includes("-")) {
+          clockOutDate = new Date(raw.clockOut);
+        } else {
+          const timeParts = String(raw.clockOut).trim().split(":");
+          const d = new Date(`${normalizedDate}T00:00:00`);
+          if (timeParts.length >= 2) {
+            d.setHours(parseInt(timeParts[0], 10) || 0, parseInt(timeParts[1], 10) || 0, parseInt(timeParts[2], 10) || 0);
+            clockOutDate = d;
+          }
+        }
+      }
+
+      // Calculate work hours
+      let calculatedHours = Number(raw.workHours) || 0;
+      if (!calculatedHours && clockInDate && clockOutDate) {
+        const diffMs = Math.max(0, clockOutDate.getTime() - clockInDate.getTime());
+        calculatedHours = Number((diffMs / (1000 * 60 * 60)).toFixed(2));
+      } else if (!calculatedHours && clockInDate) {
+        calculatedHours = 8; // standard workday default
+      }
+
+      // Determine attendance status
+      let determinedStatus = raw.status ? String(raw.status).trim() : "";
+      if (!determinedStatus || autoCalculateStatus) {
+        if (!clockInDate && !clockOutDate) {
+          determinedStatus = "Absent";
+        } else if (clockInDate) {
+          const evalRes = evaluateLatenessPenalty(
+            clockInDate,
+            settings.workStartTime || "08:00",
+            settings
+          );
+          if (evalRes.minutesLate > 0) {
+            determinedStatus = "Late";
+          } else {
+            determinedStatus = "On Time";
+          }
+        } else {
+          determinedStatus = "Present";
+        }
+      }
+
+      const noteText = raw.notes || (deviceId || raw.deviceId ? `Biometric Time-Clock (Device: ${deviceId || raw.deviceId})` : "Biometric Time-Clock Log");
+
+      try {
+        const existing = await Attendance.findOne({
+          employee: matchedEmp._id,
+          date: normalizedDate,
+        });
+
+        if (existing) {
+          existing.clockIn = clockInDate || existing.clockIn;
+          existing.clockOut = clockOutDate || existing.clockOut;
+          existing.workHours = calculatedHours || existing.workHours;
+          existing.status = determinedStatus || existing.status;
+          existing.notes = noteText;
+          await existing.save();
+          updatedCount++;
+          processedRecords.push(existing);
+        } else {
+          const newRec = await Attendance.create({
+            employee: matchedEmp._id,
+            date: normalizedDate,
+            clockIn: clockInDate,
+            clockOut: clockOutDate,
+            workHours: calculatedHours,
+            status: determinedStatus,
+            notes: noteText,
+          });
+          createdCount++;
+          processedRecords.push(newRec);
+        }
+      } catch (saveErr) {
+        errors.push({
+          row: rowNum,
+          error: saveErr.message || "Failed to save attendance record to database.",
+          data: raw,
+        });
+      }
+    }
+
+    return res.status(200).json({
+      success: true,
+      message: `Bulk biometric attendance uploaded: ${createdCount} created, ${updatedCount} updated, ${errors.length} skipped.`,
+      stats: {
+        totalReceived: records.length,
+        createdCount,
+        updatedCount,
+        errorCount: errors.length,
+      },
+      errors,
+    });
+  } catch (error) {
+    console.error("Error in bulkUploadBiometricAttendance:", error);
+    return res.status(500).json({
+      success: false,
+      message: error.message || "Failed to process bulk biometric attendance upload.",
+    });
+  }
+};
+

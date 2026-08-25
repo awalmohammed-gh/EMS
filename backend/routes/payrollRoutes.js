@@ -10,6 +10,8 @@ import {
   deletePayroll,
   exportPayrollReport,
   getPayrollAnalytics,
+  getPayrollCycles,
+  getPenaltyImpactAnalytics,
 } from "../controllers/payrollController.js";
 import { employeeAuth } from "../middleware/employeeAuth.js";
 
@@ -24,20 +26,28 @@ payrollRouter.post("/generate", verifyAdmin, generatePayroll);
 payrollRouter.get("/payslips", verifyAdmin, allPayslips);
 payrollRouter.get("/list", verifyAdmin, allPayslips);
 
+// Payroll cycle history & status
+payrollRouter.get("/cycles", verifyAdmin, getPayrollCycles);
+payrollRouter.get("/history", verifyAdmin, getPayrollCycles);
+
+// 6-Month attendance penalty impact on payroll cost
+payrollRouter.get("/penalty-impact", verifyAdmin, getPenaltyImpactAnalytics);
+payrollRouter.get("/penalties/impact", verifyAdmin, getPenaltyImpactAnalytics);
+
 // Payroll export reports
 payrollRouter.get("/export", verifyAdmin, exportPayrollReport);
 
-// Payroll analytics for bar charts dashboard
-payrollRouter.get("/analytics", getPayrollAnalytics);
+// Payroll analytics for bar charts dashboard (Admin only)
+payrollRouter.get("/analytics", verifyAdmin, getPayrollAnalytics);
 payrollRouter.get("/admin/analytics", verifyAdmin, getPayrollAnalytics);
 
 // Employee payslips
 payrollRouter.get("/employee-payslip", employeeAuth, employeePayslips);
 
-// Single payroll record details (by ID or payslipNumber)
-payrollRouter.get("/payslip/:id", getPayrollById);
-payrollRouter.get("/details/:id", getPayrollById);
-payrollRouter.get("/:id", getPayrollById);
+// Single payroll record details (by ID or payslipNumber - authenticated with ownership check)
+payrollRouter.get("/payslip/:id", employeeAuth, getPayrollById);
+payrollRouter.get("/details/:id", employeeAuth, getPayrollById);
+payrollRouter.get("/:id", employeeAuth, getPayrollById);
 
 // Update status and deletion
 payrollRouter.put("/status/:id", verifyAdmin, updatePayrollStatus);

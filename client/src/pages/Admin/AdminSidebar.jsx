@@ -1,11 +1,12 @@
 import { Link, useLocation } from "react-router-dom";
 import {
   LayoutDashboardIcon,
-  UsersIcon,
-  FileTextIcon,
-  CalendarIcon,
-  SettingsIcon,
-  MegaphoneIcon,
+  Users,
+  CalendarCheck,
+  CreditCard,
+  CalendarDays,
+  Megaphone,
+  Settings,
 } from "lucide-react";
 import Sidebar from "../../components/Sidebar";
 
@@ -14,12 +15,12 @@ const AdminSidebar = () => {
 
   const adminLinks = [
     { name: "Dashboard", path: "/admin/dashboard", icon: LayoutDashboardIcon },
-    { name: "Employees", path: "/admin/dashboard/employees", icon: UsersIcon },
-    { name: "Attendance", path: "/admin/dashboard/attendance", icon: UsersIcon },
-    { name: "Payroll", path: "/admin/dashboard/payroll", icon: FileTextIcon },
-    { name: "Leave", path: "/admin/dashboard/leave", icon: CalendarIcon },
-    { name: "Announcements", path: "/admin/dashboard/announcements", icon: MegaphoneIcon },
-    { name: "Settings", path: "/admin/dashboard/settings", icon: SettingsIcon },
+    { name: "Employees", path: "/admin/dashboard/employees", icon: Users },
+    { name: "Attendance", path: "/admin/dashboard/attendance", icon: CalendarCheck },
+    { name: "Payroll", path: "/admin/dashboard/payroll", icon: CreditCard },
+    { name: "Leave Requests", path: "/admin/dashboard/leave", icon: CalendarDays },
+    { name: "Announcements", path: "/admin/dashboard/announcements", icon: Megaphone },
+    { name: "Settings", path: "/admin/dashboard/settings", icon: Settings },
   ];
 
   return (
@@ -29,7 +30,8 @@ const AdminSidebar = () => {
         {adminLinks.map((link) => {
           const isActive =
             pathname === link.path ||
-            (link.path === "/admin/dashboard/payroll" && pathname === "/admin/dashboard/payslips");
+            (link.path === "/admin/dashboard/payroll" && pathname === "/admin/dashboard/payslips") ||
+            (link.path === "/admin/dashboard/leave" && pathname.startsWith("/admin/dashboard/leave"));
           return (
             <Link
               key={link.name}

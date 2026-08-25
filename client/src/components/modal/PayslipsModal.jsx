@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useCallback, useMemo } from "react";
 import {
   X,
   User,
@@ -8,8 +8,15 @@ import {
   CreditCard,
   FileText,
   Sparkles,
+  AlertTriangle,
+  Clock,
+  UserX,
+  Plus,
+  Trash2,
+  Building2,
+  Briefcase,
 } from "lucide-react";
-import { namesList, payrollGenerate, calculatePayrollSummary } from "../../apis/fontApis";
+import { namesList, payrollGenerate, calculatePayrollSummary, getEmployeeProfile } from "../../apis/fontApis";
 import { useManagement } from "../../context/ManagementContextProvider";
 import Loading from "../../ui/Loading";
 
@@ -19,16 +26,36 @@ export const PayslipsModal = ({ onClose, onSuccess }) => {
     month: "August 2026",
     paymentDate: new Date().toISOString().split("T")[0],
     basicSalary: "",
-    allowances: "",
-    deductions: "",
+    deductions: 0,
+    absentDaysDeduction: 0,
+    latenessDeduction: 0,
+    originalAbsenceDeduction: 0,
+    originalLatenessDeduction: 0,
     paymentMethod: "Bank Transfer",
     remarks: "",
   });
+
+  // Dynamic Manual Allowances line items
+  const [manualAllowances, setManualAllowances] = useState([
+    { id: "allowance-1", title: "Transport Allowance", amount: "" },
+  ]);
+
+  // Selected Employee Profile Cache
+  const [selectedEmployee, setSelectedEmployee] = useState(null);
+  const [attendanceMetrics, setAttendanceMetrics] = useState(null);
+
+  // Manual Penalty Override & Waiver States
+  const [isWaiverActive, setIsWaiverActive] = useState(false);
+  const [waiveAbsence, setWaiveAbsence] = useState(false);
+  const [waiveLateness, setWaiveLateness] = useState(false);
+  const [waiverReason, setWaiverReason] = useState("");
+
   const [isLoading, setIsLoading] = useState(false);
   const [isCalculating, setIsCalculating] = useState(false);
   const { setShowToast } = useManagement();
   const [employeeNames, setEmployeeNames] = useState([]);
 
+  // Fetch compact employee list for dropdown
   useEffect(() => {
     const fetchNameList = async () => {
       try {
@@ -43,29 +70,48 @@ export const PayslipsModal = ({ onClose, onSuccess }) => {
           });
         }
       } catch (error) {
-        console.error(error);
+        console.error("Error loading employee names:", error);
       }
     };
 
     fetchNameList();
   }, [setShowToast]);
 
-  const handleChange = (e) => {
-    const { name, value } = e.target;
-
-    setPayslipForm((prev) => ({
-      ...prev,
-      [name]: value,
-    }));
-  };
+  // Sum of manual allowances
+  const sumManualAllowances = useMemo(() => {
+    return manualAllowances.reduce((sum, item) => {
+      const val = parseFloat(item.amount);
+      return sum + (isNaN(val) || val < 0 ? 0 : val);
+    }, 0);
+  }, [manualAllowances]);
 
   const basicSalary = Number(payslipForm.basicSalary) || 0;
-  const allowances = Number(payslipForm.allowances) || 0;
-  const deductions = Number(payslipForm.deductions) || 0;
-  const netSalary = basicSalary + allowances - deductions;
+  const generalDeductions = Number(payslipForm.deductions) || 0;
+
+  // Compute calculated vs waived attendance penalties
+  const origAbsence = Number(payslipForm.originalAbsenceDeduction || payslipForm.absentDaysDeduction || 0);
+  const origLateness = Number(payslipForm.originalLatenessDeduction || payslipForm.latenessDeduction || 0);
+  const totalOriginalPenalties = origAbsence + origLateness;
+
+  let waivedAbsenceAmount = 0;
+  let waivedLatenessAmount = 0;
+
+  if (isWaiverActive) {
+    if (waiveAbsence) waivedAbsenceAmount = origAbsence;
+    if (waiveLateness) waivedLatenessAmount = origLateness;
+  }
+
+  const effectiveAbsentDeduction = Math.max(0, origAbsence - waivedAbsenceAmount);
+  const effectiveLatenessDeduction = Math.max(0, origLateness - waivedLatenessAmount);
+  const totalEffectiveAttendanceDeductions = effectiveAbsentDeduction + effectiveLatenessDeduction;
+  const totalWaivedSum = waivedAbsenceAmount + waivedLatenessAmount;
+
+  // Final Net Salary calculation
+  const totalAllDeductions = generalDeductions + totalEffectiveAttendanceDeductions;
+  const netSalary = Math.max(0, parseFloat((basicSalary + sumManualAllowances - totalAllDeductions).toFixed(2)));
 
   const formatCurrency = (amount) => {
-    return (amount || 0).toLocaleString("en-GH", {
+    return (Number(amount) || 0).toLocaleString("en-GH", {
       style: "currency",
       currency: "GHS",
       minimumFractionDigits: 2,
@@ -73,73 +119,188 @@ export const PayslipsModal = ({ onClose, onSuccess }) => {
     });
   };
 
-  // Auto-calculate values based on employee's attendance and approved leaves
-  const handleAutoCalculate = async () => {
+  // Auto-calculate values based on employee's attendance and penalties
+  const handleAutoCalculate = useCallback(async (empId, monthVal, baseVal) => {
+    const targetEmpId = empId !== undefined ? empId : payslipForm.employeeId;
+    const targetMonth = monthVal || payslipForm.month || "August 2026";
+    const targetBase = baseVal !== undefined ? baseVal : (Number(payslipForm.basicSalary) || 4000);
+
+    if (!targetEmpId) return;
+
     try {
       setIsCalculating(true);
       const params = {
-        month: payslipForm.month ? `${payslipForm.month}` : "August 2026",
-        baseSalaryInput: payslipForm.basicSalary || 4000,
+        month: targetMonth,
+        baseSalaryInput: targetBase,
+        employeeId: targetEmpId,
       };
-      if (payslipForm.employeeId) {
-        params.employeeId = payslipForm.employeeId;
-      }
 
       const res = await calculatePayrollSummary(params);
       if (res.data && res.data.success) {
         const calc = res.data.summary;
-        const earnedBase = calc.salaryCalculation.earnedBaseSalary;
-        const totalAllow = calc.salaryCalculation.allowances.total + calc.salaryCalculation.overtimeBonus;
-        const totalDeduct = calc.salaryCalculation.deductions.total;
+        const earnedBase = calc.salaryCalculation.basicSalary || calc.salaryCalculation.earnedBaseSalary || targetBase;
+        const absDeduct = calc.salaryCalculation.absenceDeductions || 0;
+        const lateDeduct = calc.salaryCalculation.latenessDeductions || 0;
+
+        setAttendanceMetrics(calc.workingDaysMetric || null);
 
         setPayslipForm((prev) => ({
           ...prev,
           basicSalary: earnedBase,
-          allowances: totalAllow,
-          deductions: totalDeduct,
-          remarks: `Calculated from ${calc.workingDaysMetric.presentDays} attended days, ${calc.workingDaysMetric.approvedPaidLeaveDays} approved leave days, and ${calc.workingDaysMetric.lateDays} late check-ins for ${calc.month}.`,
+          absentDaysDeduction: absDeduct,
+          latenessDeduction: lateDeduct,
+          originalAbsenceDeduction: absDeduct,
+          originalLatenessDeduction: lateDeduct,
+          remarks: `Calculated from ${calc.workingDaysMetric?.presentDays || 0} attended days, ${calc.workingDaysMetric?.approvedPaidLeaveDays || 0} approved leaves, ${calc.workingDaysMetric?.absentDays || 0} absent days, and ${calc.workingDaysMetric?.lateDays || 0} late check-in(s) for ${calc.month || targetMonth}.`,
         }));
-
-        setShowToast({
-          message: "Payroll figures auto-calculated from attendance & approved leaves!",
-          type: "success",
-          show: true,
-        });
       }
     } catch (err) {
-      console.error("Auto calculation error:", err);
-      setShowToast({
-        message: "Failed to auto-calculate from attendance. Please enter manually.",
-        type: "error",
-        show: true,
-      });
+      console.warn("Auto calculation notice:", err.message);
     } finally {
       setIsCalculating(false);
     }
+  }, [payslipForm.employeeId, payslipForm.month, payslipForm.basicSalary]);
+
+  // Handle Employee Change -> immediately fetch profile & auto-calculate
+  const handleEmployeeChange = async (e) => {
+    const selectedId = e.target.value;
+    if (!selectedId) {
+      setSelectedEmployee(null);
+      setAttendanceMetrics(null);
+      setPayslipForm((prev) => ({
+        ...prev,
+        employeeId: "",
+        basicSalary: "",
+        absentDaysDeduction: 0,
+        latenessDeduction: 0,
+        originalAbsenceDeduction: 0,
+        originalLatenessDeduction: 0,
+      }));
+      return;
+    }
+
+    // Find in local list
+    const foundEmp = employeeNames.find((emp) => String(emp._id) === String(selectedId));
+    let empBaseSalary = foundEmp && foundEmp.baseSalary ? Number(foundEmp.baseSalary) : 2500;
+
+    setSelectedEmployee(foundEmp || { _id: selectedId });
+
+    // Update form state with employee base salary
+    setPayslipForm((prev) => ({
+      ...prev,
+      employeeId: selectedId,
+      basicSalary: empBaseSalary > 0 ? empBaseSalary : 2500,
+    }));
+
+    // Trigger auto-calculation
+    handleAutoCalculate(selectedId, payslipForm.month, empBaseSalary > 0 ? empBaseSalary : 2500);
+
+    // Also fetch full employee profile asynchronously if needed
+    try {
+      const profileRes = await getEmployeeProfile(selectedId);
+      if (profileRes.data?.success && profileRes.data?.employee) {
+        const fullEmp = profileRes.data.employee;
+        setSelectedEmployee(fullEmp);
+        if (fullEmp.baseSalary && Number(fullEmp.baseSalary) > 0) {
+          empBaseSalary = Number(fullEmp.baseSalary);
+          setPayslipForm((prev) => ({
+            ...prev,
+            basicSalary: empBaseSalary,
+          }));
+        }
+      }
+    } catch (err) {
+      console.warn("Could not fetch full profile:", err.message);
+    }
+  };
+
+  const handleChange = (e) => {
+    const { name, value } = e.target;
+    setPayslipForm((prev) => ({
+      ...prev,
+      [name]: value,
+    }));
+
+    // If month changes, re-trigger auto-calculate
+    if (name === "month" && payslipForm.employeeId) {
+      handleAutoCalculate(payslipForm.employeeId, value, payslipForm.basicSalary);
+    }
+  };
+
+  // Manual Allowance handlers
+  const handleAddAllowance = () => {
+    setManualAllowances((prev) => [
+      ...prev,
+      { id: `allowance-${Date.now()}`, title: "", amount: "" },
+    ]);
+  };
+
+  const handleRemoveAllowance = (id) => {
+    setManualAllowances((prev) => prev.filter((item) => item.id !== id));
+  };
+
+  const handleAllowanceChange = (id, field, value) => {
+    setManualAllowances((prev) =>
+      prev.map((item) => (item.id === id ? { ...item, [field]: value } : item))
+    );
   };
 
   const handleSubmit = async (e) => {
     try {
       e.preventDefault();
+      if (!payslipForm.employeeId) {
+        setShowToast({
+          message: "Please select an employee first.",
+          type: "error",
+          show: true,
+        });
+        return;
+      }
+
       setIsLoading(true);
+
+      const penaltyOverrideData = isWaiverActive && totalWaivedSum > 0 ? {
+        isWaived: true,
+        waivedAbsenceDeduction: waivedAbsenceAmount,
+        waivedLatenessDeduction: waivedLatenessAmount,
+        totalWaived: totalWaivedSum,
+        reason: waiverReason.trim() || "Manual attendance penalty waiver approved by Administrator.",
+      } : { isWaived: false };
+
+      // Format custom earnings / allowances
+      const validAllowances = manualAllowances
+        .filter((a) => a.title.trim() && Number(a.amount) > 0)
+        .map((a) => ({
+          name: a.title.trim(),
+          description: a.title.trim(),
+          amount: parseFloat(a.amount),
+        }));
 
       const payslipData = {
         employee: payslipForm.employeeId,
         payMonth: payslipForm.month,
         paymentDate: payslipForm.paymentDate,
         basicSalary: basicSalary,
-        allowances: allowances,
-        deductions: deductions,
+        baseSalary: basicSalary,
+        earnings: validAllowances,
+        allowances: sumManualAllowances,
+        deductions: generalDeductions,
+        absentDaysDeduction: effectiveAbsentDeduction,
+        latenessDeduction: effectiveLatenessDeduction,
+        originalAbsenceDeduction: origAbsence,
+        originalLatenessDeduction: origLateness,
+        penaltyOverride: penaltyOverrideData,
         paymentMethod: payslipForm.paymentMethod,
-        remarks: payslipForm.remarks || "",
+        remarks: payslipForm.remarks || (penaltyOverrideData.isWaived ? `Waived GH₵${totalWaivedSum} penalties. (${penaltyOverrideData.reason})` : ""),
         netSalary: netSalary,
+        netPay: netSalary,
         status: "Paid",
       };
 
       const { data } = await payrollGenerate(payslipData);
       if (data.success) {
         setShowToast({
-          message: data.message || "Payslip created successfully!",
+          message: data.message || "Payslip generated and recorded successfully!",
           type: "success",
           show: true,
         });
@@ -155,7 +316,7 @@ export const PayslipsModal = ({ onClose, onSuccess }) => {
     } catch (error) {
       console.error(error);
       setShowToast({
-        message: error.response?.data?.message || "An error occurred generating payslip",
+        message: error.response?.data?.message || "An error occurred while generating the payslip.",
         type: "error",
         show: true,
       });
@@ -169,52 +330,56 @@ export const PayslipsModal = ({ onClose, onSuccess }) => {
   }
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+    <div id="payslip-modal-container" className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-4">
       {/* Backdrop */}
       <div
         onClick={onClose}
-        className="absolute inset-0 bg-[#0F172A]/50 backdrop-blur-sm"
+        className="absolute inset-0 bg-[#0F172A]/50 backdrop-blur-xs"
       />
 
       {/* Modal Container */}
       <div
         onClick={(e) => e.stopPropagation()}
-        className="relative z-10 flex max-h-[90vh] w-full max-w-2xl flex-col rounded-2xl bg-[#FFFFFF] shadow-2xl border-2 border-[#002185] animate-fade-in overflow-hidden"
+        className="relative z-10 flex max-h-[92vh] w-full max-w-2xl flex-col rounded-2xl bg-white dark:bg-slate-900 shadow-2xl border-2 border-[#002185] animate-fade-in overflow-hidden"
       >
         {/* Header */}
-        <div className="flex items-center justify-between border-b border-[#E2E8F0] px-6 py-5 bg-[#FFFFFF]">
+        <div className="flex items-center justify-between border-b border-slate-200 dark:border-slate-800 px-5 sm:px-6 py-3.5 bg-white dark:bg-slate-900 shrink-0">
           <div>
-            <h2 className="text-xl font-bold text-[#002185]">
-              Generate Payslip
+            <h2 className="text-lg sm:text-xl font-black text-[#002185] dark:text-blue-400">
+              Generate & Calculate Payslip
             </h2>
-            <p className="mt-1 text-xs text-[#64748B]">
-              Create employee payslip with automatic attendance & leave calculations
+            <p className="text-[11px] sm:text-xs text-slate-500 dark:text-slate-400">
+              Auto-syncs stored base salary, attendance penalties, custom allowances, and live net salary.
             </p>
           </div>
 
           <button
+            id="btn-close-payslip-modal"
             type="button"
             onClick={onClose}
-            className="rounded-lg p-2 text-[#64748B] transition hover:bg-[#F8FAFC] hover:text-[#ff5500]"
+            className="rounded-lg p-1.5 text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800 hover:text-slate-600 transition cursor-pointer"
           >
             <X className="h-5 w-5" />
           </button>
         </div>
 
-        {/* Auto-Calculate Helper Banner */}
-        <div className="mx-6 mt-4 p-3.5 rounded-xl bg-[#F8FAFC] border border-[#E2E8F0] flex items-center justify-between gap-3">
-          <div className="flex items-center gap-2 text-xs text-[#002185]">
-            <Sparkles className="w-4 h-4 text-[#ff5500] shrink-0" />
-            <span>Compute salary based on employee clock-ins & approved leaves</span>
+        {/* Auto-Calculate Quick Bar */}
+        <div className="mx-5 sm:mx-6 mt-3 p-2.5 rounded-xl bg-slate-50 dark:bg-slate-800/60 border border-slate-200 dark:border-slate-700 flex items-center justify-between gap-3 shrink-0">
+          <div className="flex items-center gap-2 text-xs text-[#002185] dark:text-blue-400 min-w-0">
+            <Sparkles className="w-4 h-4 text-amber-500 shrink-0" />
+            <span className="font-medium truncate">
+              Attendance penalties auto-calculate when selecting staff & month
+            </span>
           </div>
           <button
+            id="btn-auto-calculate-payslip"
             type="button"
-            onClick={handleAutoCalculate}
-            disabled={isCalculating}
-            className="px-3 py-1.5 rounded-lg bg-[#002185] hover:bg-[#ff5500] text-white text-xs font-bold transition-all shadow-xs shrink-0 flex items-center gap-1.5"
+            onClick={() => handleAutoCalculate()}
+            disabled={isCalculating || !payslipForm.employeeId}
+            className="px-3 py-1.5 rounded-lg bg-[#002185] hover:bg-[#ff5500] text-white text-xs font-bold transition-all shadow-xs shrink-0 flex items-center gap-1.5 cursor-pointer disabled:opacity-50"
           >
             <Calculator className="w-3.5 h-3.5" />
-            <span>{isCalculating ? "Calculating..." : "Auto-Calculate"}</span>
+            <span>{isCalculating ? "Calculating..." : "Recalculate"}</span>
           </button>
         </div>
 
@@ -222,85 +387,108 @@ export const PayslipsModal = ({ onClose, onSuccess }) => {
         <form
           id="payslip-form"
           onSubmit={handleSubmit}
-          className="flex-1 overflow-y-auto px-6 py-5 space-y-4"
+          className="flex-1 overflow-y-auto px-5 sm:px-6 py-3.5 space-y-4 text-xs"
         >
-          {/* Employee */}
+          {/* Employee Selection */}
           <div>
-            <label className="mb-1.5 block text-xs font-semibold text-[#002185] uppercase tracking-wider">
-              Employee <span className="text-[#DC2626]">*</span>
+            <label className="mb-1 block font-semibold text-[#002185] dark:text-slate-200 uppercase tracking-wider">
+              Select Employee <span className="text-red-500">*</span>
             </label>
 
             <div className="relative">
-              <User className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-[#64748B]" />
-
+              <User className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
               <select
+                id="payslip-employee-select"
                 name="employeeId"
                 value={payslipForm.employeeId}
-                onChange={handleChange}
+                onChange={handleEmployeeChange}
                 required
-                className="w-full appearance-none rounded-xl border border-[#E2E8F0] bg-[#FFFFFF] py-2.5 pl-10 pr-4 text-xs font-medium text-[#0F172A] outline-none transition hover:border-[#ff5500] focus:border-[#ff5500] focus:ring-2 focus:ring-[#ff5500]/30 cursor-pointer"
+                className="w-full appearance-none rounded-xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 py-2.5 pl-10 pr-4 font-semibold text-slate-900 dark:text-slate-100 outline-hidden transition hover:border-[#002185] focus:border-[#002185] focus:ring-2 focus:ring-[#002185]/20 cursor-pointer"
               >
-                <option value="">Select Employee</option>
+                <option value="">-- Choose Staff Member --</option>
                 {employeeNames.map((employee) => (
                   <option key={employee._id} value={employee._id}>
-                    {employee.employeeId} - {employee.fullName}
+                    {employee.employeeId || "EMP"} - {employee.fullName} ({employee.department || "Staff"}) - Base: {formatCurrency(employee.baseSalary || 2500)}
                   </option>
                 ))}
               </select>
             </div>
+
+            {/* Selected Employee Profile Summary Pill */}
+            {selectedEmployee && (
+              <div className="mt-2 p-2.5 rounded-lg bg-blue-50/60 dark:bg-blue-950/30 border border-blue-100 dark:border-blue-900/40 flex flex-wrap items-center justify-between gap-2 text-[11px] animate-fade-in">
+                <div className="flex flex-wrap items-center gap-3">
+                  <span className="font-bold text-[#002185] dark:text-blue-300 flex items-center gap-1">
+                    <User className="w-3.5 h-3.5" />
+                    {selectedEmployee.fullName || selectedEmployee.employeeId}
+                  </span>
+                  <span className="text-slate-500 dark:text-slate-400 flex items-center gap-1">
+                    <Building2 className="w-3 h-3" />
+                    {selectedEmployee.department || "Operations"}
+                  </span>
+                  <span className="text-slate-500 dark:text-slate-400 flex items-center gap-1">
+                    <Briefcase className="w-3 h-3" />
+                    {selectedEmployee.position || "Staff"}
+                  </span>
+                </div>
+                <div className="flex items-center gap-1 font-bold text-emerald-700 dark:text-emerald-400">
+                  <Banknote className="w-3.5 h-3.5" />
+                  Stored Base: {formatCurrency(selectedEmployee.baseSalary || payslipForm.basicSalary || 2500)}
+                </div>
+              </div>
+            )}
           </div>
 
           {/* Month & Payment Date */}
           <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
             <div>
-              <label className="mb-1.5 block text-xs font-semibold text-[#002185] uppercase tracking-wider">
-                Pay Month <span className="text-[#DC2626]">*</span>
+              <label className="mb-1 block font-semibold text-[#002185] dark:text-slate-200 uppercase tracking-wider">
+                Pay Month <span className="text-red-500">*</span>
               </label>
-
               <div className="relative">
-                <Calendar className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-[#64748B]" />
-
+                <Calendar className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
                 <input
-                  type="month"
+                  id="payslip-month-input"
+                  type="text"
                   name="month"
                   value={payslipForm.month}
                   onChange={handleChange}
+                  placeholder="e.g. August 2026"
                   required
-                  className="w-full rounded-xl border border-[#E2E8F0] bg-[#FFFFFF] py-2.5 pl-10 pr-4 text-xs font-medium text-[#0F172A] outline-none transition hover:border-[#ff5500] focus:border-[#ff5500] focus:ring-2 focus:ring-[#ff5500]/30"
+                  className="w-full rounded-xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 py-2 pl-10 pr-4 font-medium text-slate-900 dark:text-slate-100 outline-hidden transition focus:border-[#002185] focus:ring-2 focus:ring-[#002185]/20"
                 />
               </div>
             </div>
 
             <div>
-              <label className="mb-1.5 block text-xs font-semibold text-[#002185] uppercase tracking-wider">
-                Payment Date <span className="text-[#DC2626]">*</span>
+              <label className="mb-1 block font-semibold text-[#002185] dark:text-slate-200 uppercase tracking-wider">
+                Payment Date <span className="text-red-500">*</span>
               </label>
-
               <div className="relative">
-                <Calendar className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-[#64748B]" />
-
+                <Calendar className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
                 <input
+                  id="payslip-date-input"
                   type="date"
                   name="paymentDate"
                   value={payslipForm.paymentDate}
                   onChange={handleChange}
                   required
-                  className="w-full rounded-xl border border-[#E2E8F0] bg-[#FFFFFF] py-2.5 pl-10 pr-4 text-xs font-medium text-[#0F172A] outline-none transition hover:border-[#ff5500] focus:border-[#ff5500] focus:ring-2 focus:ring-[#ff5500]/30"
+                  className="w-full rounded-xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 py-2 pl-10 pr-4 font-medium text-slate-900 dark:text-slate-100 outline-hidden transition focus:border-[#002185] focus:ring-2 focus:ring-[#002185]/20"
                 />
               </div>
             </div>
           </div>
 
-          {/* Financials: Basic Salary, Allowances, Deductions */}
-          <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
+          {/* Basic Monthly Salary & General Deductions */}
+          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
             <div>
-              <label className="mb-1.5 block text-xs font-semibold text-[#002185] uppercase tracking-wider">
-                Basic Salary (GHS) <span className="text-[#DC2626]">*</span>
+              <label className="mb-1 block font-semibold text-[#002185] dark:text-slate-200 uppercase tracking-wider">
+                Basic Monthly Salary (GH₵) <span className="text-red-500">*</span>
               </label>
-
               <div className="relative">
-                <Banknote className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-[#64748B]" />
+                <Banknote className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
                 <input
+                  id="payslip-basic-salary"
                   type="number"
                   name="basicSalary"
                   value={payslipForm.basicSalary}
@@ -308,40 +496,20 @@ export const PayslipsModal = ({ onClose, onSuccess }) => {
                   required
                   min="0"
                   step="0.01"
-                  placeholder="0.00"
-                  className="w-full rounded-xl border border-[#E2E8F0] bg-[#FFFFFF] py-2.5 pl-10 pr-3 text-xs font-medium text-[#0F172A] outline-none transition hover:border-[#ff5500] focus:border-[#ff5500] focus:ring-2 focus:ring-[#ff5500]/30"
+                  placeholder="2500.00"
+                  className="w-full rounded-xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 py-2 pl-10 pr-3 font-bold text-slate-900 dark:text-slate-100 outline-hidden transition focus:border-[#002185]"
                 />
               </div>
             </div>
 
             <div>
-              <label className="mb-1.5 block text-xs font-semibold text-[#002185] uppercase tracking-wider">
-                Allowances (GHS)
+              <label className="mb-1 block font-semibold text-[#002185] dark:text-slate-200 uppercase tracking-wider">
+                Other General Deductions (GH₵)
               </label>
-
               <div className="relative">
-                <Banknote className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-[#64748B]" />
+                <Banknote className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
                 <input
-                  type="number"
-                  name="allowances"
-                  value={payslipForm.allowances}
-                  onChange={handleChange}
-                  min="0"
-                  step="0.01"
-                  placeholder="0.00"
-                  className="w-full rounded-xl border border-[#E2E8F0] bg-[#FFFFFF] py-2.5 pl-10 pr-3 text-xs font-medium text-[#0F172A] outline-none transition hover:border-[#ff5500] focus:border-[#ff5500] focus:ring-2 focus:ring-[#ff5500]/30"
-                />
-              </div>
-            </div>
-
-            <div>
-              <label className="mb-1.5 block text-xs font-semibold text-[#002185] uppercase tracking-wider">
-                Deductions (GHS)
-              </label>
-
-              <div className="relative">
-                <Banknote className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-[#64748B]" />
-                <input
+                  id="payslip-deductions"
                   type="number"
                   name="deductions"
                   value={payslipForm.deductions}
@@ -349,26 +517,217 @@ export const PayslipsModal = ({ onClose, onSuccess }) => {
                   min="0"
                   step="0.01"
                   placeholder="0.00"
-                  className="w-full rounded-xl border border-[#E2E8F0] bg-[#FFFFFF] py-2.5 pl-10 pr-3 text-xs font-medium text-[#0F172A] outline-none transition hover:border-[#ff5500] focus:border-[#ff5500] focus:ring-2 focus:ring-[#ff5500]/30"
+                  className="w-full rounded-xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 py-2 pl-10 pr-3 font-medium text-slate-900 dark:text-slate-100 outline-hidden transition focus:border-[#002185]"
                 />
               </div>
             </div>
           </div>
 
+          {/* Manual Allowances Section (Dynamic Rows) */}
+          <div className="rounded-xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 p-3.5 space-y-3">
+            <div className="flex items-center justify-between">
+              <div>
+                <span className="font-bold text-[#002185] dark:text-blue-400 flex items-center gap-1.5">
+                  <Banknote className="w-4 h-4 text-emerald-600" />
+                  Custom Allowances & Bonuses
+                </span>
+                <p className="text-[10px] text-slate-500">Add individual allowance items (e.g. Transport, Overtime, Housing)</p>
+              </div>
+
+              <button
+                id="btn-add-allowance-row"
+                type="button"
+                onClick={handleAddAllowance}
+                className="px-2.5 py-1 rounded-lg border border-[#002185]/20 hover:bg-[#002185]/10 text-[#002185] dark:text-blue-400 text-[11px] font-bold transition flex items-center gap-1 cursor-pointer"
+              >
+                <Plus className="w-3.5 h-3.5" />
+                <span>+ Add Allowance</span>
+              </button>
+            </div>
+
+            {/* Allowance Rows */}
+            <div className="space-y-2">
+              {manualAllowances.map((item, index) => (
+                <div key={item.id} className="flex items-center gap-2">
+                  <input
+                    type="text"
+                    placeholder="Allowance Title (e.g. Transport Allowance)"
+                    value={item.title}
+                    onChange={(e) => handleAllowanceChange(item.id, "title", e.target.value)}
+                    className="flex-1 rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 px-3 py-1.5 text-xs text-slate-900 dark:text-slate-100 outline-hidden focus:border-[#002185]"
+                  />
+
+                  <div className="relative w-32 sm:w-40">
+                    <span className="absolute left-2.5 top-1/2 -translate-y-1/2 text-slate-400 text-[10px] font-bold">GH₵</span>
+                    <input
+                      type="number"
+                      step="0.01"
+                      min="0"
+                      placeholder="0.00"
+                      value={item.amount}
+                      onChange={(e) => handleAllowanceChange(item.id, "amount", e.target.value)}
+                      className="w-full rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 pl-8 pr-2.5 py-1.5 text-xs font-semibold text-slate-900 dark:text-slate-100 outline-hidden focus:border-[#002185]"
+                    />
+                  </div>
+
+                  {manualAllowances.length > 1 && (
+                    <button
+                      type="button"
+                      onClick={() => handleRemoveAllowance(item.id)}
+                      className="p-1.5 text-slate-400 hover:text-red-500 hover:bg-red-50 dark:hover:bg-red-950/20 rounded-md transition cursor-pointer"
+                      title="Remove allowance"
+                    >
+                      <Trash2 className="w-3.5 h-3.5" />
+                    </button>
+                  )}
+                </div>
+              ))}
+            </div>
+
+            <div className="flex justify-end pt-1 text-[11px] text-slate-600 dark:text-slate-400 font-medium">
+              Total Allowances: <span className="font-bold text-emerald-600 dark:text-emerald-400 ml-1">{formatCurrency(sumManualAllowances)}</span>
+            </div>
+          </div>
+
+          {/* Attendance Penalty Review & Auto-Calculation Breakdown */}
+          <div className="rounded-xl border border-slate-200 dark:border-slate-800 bg-slate-50/70 dark:bg-slate-800/30 p-3.5 space-y-3">
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-2">
+                <AlertTriangle className="w-4 h-4 text-amber-500" />
+                <span className="font-bold text-slate-900 dark:text-white">
+                  Attendance Penalty Auto-Calculation
+                </span>
+              </div>
+              <span className="text-[11px] text-slate-500 font-mono">
+                Total Penalties: {formatCurrency(totalOriginalPenalties)}
+              </span>
+            </div>
+
+            {/* Attendance Days Metric Stats */}
+            {attendanceMetrics && (
+              <div className="grid grid-cols-4 gap-2 text-[10px] text-center">
+                <div className="p-1.5 rounded-lg bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800">
+                  <span className="text-slate-500 block">Attended</span>
+                  <span className="font-bold text-emerald-600 text-xs">{attendanceMetrics.presentDays || 0}d</span>
+                </div>
+                <div className="p-1.5 rounded-lg bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800">
+                  <span className="text-slate-500 block">Leaves</span>
+                  <span className="font-bold text-blue-600 text-xs">{attendanceMetrics.approvedPaidLeaveDays || 0}d</span>
+                </div>
+                <div className="p-1.5 rounded-lg bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800">
+                  <span className="text-slate-500 block">Absent</span>
+                  <span className="font-bold text-rose-600 text-xs">{attendanceMetrics.absentDays || 0}d</span>
+                </div>
+                <div className="p-1.5 rounded-lg bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800">
+                  <span className="text-slate-500 block">Late Days</span>
+                  <span className="font-bold text-amber-600 text-xs">{attendanceMetrics.lateDays || 0}</span>
+                </div>
+              </div>
+            )}
+
+            {/* Breakdown Grid */}
+            <div className="grid grid-cols-2 gap-3">
+              <div className="p-2.5 rounded-lg bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800">
+                <div className="flex items-center justify-between text-slate-500">
+                  <span className="flex items-center gap-1 font-semibold">
+                    <UserX className="w-3.5 h-3.5 text-rose-500" /> Absence Deductions:
+                  </span>
+                  <span className="font-bold text-rose-600 dark:text-rose-400">
+                    {formatCurrency(origAbsence)}
+                  </span>
+                </div>
+              </div>
+
+              <div className="p-2.5 rounded-lg bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800">
+                <div className="flex items-center justify-between text-slate-500">
+                  <span className="flex items-center gap-1 font-semibold">
+                    <Clock className="w-3.5 h-3.5 text-amber-500" /> Lateness Penalties:
+                  </span>
+                  <span className="font-bold text-amber-600 dark:text-amber-400">
+                    {formatCurrency(origLateness)}
+                  </span>
+                </div>
+              </div>
+            </div>
+
+            {/* Manual Waiver / Override Controls */}
+            <div className="pt-2 border-t border-slate-200 dark:border-slate-700 space-y-2">
+              <div className="flex items-center justify-between">
+                <label className="flex items-center gap-2 font-semibold text-[#002185] dark:text-blue-400 cursor-pointer">
+                  <input
+                    id="toggle-waiver-active"
+                    type="checkbox"
+                    checked={isWaiverActive}
+                    onChange={(e) => setIsWaiverActive(e.target.checked)}
+                    className="w-4 h-4 rounded text-[#002185] focus:ring-[#002185]"
+                  />
+                  <span>Enable Manual Penalty Waiver / Override</span>
+                </label>
+                {isWaiverActive && totalWaivedSum > 0 && (
+                  <span className="text-emerald-600 dark:text-emerald-400 font-bold">
+                    Waiving: {formatCurrency(totalWaivedSum)}
+                  </span>
+                )}
+              </div>
+
+              {isWaiverActive && (
+                <div className="space-y-3 pt-2 pl-6 animate-fade-in">
+                  <div className="flex flex-wrap gap-4 text-xs">
+                    <label className="flex items-center gap-1.5 cursor-pointer">
+                      <input
+                        id="chk-waive-absence"
+                        type="checkbox"
+                        checked={waiveAbsence}
+                        onChange={(e) => setWaiveAbsence(e.target.checked)}
+                        className="w-3.5 h-3.5 text-[#002185]"
+                      />
+                      <span>Waive Absence Deductions ({formatCurrency(origAbsence)})</span>
+                    </label>
+
+                    <label className="flex items-center gap-1.5 cursor-pointer">
+                      <input
+                        id="chk-waive-lateness"
+                        type="checkbox"
+                        checked={waiveLateness}
+                        onChange={(e) => setWaiveLateness(e.target.checked)}
+                        className="w-3.5 h-3.5 text-[#002185]"
+                      />
+                      <span>Waive Lateness Penalties ({formatCurrency(origLateness)})</span>
+                    </label>
+                  </div>
+
+                  <div>
+                    <label className="block text-[11px] font-semibold text-slate-600 dark:text-slate-300 mb-1">
+                      Waiver Approval Reason / Justification <span className="text-red-500">*</span>
+                    </label>
+                    <input
+                      id="input-waiver-reason"
+                      type="text"
+                      placeholder="e.g. Medical emergency excused by HR, authorized client meeting on site"
+                      value={waiverReason}
+                      onChange={(e) => setWaiverReason(e.target.value)}
+                      className="w-full px-3 py-1.5 rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 text-xs text-slate-900 dark:text-slate-100"
+                    />
+                  </div>
+                </div>
+              )}
+            </div>
+          </div>
+
           {/* Payment Method */}
           <div>
-            <label className="mb-1.5 block text-xs font-semibold text-[#002185] uppercase tracking-wider">
-              Payment Method <span className="text-[#DC2626]">*</span>
+            <label className="mb-1 block font-semibold text-[#002185] dark:text-slate-200 uppercase tracking-wider">
+              Payment Method <span className="text-red-500">*</span>
             </label>
-
             <div className="relative">
-              <CreditCard className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-[#64748B]" />
+              <CreditCard className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
               <select
+                id="payslip-payment-method"
                 name="paymentMethod"
                 value={payslipForm.paymentMethod}
                 onChange={handleChange}
                 required
-                className="w-full appearance-none rounded-xl border border-[#E2E8F0] bg-[#FFFFFF] py-2.5 pl-10 pr-4 text-xs font-medium text-[#0F172A] outline-none transition hover:border-[#ff5500] focus:border-[#ff5500] focus:ring-2 focus:ring-[#ff5500]/30 cursor-pointer"
+                className="w-full appearance-none rounded-xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 py-2.5 pl-10 pr-4 font-medium text-slate-900 dark:text-slate-100 outline-hidden transition hover:border-[#002185] focus:border-[#002185] focus:ring-2 focus:ring-[#002185]/20 cursor-pointer"
               >
                 <option value="Bank Transfer">Bank Transfer</option>
                 <option value="Mobile Money">Mobile Money</option>
@@ -379,55 +738,79 @@ export const PayslipsModal = ({ onClose, onSuccess }) => {
 
           {/* Remarks */}
           <div>
-            <label className="mb-1.5 block text-xs font-semibold text-[#002185] uppercase tracking-wider">
+            <label className="mb-1 block font-semibold text-[#002185] dark:text-slate-200 uppercase tracking-wider">
               Remarks
             </label>
-
             <div className="relative">
-              <FileText className="absolute left-3 top-3 h-4 w-4 text-[#64748B]" />
+              <FileText className="absolute left-3 top-3 h-4 w-4 text-slate-400" />
               <textarea
+                id="payslip-remarks"
                 name="remarks"
                 value={payslipForm.remarks}
                 onChange={handleChange}
                 rows={2}
                 placeholder="Attendance notes or payment remarks..."
-                className="w-full rounded-xl border border-[#E2E8F0] bg-[#FFFFFF] py-2.5 pl-10 pr-4 text-xs font-medium text-[#0F172A] outline-none transition placeholder:text-[#94A3B8] hover:border-[#ff5500] focus:border-[#ff5500] focus:ring-2 focus:ring-[#ff5500]/30 resize-none"
+                className="w-full rounded-xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 py-2 pl-10 pr-4 font-medium text-slate-900 dark:text-slate-100 outline-hidden transition focus:border-[#002185] resize-none"
               />
             </div>
           </div>
 
-          {/* Net Salary Highlight Summary Card */}
-          <div className="rounded-xl border border-[#E2E8F0] bg-[#F8FAFC] p-4 flex items-center justify-between">
-            <div>
-              <span className="text-xs font-semibold text-[#64748B] uppercase tracking-wider">
-                Calculated Net Payable Salary:
+          {/* Live Net Pay Preview Card */}
+          <div className="rounded-xl border-2 border-[#002185]/30 bg-blue-50/70 dark:bg-blue-950/30 p-4 space-y-2">
+            <div className="flex items-center justify-between">
+              <div>
+                <span className="font-black text-[#002185] dark:text-blue-400 uppercase tracking-wider text-xs block">
+                  Live Net Pay Preview:
+                </span>
+                <p className="text-[11px] text-slate-600 dark:text-slate-400 mt-0.5">
+                  Base ({formatCurrency(basicSalary)}) + Allowances ({formatCurrency(sumManualAllowances)}) - Deductions & Penalties ({formatCurrency(totalAllDeductions)})
+                </p>
+              </div>
+              <span className="text-2xl font-black text-[#002185] dark:text-blue-400">
+                {formatCurrency(netSalary)}
               </span>
-              <p className="text-xs text-[#64748B] mt-0.5">
-                Basic ({formatCurrency(basicSalary)}) + Allowances ({formatCurrency(allowances)}) - Deductions ({formatCurrency(deductions)})
-              </p>
             </div>
-            <span className="text-xl font-black text-[#002185]">
-              {formatCurrency(netSalary)}
-            </span>
+
+            {/* Mini visual equation */}
+            <div className="flex flex-wrap items-center gap-2 pt-2 border-t border-blue-100 dark:border-blue-900/50 text-[10px] text-slate-500">
+              <span>Base: <strong className="text-slate-700 dark:text-slate-300">{formatCurrency(basicSalary)}</strong></span>
+              <span>+</span>
+              <span>Allowances: <strong className="text-emerald-600">{formatCurrency(sumManualAllowances)}</strong></span>
+              <span>-</span>
+              <span>Absence: <strong className="text-rose-600">{formatCurrency(effectiveAbsentDeduction)}</strong></span>
+              <span>-</span>
+              <span>Late: <strong className="text-amber-600">{formatCurrency(effectiveLatenessDeduction)}</strong></span>
+              {generalDeductions > 0 && (
+                <>
+                  <span>-</span>
+                  <span>Other: <strong className="text-rose-600">{formatCurrency(generalDeductions)}</strong></span>
+                </>
+              )}
+              <span>=</span>
+              <span className="font-bold text-[#002185] dark:text-blue-300 text-xs">{formatCurrency(netSalary)}</span>
+            </div>
           </div>
         </form>
 
         {/* Footer */}
-        <div className="flex items-center justify-end gap-3 border-t border-[#E2E8F0] px-6 py-4 bg-[#FFFFFF]">
+        <div className="flex items-center justify-end gap-3 border-t border-slate-200 dark:border-slate-800 px-5 sm:px-6 py-3 bg-white dark:bg-slate-900 shrink-0">
           <button
+            id="btn-cancel-payslip"
             type="button"
             onClick={onClose}
-            className="rounded-xl border border-[#E2E8F0] px-5 py-2 text-xs font-semibold text-[#64748B] transition hover:bg-[#F8FAFC] hover:text-[#002185]"
+            className="rounded-xl border border-slate-200 dark:border-slate-700 px-5 py-2 font-semibold text-slate-600 dark:text-slate-300 transition hover:bg-slate-100 dark:hover:bg-slate-800 cursor-pointer"
           >
             Cancel
           </button>
 
           <button
+            id="btn-submit-payslip"
             type="submit"
             form="payslip-form"
-            className="rounded-xl bg-[#002185] px-6 py-2 text-xs font-bold text-white transition hover:bg-[#ff5500] shadow-sm"
+            disabled={!payslipForm.employeeId || isCalculating}
+            className="rounded-xl bg-[#002185] hover:bg-[#ff5500] px-6 py-2 font-bold text-white transition shadow-sm cursor-pointer disabled:opacity-50"
           >
-            Generate Payslip
+            Generate & Finalize Payslip
           </button>
         </div>
       </div>

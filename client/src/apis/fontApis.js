@@ -108,6 +108,12 @@ export const changeAdminPassword = (data) => {
 export const updateAdminSettings = (data) => {
   return api.put("/admin/settings", data);
 };
+export const getPenaltySettings = () => {
+  return api.get("/admin/settings/penalties");
+};
+export const updatePenaltySettings = (data) => {
+  return api.put("/admin/settings/penalties", data);
+};
 export const createAdminAccount = (data) => {
   return api.post("/auth/admin/register", data);
 };
@@ -150,6 +156,14 @@ export const getPayrollAnalytics = (params) => {
   return api.get("/pay/analytics", { params });
 };
 
+export const getPayrollCycles = (params) => {
+  return api.get("/pay/cycles", { params });
+};
+
+export const getPenaltyImpactAnalytics = (params) => {
+  return api.get("/pay/penalty-impact", { params });
+};
+
 export const getEmployeePayslip = () => {
   return api.get("/pay/employee-payslip");
 };
@@ -186,6 +200,11 @@ export const updateAttendanceRecord = (id, data) => {
 export const createManualAttendanceRecord = (data) => {
   return api.post("/attendance/manual-record", data);
 };
+
+export const bulkUploadBiometricAttendance = (data) => {
+  return api.post("/attendance/bulk-upload", data);
+};
+
 
 
 
@@ -322,3 +341,9 @@ export const updateAttendanceSettings = (data) => {
 export const updateSecuritySettings = (data) => {
   return api.put("/settings/security", data);
 };
+
+// Admin Settings Audit Logs
+export const getAuditLogs = (params) => {
+  return api.get("/admin/audit-logs", { params });
+};
+

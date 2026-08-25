@@ -33,10 +33,11 @@ import {
   Bar,
   CartesianGrid,
 } from "recharts";
-import Loading from "../../ui/Loading";
 import ErrorMessage from "../../ui/ErrorMessage";
 import DepartmentStatusVisualizer from "../../components/DepartmentStatusVisualizer";
 import AnnouncementBoard from "../../components/AnnouncementBoard";
+import DashboardMetricsSkeleton from "../../components/DashboardMetricsSkeleton";
+import PenaltyPayrollImpactChart from "../../components/PenaltyPayrollImpactChart";
 
 const AdminDashboard = () => {
   const navigate = useNavigate();
@@ -220,7 +221,7 @@ const AdminDashboard = () => {
   }, [dashboardData]);
 
   if (isLoading && !dashboardData) {
-    return <Loading />;
+    return <DashboardMetricsSkeleton />;
   }
 
   if (isError && !dashboardData) {
@@ -832,6 +833,9 @@ const AdminDashboard = () => {
           )}
         </div>
       </div>
+
+      {/* 6-Month Attendance Penalty Impact Visualizer */}
+      <PenaltyPayrollImpactChart />
 
       {/* Summary Cards: Payroll & Department Matrix */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">

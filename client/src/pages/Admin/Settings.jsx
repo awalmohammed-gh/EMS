@@ -7,9 +7,11 @@ import {
   Clock,
   Calendar,
   Users,
+  AlertTriangle,
   Settings as SettingsIcon,
   RefreshCw,
   Sparkles,
+  History,
 } from "lucide-react";
 import { useManagement } from "../../context/ManagementContextProvider";
 import { getAdminProfile, getSettings } from "../../apis/fontApis";
@@ -21,8 +23,10 @@ import SecuritySettings from "./Settings/SecuritySettings";
 import CompanySettings from "./Settings/CompanySettings";
 import PayrollSettings from "./Settings/PayrollSettings";
 import AttendanceSettings from "./Settings/AttendanceSettings";
+import PenaltySettings from "./Settings/PenaltySettings";
 import LeaveSettings from "./Settings/LeaveSettings";
 import EmployeeSettings from "./Settings/EmployeeSettings";
+import AuditLogView from "../../components/AuditLogView";
 
 const TABS = [
   { id: "profile", label: "Profile Info", icon: User, desc: "Personal & admin account credentials" },
@@ -30,8 +34,10 @@ const TABS = [
   { id: "company", label: "Company", icon: Building2, desc: "Organization profile, hours & currency" },
   { id: "payroll", label: "Payroll", icon: CreditCard, desc: "Payment cycles, taxes & disbursement" },
   { id: "attendance", label: "Attendance", icon: Clock, desc: "Work schedules, grace periods & overtime" },
+  { id: "penalties", label: "Penalties & Deductions", icon: AlertTriangle, desc: "Absence deductions & lateness penalty tiers" },
   { id: "leave", label: "Leave Policy", icon: Calendar, desc: "Annual, sick leave quotas & approvals" },
   { id: "employee", label: "Employee Rules", icon: Users, desc: "ID prefixes, probation & notice periods" },
+  { id: "audit", label: "Audit Trail & Logs", icon: History, desc: "Track who modified penalty rates and settings" },
 ];
 
 const SettingsContent = () => {
@@ -254,11 +260,17 @@ const SettingsContent = () => {
           {activeTab === "attendance" && (
             <AttendanceSettings onSaveSuccess={handleSaveNotification} />
           )}
+          {activeTab === "penalties" && (
+            <PenaltySettings onSaveSuccess={handleSaveNotification} />
+          )}
           {activeTab === "leave" && (
             <LeaveSettings onSaveSuccess={handleSaveNotification} />
           )}
           {activeTab === "employee" && (
             <EmployeeSettings onSaveSuccess={handleSaveNotification} />
+          )}
+          {activeTab === "audit" && (
+            <AuditLogView />
           )}
         </div>
       </div>
