@@ -24,10 +24,23 @@ import {
   deleteAnnouncement,
   togglePinAnnouncement,
 } from "../controllers/announcementController.js";
-import { deletePayroll } from "../controllers/payrollController.js";
+import { deletePayroll, getMonthlyPayrollRun, generatePayroll, calculateMonthlyPayrollSummary } from "../controllers/payrollController.js";
+import { employeeDetails } from "../controllers/employeeController.js";
+import { deleteLeave, updateLeaveStatus, getAllLeaves } from "../controllers/leaveController.js";
+import { deleteAttendanceRecord } from "../controllers/employeeAttendance.js";
 import { verifyAdmin } from "../middleware/authAdmin.js";
 
 const adminRouter = express.Router();
+
+// Admin Leave Management Endpoints (PATCH /api/admin/leave/:id/status)
+adminRouter.get("/leave/all", verifyAdmin, getAllLeaves);
+adminRouter.get("/leaves", verifyAdmin, getAllLeaves);
+adminRouter.patch("/leave/:id/status", verifyAdmin, updateLeaveStatus);
+adminRouter.put("/leave/:id/status", verifyAdmin, updateLeaveStatus);
+adminRouter.patch("/leaves/:id/status", verifyAdmin, updateLeaveStatus);
+adminRouter.put("/leaves/:id/status", verifyAdmin, updateLeaveStatus);
+adminRouter.patch("/leave/status/:id", verifyAdmin, updateLeaveStatus);
+adminRouter.put("/leave/status/:id", verifyAdmin, updateLeaveStatus);
 
 adminRouter.post("/admin-login", adminLogin);
 adminRouter.post("/login", adminLogin);
@@ -50,9 +63,18 @@ adminRouter.get("/audit-logs", verifyAdmin, getAuditLogs);
 adminRouter.get("/settings/audit-logs", verifyAdmin, getAuditLogs);
 
 // Live Admin Dashboard Stats and Payroll Summaries
+adminRouter.post("/payroll/generate", verifyAdmin, generatePayroll);
+adminRouter.post("/payroll-generate", verifyAdmin, generatePayroll);
 adminRouter.get("/dashboard-stats", verifyAdmin, getDashboardStats);
 adminRouter.get("/payroll/summary", verifyAdmin, getAdminPayrollSummary);
 adminRouter.get("/payroll-summary", verifyAdmin, getAdminPayrollSummary);
+adminRouter.get("/payroll/monthly-run", verifyAdmin, getMonthlyPayrollRun);
+adminRouter.get("/payroll-monthly-run", verifyAdmin, getMonthlyPayrollRun);
+adminRouter.get("/monthly-run", verifyAdmin, getMonthlyPayrollRun);
+adminRouter.get("/payroll/calculate-employee", verifyAdmin, calculateMonthlyPayrollSummary);
+adminRouter.get("/payroll/calculate-summary", verifyAdmin, calculateMonthlyPayrollSummary);
+adminRouter.get("/payroll/employees", verifyAdmin, employeeDetails);
+adminRouter.get("/employees", verifyAdmin, employeeDetails);
 
 // 6-Month Attendance Penalties & Payroll Cost Impact Analytics
 adminRouter.get("/analytics/penalty-impact", verifyAdmin, getPenaltyImpactAnalytics);
@@ -84,6 +106,16 @@ adminRouter.patch("/employee/:id/status", verifyAdmin, updateEmployeeStatus);
 // Admin-only employee deletion (DELETE /api/admin/employees/:id)
 adminRouter.delete("/employees/:id", verifyAdmin, deleteEmployee);
 adminRouter.delete("/employee/:id", verifyAdmin, deleteEmployee);
+
+// Admin-only leave deletion (DELETE /api/admin/leave/:id)
+adminRouter.delete("/leave/:id", verifyAdmin, deleteLeave);
+adminRouter.delete("/leaves/:id", verifyAdmin, deleteLeave);
+
+// Admin-only attendance deletion (DELETE /api/admin/attendance/:id)
+adminRouter.delete("/attendance/:id", verifyAdmin, deleteAttendanceRecord);
+adminRouter.delete("/attendance/record/:id", verifyAdmin, deleteAttendanceRecord);
+
 adminRouter.delete("/:id", verifyAdmin, deleteEmployee);
 
 export default adminRouter;
+

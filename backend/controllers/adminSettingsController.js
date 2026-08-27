@@ -5,13 +5,13 @@ import { AuditLog } from "../models/AuditLog.js";
 // In-memory fallback for penalty settings
 let inMemoryPenaltySettings = {
   workStartTime: "08:00",
-  absenceDeductionRate: 10,
-  lateTier1_amount: 0,
-  lateTier2_amount: 0,
-  lateTier3_amount: 0,
-  lateTier4_amount: 0,
-  lateTier5_amount: 0,
-  lateTier6_amount: 0,
+  absenceDeductionRate: 15,
+  lateTier1_amount: 10,
+  lateTier2_amount: 20,
+  lateTier3_amount: 35,
+  lateTier4_amount: 50,
+  lateTier5_amount: 75,
+  lateTier6_amount: 100,
   updatedAt: new Date(),
 };
 

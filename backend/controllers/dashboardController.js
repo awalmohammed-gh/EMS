@@ -3,6 +3,9 @@ import { Attendance } from "../models/attendanceModel.js";
 import { Employee } from "../models/employeeModel.js";
 import { Leave } from "../models/leaveModel.js";
 import { Payroll } from "../models/payrollModel.js";
+import { User } from "../models/userModel.js";
+import CompanySettings from "../models/CompanySettings.js";
+import { evaluateLatenessPenalty } from "./payrollController.js";
 import {
   getEmployeeLiveToday,
   liveAttendanceStore,
@@ -291,156 +294,395 @@ export const getDashboardOverview = async (req, res) => {
   }
 };
 
+// Helper: Count working days (Mon-Fri) in a given month (0-indexed)
+const getWorkingDaysInMonth = (year, monthIndex) => {
+  const daysInMonth = new Date(year, monthIndex + 1, 0).getDate();
+  let count = 0;
+  for (let day = 1; day <= daysInMonth; day++) {
+    const d = new Date(year, monthIndex, day);
+    const dayOfWeek = d.getDay();
+    if (dayOfWeek !== 0 && dayOfWeek !== 6) {
+      count++;
+    }
+  }
+  return count > 0 ? count : 22;
+};
+
 // Employee dashboard overview
 export const employeeDashboardOverview = async (req, res) => {
   try {
-    const rawEmployeeId = req.employee?.id || req.employee?._id;
-    const today = new Date().toISOString().split("T")[0];
+    const rawEmployeeId = req.employee?.id || req.employee?._id || req.user?.id || req.user?._id;
+    const now = new Date();
+    const today = now.toISOString().split("T")[0];
+    const currentYear = now.getFullYear();
+    const currentMonthIndex = now.getMonth();
+    const currentMonthPrefix = `${currentYear}-${String(currentMonthIndex + 1).padStart(2, "0")}`;
 
     let employee = null;
-    let presentDays = 0;
-    let lateDays = 0;
-    let leaveBalance = 15;
-    let latestPayslip = null;
-    let recentLeaves = [];
-    let todayAttendance = null;
+    let validObjectId = null;
 
+    // 1. Fetch employee profile & base salary
+    if (isValidObjectId(rawEmployeeId)) {
+      validObjectId = rawEmployeeId;
+      employee = await Employee.findById(rawEmployeeId).lean();
+    } else if (rawEmployeeId) {
+      employee = await Employee.findOne({
+        $or: [{ employeeId: rawEmployeeId }, { email: rawEmployeeId }],
+      }).lean();
+      if (employee && employee._id) {
+        validObjectId = employee._id.toString();
+      }
+    }
+
+    if (!employee && isValidObjectId(rawEmployeeId)) {
+      const userDoc = await User.findById(rawEmployeeId).lean();
+      if (userDoc) {
+        employee = {
+          _id: userDoc._id,
+          fullName: userDoc.fullName,
+          email: userDoc.email,
+          role: userDoc.role || "employee",
+          status: userDoc.status || "active",
+          isActive: userDoc.isActive !== false,
+          baseSalary: userDoc.baseSalary || 2500,
+          salary: userDoc.baseSalary || 2500,
+          department: userDoc.department || "Engineering",
+          position: userDoc.position || "Staff",
+          employeeId: userDoc.employeeId || "EMP-001",
+        };
+        validObjectId = userDoc._id.toString();
+      }
+    }
+
+    if (!employee) {
+      const anyEmployee = await Employee.findOne({ isActive: true }).lean();
+      if (anyEmployee) {
+        employee = anyEmployee;
+        validObjectId = anyEmployee._id.toString();
+      }
+    }
+
+    if (!employee) {
+      const anyUser = await User.findOne({ role: "employee" }).lean();
+      if (anyUser) {
+        employee = {
+          _id: anyUser._id,
+          fullName: anyUser.fullName,
+          email: anyUser.email,
+          role: anyUser.role || "employee",
+          status: anyUser.status || "active",
+          isActive: anyUser.isActive !== false,
+          baseSalary: anyUser.baseSalary || 2500,
+          salary: anyUser.baseSalary || 2500,
+          department: anyUser.department || "Engineering",
+          position: anyUser.position || "Staff",
+          employeeId: anyUser.employeeId || "EMP-001",
+        };
+        validObjectId = anyUser._id.toString();
+      }
+    }
+
+    if (!employee) {
+      employee = {
+        _id: rawEmployeeId || "emp_demo_001",
+        employeeId: "EMP-001",
+        fullName: "Mohammed Awal",
+        email: "awalm8043@gmail.com",
+        phone: "+233 24 123 4567",
+        department: "Engineering",
+        position: "Frontend Developer",
+        role: "employee",
+        status: "active",
+        isActive: true,
+        baseSalary: 2500,
+      };
+    }
+
+    const empBaseSalary = Number(employee.baseSalary || employee.salary || 2500);
+
+    // 2. Fetch Company Settings for work start time & absence rate
+    let companySettings = {
+      workStartTime: "08:00",
+      absenceDeductionRate: 10,
+      lateTier1_amount: 5,
+      lateTier2_amount: 10,
+      lateTier3_amount: 20,
+      lateTier4_amount: 30,
+      lateTier5_amount: 50,
+      lateTier6_amount: 75,
+    };
+    try {
+      if (typeof CompanySettings.getSingletonSettings === "function") {
+        const dbSettings = await CompanySettings.getSingletonSettings();
+        if (dbSettings) companySettings = { ...companySettings, ...(dbSettings.toObject ? dbSettings.toObject() : dbSettings) };
+      } else {
+        const dbSettings = await CompanySettings.findOne().lean();
+        if (dbSettings) companySettings = { ...companySettings, ...dbSettings };
+      }
+    } catch (sErr) {
+      console.warn("Company settings query fallback:", sErr.message);
+    }
+
+    // 3. Query Attendance Records (MongoDB + live store sync)
+    let allAttendanceRecords = [];
+    if (validObjectId) {
+      try {
+        const dbAtt = await Attendance.find({
+          $or: [{ employee: validObjectId }, { employee: String(rawEmployeeId) }],
+        }).lean();
+        if (dbAtt && dbAtt.length > 0) {
+          allAttendanceRecords = dbAtt;
+        }
+      } catch (attErr) {
+        console.warn("DB attendance query in employee dashboard:", attErr.message);
+      }
+    }
+
+    // Merge in-memory live attendance store records
+    if (liveAttendanceStore) {
+      liveAttendanceStore.forEach((liveAtt) => {
+        if (
+          String(liveAtt.employee) === String(validObjectId) ||
+          String(liveAtt.employee?._id) === String(validObjectId) ||
+          String(liveAtt.employee) === String(rawEmployeeId) ||
+          String(liveAtt.employee?._id) === String(rawEmployeeId) ||
+          liveAtt.employee?.employeeId === employee.employeeId
+        ) {
+          const existingIdx = allAttendanceRecords.findIndex((a) => a.date === liveAtt.date);
+          if (existingIdx >= 0) {
+            allAttendanceRecords[existingIdx] = { ...allAttendanceRecords[existingIdx], ...liveAtt };
+          } else {
+            allAttendanceRecords.push(liveAtt);
+          }
+        }
+      });
+    }
+
+    // 4. Today's Attendance
+    let todayAttendance = null;
     if (rawEmployeeId) {
       todayAttendance = getEmployeeLiveToday(rawEmployeeId, today);
     }
-
-    try {
-      let dbEmployee = null;
-      let validObjectId = null;
-
-      if (isValidObjectId(rawEmployeeId)) {
-        validObjectId = rawEmployeeId;
-        dbEmployee = await Employee.findById(rawEmployeeId)
-          .select("fullName email department position isActive status employeeId phone")
-          .lean();
-      } else if (rawEmployeeId) {
-        dbEmployee = await Employee.findOne({
-          $or: [
-            { employeeId: rawEmployeeId },
-            { email: rawEmployeeId },
-          ],
-        })
-          .select("fullName email department position isActive status employeeId phone")
-          .lean();
-        if (dbEmployee && dbEmployee._id) {
-          validObjectId = dbEmployee._id.toString();
-        }
-      }
-
-      if (dbEmployee) {
-        employee = dbEmployee;
-      } else {
-        const anyEmployee = await Employee.findOne({ isActive: true })
-          .select("fullName email department position isActive status employeeId phone")
-          .lean();
-        if (anyEmployee) {
-          employee = anyEmployee;
-          validObjectId = anyEmployee._id.toString();
-        }
-      }
-
-      if (!employee) {
-        employee = {
-          _id: rawEmployeeId || "emp_demo_001",
-          employeeId: "EMP-001",
-          fullName: "Mohammed Awal",
-          email: "awalm8043@gmail.com",
-          phone: "+233 24 123 4567",
-          department: "Engineering",
-          position: "Frontend Developer",
-          role: "employee",
-          status: "active",
-          isActive: true,
-        };
-      }
-
-      if (validObjectId) {
-        const attendance = await Attendance.find({ employee: validObjectId }).lean();
-        if (attendance && attendance.length > 0) {
-          presentDays = attendance.filter(
-            (item) => item.status === "On Time" || item.status === "Late",
-          ).length;
-          lateDays = attendance.filter((item) => item.status === "Late").length;
-        }
-
-        const dbTodayAttendance = await Attendance.findOne({
-          employee: validObjectId,
-          date: today,
-        }).lean();
-
-        if (dbTodayAttendance) {
-          todayAttendance = dbTodayAttendance;
-          liveAttendanceStore.set(`${rawEmployeeId}_${today}`, dbTodayAttendance);
-          liveAttendanceStore.set(`${validObjectId}_${today}`, dbTodayAttendance);
-        }
-
-        const dbPayslip = await Payroll.findOne({ employee: validObjectId })
-          .sort({ paymentDate: -1 })
-          .lean();
-
-        if (dbPayslip) {
-          latestPayslip = {
-            month: dbPayslip.payMonth,
-            amount: dbPayslip.netSalary,
-            netSalary: dbPayslip.netSalary,
-          };
-        }
-
-        // Query real leaves from DB
-        const dbLeaves = await Leave.find({ employee: validObjectId })
-          .sort({ createdAt: -1 })
-          .limit(5)
-          .lean();
-
-        if (dbLeaves && dbLeaves.length > 0) {
-          recentLeaves = dbLeaves;
-          const usedDays = dbLeaves
-            .filter((l) => l.status === "Approved")
-            .reduce((acc, curr) => acc + (curr.totalDays || curr.days || 0), 0);
-          leaveBalance = Math.max(0, 15 - usedDays);
-        }
-      }
-
-      // Merge in-memory live leave store items
-      if (liveLeaveStore && liveLeaveStore.length > 0 && employee) {
-        const matchingLive = liveLeaveStore.filter(
-          (l) =>
-            String(l.employee?._id) === String(rawEmployeeId) ||
-            String(l.employee?._id) === String(validObjectId) ||
-            l.employee?.employeeId === employee.employeeId
-        );
-        matchingLive.forEach((item) => {
-          if (!recentLeaves.some((r) => String(r._id) === String(item._id))) {
-            recentLeaves.unshift(item);
-          }
-        });
-      }
-    } catch (dbErr) {
-      console.warn("DB error in employee dashboard overview:", dbErr.message);
+    if (!todayAttendance && validObjectId) {
+      todayAttendance = getEmployeeLiveToday(validObjectId, today);
+    }
+    const matchingToday = allAttendanceRecords.find((r) => r.date === today);
+    if (matchingToday) {
+      todayAttendance = { ...todayAttendance, ...matchingToday };
     }
 
-    res.status(200).json({
+    let todayClockIn = todayAttendance?.clockIn || null;
+    let todayClockOut = todayAttendance?.clockOut || null;
+    let todayWorkHours = Number(todayAttendance?.workHours || 0);
+    let todayStatus = "not_clocked_in";
+
+    if (todayClockIn) {
+      const penaltyEval = evaluateLatenessPenalty(
+        todayClockIn,
+        companySettings.workStartTime,
+        companySettings
+      );
+      if (penaltyEval.minutesLate > 0 || todayAttendance?.status === "Late") {
+        todayStatus = "late";
+      } else {
+        todayStatus = "present";
+      }
+    }
+
+    const todayAttendanceFormatted = {
+      date: today,
+      clockIn: todayClockIn,
+      clockOut: todayClockOut,
+      status: todayStatus,
+      workHours: todayWorkHours,
+      delayMinutes: todayAttendance?.delayMinutes || todayAttendance?.lateMinutes || 0,
+      latePenalty: todayAttendance?.latePenalty || 0,
+      notes: todayAttendance?.notes || "",
+    };
+
+    // 5. Month-to-Date (MTD) Attendance Calculations
+    const mtdAttendanceRecords = allAttendanceRecords.filter((rec) => {
+      if (!rec) return false;
+      if (typeof rec.date === "string" && rec.date.startsWith(currentMonthPrefix)) return true;
+      const d = new Date(rec.date || rec.clockIn);
+      return !isNaN(d.getTime()) && d.getFullYear() === currentYear && d.getMonth() === currentMonthIndex;
+    });
+
+    let presentDays = 0;
+    let lateDays = 0;
+    let onTimeDays = 0;
+    let totalLateMinutes = 0;
+    let totalLatenessDeduction = 0;
+    let explicitAbsentDays = 0;
+
+    mtdAttendanceRecords.forEach((rec) => {
+      const st = (rec.status || "").toLowerCase();
+      if (st === "absent") {
+        explicitAbsentDays++;
+      } else {
+        presentDays++;
+        let isLate = st === "late";
+        let penaltyResult = null;
+
+        if (rec.clockIn) {
+          penaltyResult = evaluateLatenessPenalty(
+            rec.clockIn,
+            companySettings.workStartTime,
+            companySettings
+          );
+          if (penaltyResult.minutesLate > 0) {
+            isLate = true;
+          }
+        } else if (rec.lateMinutes > 0 || rec.delayMinutes > 0) {
+          isLate = true;
+        }
+
+        if (isLate) {
+          lateDays++;
+          const mins = penaltyResult?.minutesLate || Number(rec.lateMinutes || rec.delayMinutes || 15);
+          totalLateMinutes += mins;
+          const penaltyVal = rec.latePenalty !== undefined && rec.latePenalty > 0
+            ? Number(rec.latePenalty)
+            : (penaltyResult?.penalty || Number(companySettings.lateTier1_amount || 5));
+          totalLatenessDeduction += penaltyVal;
+        } else {
+          onTimeDays++;
+        }
+      }
+    });
+
+    // Elapsed workdays in the month up to today
+    let elapsedWorkdays = 0;
+    const totalWorkingDays = getWorkingDaysInMonth(currentYear, currentMonthIndex);
+    const currentDayOfMonth = now.getDate();
+
+    for (let day = 1; day <= currentDayOfMonth; day++) {
+      const d = new Date(currentYear, currentMonthIndex, day);
+      const dayOfWeek = d.getDay();
+      if (dayOfWeek !== 0 && dayOfWeek !== 6) {
+        elapsedWorkdays++;
+      }
+    }
+
+    // 6. Leave Records & Entitlement
+    let dbLeaves = [];
+    if (validObjectId) {
+      try {
+        dbLeaves = await Leave.find({ employee: validObjectId })
+          .sort({ createdAt: -1 })
+          .lean();
+      } catch (lErr) {
+        console.warn("DB leave query in employee dashboard:", lErr.message);
+      }
+    }
+
+    let recentLeaves = [...dbLeaves];
+    if (liveLeaveStore && liveLeaveStore.length > 0) {
+      const matchingLive = liveLeaveStore.filter(
+        (l) =>
+          String(l.employee?._id) === String(rawEmployeeId) ||
+          String(l.employee?._id) === String(validObjectId) ||
+          l.employee?.employeeId === employee.employeeId
+      );
+      matchingLive.forEach((item) => {
+        if (!recentLeaves.some((r) => String(r._id) === String(item._id))) {
+          recentLeaves.unshift(item);
+        }
+      });
+    }
+
+    const totalAnnualLeave = 15;
+    const usedLeaveDays = recentLeaves
+      .filter((l) => l.status === "Approved")
+      .reduce((acc, curr) => acc + (curr.totalDays || curr.days || 0), 0);
+    const pendingLeaveDays = recentLeaves
+      .filter((l) => l.status === "Pending")
+      .reduce((acc, curr) => acc + (curr.totalDays || curr.days || 0), 0);
+    const remainingLeaveDays = Math.max(0, totalAnnualLeave - usedLeaveDays);
+
+    // Calculate approved leave days inside current month elapsed workdays
+    let approvedLeaveDaysThisMonth = 0;
+    recentLeaves
+      .filter((l) => l.status === "Approved")
+      .forEach((leave) => {
+        const start = new Date(leave.startDate);
+        const end = new Date(leave.endDate);
+        for (let d = new Date(start); d <= end; d.setDate(d.getDate() + 1)) {
+          if (d.getFullYear() === currentYear && d.getMonth() === currentMonthIndex && d.getDate() <= currentDayOfMonth) {
+            const dow = d.getDay();
+            if (dow !== 0 && dow !== 6) {
+              approvedLeaveDaysThisMonth++;
+            }
+          }
+        }
+      });
+
+    // Absent days calculation
+    const absentDays = Math.max(
+      explicitAbsentDays,
+      Math.max(0, elapsedWorkdays - presentDays - approvedLeaveDaysThisMonth)
+    );
+
+    // 7. Net Salary Calculation
+    const absenceRate = Number(companySettings.absenceDeductionRate || 10);
+    const totalAbsenceDeduction = absentDays * absenceRate;
+    const totalDeductions = parseFloat((totalAbsenceDeduction + totalLatenessDeduction).toFixed(2));
+    const calculatedNetSalary = parseFloat(Math.max(0, empBaseSalary - totalDeductions).toFixed(2));
+
+    // Latest payslip from Payroll collection
+    let latestPayslip = null;
+    if (validObjectId) {
+      try {
+        const dbPayslip = await Payroll.findOne({ employee: validObjectId })
+          .sort({ paymentDate: -1, createdAt: -1 })
+          .lean();
+        if (dbPayslip) {
+          latestPayslip = {
+            month: dbPayslip.payMonth || dbPayslip.month,
+            amount: dbPayslip.netSalary !== undefined ? dbPayslip.netSalary : dbPayslip.netPay,
+            netSalary: dbPayslip.netSalary !== undefined ? dbPayslip.netSalary : dbPayslip.netPay,
+            basicSalary: dbPayslip.basicSalary || dbPayslip.baseSalary,
+            status: dbPayslip.status || "Paid",
+          };
+        }
+      } catch (pErr) {
+        console.warn("DB payroll query in employee dashboard:", pErr.message);
+      }
+    }
+
+    const netSalaryToReturn = latestPayslip?.netSalary !== undefined && latestPayslip?.netSalary > 0
+      ? latestPayslip.netSalary
+      : calculatedNetSalary;
+
+    return res.status(200).json({
       success: true,
       employee,
       overview: {
         presentDays,
         lateDays,
-        leaveBalance,
-        netSalary: latestPayslip ? latestPayslip.amount : 0,
+        onTimeDays,
+        absentDays,
+        leaveBalance: remainingLeaveDays,
+        totalLeaveDays: totalAnnualLeave,
+        usedLeaveDays,
+        remainingLeaveDays,
+        pendingLeaveDays,
+        baseSalary: empBaseSalary,
+        totalDeductions,
+        totalAbsenceDeduction,
+        totalLatenessDeduction,
+        totalLateMinutes,
+        netSalary: netSalaryToReturn,
         latestPayslip,
       },
-      todayAttendance,
+      todayAttendance: todayAttendanceFormatted,
       recentLeaves,
     });
   } catch (error) {
-    res.status(500).json({
+    console.error("Error in employeeDashboardOverview:", error);
+    return res.status(500).json({
       success: false,
-      message: error.message,
+      message: error.message || "Failed to fetch employee dashboard data",
     });
   }
 };

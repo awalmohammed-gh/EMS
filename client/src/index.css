@@ -23,6 +23,19 @@ body {
   transition: background-color 0.2s ease, color 0.2s ease;
 }
 
+/* Anti-flicker zero transition class applied dynamically during theme switching */
+body.transition-none,
+body.transition-none *,
+body.transition-none *::before,
+body.transition-none *::after,
+html.transition-none,
+html.transition-none *,
+html.transition-none *::before,
+html.transition-none *::after {
+  transition: none !important;
+  animation-duration: 0s !important;
+}
+
 html.dark,
 body.dark,
 .dark body {

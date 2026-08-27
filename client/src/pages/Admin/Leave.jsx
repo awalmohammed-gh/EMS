@@ -15,10 +15,16 @@ import {
   List,
   Check,
   X,
+  Trash2,
+  Loader2,
+  AlertTriangle,
+  Calendar,
 } from "lucide-react";
-import { allLeaves, updateStatus } from "../../apis/fontApis";
+import { allLeaves, updateStatus, deleteLeave } from "../../apis/fontApis";
 import { useManagement } from "../../context/ManagementContextProvider";
+import { getSocket, registerSocketUser } from "../../utils/socket";
 import LeaveApprovalWorkflow from "../../components/LeaveApprovalWorkflow";
+import TeamLeaveCalendar from "../../components/TeamLeaveCalendar";
 import Loading from "../../ui/Loading";
 import ErrorMessage from "../../ui/ErrorMessage";
 
@@ -27,16 +33,18 @@ export const Leave = () => {
   const [search, setSearch] = useState("");
   const [filterStatus, setFilterStatus] = useState("All");
   const [filterType, setFilterType] = useState("All");
-  const [activeTab, setActiveTab] = useState("pending"); // "pending" | "all"
+  const [activeTab, setActiveTab] = useState("pending"); // "pending" | "calendar" | "all"
   const [isLoading, setIsLoading] = useState(false);
   const [isError, setIsError] = useState(null);
   const [updatingStatus, setUpdatingStatus] = useState(null);
+  const [deleteConfirmLeave, setDeleteConfirmLeave] = useState(null);
+  const [isDeleting, setIsDeleting] = useState(false);
 
-  const { setShowToast } = useManagement();
+  const { setShowToast, admin } = useManagement();
 
-  const fetchLeaveRequests = async () => {
+  const fetchLeaveRequests = async (isSilent = false) => {
     try {
-      setIsLoading(true);
+      if (!isSilent) setIsLoading(true);
       setIsError(null);
       const { data } = await allLeaves();
 
@@ -53,31 +61,76 @@ export const Leave = () => {
         }
         setRequests(leaves);
       } else {
-        setIsError(data.message || "Failed to fetch leave requests.");
-        setShowToast({
-          show: true,
-          message: data.message || "Failed to fetch leave requests.",
-          type: "error",
-        });
+        if (!isSilent) {
+          setIsError(data.message || "Failed to fetch leave requests.");
+          setShowToast({
+            show: true,
+            message: data.message || "Failed to fetch leave requests.",
+            type: "error",
+          });
+        }
       }
     } catch (error) {
       console.error("Error fetching leave requests:", error);
       const errorMessage =
         error.response?.data?.message || "Failed to fetch leave requests.";
-      setIsError(errorMessage);
-      setShowToast({
-        show: true,
-        message: errorMessage,
-        type: "error",
-      });
+      if (!isSilent) {
+        setIsError(errorMessage);
+        setShowToast({
+          show: true,
+          message: errorMessage,
+          type: "error",
+        });
+      }
     } finally {
-      setIsLoading(false);
+      if (!isSilent) setIsLoading(false);
     }
   };
 
   useEffect(() => {
     fetchLeaveRequests();
-  }, []);
+
+    const adminId = admin?._id || admin?.id || "admin";
+    registerSocketUser(adminId, "admin");
+
+    const socket = getSocket();
+
+    const handleLeaveCreated = (newLeave) => {
+      const leaveObj = newLeave.leave || newLeave;
+      setRequests((prev) => {
+        const id = leaveObj._id || leaveObj.id;
+        if (prev.some((r) => String(r._id || r.id) === String(id))) {
+          return prev;
+        }
+        return [leaveObj, ...prev];
+      });
+      setShowToast({
+        show: true,
+        message: `New leave request submitted by ${leaveObj.employee?.fullName || "an employee"}.`,
+        type: "info",
+      });
+    };
+
+    const handleLeaveStatusChanged = (eventData) => {
+      const updatedLeave = eventData.leave || eventData;
+      const updatedId = eventData.leaveId || updatedLeave._id || updatedLeave.id;
+      setRequests((prev) =>
+        prev.map((r) =>
+          String(r._id || r.id) === String(updatedId)
+            ? { ...r, ...updatedLeave, status: eventData.status || updatedLeave.status }
+            : r
+        )
+      );
+    };
+
+    socket.on("leave_created", handleLeaveCreated);
+    socket.on("leave_status_changed", handleLeaveStatusChanged);
+
+    return () => {
+      socket.off("leave_created", handleLeaveCreated);
+      socket.off("leave_status_changed", handleLeaveStatusChanged);
+    };
+  }, [admin, setShowToast]);
 
   const handleStatusChange = async (id, status, adminRemark = "") => {
     // Find the leave request
@@ -125,6 +178,41 @@ export const Leave = () => {
       });
     } finally {
       setUpdatingStatus(null);
+    }
+  };
+
+  const handleConfirmDelete = async () => {
+    if (!deleteConfirmLeave) return;
+    const targetId = deleteConfirmLeave._id || deleteConfirmLeave.id;
+    if (!targetId) return;
+
+    try {
+      setIsDeleting(true);
+      const res = await deleteLeave(targetId);
+      if (res?.data?.success || res?.status === 200) {
+        setRequests((prev) =>
+          prev.filter(
+            (r) => String(r._id) !== String(targetId) && String(r.id) !== String(targetId)
+          )
+        );
+        setShowToast({
+          show: true,
+          message: "Leave record permanently deleted from the database.",
+          type: "success",
+        });
+        setDeleteConfirmLeave(null);
+      } else {
+        throw new Error(res?.data?.message || "Failed to delete leave request");
+      }
+    } catch (err) {
+      console.error("Error deleting leave:", err);
+      setShowToast({
+        show: true,
+        message: err.response?.data?.message || err.message || "Failed to delete leave record.",
+        type: "error",
+      });
+    } finally {
+      setIsDeleting(false);
     }
   };
 
@@ -218,7 +306,7 @@ export const Leave = () => {
         </div>
 
         {/* View Switcher Tabs */}
-        <div className="flex items-center p-1 bg-[#F8FAFC] border border-[#E2E8F0] rounded-xl self-stretch sm:self-auto">
+        <div className="flex items-center p-1 bg-[#F8FAFC] border border-[#E2E8F0] rounded-xl self-stretch sm:self-auto flex-wrap gap-1">
           <button
             type="button"
             onClick={() => setActiveTab("pending")}
@@ -241,6 +329,19 @@ export const Leave = () => {
                 {pendingRequests}
               </span>
             )}
+          </button>
+
+          <button
+            type="button"
+            onClick={() => setActiveTab("calendar")}
+            className={`flex items-center gap-2 px-3.5 py-1.5 rounded-lg text-xs font-bold transition-all cursor-pointer ${
+              activeTab === "calendar"
+                ? "bg-[#002185] text-white shadow-xs"
+                : "text-[#64748B] hover:text-[#002185]"
+            }`}
+          >
+            <Calendar className="w-3.5 h-3.5" />
+            <span>Team Leave Calendar</span>
           </button>
 
           <button
@@ -358,7 +459,17 @@ export const Leave = () => {
         />
       )}
 
-      {/* Tab 2: Full Leave Database Records Table (with Search, Filter & Row-level quick Approve/Reject) */}
+      {/* Tab 2: Team Leave Calendar (visualizes all approved leave requests to prevent staffing conflicts) */}
+      {activeTab === "calendar" && (
+        <TeamLeaveCalendar
+          leaves={requests}
+          onLeaveSelect={(leave) => {
+            console.log("Selected leave:", leave);
+          }}
+        />
+      )}
+
+      {/* Tab 3: Full Leave Database Records Table (with Search, Filter & Row-level quick Approve/Reject) */}
       {activeTab === "all" && (
         <div className="space-y-4">
           {/* Search Bar & Filters */}
@@ -546,6 +657,18 @@ export const Leave = () => {
                               <span>Reject</span>
                             </button>
                           )}
+
+                          <button
+                            type="button"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              setDeleteConfirmLeave(leave);
+                            }}
+                            title="Permanently delete leave record"
+                            className="p-1.5 rounded-lg border border-slate-200 hover:border-rose-300 hover:bg-rose-50 text-slate-400 hover:text-rose-600 transition cursor-pointer"
+                          >
+                            <Trash2 className="w-3.5 h-3.5" />
+                          </button>
                         </div>
                       </div>
 
@@ -577,24 +700,32 @@ export const Leave = () => {
                           </div>
                         )}
 
-                        <div className="grid grid-cols-2 gap-2 pt-2 border-t border-[#E2E8F0]">
+                        <div className="grid grid-cols-3 gap-2 pt-2 border-t border-[#E2E8F0]">
                           <button
                             type="button"
                             onClick={() => handleStatusChange(leaveId, "Rejected")}
                             disabled={isUpdating || status === "Rejected"}
-                            className="py-2 px-3 rounded-lg bg-white border border-[#DC2626]/30 text-[#DC2626] text-xs font-bold flex items-center justify-center gap-1.5 disabled:opacity-40"
+                            className="py-2 px-2 rounded-lg bg-white border border-[#DC2626]/30 text-[#DC2626] text-xs font-bold flex items-center justify-center gap-1 disabled:opacity-40"
                           >
-                            <X className="w-3.5 h-3.5" />
+                            <X className="w-3 h-3" />
                             <span>Reject</span>
                           </button>
                           <button
                             type="button"
                             onClick={() => handleStatusChange(leaveId, "Approved")}
                             disabled={isUpdating || status === "Approved"}
-                            className="py-2 px-3 rounded-lg bg-[#16A34A] text-white text-xs font-bold flex items-center justify-center gap-1.5 disabled:opacity-40 shadow-2xs"
+                            className="py-2 px-2 rounded-lg bg-[#16A34A] text-white text-xs font-bold flex items-center justify-center gap-1 disabled:opacity-40 shadow-2xs"
                           >
-                            <Check className="w-3.5 h-3.5" />
+                            <Check className="w-3 h-3" />
                             <span>Approve</span>
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => setDeleteConfirmLeave(leave)}
+                            className="py-2 px-2 rounded-lg bg-white border border-rose-200 text-rose-600 hover:bg-rose-50 text-xs font-bold flex items-center justify-center gap-1 transition"
+                          >
+                            <Trash2 className="w-3 h-3" />
+                            <span>Delete</span>
                           </button>
                         </div>
                       </div>
@@ -617,6 +748,79 @@ export const Leave = () => {
                   </p>
                 </div>
               )}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Delete Confirmation Modal */}
+      {deleteConfirmLeave && (
+        <div
+          id="delete-leave-modal-overlay"
+          className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-xs animate-in fade-in duration-200"
+          onClick={() => !isDeleting && setDeleteConfirmLeave(null)}
+        >
+          <div
+            id="delete-leave-modal-container"
+            className="bg-white rounded-2xl max-w-md w-full p-6 border border-[#E2E8F0] shadow-2xl space-y-4 animate-in zoom-in-95 duration-200"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="flex items-start gap-4">
+              <div className="w-12 h-12 rounded-2xl bg-rose-50 border border-rose-100 text-[#DC2626] flex items-center justify-center shrink-0">
+                <Trash2 className="w-6 h-6" />
+              </div>
+              <div className="space-y-1">
+                <h3 className="text-base font-bold text-[#002185]">
+                  Delete Leave Record?
+                </h3>
+                <p className="text-xs text-[#64748B]">
+                  Are you sure you want to permanently delete the{" "}
+                  <span className="font-bold text-[#0F172A]">
+                    {deleteConfirmLeave?.leaveType || "leave"}
+                  </span>{" "}
+                  request for{" "}
+                  <span className="font-bold text-[#0F172A]">
+                    {deleteConfirmLeave?.employee?.fullName || "this employee"}
+                  </span>
+                  ?
+                </p>
+              </div>
+            </div>
+
+            <div className="p-3 bg-[#FEF2F2] border border-[#FCA5A5] rounded-xl flex items-start gap-2 text-xs text-[#DC2626]">
+              <AlertTriangle className="w-4 h-4 shrink-0 mt-0.5" />
+              <span>
+                This action is irreversible and will permanently remove this leave request and associated records from the database.
+              </span>
+            </div>
+
+            <div className="flex items-center justify-end gap-2.5 pt-2 border-t border-[#F1F5F9]">
+              <button
+                type="button"
+                disabled={isDeleting}
+                onClick={() => setDeleteConfirmLeave(null)}
+                className="px-4 py-2 rounded-xl border border-[#E2E8F0] text-xs font-semibold text-[#64748B] hover:text-[#0F172A] hover:bg-[#F8FAFC] transition cursor-pointer disabled:opacity-50"
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                disabled={isDeleting}
+                onClick={handleConfirmDelete}
+                className="px-4 py-2 rounded-xl bg-[#DC2626] hover:bg-[#B91C1C] text-white text-xs font-bold transition shadow-xs flex items-center gap-1.5 cursor-pointer disabled:opacity-50"
+              >
+                {isDeleting ? (
+                  <>
+                    <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                    <span>Deleting Record...</span>
+                  </>
+                ) : (
+                  <>
+                    <Trash2 className="w-3.5 h-3.5" />
+                    <span>Delete Permanently</span>
+                  </>
+                )}
+              </button>
             </div>
           </div>
         </div>

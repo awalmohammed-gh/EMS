@@ -1,4 +1,5 @@
 import mongoose from "mongoose";
+import jwt from "jsonwebtoken";
 import { Employee } from "../models/employeeModel.js";
 import { Payroll } from "../models/payrollModel.js";
 import { Leave } from "../models/leaveModel.js";
@@ -74,12 +75,12 @@ export const evaluateLatenessPenalty = (clockInDate, workStartTime = "08:00", se
     };
   }
 
-  const t1 = Number(settings.lateTier1_amount || 0);
-  const t2 = Number(settings.lateTier2_amount || 0);
-  const t3 = Number(settings.lateTier3_amount || 0);
-  const t4 = Number(settings.lateTier4_amount || 0);
-  const t5 = Number(settings.lateTier5_amount || 0);
-  const t6 = Number(settings.lateTier6_amount || 0);
+  const t1 = settings.lateTier1_amount !== undefined && settings.lateTier1_amount !== null && Number(settings.lateTier1_amount) > 0 ? Number(settings.lateTier1_amount) : 10;
+  const t2 = settings.lateTier2_amount !== undefined && settings.lateTier2_amount !== null && Number(settings.lateTier2_amount) > 0 ? Number(settings.lateTier2_amount) : 20;
+  const t3 = settings.lateTier3_amount !== undefined && settings.lateTier3_amount !== null && Number(settings.lateTier3_amount) > 0 ? Number(settings.lateTier3_amount) : 35;
+  const t4 = settings.lateTier4_amount !== undefined && settings.lateTier4_amount !== null && Number(settings.lateTier4_amount) > 0 ? Number(settings.lateTier4_amount) : 50;
+  const t5 = settings.lateTier5_amount !== undefined && settings.lateTier5_amount !== null && Number(settings.lateTier5_amount) > 0 ? Number(settings.lateTier5_amount) : 75;
+  const t6 = settings.lateTier6_amount !== undefined && settings.lateTier6_amount !== null && Number(settings.lateTier6_amount) > 0 ? Number(settings.lateTier6_amount) : 100;
 
   let penalty = 0;
   let tier = "";
@@ -117,14 +118,81 @@ export const calculateMonthlyPayrollSummary = async (req, res) => {
   try {
     let { employeeId, month, year, baseSalaryInput } = req.query;
 
+    // Security & Scope: Extract token from header or cookies if not decoded by middleware
+    if (!req.employee && !req.admin) {
+      const authHeader = req.headers.authorization;
+      const bearerToken =
+        authHeader && authHeader.startsWith("Bearer ")
+          ? authHeader.slice(7)
+          : null;
+      const token =
+        req.cookies?.employeeToken ||
+        req.cookies?.token ||
+        bearerToken ||
+        req.headers["x-employee-token"] ||
+        req.headers["x-admin-token"];
+
+      const jwtSecret = process.env.JWT_SECRET || "default_jwt_secret_key_12345";
+      if (token) {
+        try {
+          const decoded = jwt.verify(token, jwtSecret);
+          if (decoded) {
+            if (decoded.role === "admin" || decoded.role === "super_admin") {
+              req.admin = decoded;
+            } else {
+              req.employee = {
+                _id: decoded.id || decoded._id,
+                id: decoded.id || decoded._id,
+                employeeId: decoded.employeeId,
+                role: decoded.role || "employee",
+              };
+            }
+          }
+        } catch (err) {
+          // Token decode silent catch
+        }
+      }
+    }
+
     // Security & Scope: If requested by standard employee, enforce that calculation targets only themselves
     if (req.employee && (!req.admin || req.admin.role === "employee")) {
       employeeId = req.employee.id || req.employee._id || req.employee.employeeId;
     }
 
-    const targetMonth = month || "August 2026";
-    const targetYear = parseInt(year, 10) || 2026;
-    const standardWorkingDays = getWorkingDaysInMonth(targetYear, 7); // Default ~22 days
+    // Month & Year Parsing
+    const monthNames = [
+      "January", "February", "March", "April", "May", "June",
+      "July", "August", "September", "October", "November", "December"
+    ];
+
+    const now = new Date();
+    let targetYear = parseInt(year, 10) || now.getFullYear();
+    let targetMonthIndex = now.getMonth();
+    let targetMonthName = monthNames[targetMonthIndex];
+
+    if (month) {
+      const raw = String(month).trim();
+      const yearMatch = raw.match(/\b(20\d\d)\b/);
+      if (yearMatch) {
+        targetYear = parseInt(yearMatch[1], 10);
+      }
+      const foundIdx = monthNames.findIndex((m) =>
+        raw.toLowerCase().includes(m.toLowerCase())
+      );
+      if (foundIdx !== -1) {
+        targetMonthIndex = foundIdx;
+        targetMonthName = monthNames[foundIdx];
+      } else {
+        const num = parseInt(raw, 10);
+        if (!isNaN(num) && num >= 1 && num <= 12) {
+          targetMonthIndex = num - 1;
+          targetMonthName = monthNames[targetMonthIndex];
+        }
+      }
+    }
+
+    const formattedTargetMonth = `${targetMonthName} ${targetYear}`;
+    const standardWorkingDays = getWorkingDaysInMonth(targetYear, targetMonthIndex);
 
     // Fetch active CompanySettings for penalty rules
     let companySettings = {
@@ -174,14 +242,53 @@ export const calculateMonthlyPayrollSummary = async (req, res) => {
       });
     }
 
-    const baseSalary = parseFloat(baseSalaryInput) || (targetEmployee.baseSalary ? Number(targetEmployee.baseSalary) : targetEmployee.salary ? Number(targetEmployee.salary) : 4000);
-    const absenceRate = Number(companySettings.absenceDeductionRate !== undefined ? companySettings.absenceDeductionRate : 10.0);
-    const dailyRate = parseFloat((baseSalary / standardWorkingDays).toFixed(2));
-    const hourlyRate = parseFloat((dailyRate / 8).toFixed(2));
-
     const isTargetValidObjId = isValidObjectId(targetEmployee._id);
 
-    // 1. Gather Attendance Records
+    // Check for existing saved Payroll record for this employee and month (MongoDB & memory store)
+    let existingPayroll = null;
+    if (isTargetValidObjId) {
+      try {
+        existingPayroll = await Payroll.findOne({
+          employee: targetEmployee._id,
+          $or: [
+            { payMonth: formattedTargetMonth },
+            { payMonth: { $regex: new RegExp(`^${targetMonthName}\\s*${targetYear}`, "i") } },
+            { payMonth: { $regex: new RegExp(targetMonthName, "i") } },
+          ],
+        }).lean();
+      } catch (err) {
+        console.warn("Error querying existing payroll record:", err.message);
+      }
+    }
+
+    if (!existingPayroll) {
+      existingPayroll = livePayrollStore.find(
+        (p) =>
+          String(p.employee) === String(targetEmployee._id) &&
+          (p.payMonth === formattedTargetMonth ||
+            (p.payMonth && p.payMonth.toLowerCase().includes(targetMonthName.toLowerCase())))
+      );
+    }
+
+    // Dynamic Base Monthly Salary: Bind directly to baseSalary from DB record or employee
+    const baseSalary = existingPayroll?.baseSalary ??
+      existingPayroll?.basicSalary ??
+      (parseFloat(baseSalaryInput) ||
+        (targetEmployee.baseSalary !== undefined && targetEmployee.baseSalary !== null
+          ? Number(targetEmployee.baseSalary)
+          : targetEmployee.salary !== undefined && targetEmployee.salary !== null
+          ? Number(targetEmployee.salary)
+          : 4000));
+
+    const absenceRate = Number(
+      companySettings.absenceDeductionRate !== undefined && companySettings.absenceDeductionRate !== null && Number(companySettings.absenceDeductionRate) > 0
+        ? companySettings.absenceDeductionRate
+        : 15.0
+    );
+    const dailyRate = parseFloat((baseSalary / (standardWorkingDays || 22)).toFixed(2));
+    const hourlyRate = parseFloat((dailyRate / 8).toFixed(2));
+
+    // 1. Gather Attendance Records strictly for the selected month and year
     let attendanceRecords = [];
     if (isTargetValidObjId) {
       try {
@@ -199,32 +306,59 @@ export const calculateMonthlyPayrollSummary = async (req, res) => {
 
     // Add active live clock-ins from memory
     liveAttendanceStore.forEach((liveAtt) => {
-      if (liveAtt.employee === String(targetEmployee._id)) {
+      if (String(liveAtt.employee) === String(targetEmployee._id)) {
         if (!attendanceRecords.some((a) => a.date === liveAtt.date)) {
           attendanceRecords.push(liveAtt);
         }
       }
     });
 
-    // Compute attendance counts directly from database records
+    // Filter attendance records to target month and year
+    const targetMonthPrefix = `${targetYear}-${String(targetMonthIndex + 1).padStart(2, "0")}`;
+    const filteredAttendance = attendanceRecords.filter((rec) => {
+      if (!rec) return false;
+      if (typeof rec.date === "string") {
+        if (rec.date.startsWith(targetMonthPrefix)) return true;
+        if (
+          rec.date.toLowerCase().includes(targetMonthName.toLowerCase()) &&
+          rec.date.includes(String(targetYear))
+        ) {
+          return true;
+        }
+      }
+      const d = new Date(rec.date || rec.clockIn);
+      if (!isNaN(d.getTime())) {
+        return d.getFullYear() === targetYear && d.getMonth() === targetMonthIndex;
+      }
+      return false;
+    });
+
+    // Compute attendance metrics directly from database records for this month
     let presentDays = 0;
-    let absentDays = 0;
+    let explicitAbsentDays = 0;
     let lateDays = 0;
     let onTimeDays = 0;
     let totalWorkHours = 0;
+    let overtimeHours = 0;
     let totalLatenessDeductions = 0;
     const latenessDetails = [];
 
-    attendanceRecords.forEach((record) => {
-      const hrs = record.workHours || 8;
+    filteredAttendance.forEach((record) => {
+      const hrs = Number(record.workHours) || (record.status !== "Absent" ? 8 : 0);
       totalWorkHours += hrs;
+
+      if (record.overtimeHours) {
+        overtimeHours += Number(record.overtimeHours);
+      } else if (hrs > 8) {
+        overtimeHours += hrs - 8;
+      }
 
       const st = (record.status || "").toLowerCase();
       if (st === "absent") {
-        absentDays++;
+        explicitAbsentDays++;
       } else {
         presentDays++;
-        // Check lateness
+        // Evaluate late check-in
         let isLate = st === "late";
         let penaltyResult = null;
 
@@ -239,15 +373,13 @@ export const calculateMonthlyPayrollSummary = async (req, res) => {
           lateDays++;
           if (penaltyResult && penaltyResult.minutesLate > 0) {
             totalLatenessDeductions += penaltyResult.penalty;
-            if (penaltyResult.penalty > 0 || penaltyResult.minutesLate > 0) {
-              latenessDetails.push({
-                date: record.date,
-                clockIn: penaltyResult.clockInFormatted,
-                minutesLate: penaltyResult.minutesLate,
-                tier: penaltyResult.tier,
-                penalty: penaltyResult.penalty,
-              });
-            }
+            latenessDetails.push({
+              date: record.date,
+              clockIn: penaltyResult.clockInFormatted,
+              minutesLate: penaltyResult.minutesLate,
+              tier: penaltyResult.tier,
+              penalty: penaltyResult.penalty,
+            });
           } else {
             const fallbackPenalty = Number(companySettings.lateTier1_amount || 0);
             totalLatenessDeductions += fallbackPenalty;
@@ -265,7 +397,7 @@ export const calculateMonthlyPayrollSummary = async (req, res) => {
       }
     });
 
-    // 2. Gather Approved Leave Requests
+    // 2. Gather Approved Leave Requests overlapping the selected month
     let approvedLeaves = [];
     if (isTargetValidObjId) {
       try {
@@ -282,42 +414,142 @@ export const calculateMonthlyPayrollSummary = async (req, res) => {
       }
     }
 
+    const monthStart = new Date(targetYear, targetMonthIndex, 1);
+    const monthEnd = new Date(targetYear, targetMonthIndex + 1, 0, 23, 59, 59, 999);
+
     let approvedPaidLeaveDays = 0;
     let approvedUnpaidLeaveDays = 0;
+    const approvedLeavesList = [];
 
     approvedLeaves.forEach((leave) => {
-      const days = Number(leave.totalDays) || 1;
-      if (leave.leaveType === "Unpaid Leave") {
-        approvedUnpaidLeaveDays += days;
-        absentDays += days; // Unpaid leave counts as absent
-      } else {
-        approvedPaidLeaveDays += days;
+      const lStart = new Date(leave.startDate);
+      const lEnd = new Date(leave.endDate || leave.startDate);
+      if (isNaN(lStart.getTime())) return;
+
+      const effectiveStart = lStart < monthStart ? monthStart : lStart;
+      const effectiveEnd = lEnd > monthEnd ? monthEnd : lEnd;
+
+      if (effectiveStart <= effectiveEnd) {
+        let daysInMonth = 0;
+        const cur = new Date(effectiveStart);
+        while (cur <= effectiveEnd) {
+          const dayOfWeek = cur.getDay();
+          if (dayOfWeek !== 0 && dayOfWeek !== 6) {
+            daysInMonth++;
+          }
+          cur.setDate(cur.getDate() + 1);
+        }
+
+        if (daysInMonth > 0) {
+          if (leave.leaveType === "Unpaid Leave") {
+            approvedUnpaidLeaveDays += daysInMonth;
+          } else {
+            approvedPaidLeaveDays += daysInMonth;
+          }
+
+          approvedLeavesList.push({
+            _id: leave._id,
+            leaveType: leave.leaveType,
+            totalDays: daysInMonth,
+            startDate: leave.startDate,
+            endDate: leave.endDate,
+            reason: leave.reason || "",
+          });
+        }
       }
     });
 
-    // Dynamic Absenteeism Deduction Rule: absentDays * companySettings.absenceDeductionRate
-    const absenceDeductions = parseFloat((absentDays * absenceRate).toFixed(2));
+    // 3. Dynamic Calculation of Payable Days & Unexcused Absences
+    const attendedDays = presentDays;
+    const payableDays = Math.min(standardWorkingDays, attendedDays + approvedPaidLeaveDays);
+    const unexcusedAbsences = Math.max(0, standardWorkingDays - payableDays);
+    const absentDaysCount = unexcusedAbsences;
+
+    // 4. Dynamic Allowances (from MongoDB payroll record or empty)
+    let dynamicAllowances = [];
+    if (existingPayroll) {
+      if (Array.isArray(existingPayroll.earnings) && existingPayroll.earnings.length > 0) {
+        dynamicAllowances = existingPayroll.earnings.map((e) => ({
+          title: e.title || e.description || e.name || "Allowance",
+          description: e.description || e.title || "Custom Allowance",
+          amount: Number(e.amount) || 0,
+        }));
+      } else if (Array.isArray(existingPayroll.allowances) && existingPayroll.allowances.length > 0) {
+        dynamicAllowances = existingPayroll.allowances.map((e) => ({
+          title: e.title || e.description || e.name || "Allowance",
+          description: e.description || e.title || "Custom Allowance",
+          amount: Number(e.amount) || 0,
+        }));
+      } else if (typeof existingPayroll.allowances === "number" && existingPayroll.allowances > 0) {
+        dynamicAllowances = [{
+          title: "Allowance",
+          description: "Monthly Allowance",
+          amount: Number(existingPayroll.allowances),
+        }];
+      }
+    }
+
+    const totalAllowances = dynamicAllowances.reduce((acc, item) => acc + Number(item.amount || 0), 0);
+
+    // 5. Dynamic Custom Deductions (from MongoDB payroll record or empty)
+    let dynamicCustomDeductions = [];
+    if (existingPayroll) {
+      if (Array.isArray(existingPayroll.deductions) && existingPayroll.deductions.length > 0) {
+        dynamicCustomDeductions = existingPayroll.deductions.map((d) => ({
+          title: d.title || d.description || d.name || "Deduction",
+          description: d.description || d.title || "Custom Deduction",
+          amount: Number(d.amount) || 0,
+        }));
+      } else if (typeof existingPayroll.deductions === "number" && existingPayroll.deductions > 0) {
+        dynamicCustomDeductions = [{
+          title: "Deduction",
+          description: "Admin Adjustment",
+          amount: Number(existingPayroll.deductions),
+        }];
+      }
+    }
+
+    const totalCustomDeductions = dynamicCustomDeductions.reduce((acc, item) => acc + Number(item.amount || 0), 0);
+
+    // 6. Deductions Itemization: Absenteeism, Lateness Tiers & Custom Deductions
+    const absentDaysDeduction = parseFloat((absentDaysCount * absenceRate).toFixed(2));
     const latenessDeductions = parseFloat(totalLatenessDeductions.toFixed(2));
-    const totalAttendanceDeductions = parseFloat((absenceDeductions + latenessDeductions).toFixed(2));
-    const grossSalary = baseSalary;
-    const totalDeductions = totalAttendanceDeductions;
-    const netCalculatedSalary = parseFloat(Math.max(0, grossSalary - totalDeductions).toFixed(2));
+    const totalAttendanceDeductions = parseFloat((absentDaysDeduction + latenessDeductions).toFixed(2));
+    
+    // Subtotal of Deductions MUST strictly equal sum of all components
+    const totalDeductions = parseFloat((totalAttendanceDeductions + totalCustomDeductions).toFixed(2));
+
+    // 7. Net Take-Home Pay Formula: Net = Base Salary + Total Allowances - Total Deductions
+    const grossEarnings = parseFloat((baseSalary + totalAllowances).toFixed(2));
+    const netCalculatedSalary = parseFloat(Math.max(0, grossEarnings - totalDeductions).toFixed(2));
 
     const summary = {
-      month: targetMonth,
+      month: formattedTargetMonth,
       year: targetYear,
-      employee: targetEmployee,
+      employee: {
+        _id: targetEmployee._id,
+        id: targetEmployee._id,
+        fullName: targetEmployee.fullName || `${targetEmployee.firstName || ""} ${targetEmployee.lastName || ""}`.trim() || "Employee",
+        employeeId: targetEmployee.employeeId || "EMP",
+        department: targetEmployee.department || "General",
+        position: targetEmployee.position || "Staff",
+        baseSalary,
+        salary: baseSalary,
+      },
       workingDaysMetric: {
         standardWorkingDays,
-        presentDays,
+        presentDays: attendedDays,
+        attendedDays,
         onTimeDays,
         lateDays,
-        absentDays,
+        absentDays: absentDaysCount,
+        unexcusedAbsences: absentDaysCount,
         totalWorkHours,
+        overtimeHours: parseFloat(overtimeHours.toFixed(1)),
         approvedPaidLeaveDays,
         approvedUnpaidLeaveDays,
+        payableDays,
       },
-      penaltySettings: companySettings,
       rates: {
         monthlyBaseSalary: baseSalary,
         dailyRate,
@@ -332,31 +564,53 @@ export const calculateMonthlyPayrollSummary = async (req, res) => {
         lateTier5_amount: companySettings.lateTier5_amount,
         lateTier6_amount: companySettings.lateTier6_amount,
       },
+      earnings: dynamicAllowances,
+      customDeductions: dynamicCustomDeductions,
+      latenessBreakdown: latenessDetails,
+      approvedLeavesList,
       salaryCalculation: {
-        grossSalary,
+        baseSalary,
         basicSalary: baseSalary,
         earnedBaseSalary: baseSalary,
-        overtimeBonus: 0,
-        absentDays,
-        absenceDeductions,
+        grossEarnings,
+        totalAllowances,
+        absentDays: absentDaysCount,
+        absenceDeductionRate: absenceRate,
+        absentDaysDeduction,
+        absenceDeductions: absentDaysDeduction,
         lateDays,
         latenessDeductions,
-        latenessDetails,
+        latenessPenalties: latenessDeductions,
+        latenessPenalty: latenessDeductions,
         totalAttendanceDeductions,
+        totalCustomDeductions,
+        totalDeductions,
+        netCalculatedSalary,
+        netPay: netCalculatedSalary,
+        netSalary: netCalculatedSalary,
+        liveNetPay: netCalculatedSalary,
         deductions: {
-          absenceDeduction: absenceDeductions,
+          absenceDeduction: absentDaysDeduction,
+          absenceDeductions: absentDaysDeduction,
           latenessDeduction: latenessDeductions,
+          latenessPenalties: latenessDeductions,
+          customDeductions: totalCustomDeductions,
           total: totalDeductions,
         },
-        allowances: {
-          total: 0,
-        },
-        netCalculatedSalary,
       },
+      absenceDeductions: absentDaysDeduction,
+      absentDaysDeduction,
+      latenessPenalties: latenessDeductions,
+      latenessDeductions,
+      netPay: netCalculatedSalary,
+      netSalary: netCalculatedSalary,
+      liveNetPay: netCalculatedSalary,
+      payrollRecord: existingPayroll || null,
       formulaExplanation: {
-        baseSalaryFormula: "Full Standard Base Salary",
-        deductionsFormula: `Absent Days * GH₵${absenceRate} + Lateness Tier Penalties (GH₵${latenessDeductions})`,
-        netSalaryFormula: "Base Salary + Approved Allowances - Total Absence Deductions - Total Lateness Penalties - Custom Admin Deductions",
+        baseSalaryFormula: `Base Monthly Salary: GH₵${baseSalary.toFixed(2)}`,
+        absentDaysFormula: `Absenteeism Deduction: ${absentDaysCount} absent day(s) × GH₵${absenceRate.toFixed(2)}/day = GH₵${absentDaysDeduction.toFixed(2)}`,
+        latenessFormula: `Lateness Penalties: ${lateDays} late clock-in(s) evaluated by tier = GH₵${latenessDeductions.toFixed(2)}`,
+        netSalaryFormula: `Net Take-Home = Base Salary (GH₵${baseSalary.toFixed(2)}) + Allowances (GH₵${totalAllowances.toFixed(2)}) - Total Deductions (GH₵${totalDeductions.toFixed(2)}) = GH₵${netCalculatedSalary.toFixed(2)}`,
       },
     };
 
@@ -509,6 +763,8 @@ export const generatePayroll = async (req, res) => {
       });
     }
 
+    const finalStatus = req.body.status || "Published";
+
     const newRecord = {
       _id: "pay_" + Date.now(),
       id: payslipNumber,
@@ -536,46 +792,56 @@ export const generatePayroll = async (req, res) => {
       netPay: calculatedNetPay,
       paymentMethod,
       remarks: remarks || (penaltyOverrideData?.isWaived ? `Waived GH₵${penaltyOverrideData.totalWaived} penalties. Note: ${penaltyOverrideData.reason}` : "Generated monthly salary disbursement."),
-      status: "Paid",
+      status: finalStatus,
       createdAt: new Date().toISOString(),
     };
 
-    // If valid MongoDB connection, save to MongoDB
+    // If valid MongoDB connection, save or update in MongoDB
     if (isValidObjectId(empDoc._id)) {
       try {
-        const payroll = await Payroll.create({
-          employee: empDoc._id,
-          payslipNumber,
-          payMonth,
-          paymentDate,
-          basicSalary: finalBaseSalary,
-          baseSalary: finalBaseSalary,
-          earnings: parsedEarnings,
-          deductions: parsedDeductions,
-          absentDaysDeduction: finalAbsentDeduction,
-          latenessDeduction: finalLatenessDeduction,
-          totalAttendanceDeductions,
-          originalAbsenceDeduction: origAbsence,
-          originalLatenessDeduction: origLateness,
-          penaltyOverride: penaltyOverrideData,
-          allowances: totalCustomEarnings,
-          netSalary: calculatedNetPay,
-          netPay: calculatedNetPay,
-          paymentMethod,
-          remarks: newRecord.remarks,
-          status: "Paid",
-        });
-
-        await payroll.populate(
-          "employee",
-          "employeeId fullName email department position",
-        );
+        const payroll = await Payroll.findOneAndUpdate(
+          { employee: empDoc._id, payMonth },
+          {
+            employee: empDoc._id,
+            payslipNumber,
+            payMonth,
+            paymentDate,
+            basicSalary: finalBaseSalary,
+            baseSalary: finalBaseSalary,
+            earnings: parsedEarnings,
+            deductions: parsedDeductions,
+            absentDaysDeduction: finalAbsentDeduction,
+            latenessDeduction: finalLatenessDeduction,
+            totalAttendanceDeductions,
+            originalAbsenceDeduction: origAbsence,
+            originalLatenessDeduction: origLateness,
+            penaltyOverride: penaltyOverrideData,
+            allowances: totalCustomEarnings,
+            netSalary: calculatedNetPay,
+            netPay: calculatedNetPay,
+            paymentMethod,
+            remarks: newRecord.remarks,
+            status: finalStatus,
+          },
+          { new: true, upsert: true, setDefaultsOnInsert: true }
+        ).populate("employee", "employeeId fullName email department position");
 
         newRecord._id = payroll._id;
       } catch (dbErr) {
         console.warn("DB storage in generatePayroll:", dbErr.message);
       }
     }
+
+    // Remove any existing in-memory entry for this employee and payMonth
+    const existingIndex = livePayrollStore.findIndex((p) => {
+      const pEmpId = String(p.employee?._id || p.employee || p.employeeId || "");
+      const targetEmpId = String(empDoc._id || empDoc.employeeId || "");
+      return (pEmpId === targetEmpId || p.employeeId === empDoc.employeeId) && (p.payMonth === payMonth || p.month === payMonth);
+    });
+    if (existingIndex !== -1) {
+      livePayrollStore.splice(existingIndex, 1);
+    }
+    livePayrollStore.unshift(newRecord);
 
     // Write audit log if penalties were waived or overridden
     if (penaltyOverrideData?.isWaived) {
@@ -607,9 +873,7 @@ export const generatePayroll = async (req, res) => {
       }
     }
 
-    livePayrollStore.unshift(newRecord);
-
-    // Push automated in-app notification to the affected employee for attendance deductions & penalties
+    // Push automated in-app notification to the affected employee for payslip publication
     try {
       const targetEmpId = String(empDoc._id || empDoc.employeeId || empDoc.email || "");
       const formattedTotalDeduct = Number(totalAttendanceDeductions || 0);
@@ -630,8 +894,8 @@ export const generatePayroll = async (req, res) => {
           sender_id: String(req.admin?.id || req.admin?._id || "admin"),
           sender_role: "admin",
           sender_name: req.admin?.fullName || "Payroll Administrator",
-          title: "⚠️ Attendance Deduction Applied to Payslip",
-          message: `An attendance deduction of GH₵${formattedTotalDeduct.toFixed(2)} (${detailStr}) has been applied to your ${payMonth} payslip. Net Pay: GH₵${calculatedNetPay.toFixed(2)}.`,
+          title: "📄 Official Payslip Released (Attendance Deductions Applied)",
+          message: `Your official payslip for ${payMonth} has been released. An attendance deduction of GH₵${formattedTotalDeduct.toFixed(2)} (${detailStr}) was applied. Net Take-Home: GH₵${calculatedNetPay.toFixed(2)}.`,
           type: "payroll_alert",
           category: "payroll",
           priority: "high",
@@ -654,8 +918,8 @@ export const generatePayroll = async (req, res) => {
           sender_id: String(req.admin?.id || req.admin?._id || "admin"),
           sender_role: "admin",
           sender_name: req.admin?.fullName || "Management",
-          title: "✅ Attendance Penalty Waived",
-          message: `Management approved a waiver of GH₵${Number(penaltyOverrideData.totalWaived).toFixed(2)} in attendance deductions for your ${payMonth} payslip. Reason: ${penaltyOverrideData.reason || "Approved exception"}`,
+          title: "✅ Official Payslip Released (Penalty Waived)",
+          message: `Your official payslip for ${payMonth} has been released. Management approved a waiver of GH₵${Number(penaltyOverrideData.totalWaived).toFixed(2)} in attendance deductions. Net Take-Home: GH₵${calculatedNetPay.toFixed(2)}.`,
           type: "payroll_alert",
           category: "payroll",
           priority: "medium",
@@ -666,6 +930,27 @@ export const generatePayroll = async (req, res) => {
             payslipNumber,
             waivedAmount: penaltyOverrideData.totalWaived,
             reason: penaltyOverrideData.reason,
+          },
+        });
+      } else {
+        await createNotificationRecord({
+          recipient_id: targetEmpId,
+          recipient_role: "employee",
+          sender_id: String(req.admin?.id || req.admin?._id || "admin"),
+          sender_role: "admin",
+          sender_name: req.admin?.fullName || "Management",
+          title: "🎉 Official Payslip Released",
+          message: `Your official payslip for ${payMonth} has been generated and released upon payment. Net Take-Home: GH₵${calculatedNetPay.toFixed(2)}.`,
+          type: "payroll_alert",
+          category: "payroll",
+          priority: "medium",
+          action_url: "/employee/dashboard/payslips",
+          action_label: "View Payslip",
+          metadata: {
+            payMonth,
+            payslipNumber,
+            netPay: calculatedNetPay,
+            paymentDate,
           },
         });
       }
@@ -722,15 +1007,415 @@ export const allPayslips = async (req, res) => {
   }
 };
 
-// Function to get a single payroll/payslip record by ID or payslipNumber
-export const getPayrollById = async (req, res) => {
+// Helper: Build complete, transparent, itemized payslip breakdown synced directly with live DB records
+export const buildDetailedPayslipBreakdown = async (foundRecord, employeeId = null) => {
+  if (!foundRecord) return null;
+
+  // 1. Resolve Employee record
+  let emp = foundRecord.employee;
+  if (!emp || typeof emp === "string" || !emp.fullName) {
+    const lookupId = emp || employeeId || foundRecord.employeeId;
+    if (isValidObjectId(lookupId)) {
+      try {
+        emp = await Employee.findById(lookupId).lean();
+      } catch (err) {
+        console.warn("DB employee lookup in breakdown helper:", err.message);
+      }
+    } else if (lookupId) {
+      try {
+        emp = await Employee.findOne({
+          $or: [{ employeeId: lookupId }, { email: lookupId }],
+        }).lean();
+      } catch (err) {
+        console.warn("DB employee search by id in breakdown helper:", err.message);
+      }
+    }
+  }
+
+  // 2. Fetch CompanySettings for penalty rates
+  let settings = {
+    workStartTime: "08:00",
+    absenceDeductionRate: 10,
+    lateTier1_amount: 0,
+    lateTier2_amount: 0,
+    lateTier3_amount: 0,
+    lateTier4_amount: 0,
+    lateTier5_amount: 0,
+    lateTier6_amount: 0,
+  };
+  try {
+    const dbSettings = await CompanySettings.findOne().lean();
+    if (dbSettings) {
+      settings = { ...settings, ...dbSettings };
+    }
+  } catch (err) {
+    console.warn("Error fetching company settings in breakdown helper:", err.message);
+  }
+
+  // 3. Fetch real Attendance records for employee
+  let attendanceRecords = [];
+  if (emp && isValidObjectId(emp._id)) {
+    try {
+      attendanceRecords = await Attendance.find({ employee: emp._id }).lean();
+    } catch (err) {
+      console.warn("Error fetching attendance for payslip breakdown:", err.message);
+    }
+  }
+
+  // Add active live clock-ins from memory store
+  liveAttendanceStore.forEach((liveAtt) => {
+    if (emp && liveAtt.employee === String(emp._id)) {
+      if (!attendanceRecords.some((a) => a.date === liveAtt.date)) {
+        attendanceRecords.push(liveAtt);
+      }
+    }
+  });
+
+  // 4. Fetch real Leave records
+  let leaveRecords = [];
+  if (emp && isValidObjectId(emp._id)) {
+    try {
+      leaveRecords = await Leave.find({ employee: emp._id, status: "Approved" }).lean();
+    } catch (err) {
+      console.warn("Error fetching leaves for payslip breakdown:", err.message);
+    }
+  }
+
+  // 5. Calculate base salary
+  const baseSalary = Number(
+    foundRecord.baseSalary !== undefined
+      ? foundRecord.baseSalary
+      : (foundRecord.basicSalary !== undefined
+          ? foundRecord.basicSalary
+          : (emp?.salary ? Number(emp.salary) : (emp?.baseSalary ? Number(emp.baseSalary) : 4000)))
+  );
+
+  // 6. Allowances: Array of dynamic admin-entered allowances [{ title, amount, description }]
+  let allowances = [];
+  if (Array.isArray(foundRecord.earnings) && foundRecord.earnings.length > 0) {
+    allowances = foundRecord.earnings
+      .filter((e) => e && (e.description || e.name || e.title))
+      .map((e) => ({
+        title: e.title || e.description || e.name || "Allowance",
+        description: e.description || e.title || e.name || "Allowance",
+        amount: Number(e.amount || 0),
+      }));
+  } else if (Number(foundRecord.allowances || 0) > 0) {
+    allowances = [
+      {
+        title: "Allowances & Bonuses",
+        description: "Allowances & Bonuses",
+        amount: Number(foundRecord.allowances),
+      },
+    ];
+  }
+  const totalAllowances = allowances.reduce((sum, item) => sum + Number(item.amount || 0), 0);
+
+  // 7. Custom Deductions: Array of extra admin adjustments [{ title, amount, description }]
+  let customDeductions = [];
+  if (Array.isArray(foundRecord.deductions) && foundRecord.deductions.length > 0) {
+    customDeductions = foundRecord.deductions
+      .filter((d) => d && (d.description || d.name || d.title))
+      .map((d) => ({
+        title: d.title || d.description || d.name || "Deduction",
+        description: d.description || d.title || d.name || "Deduction",
+        amount: Number(d.amount || 0),
+      }));
+  } else if (Array.isArray(foundRecord.customDeductions) && foundRecord.customDeductions.length > 0) {
+    customDeductions = foundRecord.customDeductions
+      .filter((d) => d && (d.description || d.name || d.title))
+      .map((d) => ({
+        title: d.title || d.description || d.name || "Deduction",
+        description: d.description || d.title || d.name || "Deduction",
+        amount: Number(d.amount || 0),
+      }));
+  } else if (typeof foundRecord.deductions === "number" && Number(foundRecord.deductions) > 0) {
+    customDeductions = [
+      {
+        title: "Standard Deductions",
+        description: "Standard Deductions",
+        amount: Number(foundRecord.deductions),
+      },
+    ];
+  }
+  const totalCustomDeductions = customDeductions.reduce((sum, item) => sum + Number(item.amount || 0), 0);
+
+  // 8. Dynamic Attendance & Lateness Breakdown Calculation
+  let unexcusedAbsentDays = 0;
+  let totalLateMinutes = 0;
+  let lateDaysCount = 0;
+  const tierBreakdown = [];
+  let calculatedLatenessPenalties = 0;
+
+  if (attendanceRecords.length > 0) {
+    attendanceRecords.forEach((att) => {
+      const st = (att.status || "").toLowerCase();
+      if (st === "absent") {
+        unexcusedAbsentDays++;
+      } else {
+        const isLateStatus = st === "late";
+        let penaltyResult = null;
+        if (att.clockIn) {
+          penaltyResult = evaluateLatenessPenalty(att.clockIn, settings.workStartTime, settings);
+        }
+
+        const isLate = isLateStatus || (penaltyResult && penaltyResult.minutesLate > 0);
+        if (isLate) {
+          lateDaysCount++;
+          const mins = penaltyResult ? penaltyResult.minutesLate : 15;
+          const pen = penaltyResult ? penaltyResult.penalty : Number(settings.lateTier1_amount || 0);
+          const tierName = penaltyResult ? penaltyResult.tier : "1-30 mins late (Tier 1)";
+          const clockInTime = penaltyResult ? penaltyResult.clockInFormatted : (att.clockIn ? String(att.clockIn) : "Late");
+
+          totalLateMinutes += mins;
+          calculatedLatenessPenalties += pen;
+
+          tierBreakdown.push({
+            date: att.date || new Date().toISOString().split("T")[0],
+            clockIn: clockInTime,
+            minutesLate: mins,
+            tier: tierName,
+            penalty: pen,
+            count: 1,
+            total: pen,
+          });
+        }
+      }
+    });
+  }
+
+  // Rate per day from CompanySettings or stored
+  const ratePerDay = Number(
+    foundRecord.absenceDeductionDetails?.ratePerDay !== undefined
+      ? foundRecord.absenceDeductionDetails.ratePerDay
+      : (settings.absenceDeductionRate !== undefined ? settings.absenceDeductionRate : 10)
+  );
+
+  let finalAbsenceDaysCount = unexcusedAbsentDays;
+  let finalAbsenceAmount = 0;
+
+  if (foundRecord.absentDaysDeduction !== undefined && foundRecord.absentDaysDeduction !== null) {
+    finalAbsenceAmount = Number(foundRecord.absentDaysDeduction);
+    if (finalAbsenceAmount > 0 && finalAbsenceDaysCount === 0 && ratePerDay > 0) {
+      finalAbsenceDaysCount = Math.round(finalAbsenceAmount / ratePerDay);
+    }
+  } else if (foundRecord.absenceDeductionDetails?.totalAmount !== undefined) {
+    finalAbsenceAmount = Number(foundRecord.absenceDeductionDetails.totalAmount);
+    finalAbsenceDaysCount = Number(foundRecord.absenceDeductionDetails.daysCount || finalAbsenceDaysCount);
+  } else {
+    finalAbsenceAmount = Number((finalAbsenceDaysCount * ratePerDay).toFixed(2));
+  }
+
+  let finalLatenessAmount = 0;
+  if (foundRecord.latenessDeduction !== undefined && foundRecord.latenessDeduction !== null) {
+    finalLatenessAmount = Number(foundRecord.latenessDeduction);
+  } else if (foundRecord.latenessDeductionDetails?.totalAmount !== undefined) {
+    finalLatenessAmount = Number(foundRecord.latenessDeductionDetails.totalAmount);
+  } else {
+    finalLatenessAmount = Number(calculatedLatenessPenalties.toFixed(2));
+  }
+
+  // Evaluate Penalty Waiver if applied
+  if (foundRecord.penaltyOverride?.isWaived) {
+    const waivedAbs = Number(foundRecord.penaltyOverride.waivedAbsenceDeduction || 0);
+    const waivedLate = Number(foundRecord.penaltyOverride.waivedLatenessDeduction || 0);
+    finalAbsenceAmount = Math.max(0, finalAbsenceAmount - waivedAbs);
+    finalLatenessAmount = Math.max(0, finalLatenessAmount - waivedLate);
+  }
+
+  const absenceDeduction = {
+    daysCount: finalAbsenceDaysCount,
+    ratePerDay,
+    totalAmount: finalAbsenceAmount,
+  };
+
+  const latenessDeduction = {
+    totalLateMinutes: Number(foundRecord.latenessDeductionDetails?.totalLateMinutes || totalLateMinutes),
+    lateDaysCount: Number(foundRecord.latenessDeductionDetails?.lateDaysCount || lateDaysCount),
+    tierBreakdown: (foundRecord.latenessDeductionDetails?.tierBreakdown && foundRecord.latenessDeductionDetails.tierBreakdown.length > 0)
+      ? foundRecord.latenessDeductionDetails.tierBreakdown
+      : tierBreakdown,
+    totalAmount: finalLatenessAmount,
+  };
+
+  const totalAttendanceDeductions = absenceDeduction.totalAmount + latenessDeduction.totalAmount;
+  const totalDeductions = totalCustomDeductions + totalAttendanceDeductions;
+  const netSalary = Number(
+    foundRecord.netPay !== undefined
+      ? foundRecord.netPay
+      : (foundRecord.netSalary !== undefined
+          ? foundRecord.netSalary
+          : Math.max(0, parseFloat((baseSalary + totalAllowances - totalDeductions).toFixed(2))))
+  );
+
+  const payslipId = foundRecord.payslipNumber || foundRecord.id || (foundRecord._id ? `PAY-${String(foundRecord._id).slice(-6).toUpperCase()}` : "PAY-1001");
+
+  const normalizedEmployee = {
+    _id: emp?._id || "",
+    fullName: emp?.fullName || foundRecord.employeeName || "Employee",
+    employeeId: emp?.employeeId || foundRecord.employeeId || "",
+    department: emp?.department || foundRecord.department || "Operations",
+    position: emp?.position || foundRecord.position || "Staff Member",
+    email: emp?.email || "",
+    bankName: emp?.bankName || "",
+    accountNumber: emp?.accountNumber || "",
+    phone: emp?.phone || "",
+  };
+
+  return {
+    ...foundRecord,
+    _id: foundRecord._id || payslipId,
+    id: payslipId,
+    payslipNumber: payslipId,
+    payMonth: foundRecord.payMonth || foundRecord.month || "August 2026",
+    month: foundRecord.payMonth || foundRecord.month || "August 2026",
+    paymentDate: foundRecord.paymentDate || new Date().toISOString().split("T")[0],
+    paymentMethod: foundRecord.paymentMethod || "Bank Transfer",
+    status: foundRecord.status || "Paid",
+    remarks: foundRecord.remarks || "",
+    employee: normalizedEmployee,
+    employeeName: normalizedEmployee.fullName,
+    employeeId: normalizedEmployee.employeeId,
+    department: normalizedEmployee.department,
+    position: normalizedEmployee.position,
+    baseSalary,
+    basicSalary: baseSalary,
+    allowances,
+    earnings: allowances,
+    absenceDeduction,
+    absentDaysDeduction: absenceDeduction.totalAmount,
+    latenessDeduction,
+    totalAttendanceDeductions,
+    customDeductions,
+    deductions: customDeductions,
+    totalAllowances,
+    totalCustomDeductions,
+    totalDeductions,
+    grossEarnings: baseSalary + totalAllowances,
+    netSalary,
+    netPay: netSalary,
+    penaltyOverride: foundRecord.penaltyOverride || null,
+    attendanceSummary: {
+      standardWorkingDays: getWorkingDaysInMonth(2026, 7),
+      presentDays: Math.max(0, attendanceRecords.length - finalAbsenceDaysCount),
+      onTimeDays: Math.max(0, attendanceRecords.length - finalAbsenceDaysCount - lateDaysCount),
+      lateDays: lateDaysCount,
+      absentDays: finalAbsenceDaysCount,
+      approvedPaidLeaveDays: leaveRecords.length,
+    },
+    breakdown: {
+      baseSalary,
+      grossEarnings: baseSalary + totalAllowances,
+      allowances,
+      absenceDeduction,
+      latenessDeduction,
+      customDeductions,
+      totalAttendanceDeductions,
+      totalDeductions,
+      netSalary,
+    },
+  };
+};
+
+// GET /api/employee/payslips/latest or /api/payroll/payslips/latest
+export const getEmployeeLatestPayslipBreakdown = async (req, res) => {
+  try {
+    const authEmp = req.employee;
+    if (!authEmp && (!req.admin || req.admin.role === "employee")) {
+      return res.status(401).json({
+        success: false,
+        message: "Unauthorized: Employee authentication token required.",
+      });
+    }
+
+    const rawEmpId = req.query.employeeId || authEmp?.id || authEmp?._id || authEmp?.employeeId;
+    let targetEmployee = null;
+
+    if (isValidObjectId(rawEmpId)) {
+      try {
+        targetEmployee = await Employee.findById(rawEmpId).lean();
+      } catch (err) {
+        console.warn("DB find employee fallback:", err.message);
+      }
+    } else if (rawEmpId) {
+      try {
+        targetEmployee = await Employee.findOne({
+          $or: [{ employeeId: rawEmpId }, { email: rawEmpId }],
+        }).lean();
+      } catch (err) {
+        console.warn("DB find employee by code fallback:", err.message);
+      }
+    }
+
+    if (!targetEmployee) {
+      try {
+        targetEmployee = await Employee.findOne({ isActive: true }).lean();
+      } catch (err) {
+        console.warn("DB find active employee fallback:", err.message);
+      }
+    }
+
+    let latestPayslip = null;
+
+    // Try finding latest published payslip from MongoDB
+    if (targetEmployee && isValidObjectId(targetEmployee._id)) {
+      try {
+        latestPayslip = await Payroll.findOne({
+          employee: targetEmployee._id,
+          status: { $in: ["Published", "published", "Paid", "paid"] },
+        })
+          .sort({ paymentDate: -1, createdAt: -1 })
+          .populate("employee", "fullName employeeId department position email bankName accountNumber phone")
+          .lean();
+      } catch (dbErr) {
+        console.warn("DB find latest payslip fallback:", dbErr.message);
+      }
+    }
+
+    // Check live in-memory store for published payslips
+    if (!latestPayslip && targetEmployee) {
+      const match = livePayrollStore.find((p) => {
+        const pEmpId = String(p.employee?._id || p.employee || "");
+        const status = String(p.status || "").toLowerCase();
+        const isPublished = status === "published" || status === "paid";
+        return isPublished && (pEmpId === String(targetEmployee._id) || p.employeeId === targetEmployee.employeeId);
+      });
+      if (match) latestPayslip = match;
+    }
+
+    if (!latestPayslip) {
+      return res.status(200).json({
+        success: true,
+        hasPublishedPayslip: false,
+        payslip: null,
+        breakdown: null,
+        message: "Your official payslip for this period has not been released yet. Payslips are published by Admin at the end of the billing cycle.",
+      });
+    }
+
+    const detailed = await buildDetailedPayslipBreakdown(latestPayslip, targetEmployee?._id);
+
+    return res.status(200).json({
+      success: true,
+      hasPublishedPayslip: true,
+      payslip: detailed,
+      breakdown: detailed.breakdown,
+    });
+  } catch (error) {
+    console.error("Error in getEmployeeLatestPayslipBreakdown:", error);
+    return res.status(500).json({
+      success: false,
+      message: error.message || "Failed to retrieve latest payslip breakdown.",
+    });
+  }
+};
+
+// GET /api/employee/payslip/:id or /api/payroll/payslip/:id
+export const getEmployeePayslipBreakdownById = async (req, res) => {
   try {
     const { id } = req.params;
-    if (!id) {
-      return res.status(400).json({
-        success: false,
-        message: "Payroll ID or payslip number is required.",
-      });
+    if (!id || id === "latest") {
+      return getEmployeeLatestPayslipBreakdown(req, res);
     }
 
     let foundRecord = null;
@@ -796,133 +1481,26 @@ export const getPayrollById = async (req, res) => {
       }
     }
 
-    // Normalize employee object and structure
-    const employeeData = foundRecord.employee || {
-      fullName: foundRecord.employeeName || "Employee",
-      employeeId: foundRecord.employeeId || "",
-      department: foundRecord.department || "Operations",
-      position: foundRecord.position || "Staff",
-      email: "",
-      bankName: "",
-      accountNumber: "",
-    };
-
-    const basicSalary = Number(foundRecord.basicSalary !== undefined ? foundRecord.basicSalary : (foundRecord.baseSalary || 0));
-    const baseSalary = basicSalary;
-    const allowances = Number(foundRecord.allowances || 0);
-    const absentDaysDeduction = Number(foundRecord.absentDaysDeduction || 0);
-    const latenessDeduction = Number(foundRecord.latenessDeduction || 0);
-    const totalAttendanceDeductions = Number(foundRecord.totalAttendanceDeductions || (absentDaysDeduction + latenessDeduction));
-
-    // Normalize dynamic earnings array
-    let dynamicEarnings = [];
-    if (Array.isArray(foundRecord.earnings) && foundRecord.earnings.length > 0) {
-      dynamicEarnings = foundRecord.earnings.map((e) => ({
-        description: e.description || e.name || e.label || "Allowance",
-        amount: Number(e.amount || 0),
-      }));
-    } else if (allowances > 0) {
-      dynamicEarnings = [
-        { description: "Allowances & Bonuses", amount: allowances },
-      ];
-    }
-
-    // Normalize dynamic deductions array
-    let dynamicDeductions = [];
-    if (Array.isArray(foundRecord.deductions)) {
-      dynamicDeductions = foundRecord.deductions.map((d) => ({
-        description: d.description || d.name || d.label || "Deduction",
-        amount: Number(d.amount || 0),
-      }));
-    } else if (typeof foundRecord.deductions === "number" && Number(foundRecord.deductions) > 0) {
-      dynamicDeductions = [
-        { description: "Standard Deductions", amount: Number(foundRecord.deductions) },
-      ];
-    }
-
-    const totalCustomEarnings = dynamicEarnings.reduce((acc, curr) => acc + Number(curr.amount || 0), 0);
-    const totalCustomDeductions = dynamicDeductions.reduce((acc, curr) => acc + Number(curr.amount || 0), 0);
-    const totalDeductionsAmount = totalCustomDeductions + totalAttendanceDeductions;
-
-    const netSalary = Number(
-      foundRecord.netPay !== undefined
-        ? foundRecord.netPay
-        : (foundRecord.netSalary !== undefined
-            ? foundRecord.netSalary
-            : Math.max(0, basicSalary + totalCustomEarnings - totalDeductionsAmount))
-    );
-    const netPay = netSalary;
-    const grossEarnings = basicSalary + totalCustomEarnings;
-
-    const detailedPayroll = {
-      ...foundRecord,
-      _id: foundRecord._id || id,
-      payslipNumber: foundRecord.payslipNumber || foundRecord.id || `PAY-${id}`,
-      id: foundRecord.payslipNumber || foundRecord.id || `PAY-${id}`,
-      employee: employeeData,
-      employeeName: employeeData.fullName,
-      employeeId: employeeData.employeeId,
-      department: employeeData.department,
-      position: employeeData.position,
-      payMonth: foundRecord.payMonth || foundRecord.month || "August 2026",
-      paymentDate: foundRecord.paymentDate || new Date().toISOString().split("T")[0],
-      basicSalary,
-      baseSalary,
-      earnings: dynamicEarnings,
-      deductions: dynamicDeductions,
-      absentDaysDeduction,
-      latenessDeduction,
-      totalAttendanceDeductions,
-      allowances: totalCustomEarnings,
-      totalEarnings: totalCustomEarnings,
-      totalDeductions: totalDeductionsAmount,
-      grossEarnings,
-      netSalary,
-      netPay,
-      status: foundRecord.status || "Paid",
-      paymentMethod: foundRecord.paymentMethod || "Bank Transfer",
-      remarks: foundRecord.remarks || "Monthly payroll calculation.",
-      breakdown: {
-        grossEarnings,
-        basicSalary,
-        baseSalary,
-        absentDaysDeduction,
-        latenessDeduction,
-        totalAttendanceDeductions,
-        absenteeismDeductions: absentDaysDeduction,
-        allowances: totalCustomEarnings,
-        totalEarnings: totalCustomEarnings,
-        totalDeductions: totalDeductionsAmount,
-        netPayable: netPay,
-        netPay,
-        earnings: [
-          { label: "Base Salary", amount: basicSalary, type: "base" },
-          ...dynamicEarnings.map((e) => ({ label: e.description, amount: e.amount, type: "allowance" })),
-        ],
-        deductionsList: [
-          ...dynamicDeductions.map((d) => ({ label: d.description, amount: d.amount, type: "deduction" })),
-          ...(absentDaysDeduction > 0
-            ? [{ label: "Absence Deduction", amount: absentDaysDeduction, type: "absence" }]
-            : []),
-          ...(latenessDeduction > 0
-            ? [{ label: "Lateness Penalties", amount: latenessDeduction, type: "lateness" }]
-            : []),
-        ],
-      },
-    };
+    const detailed = await buildDetailedPayslipBreakdown(foundRecord);
 
     return res.status(200).json({
       success: true,
-      payroll: detailedPayroll,
-      payslip: detailedPayroll,
+      payroll: detailed,
+      payslip: detailed,
+      breakdown: detailed.breakdown,
     });
   } catch (error) {
-    console.error("Error in getPayrollById:", error);
+    console.error("Error in getEmployeePayslipBreakdownById:", error);
     return res.status(500).json({
       success: false,
-      message: error.message || "Failed to retrieve payroll details.",
+      message: error.message || "Failed to retrieve payslip details.",
     });
   }
+};
+
+// Function to get a single payroll/payslip record by ID or payslipNumber
+export const getPayrollById = async (req, res) => {
+  return getEmployeePayslipBreakdownById(req, res);
 };
 
 // Function to update payroll status (e.g. Paid, Pending, Failed)
@@ -959,7 +1537,45 @@ export const updatePayrollStatus = async (req, res) => {
     if (inMem) {
       inMem.status = status;
       if (remarks) inMem.remarks = remarks;
-      updated = inMem;
+      if (!updated) updated = inMem;
+    }
+
+    // Trigger in-app notification to employee if status is Published or Paid
+    if (status === "Published" || status === "Paid") {
+      try {
+        const emp = updated?.employee;
+        const targetEmpId = String(emp?._id || emp?.employeeId || updated?.employeeId || "");
+        const payMonth = updated?.payMonth || updated?.month || "Current Month";
+        const netTakeHome = Number(updated?.netSalary || updated?.netPay || 0);
+
+        if (targetEmpId) {
+          await createNotificationRecord({
+            recipient_id: targetEmpId,
+            recipient_role: "employee",
+            sender_id: String(req.admin?.id || req.admin?._id || "admin"),
+            sender_role: "admin",
+            sender_name: req.admin?.fullName || req.admin?.full_name || "Payroll Administrator",
+            title: status === "Paid" ? "💰 Salary Disbursement Completed" : "📄 New Payslip Published",
+            message: status === "Paid"
+              ? `Your salary for ${payMonth} (GH₵${netTakeHome.toFixed(2)}) has been processed and marked as Paid.`
+              : `Your official payslip for ${payMonth} is now published and available to view. Net Take-Home: GH₵${netTakeHome.toFixed(2)}.`,
+            type: "payroll_alert",
+            category: "payroll",
+            priority: "high",
+            action_url: "/employee/dashboard/payslips",
+            action_label: "View Payslip",
+            metadata: {
+              payMonth,
+              payslipId: String(updated?._id || id),
+              payslipNumber: updated?.payslipNumber || id,
+              netPay: netTakeHome,
+              status,
+            },
+          });
+        }
+      } catch (notifErr) {
+        console.warn("Could not dispatch payslip status notification:", notifErr.message);
+      }
     }
 
     return res.status(200).json({
@@ -1096,7 +1712,7 @@ export const exportPayrollReport = async (req, res) => {
 // Each employee payslip
 export const employeePayslips = async (req, res) => {
   try {
-    const rawEmployeeId = req.employee?.id || req.employee?._id;
+    const rawEmployeeId = req.employee?.id || req.employee?._id || req.employee?.employeeId;
     let validObjectId = null;
 
     if (isValidObjectId(rawEmployeeId)) {
@@ -1112,57 +1728,19 @@ export const employeePayslips = async (req, res) => {
       }
     }
 
-    let formattedPayslips = [];
+    let foundPayslips = [];
 
     if (validObjectId) {
       try {
         const payslips = await Payroll.find({
           employee: validObjectId,
         })
-          .populate("employee", "employeeId fullName department position")
-          .sort({ paymentDate: -1 })
+          .populate("employee", "employeeId fullName department position email bankName accountNumber phone")
+          .sort({ paymentDate: -1, createdAt: -1 })
           .lean();
 
         if (payslips && payslips.length > 0) {
-          formattedPayslips = payslips.map((payslip) => {
-            const bSal = Number(payslip.baseSalary !== undefined ? payslip.baseSalary : (payslip.basicSalary || 0));
-            const earn = Array.isArray(payslip.earnings) ? payslip.earnings : [];
-            const deduct = Array.isArray(payslip.deductions)
-              ? payslip.deductions
-              : (typeof payslip.deductions === "number" && payslip.deductions > 0
-                  ? [{ description: "Deduction", amount: payslip.deductions }]
-                  : []);
-            const absDeduct = Number(payslip.absentDaysDeduction || 0);
-            const lateDeduct = Number(payslip.latenessDeduction || 0);
-            const totalAttDeduct = Number(payslip.totalAttendanceDeductions || (absDeduct + lateDeduct));
-            const totalEarn = earn.reduce((acc, c) => acc + Number(c.amount || 0), 0) || Number(payslip.allowances || 0);
-            const totalDeduct = deduct.reduce((acc, c) => acc + Number(c.amount || 0), 0) + totalAttDeduct;
-            const net = Number(payslip.netPay !== undefined ? payslip.netPay : (payslip.netSalary !== undefined ? payslip.netSalary : Math.max(0, bSal + totalEarn - totalDeduct)));
-
-            return {
-              id: payslip.payslipNumber || payslip._id,
-              payslipNumber: payslip.payslipNumber,
-              _id: payslip._id,
-              employeeId: payslip.employee?.employeeId || "",
-              employeeName: payslip.employee?.fullName || "Employee",
-              department: payslip.employee?.department || "Operations",
-              position: payslip.employee?.position || "Staff",
-              month: payslip.payMonth,
-              payMonth: payslip.payMonth,
-              basicSalary: bSal,
-              baseSalary: bSal,
-              earnings: earn,
-              deductions: deduct,
-              absentDaysDeduction: absDeduct,
-              latenessDeduction: lateDeduct,
-              totalAttendanceDeductions: totalAttDeduct,
-              allowances: totalEarn,
-              netSalary: net,
-              netPay: net,
-              status: payslip.status,
-              paymentDate: payslip.paymentDate,
-            };
-          });
+          foundPayslips = [...payslips];
         }
       } catch (dbErr) {
         console.warn("DB error for employeePayslips:", dbErr.message);
@@ -1177,31 +1755,32 @@ export const employeePayslips = async (req, res) => {
       });
 
       liveMatches.forEach((p) => {
-        if (!formattedPayslips.some((f) => String(f._id) === String(p._id) || f.payslipNumber === p.payslipNumber)) {
-          formattedPayslips.unshift({
-            id: p.payslipNumber || p.id,
-            payslipNumber: p.payslipNumber || p.id,
-            _id: p._id,
-            employeeId: p.employee?.employeeId || p.employeeId || "",
-            employeeName: p.employee?.fullName || p.employeeName || "Employee",
-            department: p.employee?.department || p.department || "Operations",
-            position: p.employee?.position || p.position || "Staff",
-            month: p.payMonth || p.month,
-            payMonth: p.payMonth || p.month,
-            basicSalary: p.basicSalary,
-            allowances: p.allowances,
-            deductions: p.deductions,
-            netSalary: p.netSalary,
-            status: p.status,
-            paymentDate: p.paymentDate,
-          });
+        if (!foundPayslips.some((f) => String(f._id) === String(p._id) || f.payslipNumber === p.payslipNumber)) {
+          foundPayslips.unshift(p);
         }
       });
     }
 
+    // Filter only officially published / paid payslips for the employee
+    const publishedPayslips = foundPayslips.filter((p) => {
+      const st = String(p.status || "").toLowerCase();
+      return st === "published" || st === "paid";
+    });
+
+    // Format all published payslips with complete transparent itemized breakdowns
+    const formattedPayslips = await Promise.all(
+      publishedPayslips.map((p) => buildDetailedPayslipBreakdown(p, validObjectId)),
+    );
+
     return res.status(200).json({
       success: true,
+      hasPublishedPayslip: formattedPayslips.length > 0,
+      totalCount: formattedPayslips.length,
       payslips: formattedPayslips,
+      message:
+        formattedPayslips.length === 0
+          ? "Your official payslip for this period has not been released yet. Payslips are published by Admin at the end of the billing cycle."
+          : "Official published payslips retrieved successfully.",
     });
   } catch (error) {
     return res.status(500).json({
@@ -1583,6 +2162,823 @@ export const getPayrollCycles = async (req, res) => {
   }
 };
 
+/**
+ * Salary Projection Calculator for Employees
+ * Estimates end-of-month take-home pay based on attendance record, pending/approved leaves, and dynamic simulations
+ */
+export const getSalaryProjection = async (req, res) => {
+  try {
+    let {
+      employeeId,
+      month,
+      year,
+      simulatedRemainingDays,
+      simulatedLateDays,
+      simulatedOvertimeHours,
+      simRemainingLateDays,
+      simRemainingAvgMinutesLate,
+      simRemainingUnexcusedAbsences,
+      simOvertimeHours,
+      simPendingLeaveApproved,
+      pendingLeaveOutcome,
+      customBaseSalary,
+    } = { ...req.query, ...req.body };
+
+    // Support both parameter naming conventions
+    if (simRemainingLateDays !== undefined && simulatedLateDays === undefined) {
+      simulatedLateDays = simRemainingLateDays;
+    }
+    if (simRemainingUnexcusedAbsences !== undefined && simulatedRemainingDays === undefined) {
+      // Unexcused absences can adjust simulated missed days
+    }
+    if (simOvertimeHours !== undefined && simulatedOvertimeHours === undefined) {
+      simulatedOvertimeHours = simOvertimeHours;
+    }
+    if (simPendingLeaveApproved !== undefined && !pendingLeaveOutcome) {
+      pendingLeaveOutcome = simPendingLeaveApproved ? "approve_paid" : "reject_absent";
+    }
+
+    // Security & Scope: Extract token from header or cookies if not decoded by middleware
+    if (!req.employee && !req.admin) {
+      const authHeader = req.headers.authorization;
+      const bearerToken =
+        authHeader && authHeader.startsWith("Bearer ")
+          ? authHeader.slice(7)
+          : null;
+      const token =
+        req.cookies?.employeeToken ||
+        req.cookies?.token ||
+        bearerToken ||
+        req.headers["x-employee-token"] ||
+        req.headers["x-admin-token"];
+
+      const jwtSecret = process.env.JWT_SECRET || "default_jwt_secret_key_12345";
+      if (token) {
+        try {
+          const decoded = jwt.verify(token, jwtSecret);
+          if (decoded) {
+            if (decoded.role === "admin" || decoded.role === "super_admin") {
+              req.admin = decoded;
+            } else {
+              req.employee = {
+                _id: decoded.id || decoded._id,
+                id: decoded.id || decoded._id,
+                employeeId: decoded.employeeId,
+                role: decoded.role || "employee",
+              };
+            }
+          }
+        } catch {
+          // Silent catch
+        }
+      }
+    }
+
+    if (req.employee && (!req.admin || req.admin.role === "employee")) {
+      employeeId = req.employee.id || req.employee._id || req.employee.employeeId;
+    }
+
+    // Target employee lookup from Employee and User collections
+    let targetEmployee = null;
+    if (employeeId && employeeId !== "all") {
+      try {
+        if (isValidObjectId(employeeId)) {
+          targetEmployee = await Employee.findById(employeeId).lean();
+        } else {
+          targetEmployee = await Employee.findOne({
+            $or: [{ employeeId }, { email: employeeId }],
+          }).lean();
+        }
+      } catch (err) {
+        console.warn("Error querying employee in getSalaryProjection:", err.message);
+      }
+    }
+
+    if (!targetEmployee) {
+      targetEmployee = await Employee.findOne({ isActive: true }).lean();
+    }
+
+    // If still not found, check User collection
+    if (!targetEmployee) {
+      try {
+        const targetUser = await User.findOne({ role: "employee" }).lean();
+        if (targetUser) {
+          targetEmployee = {
+            _id: targetUser._id,
+            fullName: targetUser.fullName,
+            employeeId: targetUser.employeeId || "EMP001",
+            email: targetUser.email,
+            department: targetUser.department || "Operations",
+            position: targetUser.position || "Staff",
+            baseSalary: targetUser.baseSalary || 2500,
+            salary: targetUser.baseSalary || 2500,
+            allowances: targetUser.allowances || 0,
+          };
+        }
+      } catch (err) {
+        console.warn("Error querying user fallback in getSalaryProjection:", err.message);
+      }
+    }
+
+    if (!targetEmployee) {
+      return res.status(404).json({
+        success: false,
+        message: "No active employee found for salary projection.",
+      });
+    }
+
+    // Target Month / Year parsing
+    const monthNames = [
+      "January", "February", "March", "April", "May", "June",
+      "July", "August", "September", "October", "November", "December"
+    ];
+    const now = new Date();
+    let targetYear = parseInt(year, 10) || now.getFullYear();
+    let targetMonthIndex = now.getMonth();
+    let targetMonthName = monthNames[targetMonthIndex];
+
+    if (month) {
+      const raw = String(month).trim();
+      const yearMatch = raw.match(/\b(20\d\d)\b/);
+      if (yearMatch) targetYear = parseInt(yearMatch[1], 10);
+      const foundIdx = monthNames.findIndex((m) =>
+        raw.toLowerCase().includes(m.toLowerCase())
+      );
+      if (foundIdx !== -1) {
+        targetMonthIndex = foundIdx;
+        targetMonthName = monthNames[foundIdx];
+      } else {
+        const num = parseInt(raw, 10);
+        if (!isNaN(num) && num >= 1 && num <= 12) {
+          targetMonthIndex = num - 1;
+          targetMonthName = monthNames[targetMonthIndex];
+        }
+      }
+    }
+
+    const formattedTargetMonth = `${targetMonthName} ${targetYear}`;
+    const totalWorkingDays = getWorkingDaysInMonth(targetYear, targetMonthIndex);
+    const totalDaysInMonth = new Date(targetYear, targetMonthIndex + 1, 0).getDate();
+    const isCurrentMonth = now.getFullYear() === targetYear && now.getMonth() === targetMonthIndex;
+    const isPastMonth =
+      targetYear < now.getFullYear() ||
+      (targetYear === now.getFullYear() && targetMonthIndex < now.getMonth());
+    const currentDay = isCurrentMonth ? now.getDate() : totalDaysInMonth;
+
+    // Elapsed vs Remaining workdays calculation
+    let elapsedWorkDays = 0;
+    let remainingWorkDays = 0;
+
+    for (let day = 1; day <= totalDaysInMonth; day++) {
+      const curDate = new Date(targetYear, targetMonthIndex, day);
+      const dayOfWeek = curDate.getDay();
+      if (dayOfWeek !== 0 && dayOfWeek !== 6) {
+        if (isPastMonth) {
+          elapsedWorkDays++;
+        } else if (isCurrentMonth) {
+          if (day <= now.getDate()) {
+            elapsedWorkDays++;
+          } else {
+            remainingWorkDays++;
+          }
+        } else {
+          remainingWorkDays++;
+        }
+      }
+    }
+
+    // Company Settings retrieval
+    let companySettings = {
+      workStartTime: "08:00",
+      absenceDeductionRate: 10,
+      lateTier1_amount: 5,
+      lateTier2_amount: 10,
+      lateTier3_amount: 20,
+      lateTier4_amount: 30,
+      lateTier5_amount: 50,
+      lateTier6_amount: 75,
+    };
+    try {
+      const dbSettings = await CompanySettings.getSingletonSettings();
+      if (dbSettings) companySettings = { ...companySettings, ...(dbSettings.toObject ? dbSettings.toObject() : dbSettings) };
+    } catch {
+      try {
+        const dbSettings = await CompanySettings.findOne().lean();
+        if (dbSettings) companySettings = { ...companySettings, ...dbSettings };
+      } catch (err) {
+        console.warn("DB settings query in getSalaryProjection:", err.message);
+      }
+    }
+
+    const rawBaseSalary =
+      parseFloat(customBaseSalary) ||
+      Number(targetEmployee.baseSalary || targetEmployee.salary || 0);
+    const baseSalary = rawBaseSalary > 0 ? rawBaseSalary : 2500.0;
+    const allowances = Number(targetEmployee.allowances || 0);
+
+    const absenceRatePerDay = Number(
+      companySettings.absenceDeductionRate !== undefined
+        ? companySettings.absenceDeductionRate
+        : 10.0
+    );
+    const dailyBaseRate = parseFloat((baseSalary / (totalWorkingDays || 22)).toFixed(2));
+    const hourlyRate = parseFloat((dailyBaseRate / 8).toFixed(2));
+    const overtimeHourlyRate = parseFloat((hourlyRate * 1.5).toFixed(2));
+
+    // Attendance records query
+    let attendanceRecords = [];
+    if (isValidObjectId(targetEmployee._id)) {
+      try {
+        const dbAtt = await Attendance.find({ employee: targetEmployee._id }).lean();
+        if (dbAtt) attendanceRecords = dbAtt;
+      } catch (err) {
+        console.warn("DB attendance query in getSalaryProjection:", err.message);
+      }
+    }
+
+    liveAttendanceStore.forEach((liveAtt) => {
+      if (String(liveAtt.employee) === String(targetEmployee._id)) {
+        if (!attendanceRecords.some((a) => a.date === liveAtt.date)) {
+          attendanceRecords.push(liveAtt);
+        }
+      }
+    });
+
+    const targetMonthPrefix = `${targetYear}-${String(targetMonthIndex + 1).padStart(2, "0")}`;
+    const monthAttendance = attendanceRecords.filter((rec) => {
+      if (!rec) return false;
+      if (typeof rec.date === "string" && rec.date.startsWith(targetMonthPrefix)) return true;
+      const d = new Date(rec.date || rec.clockIn);
+      return !isNaN(d.getTime()) && d.getFullYear() === targetYear && d.getMonth() === targetMonthIndex;
+    });
+
+    let presentDaysToDate = 0;
+    let onTimeDaysToDate = 0;
+    let lateDaysToDate = 0;
+    let explicitAbsentDaysToDate = 0;
+    let overtimeHoursToDate = 0;
+    let totalWorkHoursToDate = 0;
+    let latenessPenaltiesToDate = 0;
+    let totalLateMinutes = 0;
+    const latenessDetails = [];
+
+    monthAttendance.forEach((rec) => {
+      const hrs = Number(rec.workHours) || (rec.status !== "Absent" ? 8 : 0);
+      totalWorkHoursToDate += hrs;
+      if (rec.overtimeHours) overtimeHoursToDate += Number(rec.overtimeHours);
+      else if (hrs > 8) overtimeHoursToDate += hrs - 8;
+
+      const st = (rec.status || "").toLowerCase();
+      if (st === "absent") {
+        explicitAbsentDaysToDate++;
+      } else {
+        presentDaysToDate++;
+        let isLate = st === "late";
+        let penaltyObj = null;
+
+        if (rec.clockIn) {
+          penaltyObj = evaluateLatenessPenalty(rec.clockIn, companySettings.workStartTime, companySettings);
+          if (penaltyObj.minutesLate > 0) isLate = true;
+        } else if (rec.lateMinutes > 0 || rec.delayMinutes > 0) {
+          isLate = true;
+        }
+
+        if (isLate) {
+          lateDaysToDate++;
+          const recLateMins = penaltyObj?.minutesLate || Number(rec.lateMinutes || rec.delayMinutes || 15);
+          totalLateMinutes += recLateMins;
+          const penaltyVal = rec.latePenalty !== undefined && rec.latePenalty > 0
+            ? Number(rec.latePenalty)
+            : (penaltyObj?.penalty || Number(companySettings.lateTier1_amount || 5));
+          latenessPenaltiesToDate += penaltyVal;
+          latenessDetails.push({
+            date: rec.date,
+            clockIn: penaltyObj?.clockInFormatted || (rec.clockIn ? new Date(rec.clockIn).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }) : "Late"),
+            minutesLate: recLateMins,
+            tier: penaltyObj?.tier || rec.penaltyTier || "Late Tier 1",
+            penalty: penaltyVal,
+          });
+        } else {
+          onTimeDaysToDate++;
+        }
+      }
+    });
+
+    // Leave Context: Approved & Pending
+    let allEmployeeLeaves = [];
+    if (isValidObjectId(targetEmployee._id)) {
+      try {
+        const dbLeaves = await Leave.find({ employee: targetEmployee._id }).lean();
+        if (dbLeaves) allEmployeeLeaves = dbLeaves;
+      } catch (err) {
+        console.warn("DB leave query in getSalaryProjection:", err.message);
+      }
+    }
+
+    const monthStart = new Date(targetYear, targetMonthIndex, 1);
+    const monthEnd = new Date(targetYear, targetMonthIndex + 1, 0, 23, 59, 59, 999);
+
+    let approvedPaidLeaveDays = 0;
+    let approvedUnpaidLeaveDays = 0;
+    const approvedLeavesList = [];
+    const pendingLeavesList = [];
+    let pendingPaidLeaveDays = 0;
+    let pendingUnpaidLeaveDays = 0;
+
+    allEmployeeLeaves.forEach((leave) => {
+      const lStart = new Date(leave.startDate);
+      const lEnd = new Date(leave.endDate || leave.startDate);
+      if (isNaN(lStart.getTime())) return;
+
+      const effStart = lStart < monthStart ? monthStart : lStart;
+      const effEnd = lEnd > monthEnd ? monthEnd : lEnd;
+
+      if (effStart <= effEnd) {
+        let workDaysCount = 0;
+        const cur = new Date(effStart);
+        while (cur <= effEnd) {
+          const dw = cur.getDay();
+          if (dw !== 0 && dw !== 6) workDaysCount++;
+          cur.setDate(cur.getDate() + 1);
+        }
+
+        if (workDaysCount > 0) {
+          const statusLower = (leave.status || "pending").toLowerCase();
+          const isUnpaid = (leave.leaveType || "").toLowerCase().includes("unpaid");
+
+          if (statusLower === "approved") {
+            if (isUnpaid) approvedUnpaidLeaveDays += workDaysCount;
+            else approvedPaidLeaveDays += workDaysCount;
+            approvedLeavesList.push({
+              _id: leave._id,
+              leaveType: leave.leaveType,
+              startDate: leave.startDate,
+              endDate: leave.endDate,
+              days: workDaysCount,
+              status: "Approved",
+              isPaid: !isUnpaid,
+            });
+          } else if (statusLower === "pending") {
+            if (isUnpaid) pendingUnpaidLeaveDays += workDaysCount;
+            else pendingPaidLeaveDays += workDaysCount;
+            pendingLeavesList.push({
+              _id: leave._id,
+              leaveType: leave.leaveType,
+              startDate: leave.startDate,
+              endDate: leave.endDate,
+              days: workDaysCount,
+              reason: leave.reason || "Personal Leave",
+              status: "Pending",
+              isPaid: !isUnpaid,
+            });
+          }
+        }
+      }
+    });
+
+    const totalPendingDays = pendingPaidLeaveDays + pendingUnpaidLeaveDays;
+    const pendingLeavesCount = pendingLeavesList.length;
+
+    // Actual Unexcused Absences to date:
+    // Total business days elapsed minus attended days minus approved leaves
+    const elapsedAccountedDays =
+      presentDaysToDate +
+      explicitAbsentDaysToDate +
+      approvedPaidLeaveDays +
+      approvedUnpaidLeaveDays;
+    const unexplainedAbsencesToDate = Math.max(0, elapsedWorkDays - elapsedAccountedDays);
+    const unexcusedAbsentDays = explicitAbsentDaysToDate + unexplainedAbsencesToDate;
+    const monthToDateAbsenceDeductions = parseFloat((unexcusedAbsentDays * absenceRatePerDay).toFixed(2));
+    const monthToDateLatenessPenalties = parseFloat(latenessPenaltiesToDate.toFixed(2));
+    const totalMtdDeductions = parseFloat(
+      (monthToDateLatenessPenalties + monthToDateAbsenceDeductions).toFixed(2)
+    );
+
+    // ==========================================
+    // 1. BASELINE PROJECTION (100% On-Time Remaining Days)
+    // ==========================================
+    const baselinePresentDays = presentDaysToDate + remainingWorkDays;
+    const baselineUnexcusedAbsences = unexcusedAbsentDays;
+    const baselineAbsenceDeduction = monthToDateAbsenceDeductions;
+    const baselineLatenessDeduction = monthToDateLatenessPenalties;
+    const baselineOvertimePay = parseFloat(
+      (overtimeHoursToDate * overtimeHourlyRate).toFixed(2)
+    );
+    const baselineGross = parseFloat((baseSalary + allowances + baselineOvertimePay).toFixed(2));
+    const baselineDeductions = parseFloat(
+      (baselineAbsenceDeduction + baselineLatenessDeduction).toFixed(2)
+    );
+    const baselineNetPay = parseFloat(Math.max(0, baselineGross - baselineDeductions).toFixed(2));
+
+    // ==========================================
+    // 2. TREND-BASED PROJECTION (Current Pace Projected Forward)
+    // ==========================================
+    const attendanceRateToDate = elapsedWorkDays > 0 ? presentDaysToDate / elapsedWorkDays : 1;
+    const avgLatePenaltyPerDay = elapsedWorkDays > 0 ? monthToDateLatenessPenalties / elapsedWorkDays : 0;
+    const avgOvertimePerDay = elapsedWorkDays > 0 ? overtimeHoursToDate / elapsedWorkDays : 0;
+    const avgLateDaysPerDay = elapsedWorkDays > 0 ? lateDaysToDate / elapsedWorkDays : 0;
+
+    const trendProjectedPresent = Math.round(
+      presentDaysToDate + remainingWorkDays * attendanceRateToDate
+    );
+    const trendRemainingMissedDays = Math.max(
+      0,
+      remainingWorkDays - Math.round(remainingWorkDays * attendanceRateToDate)
+    );
+    const trendTotalAbsences = unexcusedAbsentDays + trendRemainingMissedDays;
+    const trendAbsenceDeduction = parseFloat((trendTotalAbsences * absenceRatePerDay).toFixed(2));
+    const trendLatenessDeduction = parseFloat(
+      (monthToDateLatenessPenalties + remainingWorkDays * avgLatePenaltyPerDay).toFixed(2)
+    );
+    const trendProjectedOvertimeHours = parseFloat(
+      (overtimeHoursToDate + remainingWorkDays * avgOvertimePerDay).toFixed(1)
+    );
+    const trendOvertimePay = parseFloat((trendProjectedOvertimeHours * overtimeHourlyRate).toFixed(2));
+    const trendGross = parseFloat((baseSalary + allowances + trendOvertimePay).toFixed(2));
+    const trendDeductions = parseFloat((trendAbsenceDeduction + trendLatenessDeduction).toFixed(2));
+    const trendNetPay = parseFloat(Math.max(0, trendGross - trendDeductions).toFixed(2));
+    const trendProjectedLateDays = Math.round(lateDaysToDate + remainingWorkDays * avgLateDaysPerDay);
+
+    // ==========================================
+    // 3. CUSTOM SIMULATION PROJECTION
+    // ==========================================
+    const simRemainingDays =
+      simulatedRemainingDays !== undefined && !isNaN(Number(simulatedRemainingDays))
+        ? Math.max(0, Math.min(remainingWorkDays, Number(simulatedRemainingDays)))
+        : remainingWorkDays;
+
+    const simLateDays =
+      simulatedLateDays !== undefined && !isNaN(Number(simulatedLateDays))
+        ? Math.max(0, Number(simulatedLateDays))
+        : 0;
+
+    const simExtraOvertime =
+      simulatedOvertimeHours !== undefined && !isNaN(Number(simulatedOvertimeHours))
+        ? Math.max(0, Number(simulatedOvertimeHours))
+        : 0;
+
+    const simUnexcused =
+      simRemainingUnexcusedAbsences !== undefined && !isNaN(Number(simRemainingUnexcusedAbsences))
+        ? Math.max(0, Number(simRemainingUnexcusedAbsences))
+        : 0;
+
+    let simPendingAbsenceDays = 0;
+    if (pendingLeaveOutcome === "approve_unpaid" || pendingLeaveOutcome === "reject_absent" || pendingLeaveOutcome === "unpaid") {
+      simPendingAbsenceDays = totalPendingDays;
+    }
+
+    const simMissedRemainingDays = Math.max(0, remainingWorkDays - simRemainingDays) + simUnexcused;
+    const simTotalAbsences = unexcusedAbsentDays + simMissedRemainingDays + simPendingAbsenceDays;
+    const simAbsenceDeduction = parseFloat((simTotalAbsences * absenceRatePerDay).toFixed(2));
+
+    const avgTierLateCost = Number(companySettings.lateTier1_amount || 5);
+    const simLatenessDeduction = parseFloat(
+      (monthToDateLatenessPenalties + simLateDays * avgTierLateCost).toFixed(2)
+    );
+
+    const simTotalOvertimeHours = parseFloat((overtimeHoursToDate + simExtraOvertime).toFixed(1));
+    const simOvertimePay = parseFloat((simTotalOvertimeHours * overtimeHourlyRate).toFixed(2));
+
+    const simGross = parseFloat((baseSalary + allowances + simOvertimePay).toFixed(2));
+    const simDeductions = parseFloat((simAbsenceDeduction + simLatenessDeduction).toFixed(2));
+    const simNetPay = parseFloat(Math.max(0, simGross - simDeductions).toFixed(2));
+
+    return res.status(200).json({
+      success: true,
+      month: formattedTargetMonth,
+      targetYear,
+      targetMonthIndex,
+      targetMonthName,
+      employee: {
+        _id: targetEmployee._id,
+        employeeId: targetEmployee.employeeId || "EMP001",
+        fullName: targetEmployee.fullName || "Employee",
+        department: targetEmployee.department || "Operations",
+        position: targetEmployee.position || "Staff",
+        baseSalary,
+        salary: baseSalary,
+        allowances,
+        dailyRate: dailyBaseRate,
+        hourlyRate,
+      },
+      calendar: {
+        currentDay,
+        totalDaysInMonth,
+        totalWorkingDays,
+        elapsedWorkdays: elapsedWorkDays,
+        elapsedWorkDays,
+        remainingWorkdays: remainingWorkDays,
+        remainingWorkDays,
+        monthName: targetMonthName,
+        year: targetYear,
+        isCurrentMonth,
+        isPastMonth,
+        progressLabel: `Day ${currentDay} / ${totalDaysInMonth} | ${elapsedWorkDays} workdays elapsed · ${remainingWorkDays} remaining`,
+      },
+      rates: {
+        baseSalary,
+        dailyBaseRate,
+        hourlyRate,
+        overtimeHourlyRate,
+        absenceRatePerDay,
+        allowances,
+      },
+      attendance: {
+        daysWorked: presentDaysToDate,
+        attendedDays: presentDaysToDate,
+        onTimeCount: onTimeDaysToDate,
+        onTimeDays: onTimeDaysToDate,
+        lateDaysCount: lateDaysToDate,
+        lateDays: lateDaysToDate,
+        totalLateMinutes,
+        unexcusedAbsentDays,
+        explicitAbsentDays: explicitAbsentDaysToDate,
+        attendanceRate: attendanceRateToDate,
+      },
+      deductions: {
+        monthToDateLatenessPenalties,
+        monthToDateAbsenceDeductions,
+        totalMtdDeductions,
+        latenessDeductions: monthToDateLatenessPenalties,
+        absenceDeductions: monthToDateAbsenceDeductions,
+        totalDeductionsToDate: totalMtdDeductions,
+        latenessDetails,
+      },
+      currentMonthToDate: {
+        daysWorked: presentDaysToDate,
+        attendedDays: presentDaysToDate,
+        onTimeCount: onTimeDaysToDate,
+        onTimeDays: onTimeDaysToDate,
+        lateDaysCount: lateDaysToDate,
+        lateDays: lateDaysToDate,
+        totalLateMinutes,
+        unexcusedAbsentDays,
+        accruedLatenessPenalties: monthToDateLatenessPenalties,
+        accruedAbsenteeismDeduction: monthToDateAbsenceDeductions,
+        accruedDeductionsTotal: totalMtdDeductions,
+        totalMtdDeductions,
+        presentDays: presentDaysToDate,
+        totalWorkHours: totalWorkHoursToDate,
+        overtimeHours: overtimeHoursToDate,
+      },
+      actualToDate: {
+        daysWorked: presentDaysToDate,
+        presentDays: presentDaysToDate,
+        onTimeDays: onTimeDaysToDate,
+        onTimeCount: onTimeDaysToDate,
+        lateDays: lateDaysToDate,
+        lateDaysCount: lateDaysToDate,
+        totalLateMinutes,
+        absentDays: unexcusedAbsentDays,
+        unexcusedAbsentDays,
+        totalWorkHours: totalWorkHoursToDate,
+        overtimeHours: overtimeHoursToDate,
+        latenessDeductions: monthToDateLatenessPenalties,
+        absenceDeductions: monthToDateAbsenceDeductions,
+        totalDeductionsToDate: totalMtdDeductions,
+        latenessDetails,
+      },
+      pendingLeaves: {
+        count: pendingLeavesCount,
+        totalDays: totalPendingDays,
+        pendingLeavesList,
+        pendingPaidLeaveDays,
+        pendingUnpaidLeaveDays,
+      },
+      pendingLeavesSummary: {
+        count: pendingLeavesCount,
+        totalDays: totalPendingDays,
+        pendingPaidLeaveDays,
+        pendingUnpaidLeaveDays,
+        list: pendingLeavesList,
+      },
+      leaveContext: {
+        approvedPaidLeaveDays,
+        approvedUnpaidLeaveDays,
+        approvedLeavesList,
+        pendingPaidLeaveDays,
+        pendingUnpaidLeaveDays,
+        totalPendingDays,
+        pendingLeavesList,
+      },
+      projections: {
+        baseline: {
+          title: "Best-Case (100% On-Time)",
+          tag: "Optimal",
+          description:
+            "Zero further lateness or absences for the remaining workdays.",
+          projectedPresentDays: baselinePresentDays,
+          projectedAbsenceDays: baselineUnexcusedAbsences,
+          totalMonthLateDays: lateDaysToDate,
+          totalMonthAbsentDays: baselineUnexcusedAbsences,
+          projectedOvertimeHours: overtimeHoursToDate,
+          projectedOvertimePay: baselineOvertimePay,
+          projectedGrossPay: baselineGross,
+          projectedGrossSalary: baselineGross,
+          projectedLatenessPenalties: baselineLatenessDeduction,
+          projectedAbsenteeismDeductions: baselineAbsenceDeduction,
+          projectedSSNIT: 0,
+          projectedTax: 0,
+          projectedDeductions: baselineDeductions,
+          projectedTotalDeductions: baselineDeductions,
+          projectedNetPay: baselineNetPay,
+          projectedNetSalary: baselineNetPay,
+          projectedTakeHomePay: baselineNetPay,
+          deltaVsBaseSalary: parseFloat((baselineNetPay - baseSalary).toFixed(2)),
+          absenceDeduction: baselineAbsenceDeduction,
+          latenessDeduction: baselineLatenessDeduction,
+        },
+        trend: {
+          title: "Current Trend (Pace)",
+          tag: "Recommended",
+          description:
+            "Assumes your attendance and punctuality continue at your current month-to-date average.",
+          projectedPresentDays: trendProjectedPresent,
+          projectedAbsenceDays: trendTotalAbsences,
+          totalMonthLateDays: trendProjectedLateDays,
+          totalMonthAbsentDays: trendTotalAbsences,
+          projectedOvertimeHours: trendProjectedOvertimeHours,
+          projectedOvertimePay: trendOvertimePay,
+          projectedGrossPay: trendGross,
+          projectedGrossSalary: trendGross,
+          projectedLatenessPenalties: trendLatenessDeduction,
+          projectedAbsenteeismDeductions: trendAbsenceDeduction,
+          projectedSSNIT: 0,
+          projectedTax: 0,
+          projectedDeductions: trendDeductions,
+          projectedTotalDeductions: trendDeductions,
+          projectedNetPay: trendNetPay,
+          projectedNetSalary: trendNetPay,
+          projectedTakeHomePay: trendNetPay,
+          deltaVsBaseSalary: parseFloat((trendNetPay - baseSalary).toFixed(2)),
+          absenceDeduction: trendAbsenceDeduction,
+          latenessDeduction: trendLatenessDeduction,
+        },
+        simulation: {
+          title: "Custom Simulation",
+          tag: "Interactive",
+          description:
+            "Simulate remaining late days, overtime hours, and unexcused absences with sliders.",
+          simulatedRemainingDays: simRemainingDays,
+          simulatedLateDays: simLateDays,
+          totalMonthLateDays: lateDaysToDate + simLateDays,
+          totalMonthAbsentDays: simTotalAbsences,
+          simulatedOvertimeHours: simTotalOvertimeHours,
+          pendingLeaveOutcome: pendingLeaveOutcome || "approve_paid",
+          projectedGrossPay: simGross,
+          projectedGrossSalary: simGross,
+          projectedLatenessPenalties: simLatenessDeduction,
+          projectedAbsenteeismDeductions: simAbsenceDeduction,
+          projectedSSNIT: 0,
+          projectedTax: 0,
+          projectedDeductions: simDeductions,
+          projectedTotalDeductions: simDeductions,
+          projectedNetPay: simNetPay,
+          projectedNetSalary: simNetPay,
+          projectedTakeHomePay: simNetPay,
+          deltaVsBaseSalary: parseFloat((simNetPay - baseSalary).toFixed(2)),
+          absenceDeduction: simAbsenceDeduction,
+          latenessDeduction: simLatenessDeduction,
+          overtimePay: simOvertimePay,
+        },
+        simulated: {
+          title: "Custom Simulation",
+          tag: "Interactive",
+          description:
+            "Simulate remaining late days, overtime hours, and unexcused absences with sliders.",
+          simulatedRemainingDays: simRemainingDays,
+          simulatedLateDays: simLateDays,
+          totalMonthLateDays: lateDaysToDate + simLateDays,
+          totalMonthAbsentDays: simTotalAbsences,
+          simulatedOvertimeHours: simTotalOvertimeHours,
+          pendingLeaveOutcome: pendingLeaveOutcome || "approve_paid",
+          projectedGrossPay: simGross,
+          projectedGrossSalary: simGross,
+          projectedLatenessPenalties: simLatenessDeduction,
+          projectedAbsenteeismDeductions: simAbsenceDeduction,
+          projectedSSNIT: 0,
+          projectedTax: 0,
+          projectedDeductions: simDeductions,
+          projectedTotalDeductions: simDeductions,
+          projectedNetPay: simNetPay,
+          projectedNetSalary: simNetPay,
+          projectedTakeHomePay: simNetPay,
+          deltaVsBaseSalary: parseFloat((simNetPay - baseSalary).toFixed(2)),
+          absenceDeduction: simAbsenceDeduction,
+          latenessDeduction: simLatenessDeduction,
+          overtimePay: simOvertimePay,
+        },
+      },
+    });
+  } catch (error) {
+    console.error("Error in getSalaryProjection:", error);
+    return res.status(500).json({
+      success: false,
+      message: error.message || "Failed to calculate salary projection.",
+    });
+  }
+};
+
 // Retrieve 6-Month Attendance Penalty Impact Analytics on Total Payroll Cost
 export { getPenaltyImpactAnalytics } from "./analyticsController.js";
+
+// Automated Live Monthly Payroll Calculation for Authenticated Employee
+import {
+  calculateEmployeeMonthPayroll,
+  calculateAllEmployeesMonthlyRun,
+} from "../services/payrollCalculationService.js";
+
+export const getEmployeeLivePayrollSummary = async (req, res) => {
+  try {
+    let rawEmployeeId = req.employee?._id || req.employee?.id || req.user?._id || req.user?.id;
+    const { month, year, employeeId } = req.query;
+
+    if (employeeId && (req.admin || req.employee?.role === "admin")) {
+      rawEmployeeId = employeeId;
+    }
+
+    if (!rawEmployeeId) {
+      const authHeader = req.headers.authorization;
+      const bearerToken =
+        authHeader && authHeader.startsWith("Bearer ")
+          ? authHeader.slice(7)
+          : null;
+      const token =
+        req.cookies?.employeeToken ||
+        req.cookies?.token ||
+        bearerToken ||
+        req.headers["x-employee-token"];
+
+      const jwtSecret = process.env.JWT_SECRET || "default_jwt_secret_key_12345";
+      if (token) {
+        try {
+          const decoded = jwt.verify(token, jwtSecret);
+          if (decoded) {
+            rawEmployeeId = decoded.id || decoded._id || decoded.employeeId;
+          }
+        } catch {
+          // invalid token
+        }
+      }
+    }
+
+    const calculation = await calculateEmployeeMonthPayroll({
+      employeeInput: rawEmployeeId || "emp_default_01",
+      month: month || req.query.monthStr,
+      year,
+      isFullMonthAudit: false,
+    });
+
+    return res.status(200).json({
+      success: true,
+      baseSalary: calculation.baseSalary,
+      workdaysElapsed: calculation.workdaysElapsed,
+      attendedDays: calculation.attendedDays,
+      lateDays: calculation.lateDays,
+      onTimeDays: calculation.onTimeDays,
+      approvedLeaveDays: calculation.approvedLeaveDays,
+      totalLateMinutes: calculation.totalLateMinutes,
+      latenessDeductions: calculation.latenessDeductions,
+      absentDays: calculation.absentDays,
+      absenceDeductions: calculation.absenceDeductions,
+      allowances: calculation.allowances,
+      otherCustomDeductions: calculation.otherCustomDeductions,
+      netTakeHomePay: calculation.netTakeHomePay,
+      employee: calculation.employee,
+      month: calculation.month,
+      monthName: calculation.monthName,
+      companySettings: calculation.companySettings,
+      calendar: calculation.calendar,
+      dailyAudit: calculation.dailyAudit,
+      summary: calculation,
+    });
+  } catch (error) {
+    console.error("Error in getEmployeeLivePayrollSummary:", error);
+    return res.status(500).json({
+      success: false,
+      message: error.message || "Failed to calculate live payroll summary.",
+    });
+  }
+};
+
+// Batch Monthly Payroll Run Aggregation across All Active Employees for Admin
+export const getMonthlyPayrollRun = async (req, res) => {
+  try {
+    const { month, year } = req.query;
+    const runResult = await calculateAllEmployeesMonthlyRun({ month, year });
+
+    return res.status(200).json({
+      success: true,
+      ...runResult,
+    });
+  } catch (error) {
+    console.error("Error in getMonthlyPayrollRun:", error);
+    return res.status(500).json({
+      success: false,
+      message: error.message || "Failed to calculate batch monthly payroll run.",
+    });
+  }
+};
+
+
 

@@ -9,12 +9,11 @@ import {
   Calendar,
   ExternalLink,
   CheckCircle2,
-  Sun,
-  Moon,
 } from "lucide-react";
 import { useManagement } from "../context/ManagementContextProvider";
-import { useTheme } from "../context/ThemeContext";
 import NotificationBell from "./NotificationBell";
+import ThemeToggle from "./ThemeToggle";
+import Avatar from "./Avatar";
 
 // Helper to extract dynamic initials from full name
 const getInitials = (name, fallback = "EM") => {
@@ -34,8 +33,7 @@ export const Navbar = ({
 }) => {
   const location = useLocation();
   const navigate = useNavigate();
-  const { user, role: contextRole, logout } = useManagement();
-  const { isDark, toggleTheme } = useTheme();
+  const { user, admin, role: contextRole, logout } = useManagement();
   const [isProfileMenuOpen, setIsProfileMenuOpen] = useState(false);
   const profileMenuRef = useRef(null);
 
@@ -154,21 +152,8 @@ export const Navbar = ({
 
           {/* Right Section: Theme Toggle + Notification Bell + User Profile Menu */}
           <div className="flex items-center gap-2 sm:gap-3.5">
-            {/* Theme Toggle Switch */}
-            <button
-              id="navbar-theme-toggle-btn"
-              type="button"
-              onClick={toggleTheme}
-              className="p-2 rounded-xl border border-gray-200 dark:border-slate-700 bg-gray-50/90 dark:bg-slate-800 text-gray-700 dark:text-amber-400 hover:bg-gray-100 dark:hover:bg-slate-700/80 transition-all duration-200 cursor-pointer flex items-center justify-center shadow-2xs group"
-              aria-label={isDark ? "Switch to light mode" : "Switch to dark mode"}
-              title={isDark ? "Switch to light mode" : "Switch to dark mode"}
-            >
-              {isDark ? (
-                <Sun className="w-4 h-4 transition-transform duration-300 group-hover:rotate-45" />
-              ) : (
-                <Moon className="w-4 h-4 text-[#002185] transition-transform duration-300 group-hover:-rotate-12" />
-              )}
-            </button>
+            {/* Theme Toggle Dropdown */}
+            <ThemeToggle />
 
             {/* Notification Bell */}
             <div className="relative shrink-0">
@@ -194,26 +179,18 @@ export const Navbar = ({
               >
                 {/* Dynamic Avatar with Initials */}
                 <div className="relative shrink-0">
-                  {isAdmin ? (
-                    <div className="w-8 h-8 sm:w-9 sm:h-9 rounded-xl bg-gradient-to-br from-[#002185] to-[#001566] text-white flex items-center justify-center font-bold text-xs sm:text-sm shadow-md border border-[#002185]/20 select-none ring-2 ring-[#002185]/10">
-                      {adminInitials}
-                    </div>
-                  ) : user?.avatar || user?.profile_image_url || user?.profile_picture ? (
-                    <img
-                      src={user.avatar || user.profile_image_url || user.profile_picture}
-                      alt={employeeFullName}
-                      className="w-8 h-8 sm:w-9 sm:h-9 rounded-xl object-cover border-2 border-[#E2E8F0] dark:border-slate-700 shadow-md"
-                      onError={(e) => {
-                        e.currentTarget.style.display = "none";
-                        const fallback = e.currentTarget.nextElementSibling;
-                        if (fallback) fallback.style.display = "flex";
-                      }}
-                    />
-                  ) : (
-                    <div className="w-8 h-8 sm:w-9 sm:h-9 rounded-xl bg-gradient-to-br from-[#ff5500] to-[#e64a00] text-white flex items-center justify-center font-bold text-xs sm:text-sm shadow-md border border-[#ff5500]/20 select-none ring-2 ring-[#ff5500]/10">
-                      {employeeInitials}
-                    </div>
-                  )}
+                  <Avatar
+                    src={
+                      isAdmin
+                        ? admin?.profile_image_url || admin?.avatar || user?.profile_image_url || user?.avatar
+                        : user?.profilePicture || user?.avatar || user?.profile_image_url || user?.profile_picture
+                    }
+                    name={isAdmin ? adminTitle : employeeFullName}
+                    size="sm"
+                    shape="rounded"
+                    className="w-8 h-8 sm:w-9 sm:h-9 shadow-md"
+                    fallbackInitials={isAdmin ? adminInitials : employeeInitials}
+                  />
                   <span className="absolute -bottom-0.5 -right-0.5 w-2.5 h-2.5 bg-gradient-to-br from-[#16A34A] to-[#15803D] border-2 border-white dark:border-slate-900 rounded-full shadow-sm"></span>
                 </div>
 
@@ -257,15 +234,18 @@ export const Navbar = ({
                   {/* Dropdown Header Card */}
                   <div className="px-4 py-3.5 border-b border-[#F1F5F9] dark:border-slate-800 bg-gradient-to-r from-[#F8FAFC] to-white dark:from-slate-850 dark:to-slate-900">
                     <div className="flex items-center gap-3">
-                      {isAdmin ? (
-                        <div className="w-11 h-11 rounded-xl bg-gradient-to-br from-[#002185] to-[#001566] text-white flex items-center justify-center font-bold text-sm border border-[#002185]/20 shrink-0 shadow-md ring-2 ring-[#002185]/10">
-                          {adminInitials}
-                        </div>
-                      ) : (
-                        <div className="w-11 h-11 rounded-xl bg-gradient-to-br from-[#ff5500] to-[#e64a00] text-white flex items-center justify-center font-bold text-sm border border-[#ff5500]/20 shrink-0 shadow-md ring-2 ring-[#ff5500]/10">
-                          {employeeInitials}
-                        </div>
-                      )}
+                      <Avatar
+                        src={
+                          isAdmin
+                            ? admin?.profile_image_url || admin?.avatar || user?.profile_image_url || user?.avatar
+                            : user?.profilePicture || user?.avatar || user?.profile_image_url || user?.profile_picture
+                        }
+                        name={isAdmin ? adminTitle : employeeFullName}
+                        size="md"
+                        shape="rounded"
+                        className="w-11 h-11 shadow-md"
+                        fallbackInitials={isAdmin ? adminInitials : employeeInitials}
+                      />
                       <div className="min-w-0 flex-1">
                         <p className="text-sm font-bold text-[#0F172A] dark:text-slate-100 truncate">
                           {isAdmin ? adminTitle : employeeFullName}

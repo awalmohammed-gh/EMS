@@ -66,22 +66,29 @@ export const normalizePayslipData = (payslip = {}) => {
   const payPeriod =
     payslip.payMonth ||
     payslip.month ||
-    "August 2026";
+    "Current Pay Period";
 
   const paymentDate = formatPayslipDate(payslip.paymentDate);
   const dateGenerated = formatPayslipDate(new Date());
 
   const basicSalary = Number(
-    payslip.basicSalary !== undefined
+    payslip.breakdown?.baseSalary !== undefined
+      ? payslip.breakdown.baseSalary
+      : payslip.basicSalary !== undefined
       ? payslip.basicSalary
       : payslip.baseSalary !== undefined
       ? payslip.baseSalary
-      : 4000
+      : 0
   );
 
   // Dynamic mapped allowances
   let dynamicAllowances = [];
-  if (Array.isArray(payslip.earnings) && payslip.earnings.length > 0) {
+  if (Array.isArray(payslip.breakdown?.allowances)) {
+    dynamicAllowances = payslip.breakdown.allowances.map((item) => ({
+      description: item.title || item.description || item.name || "Allowance",
+      amount: Number(item.amount || 0),
+    }));
+  } else if (Array.isArray(payslip.earnings) && payslip.earnings.length > 0) {
     dynamicAllowances = payslip.earnings.map((item) => ({
       description: item.description || item.name || item.label || "Allowance",
       amount: Number(item.amount || 0),
@@ -89,7 +96,7 @@ export const normalizePayslipData = (payslip = {}) => {
   } else if (Number(payslip.allowances || payslip.totalEarnings || 0) > 0) {
     dynamicAllowances = [
       {
-        description: "Allowances & Performance Bonuses",
+        description: "Allowances & Dynamic Earnings",
         amount: Number(payslip.allowances || payslip.totalEarnings),
       },
     ];
@@ -97,9 +104,14 @@ export const normalizePayslipData = (payslip = {}) => {
 
   // Dynamic mapped deductions
   let dynamicDeductions = [];
-  if (Array.isArray(payslip.deductions) && payslip.deductions.length > 0) {
+  if (Array.isArray(payslip.breakdown?.customDeductions)) {
+    dynamicDeductions = payslip.breakdown.customDeductions.map((item) => ({
+      description: item.title || item.description || item.name || "Adjustment",
+      amount: Number(item.amount || 0),
+    }));
+  } else if (Array.isArray(payslip.deductions) && payslip.deductions.length > 0) {
     dynamicDeductions = payslip.deductions.map((item) => ({
-      description: item.description || item.name || item.label || "Deduction",
+      description: item.description || item.name || item.label || "Adjustment",
       amount: Number(item.amount || 0),
     }));
   } else if (
@@ -108,29 +120,48 @@ export const normalizePayslipData = (payslip = {}) => {
   ) {
     dynamicDeductions = [
       {
-        description: "Statutory Deductions & Taxes",
+        description: "Administrative Deductions",
         amount: Number(payslip.deductions),
       },
     ];
   }
 
-  // Absenteeism penalty (GH₵10/day or absentDaysDeduction)
+  // Absenteeism penalty
+  const absenceBreakdown = payslip.breakdown?.absenceDeduction || payslip.absenceDeduction || {};
+  const absentDays = Number(absenceBreakdown.daysCount || payslip.absentDays || 0);
+  const absentRate = Number(absenceBreakdown.ratePerDay !== undefined ? absenceBreakdown.ratePerDay : 10);
   const absentDaysDeduction = Number(
-    payslip.absentDaysDeduction ||
-      payslip.absenteeismDeductions ||
-      (payslip.absentDays ? Number(payslip.absentDays) * 10 : 0)
+    absenceBreakdown.totalAmount !== undefined
+      ? absenceBreakdown.totalAmount
+      : (payslip.absentDaysDeduction || (absentDays > 0 ? absentDays * absentRate : 0))
+  );
+
+  // Lateness penalty
+  const latenessBreakdown = payslip.breakdown?.latenessDeduction || payslip.latenessDeduction || {};
+  const totalLateMinutes = Number(latenessBreakdown.totalLateMinutes || 0);
+  const lateDaysCount = Number(latenessBreakdown.lateDaysCount || 0);
+  const tierBreakdown = Array.isArray(latenessBreakdown.tierBreakdown) ? latenessBreakdown.tierBreakdown : [];
+  const latenessDeduction = Number(
+    latenessBreakdown.totalAmount !== undefined
+      ? latenessBreakdown.totalAmount
+      : (typeof payslip.latenessDeduction === "number" ? payslip.latenessDeduction : 0)
   );
 
   const totalAllowances = dynamicAllowances.reduce(
     (acc, curr) => acc + curr.amount,
     0
   );
+  const totalCustomDeductions = dynamicDeductions.reduce(
+    (acc, curr) => acc + curr.amount,
+    0
+  );
   const totalDeductions =
-    dynamicDeductions.reduce((acc, curr) => acc + curr.amount, 0) +
-    absentDaysDeduction;
+    totalCustomDeductions + absentDaysDeduction + latenessDeduction;
 
   const netSalary = Number(
-    payslip.netSalary !== undefined
+    payslip.breakdown?.netSalary !== undefined
+      ? payslip.breakdown.netSalary
+      : payslip.netSalary !== undefined
       ? payslip.netSalary
       : payslip.netPay !== undefined
       ? payslip.netPay
@@ -152,7 +183,13 @@ export const normalizePayslipData = (payslip = {}) => {
     basicSalary,
     dynamicAllowances,
     dynamicDeductions,
+    absentDays,
+    absentRate,
     absentDaysDeduction,
+    totalLateMinutes,
+    lateDaysCount,
+    tierBreakdown,
+    latenessDeduction,
     totalAllowances,
     totalDeductions,
     netSalary,
@@ -172,7 +209,7 @@ export const generatePayslipHTML = (rawPayslip) => {
             (item) => `
           <tr style="border-bottom: 1px solid #bfdbfe;">
             <td style="padding: 10px 16px; color: #1e293b; font-size: 13px;">${item.description}</td>
-            <td style="padding: 10px 16px; text-align: right; font-weight: 600; color: #059669; font-size: 13px;">${formatCurrency(item.amount)}</td>
+            <td style="padding: 10px 16px; text-align: right; font-weight: 600; color: #059669; font-size: 13px;">+${formatCurrency(item.amount)}</td>
           </tr>`
           )
           .join("")
@@ -185,9 +222,37 @@ export const generatePayslipHTML = (rawPayslip) => {
   if (data.absentDaysDeduction > 0) {
     deductionsRows += `
       <tr style="border-bottom: 1px solid #bfdbfe;">
-        <td style="padding: 10px 16px; color: #1e293b; font-size: 13px;">Absenteeism Penalty (GH₵10/day)</td>
+        <td style="padding: 10px 16px; color: #1e293b; font-size: 13px;">
+          <strong>Absenteeism Penalty</strong>
+          <span style="display:block; font-size: 11px; color: #64748b;">${data.absentDays} unexcused absent days @ ${formatCurrency(data.absentRate)}/day</span>
+        </td>
         <td style="padding: 10px 16px; text-align: right; font-weight: 700; color: #dc2626; font-size: 13px;">-${formatCurrency(data.absentDaysDeduction)}</td>
       </tr>`;
+  }
+
+  if (data.latenessDeduction > 0) {
+    deductionsRows += `
+      <tr style="border-bottom: 1px solid #bfdbfe;">
+        <td style="padding: 10px 16px; color: #1e293b; font-size: 13px;">
+          <strong>Lateness Penalties</strong>
+          <span style="display:block; font-size: 11px; color: #64748b;">${data.lateDaysCount} late days (${data.totalLateMinutes} total late mins)</span>
+        </td>
+        <td style="padding: 10px 16px; text-align: right; font-weight: 700; color: #dc2626; font-size: 13px;">-${formatCurrency(data.latenessDeduction)}</td>
+      </tr>`;
+
+    if (data.tierBreakdown.length > 0) {
+      deductionsRows += data.tierBreakdown
+        .map(
+          (t) => `
+        <tr style="border-bottom: 1px solid #bfdbfe; background: #fffcfc;">
+          <td style="padding: 6px 16px 6px 28px; color: #64748b; font-size: 11px;">
+            • ${t.date || "Log"}: ${t.minutesLate || 0} mins late (${t.tier || "Tier fine"})
+          </td>
+          <td style="padding: 6px 16px; text-align: right; font-weight: 600; color: #dc2626; font-size: 11px;">-${formatCurrency(t.penalty || t.total || 0)}</td>
+        </tr>`
+        )
+        .join("");
+    }
   }
 
   if (data.dynamicDeductions.length > 0) {
@@ -205,7 +270,7 @@ export const generatePayslipHTML = (rawPayslip) => {
   if (!deductionsRows) {
     deductionsRows = `
       <tr style="border-bottom: 1px solid #bfdbfe;">
-        <td colspan="2" style="padding: 10px 16px; color: #64748b; font-style: italic; font-size: 12px;">No deductions or absenteeism penalties recorded</td>
+        <td colspan="2" style="padding: 10px 16px; color: #64748b; font-style: italic; font-size: 12px;">No deductions or absenteeism penalties recorded (100% Attendance)</td>
       </tr>`;
   }
 
@@ -561,11 +626,40 @@ export const generatePayslipPDF = async (rawPayslip) => {
     doc.setFont("helvetica", "normal");
     doc.setFontSize(8.5);
     doc.setTextColor(30, 41, 59);
-    doc.text("Absenteeism Penalty (GH₵10/day)", col1X, currentY + 5.5);
+    doc.text(`Absenteeism Penalty (${data.absentDays} days @ ${formatCurrency(data.absentRate)}/day)`, col1X, currentY + 5.5);
     doc.setFont("helvetica", "bold");
     doc.setTextColor(220, 38, 38);
     doc.text(`-${formatCurrency(data.absentDaysDeduction)}`, col2X, currentY + 5.5, { align: "right" });
     currentY += rowHeight;
+  }
+
+  if (data.latenessDeduction > 0) {
+    hasDeductions = true;
+    doc.setFillColor(255, 255, 255);
+    doc.rect(margin, currentY, contentWidth, rowHeight, "FD");
+    doc.setFont("helvetica", "normal");
+    doc.setFontSize(8.5);
+    doc.setTextColor(30, 41, 59);
+    doc.text(`Lateness Penalties (${data.lateDaysCount} days, ${data.totalLateMinutes} total late mins)`, col1X, currentY + 5.5);
+    doc.setFont("helvetica", "bold");
+    doc.setTextColor(220, 38, 38);
+    doc.text(`-${formatCurrency(data.latenessDeduction)}`, col2X, currentY + 5.5, { align: "right" });
+    currentY += rowHeight;
+
+    if (data.tierBreakdown.length > 0) {
+      data.tierBreakdown.slice(0, 5).forEach((t) => {
+        doc.setFillColor(255, 252, 252);
+        doc.rect(margin, currentY, contentWidth, 7, "FD");
+        doc.setFont("helvetica", "normal");
+        doc.setFontSize(7.5);
+        doc.setTextColor(100, 116, 139);
+        doc.text(`  • ${t.date || "Log"}: ${t.minutesLate || 0} mins late (${t.tier || "Tier fine"})`, col1X + 4, currentY + 4.8);
+        doc.setFont("helvetica", "bold");
+        doc.setTextColor(220, 38, 38);
+        doc.text(`-${formatCurrency(t.penalty || t.total || 0)}`, col2X, currentY + 4.8, { align: "right" });
+        currentY += 7;
+      });
+    }
   }
 
   if (data.dynamicDeductions.length > 0) {

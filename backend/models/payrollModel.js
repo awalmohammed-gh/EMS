@@ -81,6 +81,30 @@ const payrollSchema = new mongoose.Schema(
       min: 0,
     },
 
+    absenceDeductionDetails: {
+      daysCount: { type: Number, default: 0 },
+      ratePerDay: { type: Number, default: 10 },
+      totalAmount: { type: Number, default: 0 },
+    },
+
+    latenessDeductionDetails: {
+      totalLateMinutes: { type: Number, default: 0 },
+      lateDaysCount: { type: Number, default: 0 },
+      tierBreakdown: { type: Array, default: [] },
+      totalAmount: { type: Number, default: 0 },
+    },
+
+    customDeductions: {
+      type: [
+        {
+          title: { type: String },
+          description: { type: String },
+          amount: { type: Number, default: 0 },
+        },
+      ],
+      default: [],
+    },
+
     deductions: {
       type: mongoose.Schema.Types.Mixed,
       default: [],
@@ -89,11 +113,17 @@ const payrollSchema = new mongoose.Schema(
     earnings: {
       type: [
         {
-          description: { type: String, required: true },
+          title: { type: String },
+          description: { type: String },
           amount: { type: Number, required: true, min: 0 },
         },
       ],
       default: [],
+    },
+
+    breakdown: {
+      type: mongoose.Schema.Types.Mixed,
+      default: null,
     },
 
     netSalary: {
@@ -115,8 +145,8 @@ const payrollSchema = new mongoose.Schema(
 
     status: {
       type: String,
-      enum: ["Paid", "Pending"],
-      default: "Paid",
+      enum: ["Paid", "Pending", "Published", "Draft", "published", "paid", "pending", "draft", "Failed"],
+      default: "Published",
     },
 
     remarks: {

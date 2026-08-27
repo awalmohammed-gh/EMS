@@ -20,6 +20,8 @@ import {
   Download,
   CheckCircle,
   Clock,
+  Zap,
+  X,
 } from "lucide-react";
 import Loading from "../../ui/Loading";
 import ErrorMessage from "../../ui/ErrorMessage";
@@ -27,6 +29,8 @@ import { useManagement } from "../../context/ManagementContextProvider";
 import { useNavigate } from "react-router-dom";
 import EmployeeLeaveChart from "../../components/EmployeeLeaveChart";
 import AnnouncementBoard from "../../components/AnnouncementBoard";
+import ApplyLeaveModal from "../../components/modal/ApplyLeaveModal";
+import EmployeePayslipsModal from "../../components/modal/EmployeePayslipsModal";
 
 const EmployeeDashboard = () => {
   const [dashboardData, setDashboardData] = useState(null);
@@ -39,6 +43,11 @@ const EmployeeDashboard = () => {
     status: null,
     workHours: 0,
   });
+
+  // Quick Actions Floating Menu & Modals State
+  const [quickActionsOpen, setQuickActionsOpen] = useState(false);
+  const [showApplyLeaveModal, setShowApplyLeaveModal] = useState(false);
+  const [showPayslipModal, setShowPayslipModal] = useState(false);
 
   const { setShowToast, user, setUser } = useManagement();
   const navigate = useNavigate();
@@ -242,6 +251,28 @@ const EmployeeDashboard = () => {
 
   useEffect(() => {
     fetchEmployeeDashboardData();
+
+    let bc;
+    try {
+      bc = new BroadcastChannel("eyenit_attendance_sync");
+      bc.onmessage = (event) => {
+        if (event.data?.type === "clock_in" || event.data?.type === "clock_out" || event.data?.type === "leave_updated") {
+          fetchEmployeeDashboardData();
+        }
+      };
+    } catch {
+      // BroadcastChannel fallback
+    }
+
+    return () => {
+      if (bc) {
+        try {
+          bc.close();
+        } catch {
+          // ignore
+        }
+      }
+    };
   }, []);
 
   // Format currency
@@ -302,37 +333,51 @@ const EmployeeDashboard = () => {
   };
 
   const getStatusColor = (status) => {
-    switch (status) {
-      case "Approved":
-      case "Paid":
+    const s = String(status || "").toLowerCase();
+    switch (s) {
+      case "approved":
+      case "paid":
+      case "present":
+      case "on time":
+      case "ontime":
         return "bg-[#16A34A] text-white";
-      case "Pending":
+      case "pending":
         return "bg-[#F59E0B] text-white";
-      case "Rejected":
+      case "rejected":
+      case "absent":
         return "bg-[#DC2626] text-white";
-      case "Present":
-      case "On Time":
-        return "bg-[#16A34A] text-white";
-      case "Late":
+      case "late":
         return "bg-[#F97316] text-white";
-      case "Absent":
-        return "bg-[#DC2626] text-white";
       default:
         return "bg-[#64748B] text-white";
     }
   };
 
   const getStatusBadgeColor = (status) => {
-    switch (status) {
-      case "On Time":
+    const s = String(status || "").toLowerCase();
+    switch (s) {
+      case "present":
+      case "on time":
+      case "ontime":
         return "bg-[#16A34A] text-white";
-      case "Late":
+      case "late":
         return "bg-[#F97316] text-white";
-      case "Absent":
+      case "absent":
         return "bg-[#DC2626] text-white";
       default:
         return "bg-[#64748B] text-white";
     }
+  };
+
+  const formatAttendanceStatusLabel = (status) => {
+    if (!status) return "Clocked In";
+    const s = String(status).toLowerCase();
+    if (s === "present") return "Present (On Time)";
+    if (s === "late") return "Present (Late)";
+    if (s === "absent") return "Absent";
+    if (s === "on_leave" || s === "on leave") return "On Leave";
+    if (s === "not_clocked_in") return "Not Clocked In";
+    return status;
   };
 
 
@@ -400,7 +445,10 @@ const EmployeeDashboard = () => {
   const accountBadge = getAccountStatusBadge(currentStatus);
 
   // Calculate total days
-  const totalDays = (overview.presentDays || 0) + (overview.lateDays || 0);
+  const totalDays =
+    overview.totalDays !== undefined
+      ? overview.totalDays
+      : (overview.presentDays || 0) + (overview.absentDays || 0);
 
   // Check if user has clocked in today
   const hasClockedIn = Boolean(attendanceData.clockIn);
@@ -410,23 +458,25 @@ const EmployeeDashboard = () => {
   const statsCards = [
     {
       title: "Present Days",
-      value: overview.presentDays || 0,
+      value: overview.presentDays !== undefined ? overview.presentDays : 0,
       icon: UserCheck,
-      description: `Late: ${overview.lateDays || 0} days`,
+      description: `Late: ${overview.lateDays || 0} | On Time: ${overview.onTimeDays || 0}`,
       color: "bg-[#16A34A]",
     },
     {
       title: "Leave Balance",
-      value: overview.leaveBalance || 0,
+      value: `${overview.remainingLeaveDays !== undefined ? overview.remainingLeaveDays : overview.leaveBalance || 0} days`,
       icon: CalendarDays,
-      description: "Available days",
+      description: `Used: ${overview.usedLeaveDays || 0} | Pending: ${overview.pendingLeaveDays || 0}`,
       color: "bg-[#002185]",
     },
     {
       title: "Late Days",
-      value: overview.lateDays || 0,
+      value: overview.lateDays !== undefined ? overview.lateDays : 0,
       icon: TrendingDown,
-      description: `Out of ${totalDays} days`,
+      description: overview.totalLateMinutes
+        ? `${overview.totalLateMinutes} mins total delay`
+        : `Deduction: GH₵${(overview.totalLatenessDeduction || 0).toFixed(2)}`,
       color: "bg-[#F97316]",
     },
     {
@@ -435,24 +485,24 @@ const EmployeeDashboard = () => {
       icon: Banknote,
       description: latestPayslip.month
         ? formatMonth(latestPayslip.month)
-        : "Current month",
+        : "Projected net take-home",
       color: "bg-[#002185]",
     },
   ];
 
-  // Attendance summary
+  // Attendance summary (MTD Live Calculation)
   const attendanceSummary = {
-    totalDays: totalDays || 0,
-    present: overview.presentDays || 0,
-    late: overview.lateDays || 0,
-    absent: 0,
+    totalDays: (overview.presentDays || 0) + (overview.absentDays || 0),
+    present: overview.presentDays !== undefined ? overview.presentDays : 0,
+    late: overview.lateDays !== undefined ? overview.lateDays : 0,
+    absent: overview.absentDays !== undefined ? overview.absentDays : 0,
   };
 
-  // Leave balance
+  // Leave balance (Live Calculation)
   const leaveBalance = {
-    total: overview.leaveBalance || 0,
-    used: 0,
-    remaining: overview.leaveBalance || 0,
+    total: overview.totalLeaveDays || 15,
+    used: overview.usedLeaveDays || 0,
+    remaining: overview.remainingLeaveDays !== undefined ? overview.remainingLeaveDays : overview.leaveBalance || 15,
   };
 
   return (
@@ -549,7 +599,7 @@ const EmployeeDashboard = () => {
               <div>
                 <p className="text-2xl font-bold text-[#002185] leading-tight">
                   {hasClockedIn
-                    ? attendanceData.status || "Clocked In"
+                    ? formatAttendanceStatusLabel(attendanceData.status)
                     : "Not Clocked In"}
                 </p>
                 {hasClockedIn && attendanceData.status ? (
@@ -559,12 +609,12 @@ const EmployeeDashboard = () => {
                     )}`}
                   >
                     <CheckCircle className="w-3 h-3" />
-                    {attendanceData.status}
+                    {formatAttendanceStatusLabel(attendanceData.status)}
                   </span>
                 ) : !hasClockedIn ? (
                   <span className="inline-flex items-center gap-1 mt-1.5 px-2.5 py-1 rounded-full text-xs font-medium bg-[#64748B] text-white">
                     <AlertCircle className="w-3 h-3" />
-                    Pending
+                    Not Clocked In
                   </span>
                 ) : null}
               </div>
@@ -884,6 +934,156 @@ const EmployeeDashboard = () => {
           )}
         </div>
       </div>
+
+      {/* Quick Actions Floating Action Menu (Mobile & Desktop Accessible) */}
+      <div className="fixed bottom-6 right-6 z-40 sm:bottom-8 sm:right-8">
+        {/* Backdrop overlay when open */}
+        {quickActionsOpen && (
+          <div
+            onClick={() => setQuickActionsOpen(false)}
+            className="fixed inset-0 bg-[#0F172A]/30 backdrop-blur-xs z-30 animate-fade-in"
+          />
+        )}
+
+        {/* Floating Menu Action Items */}
+        <div
+          className={`relative z-40 flex flex-col items-end gap-3 transition-all duration-300 ${
+            quickActionsOpen
+              ? "opacity-100 translate-y-0 pointer-events-auto"
+              : "opacity-0 translate-y-6 pointer-events-none"
+          }`}
+        >
+          {/* Action 1: Clock In / Clock Out */}
+          <button
+            id="quick-action-clock-in-out"
+            type="button"
+            onClick={async () => {
+              setQuickActionsOpen(false);
+              if (!attendanceData.clockIn) {
+                await handleClockIn();
+              } else if (!attendanceData.clockOut) {
+                await handleClockOut();
+              } else {
+                navigate("/employee/dashboard/attendance");
+              }
+            }}
+            className="group flex items-center gap-3 px-4 py-2.5 rounded-full bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 shadow-xl hover:shadow-2xl transition-all duration-200 cursor-pointer"
+          >
+            <span className="text-xs font-bold text-slate-800 dark:text-slate-100 group-hover:text-[#002185] dark:group-hover:text-blue-400 whitespace-nowrap">
+              {!attendanceData.clockIn
+                ? "Clock In Now"
+                : !attendanceData.clockOut
+                ? "Clock Out Now"
+                : "View Today's Attendance"}
+            </span>
+            <div
+              className={`w-9 h-9 rounded-full flex items-center justify-center text-white shadow-sm transition-transform duration-200 group-hover:scale-110 ${
+                !attendanceData.clockIn
+                  ? "bg-emerald-600"
+                  : !attendanceData.clockOut
+                  ? "bg-amber-600"
+                  : "bg-blue-600"
+              }`}
+            >
+              {!attendanceData.clockIn ? (
+                <LogIn className="w-4 h-4" />
+              ) : !attendanceData.clockOut ? (
+                <LogOut className="w-4 h-4" />
+              ) : (
+                <Clock className="w-4 h-4" />
+              )}
+            </div>
+          </button>
+
+          {/* Action 2: Request Leave */}
+          <button
+            id="quick-action-request-leave"
+            type="button"
+            onClick={() => {
+              setQuickActionsOpen(false);
+              setShowApplyLeaveModal(true);
+            }}
+            className="group flex items-center gap-3 px-4 py-2.5 rounded-full bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 shadow-xl hover:shadow-2xl transition-all duration-200 cursor-pointer"
+          >
+            <span className="text-xs font-bold text-slate-800 dark:text-slate-100 group-hover:text-[#002185] dark:group-hover:text-blue-400 whitespace-nowrap">
+              Request Leave
+            </span>
+            <div className="w-9 h-9 rounded-full bg-[#002185] flex items-center justify-center text-white shadow-sm transition-transform duration-200 group-hover:scale-110">
+              <CalendarCheck className="w-4 h-4" />
+            </div>
+          </button>
+
+          {/* Action 3: View Payslip */}
+          <button
+            id="quick-action-view-payslip"
+            type="button"
+            onClick={() => {
+              setQuickActionsOpen(false);
+              if (latestPayslip && (latestPayslip.amount || latestPayslip.payslipNumber)) {
+                setShowPayslipModal(true);
+              } else {
+                navigate("/employee/dashboard/payslips");
+              }
+            }}
+            className="group flex items-center gap-3 px-4 py-2.5 rounded-full bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 shadow-xl hover:shadow-2xl transition-all duration-200 cursor-pointer"
+          >
+            <span className="text-xs font-bold text-slate-800 dark:text-slate-100 group-hover:text-[#002185] dark:group-hover:text-blue-400 whitespace-nowrap">
+              View Payslip
+            </span>
+            <div className="w-9 h-9 rounded-full bg-[#ff5500] flex items-center justify-center text-white shadow-sm transition-transform duration-200 group-hover:scale-110">
+              <Banknote className="w-4 h-4" />
+            </div>
+          </button>
+        </div>
+
+        {/* Main Floating Trigger Button (FAB) */}
+        <div className="relative z-40 mt-3 flex items-center justify-end">
+          <button
+            id="btn-quick-actions-fab"
+            type="button"
+            aria-expanded={quickActionsOpen}
+            aria-label="Quick Actions Floating Menu"
+            onClick={() => setQuickActionsOpen((prev) => !prev)}
+            className={`flex items-center gap-2 h-13 px-4 sm:px-5 rounded-full bg-[#002185] hover:bg-[#ff5500] text-white shadow-2xl transition-all duration-300 transform hover:scale-105 active:scale-95 cursor-pointer border-2 border-white/20 ${
+              quickActionsOpen ? "bg-[#ff5500] ring-4 ring-[#ff5500]/30 rotate-0" : ""
+            }`}
+          >
+            <div className="transition-transform duration-300">
+              {quickActionsOpen ? (
+                <X className="w-5 h-5 animate-spin-once" />
+              ) : (
+                <Zap className="w-5 h-5 text-amber-400 fill-amber-400" />
+              )}
+            </div>
+            <span className="text-xs font-bold tracking-wide uppercase">
+              {quickActionsOpen ? "Close" : "Quick Actions"}
+            </span>
+          </button>
+        </div>
+      </div>
+
+      {/* Direct Modals Triggered by Quick Actions */}
+      {showApplyLeaveModal && (
+        <ApplyLeaveModal
+          onClose={() => setShowApplyLeaveModal(false)}
+          onSuccess={async () => {
+            await fetchEmployeeDashboardData();
+            setShowToast({
+              message: "Leave request submitted successfully!",
+              type: "success",
+              show: true,
+            });
+          }}
+        />
+      )}
+
+      {showPayslipModal && (latestPayslip || dashboardData?.payslips?.[0]) && (
+        <EmployeePayslipsModal
+          payslip={latestPayslip || dashboardData?.payslips?.[0]}
+          allPayslips={dashboardData?.payslips || [latestPayslip]}
+          onClose={() => setShowPayslipModal(false)}
+        />
+      )}
     </div>
   );
 };

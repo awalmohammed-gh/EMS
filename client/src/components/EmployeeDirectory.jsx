@@ -24,6 +24,7 @@ import {
 import { exportEmployeesToCSV } from "../utils/exportCsv";
 import { updateEmployeeStatus, deleteEmployee } from "../apis/fontApis";
 import { useManagement } from "../context/ManagementContextProvider";
+import Avatar from "./Avatar";
 
 export const EmployeeDirectory = ({
   employees = [],
@@ -501,9 +502,14 @@ export const EmployeeDirectory = ({
                   {/* Top Row: Avatar, Name, ID & Status Badge */}
                   <div className="flex items-start justify-between gap-3">
                     <div className="flex items-center gap-3">
-                      <div className="w-12 h-12 rounded-2xl bg-gradient-to-br from-[#002185] to-[#0A2E9E] text-white font-black text-sm flex items-center justify-center shadow-xs shrink-0 group-hover:scale-105 transition-transform">
-                        {initials}
-                      </div>
+                      <Avatar
+                        src={emp.profilePicture || emp.profile_picture || emp.avatar || emp.avatar_url || emp.profile_image_url}
+                        name={emp.fullName}
+                        size="lg"
+                        shape="rounded"
+                        className="w-12 h-12 rounded-2xl shrink-0 group-hover:scale-105 transition-transform shadow-xs"
+                        fallbackInitials={initials}
+                      />
                       <div className="min-w-0">
                         <h3 className="text-sm font-bold text-[#002185] truncate group-hover:text-[#ff5500] transition-colors">
                           {emp.fullName}
@@ -694,9 +700,14 @@ export const EmployeeDirectory = ({
                       {/* Name & Avatar */}
                       <td className="px-4 py-3">
                         <div className="flex items-center gap-3">
-                          <div className="w-9 h-9 rounded-xl bg-[#002185] text-white font-bold flex items-center justify-center text-xs shrink-0">
-                            {initials}
-                          </div>
+                          <Avatar
+                            src={emp.profilePicture || emp.profile_picture || emp.avatar || emp.avatar_url || emp.profile_image_url}
+                            name={emp.fullName}
+                            size="sm"
+                            shape="rounded"
+                            className="w-9 h-9 rounded-xl shrink-0"
+                            fallbackInitials={initials}
+                          />
                           <div>
                             <div className="font-bold text-[#002185]">
                               {emp.fullName}
@@ -944,13 +955,24 @@ export const EmployeeDirectory = ({
               </button>
 
               <div className="flex items-center gap-4">
-                <div className="w-16 h-16 rounded-2xl bg-white text-[#002185] font-black text-xl flex items-center justify-center shadow-md shrink-0">
-                  {(selectedEmployee.fullName || "E")
-                    .split(" ")
-                    .map((n) => n[0])
-                    .join("")
-                    .slice(0, 2)
-                    .toUpperCase()}
+                <div className="w-16 h-16 rounded-2xl bg-white text-[#002185] font-black text-xl flex items-center justify-center shadow-md shrink-0 overflow-hidden">
+                  {selectedEmployee.profilePicture || selectedEmployee.profile_picture || selectedEmployee.avatar || selectedEmployee.avatar_url ? (
+                    <img
+                      src={selectedEmployee.profilePicture || selectedEmployee.profile_picture || selectedEmployee.avatar || selectedEmployee.avatar_url}
+                      alt={selectedEmployee.fullName}
+                      className="w-full h-full object-cover"
+                      onError={(e) => {
+                        e.currentTarget.style.display = "none";
+                      }}
+                    />
+                  ) : (
+                    (selectedEmployee.fullName || "E")
+                      .split(" ")
+                      .map((n) => n[0])
+                      .join("")
+                      .slice(0, 2)
+                      .toUpperCase()
+                  )}
                 </div>
                 <div>
                   <h3 className="text-lg font-bold text-white">

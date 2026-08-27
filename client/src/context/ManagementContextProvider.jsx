@@ -293,6 +293,26 @@ export const ManagementContextProvider = ({ children }) => {
   const value = {
     user,
     setUser,
+    admin: (role === "admin" || user?.role === "admin" || user?.role === "super_admin") ? user : null,
+    setAdmin: (newAdminData) => {
+      if (typeof newAdminData === "function") {
+        setUser((prev) => {
+          const updated = newAdminData(prev);
+          if (updated) {
+            localStorage.setItem("adminData", JSON.stringify(updated));
+            localStorage.setItem("userData", JSON.stringify(updated));
+          }
+          return updated;
+        });
+      } else {
+        setUser((prev) => {
+          const updated = { ...prev, ...newAdminData };
+          localStorage.setItem("adminData", JSON.stringify(updated));
+          localStorage.setItem("userData", JSON.stringify(updated));
+          return updated;
+        });
+      }
+    },
     role,
     setRole,
     isLoadingUser,
@@ -314,12 +334,14 @@ export const ManagementContextProvider = ({ children }) => {
     setShowPayslipsModal,
     clockIn,
     clockOut,
-    showToast,
+    showToast: triggerToast,
+    toastState: showToast,
     setShowToast,
     triggerToast,
     toast,
     notificationService,
   };
+
 
   return (
     <ManagementContext.Provider value={value}>

@@ -121,11 +121,21 @@ export const createAdminAccount = (data) => {
 
 //generate payroll
 export const payrollGenerate = (data) => {
-  return api.post("/pay/generate", data);
+  return api.post("/admin/payroll/generate", data).catch(() => {
+    return api.post("/pay/generate", data);
+  });
+};
+
+export const calculateEmployeePayroll = (params) => {
+  return api.get("/admin/payroll/calculate-employee", { params }).catch(() => {
+    return api.get("/pay/calculate-summary", { params });
+  });
 };
 
 export const calculatePayrollSummary = (params) => {
-  return api.get("/pay/calculate-summary", { params });
+  return api.get("/admin/payroll/calculate-employee", { params }).catch(() => {
+    return api.get("/pay/calculate-summary", { params });
+  });
 };
 
 export const getAllPayslips = (data) => {
@@ -164,8 +174,38 @@ export const getPenaltyImpactAnalytics = (params) => {
   return api.get("/pay/penalty-impact", { params });
 };
 
+export const getEmployeeLivePayrollSummary = (params) => {
+  return api.get("/pay/live-summary", { params });
+};
+
+export const getMonthlyPayrollRun = (params) => {
+  return api.get("/admin/payroll/monthly-run", { params }).catch(() => {
+    return api.get("/pay/monthly-run", { params });
+  });
+};
+
+export const getSalaryProjection = (params) => {
+  return api.get("/employee/salary-projection/current", { params });
+};
+
+export const getCurrentSalaryProjection = (params) => {
+  return api.get("/employee/salary-projection/current", { params });
+};
+
+export const calculateSalaryProjection = (data) => {
+  return api.post("/employee/salary-projection", data);
+};
+
 export const getEmployeePayslip = () => {
-  return api.get("/pay/employee-payslip");
+  return api.get("/employee/payslips/my-payslips").catch(() => {
+    return api.get("/pay/employee-payslip");
+  });
+};
+
+export const getMyPayslips = () => {
+  return api.get("/employee/payslips/my-payslips").catch(() => {
+    return api.get("/pay/employee-payslip");
+  });
 };
 
 //attendance
@@ -197,9 +237,14 @@ export const updateAttendanceRecord = (id, data) => {
   return api.put(`/attendance/record/${id}`, data);
 };
 
+export const deleteAttendanceRecord = (id) => {
+  return api.delete(`/attendance/${id}`);
+};
+
 export const createManualAttendanceRecord = (data) => {
   return api.post("/attendance/manual-record", data);
 };
+
 
 export const bulkUploadBiometricAttendance = (data) => {
   return api.post("/attendance/bulk-upload", data);
@@ -253,24 +298,67 @@ export const deleteAllNotifications = (params) => {
 
 // leave
 export const applyForLeave = (data) => {
-  return api.post("/leave/apply", data);
+  return api.post("/leave/apply", data).catch(() => {
+    return api.post("/employee/leave/apply", data);
+  });
 };
 
 export const myLeave = () => {
-  return api.get("/leave/my-leaves");
+  return api.get("/employee/leave-requests").catch(() => {
+    return api.get("/leave/my-leaves");
+  });
+};
+
+export const getEmployeeLeaveRequests = () => {
+  return api.get("/employee/leave-requests").catch(() => {
+    return api.get("/leave/my-leaves");
+  });
 };
 
 export const allLeaves = () => {
-  return api.get("/leave/all");
+  return api.get("/admin/leave/all").catch(() => {
+    return api.get("/leave/all");
+  });
 };
 
-export const updateStatus = (id, status, adminRemark = "") => {
-  return api.put(`/leave/status/${id}`, { status, adminRemark });
+export const updateStatus = (id, status, adminRemark = "", adminNotes = "") => {
+  const payload = {
+    status,
+    adminRemark: adminRemark || adminNotes,
+    adminNotes: adminNotes || adminRemark,
+  };
+  return api.patch(`/admin/leave/${id}/status`, payload).catch(() => {
+    return api.put(`/admin/leave/${id}/status`, payload).catch(() => {
+      return api.put(`/leave/status/${id}`, payload);
+    });
+  });
+};
+
+export const updateLeaveStatusAdmin = (id, payload) => {
+  const body = typeof payload === "string" ? { status: payload } : payload;
+  return api.patch(`/admin/leave/${id}/status`, body).catch(() => {
+    return api.put(`/admin/leave/${id}/status`, body).catch(() => {
+      return api.put(`/leave/status/${id}`, body);
+    });
+  });
 };
 
 export const getEmployeeLeaveStats = () => {
-  return api.get("/leave/employee-stats");
+  return api.get("/employee/leave/stats").catch(() => {
+    return api.get("/leave/employee-stats");
+  });
 };
+
+export const deleteLeave = (id) => {
+  return api.delete(`/admin/leave/${id}`).catch(() => {
+    return api.delete(`/leave/${id}`);
+  });
+};
+
+export const deleteLeaveRequest = (id) => {
+  return api.delete(`/leave/${id}`);
+};
+
 
 // announcements (Supporting both /admin/announcements and /announcements)
 export const getAdminAnnouncements = (params) => {
@@ -346,4 +434,18 @@ export const updateSecuritySettings = (data) => {
 export const getAuditLogs = (params) => {
   return api.get("/admin/audit-logs", { params });
 };
+
+// Profile Picture & Avatar Management
+export const uploadProfilePicture = (formData) => {
+  return api.patch("/users/profile-picture", formData, {
+    headers: {
+      "Content-Type": "multipart/form-data",
+    },
+  });
+};
+
+export const removeProfilePicture = () => {
+  return api.delete("/users/profile-picture");
+};
+
 

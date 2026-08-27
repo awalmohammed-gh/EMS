@@ -37,7 +37,7 @@ const leaveSchema = new mongoose.Schema(
 
     status: {
       type: String,
-      enum: ["Pending", "Approved", "Rejected"],
+      enum: ["Pending", "Approved", "Rejected", "pending", "approved", "rejected"],
       default: "Pending",
     },
 
@@ -47,8 +47,19 @@ const leaveSchema = new mongoose.Schema(
       trim: true,
     },
 
-    approvedBy: {
+    adminNotes: {
       type: String,
+      default: "",
+      trim: true,
+    },
+
+    approvedBy: {
+      type: mongoose.Schema.Types.Mixed,
+      default: null,
+    },
+
+    reviewedAt: {
+      type: Date,
       default: null,
     },
 

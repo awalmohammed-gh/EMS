@@ -11,6 +11,7 @@ import {
   updateAttendanceRecord,
   createManualAttendance,
   bulkUploadBiometricAttendance,
+  deleteAttendanceRecord,
 } from "../controllers/employeeAttendance.js";
 import { verifyAdmin } from "../middleware/authAdmin.js";
 
@@ -29,4 +30,9 @@ attendanceRouter.post("/manual-record", verifyAdmin, createManualAttendance);
 attendanceRouter.post("/bulk-upload", verifyAdmin, bulkUploadBiometricAttendance);
 attendanceRouter.post("/biometric-upload", verifyAdmin, bulkUploadBiometricAttendance);
 
+// delete attendance record
+attendanceRouter.delete("/:id", verifyAdmin, deleteAttendanceRecord);
+attendanceRouter.delete("/record/:id", verifyAdmin, deleteAttendanceRecord);
+
 export default attendanceRouter;
+

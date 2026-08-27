@@ -123,7 +123,7 @@ export const PayslipsModal = ({ onClose, onSuccess }) => {
   const handleAutoCalculate = useCallback(async (empId, monthVal, baseVal) => {
     const targetEmpId = empId !== undefined ? empId : payslipForm.employeeId;
     const targetMonth = monthVal || payslipForm.month || "August 2026";
-    const targetBase = baseVal !== undefined ? baseVal : (Number(payslipForm.basicSalary) || 4000);
+    const targetBase = baseVal !== undefined ? baseVal : (Number(payslipForm.basicSalary) || 2500);
 
     if (!targetEmpId) return;
 
@@ -137,12 +137,32 @@ export const PayslipsModal = ({ onClose, onSuccess }) => {
 
       const res = await calculatePayrollSummary(params);
       if (res.data && res.data.success) {
-        const calc = res.data.summary;
-        const earnedBase = calc.salaryCalculation.basicSalary || calc.salaryCalculation.earnedBaseSalary || targetBase;
-        const absDeduct = calc.salaryCalculation.absenceDeductions || 0;
-        const lateDeduct = calc.salaryCalculation.latenessDeductions || 0;
+        const summary = res.data.summary || res.data;
+        const calc = summary?.salaryCalculation || summary;
+        const metrics = summary?.workingDaysMetric || res.data.workingDaysMetric || null;
 
-        setAttendanceMetrics(calc.workingDaysMetric || null);
+        const earnedBase = calc?.baseSalary ?? calc?.basicSalary ?? calc?.earnedBaseSalary ?? targetBase;
+        const absDeduct = Number(
+          calc?.absenceDeductions ??
+          calc?.absentDaysDeduction ??
+          calc?.deductions?.absenceDeductions ??
+          calc?.deductions?.absenceDeduction ??
+          summary?.absenceDeductions ??
+          summary?.absentDaysDeduction ??
+          0
+        );
+        const lateDeduct = Number(
+          calc?.latenessPenalties ??
+          calc?.latenessDeductions ??
+          calc?.latenessPenalty ??
+          calc?.deductions?.latenessPenalties ??
+          calc?.deductions?.latenessDeduction ??
+          summary?.latenessPenalties ??
+          summary?.latenessDeductions ??
+          0
+        );
+
+        setAttendanceMetrics(metrics);
 
         setPayslipForm((prev) => ({
           ...prev,
@@ -151,7 +171,7 @@ export const PayslipsModal = ({ onClose, onSuccess }) => {
           latenessDeduction: lateDeduct,
           originalAbsenceDeduction: absDeduct,
           originalLatenessDeduction: lateDeduct,
-          remarks: `Calculated from ${calc.workingDaysMetric?.presentDays || 0} attended days, ${calc.workingDaysMetric?.approvedPaidLeaveDays || 0} approved leaves, ${calc.workingDaysMetric?.absentDays || 0} absent days, and ${calc.workingDaysMetric?.lateDays || 0} late check-in(s) for ${calc.month || targetMonth}.`,
+          remarks: `Calculated from ${metrics?.presentDays || 0} attended days, ${metrics?.approvedPaidLeaveDays || 0} approved leaves, ${metrics?.absentDays || 0} absent days, and ${metrics?.lateDays || 0} late check-in(s) for ${summary?.month || targetMonth}.`,
         }));
       }
     } catch (err) {
@@ -160,6 +180,18 @@ export const PayslipsModal = ({ onClose, onSuccess }) => {
       setIsCalculating(false);
     }
   }, [payslipForm.employeeId, payslipForm.month, payslipForm.basicSalary]);
+
+  const handleRecalculate = () => {
+    if (!payslipForm.employeeId) {
+      setShowToast({
+        message: "Please select an employee before recalculating.",
+        type: "error",
+        show: true,
+      });
+      return;
+    }
+    handleAutoCalculate(payslipForm.employeeId, payslipForm.month, payslipForm.basicSalary);
+  };
 
   // Handle Employee Change -> immediately fetch profile & auto-calculate
   const handleEmployeeChange = async (e) => {
@@ -294,7 +326,7 @@ export const PayslipsModal = ({ onClose, onSuccess }) => {
         remarks: payslipForm.remarks || (penaltyOverrideData.isWaived ? `Waived GH₵${totalWaivedSum} penalties. (${penaltyOverrideData.reason})` : ""),
         netSalary: netSalary,
         netPay: netSalary,
-        status: "Paid",
+        status: "Published",
       };
 
       const { data } = await payrollGenerate(payslipData);
@@ -374,7 +406,7 @@ export const PayslipsModal = ({ onClose, onSuccess }) => {
           <button
             id="btn-auto-calculate-payslip"
             type="button"
-            onClick={() => handleAutoCalculate()}
+            onClick={handleRecalculate}
             disabled={isCalculating || !payslipForm.employeeId}
             className="px-3 py-1.5 rounded-lg bg-[#002185] hover:bg-[#ff5500] text-white text-xs font-bold transition-all shadow-xs shrink-0 flex items-center gap-1.5 cursor-pointer disabled:opacity-50"
           >
@@ -547,7 +579,7 @@ export const PayslipsModal = ({ onClose, onSuccess }) => {
 
             {/* Allowance Rows */}
             <div className="space-y-2">
-              {manualAllowances.map((item, index) => (
+              {manualAllowances.map((item) => (
                 <div key={item.id} className="flex items-center gap-2">
                   <input
                     type="text"
@@ -808,9 +840,10 @@ export const PayslipsModal = ({ onClose, onSuccess }) => {
             type="submit"
             form="payslip-form"
             disabled={!payslipForm.employeeId || isCalculating}
-            className="rounded-xl bg-[#002185] hover:bg-[#ff5500] px-6 py-2 font-bold text-white transition shadow-sm cursor-pointer disabled:opacity-50"
+            className="rounded-xl bg-[#002185] hover:bg-[#ff5500] px-6 py-2 font-bold text-white transition shadow-sm cursor-pointer disabled:opacity-50 flex items-center gap-2"
           >
-            Generate & Finalize Payslip
+            <Banknote className="w-4 h-4" />
+            <span>Save &amp; Publish Payslip</span>
           </button>
         </div>
       </div>

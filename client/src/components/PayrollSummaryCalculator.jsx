@@ -23,19 +23,30 @@ export const PayrollSummaryCalculator = ({
   onApplyCalculatedValues = null,
 }) => {
   const currentMonthIndex = new Date().getMonth();
-  const months = [
+  const currentYear = new Date().getFullYear();
+  const monthNames = [
     "January", "February", "March", "April", "May", "June",
     "July", "August", "September", "October", "November", "December"
   ];
 
-  const [selectedMonth, setSelectedMonth] = useState(`${months[currentMonthIndex]} 2026`);
+  const monthOptions = [
+    ...monthNames.map((m) => `${m} ${currentYear}`),
+    ...monthNames.map((m) => `${m} ${currentYear - 1}`),
+  ];
+
+  const [selectedMonth, setSelectedMonth] = useState(`${monthNames[currentMonthIndex]} ${currentYear}`);
   const [baseSalary, setBaseSalary] = useState(initialBaseSalary);
   const [isLoading, setIsLoading] = useState(false);
   const [summaryData, setSummaryData] = useState(null);
   const [showFormulaDetails, setShowFormulaDetails] = useState(false);
   const [showLeaveDetails, setShowLeaveDetails] = useState(false);
+  const [showLatenessDetails, setShowLatenessDetails] = useState(false);
 
-  // Custom simulation overrides (optional for HR testing)
+  // Dynamic custom allowances & deductions from database / admin inputs
+  const [customEarnings, setCustomEarnings] = useState([]);
+  const [customDeductions, setCustomDeductions] = useState([]);
+
+  // Custom simulation overrides (optional for HR testing / simulation)
   const [customAttendanceDays, setCustomAttendanceDays] = useState(null);
   const [customApprovedLeaves, setCustomApprovedLeaves] = useState(null);
   const [customLateDays, setCustomLateDays] = useState(null);
@@ -53,7 +64,6 @@ export const PayrollSummaryCalculator = ({
       setIsLoading(true);
       const params = {
         month: selectedMonth,
-        baseSalaryInput: baseSalary,
       };
       if (employeeId) {
         params.employeeId = employeeId;
@@ -61,7 +71,30 @@ export const PayrollSummaryCalculator = ({
 
       const response = await calculatePayrollSummary(params);
       if (response.data && response.data.success) {
-        setSummaryData(response.data.summary);
+        const data = response.data.summary;
+        setSummaryData(data);
+
+        // Sync Base Salary directly from MongoDB database
+        const dbBaseSalary =
+          data?.salaryCalculation?.baseSalary ??
+          data?.employee?.baseSalary ??
+          data?.employee?.salary ??
+          initialBaseSalary;
+        setBaseSalary(Number(dbBaseSalary));
+
+        // Sync Dynamic Allowances from database
+        if (Array.isArray(data?.earnings)) {
+          setCustomEarnings(data.earnings);
+        } else {
+          setCustomEarnings([]);
+        }
+
+        // Sync Dynamic Custom Deductions from database
+        if (Array.isArray(data?.customDeductions)) {
+          setCustomDeductions(data.customDeductions);
+        } else {
+          setCustomDeductions([]);
+        }
       }
     } catch (err) {
       console.error("Error fetching payroll calculation summary:", err);
@@ -74,48 +107,57 @@ export const PayrollSummaryCalculator = ({
     fetchSummary();
   }, [selectedMonth, employeeId]);
 
-  // Handle live recalculation with current overrides
+  // Handle live calculation with current database records or HR overrides
   const standardWorkingDays = summaryData?.workingDaysMetric?.standardWorkingDays || 22;
-  const attendedDays = customAttendanceDays !== null 
-    ? customAttendanceDays 
-    : (summaryData?.workingDaysMetric?.presentDays ?? 19);
-  
+
+  // Zero-fallback KPI metrics directly from database
+  const attendedDays = customAttendanceDays !== null
+    ? customAttendanceDays
+    : (summaryData?.workingDaysMetric?.attendedDays ?? summaryData?.workingDaysMetric?.presentDays ?? 0);
+
   const approvedLeaveDays = customApprovedLeaves !== null
     ? customApprovedLeaves
-    : (summaryData?.workingDaysMetric?.approvedPaidLeaveDays ?? 2);
-  
+    : (summaryData?.workingDaysMetric?.approvedPaidLeaveDays ?? 0);
+
   const lateDays = customLateDays !== null
     ? customLateDays
-    : (summaryData?.workingDaysMetric?.lateDays ?? 1);
+    : (summaryData?.workingDaysMetric?.lateDays ?? 0);
 
   const overtimeHours = customOvertimeHours !== null
     ? customOvertimeHours
-    : (summaryData?.workingDaysMetric?.overtimeHours ?? 3);
+    : (summaryData?.workingDaysMetric?.overtimeHours ?? 0);
 
-  // Dynamic / Live Calculation based on Attendance & Actual Admin Data
+  // Dynamic / Live Calculation based on Attendance & Actual Database Records
   const dailyRate = standardWorkingDays > 0 ? baseSalary / standardWorkingDays : 0;
   const payableDays = Math.min(standardWorkingDays, attendedDays + approvedLeaveDays);
   const unexcusedAbsences = Math.max(0, standardWorkingDays - payableDays);
   const attendanceRate = standardWorkingDays > 0 ? Math.min(100, Math.round((payableDays / standardWorkingDays) * 100)) : 100;
 
-  // Dynamic Absenteeism Deduction Rule from CompanySettings (default GH₵10.00)
-  const absenceDeductionRate = Number(summaryData?.rates?.absenceDeductionRate || summaryData?.penaltySettings?.absenceDeductionRate || 10);
+  // Dynamic Absenteeism Deduction Rule from CompanySettings (default GH₵10.00/day)
+  const absenceDeductionRate = Number(
+    summaryData?.rates?.absenceDeductionRate ||
+    summaryData?.rates?.fixedAbsenceRate ||
+    10
+  );
   const absentDaysDeduction = Number((unexcusedAbsences * absenceDeductionRate).toFixed(2));
 
-  // Lateness Penalties from CompanySettings Tiers
-  const latenessPenalties = Number(summaryData?.salaryCalculation?.latenessDeductions || 0);
-  const totalAttendanceDeductions = absentDaysDeduction + latenessPenalties;
+  // Lateness Penalties from CompanySettings Tier Evaluation
+  const latenessPenalties = customLateDays !== null
+    ? Number((customLateDays * Number(summaryData?.rates?.lateTier1_amount || 0)).toFixed(2))
+    : Number(summaryData?.salaryCalculation?.latenessDeductions || 0);
 
-  // Dynamic custom earnings / allowances (defaults to 0 unless added)
-  const [customEarnings, setCustomEarnings] = useState([]);
-  const [customDeductions, setCustomDeductions] = useState([]);
+  const totalAttendanceDeductions = Number((absentDaysDeduction + latenessPenalties).toFixed(2));
 
+  // Dynamic Allowances & Deductions
   const totalDynamicEarnings = customEarnings.reduce((acc, item) => acc + Number(item.amount || 0), 0);
   const totalDynamicDeductions = customDeductions.reduce((acc, item) => acc + Number(item.amount || 0), 0);
 
-  const totalDeductions = totalAttendanceDeductions + totalDynamicDeductions;
-  const grossEarnings = baseSalary + totalDynamicEarnings;
-  const netSalary = Math.max(0, grossEarnings - totalDeductions);
+  // Deductions Subtotal Header strictly equals sum of all components
+  const totalDeductions = Number((totalAttendanceDeductions + totalDynamicDeductions).toFixed(2));
+  const grossEarnings = Number((baseSalary + totalDynamicEarnings).toFixed(2));
+  
+  // Net Take-Home formula: Base Salary + Total Allowances - Total Deductions
+  const netSalary = Math.max(0, Number((grossEarnings - totalDeductions).toFixed(2)));
 
   const formatCurrency = (val) => {
     return (val || 0).toLocaleString("en-GH", {
@@ -183,9 +225,9 @@ export const PayrollSummaryCalculator = ({
               onChange={(e) => setSelectedMonth(e.target.value)}
               className="pl-9 pr-8 py-2 text-xs font-semibold bg-[#F8FAFC] border border-[#E2E8F0] rounded-xl text-[#002185] focus:outline-none focus:border-[#ff5500] cursor-pointer appearance-none"
             >
-              {months.map((m) => (
-                <option key={m} value={`${m} 2026`}>
-                  {m} 2026
+              {monthOptions.map((m) => (
+                <option key={m} value={m}>
+                  {m}
                 </option>
               ))}
             </select>
@@ -197,7 +239,7 @@ export const PayrollSummaryCalculator = ({
             onClick={fetchSummary}
             disabled={isLoading}
             title="Refresh calculation from live database"
-            className="p-2 rounded-xl border border-[#E2E8F0] bg-[#F8FAFC] text-[#64748B] hover:text-[#002185] hover:border-[#002185] transition-all"
+            className="p-2 rounded-xl border border-[#E2E8F0] bg-[#F8FAFC] text-[#64748B] hover:text-[#002185] hover:border-[#002185] transition-all cursor-pointer"
           >
             <RefreshCw className={`w-4 h-4 ${isLoading ? "animate-spin" : ""}`} />
           </button>
@@ -242,7 +284,7 @@ export const PayrollSummaryCalculator = ({
           <button
             type="button"
             onClick={() => setShowLeaveDetails(!showLeaveDetails)}
-            className="text-[10px] text-[#ff5500] font-medium hover:underline mt-1 flex items-center gap-0.5"
+            className="text-[10px] text-[#ff5500] font-medium hover:underline mt-1 flex items-center gap-0.5 cursor-pointer"
           >
             <span>{showLeaveDetails ? "Hide leave records" : "View leave requests"}</span>
             {showLeaveDetails ? <ChevronUp className="w-2.5 h-2.5" /> : <ChevronDown className="w-2.5 h-2.5" />}
@@ -271,7 +313,7 @@ export const PayrollSummaryCalculator = ({
           </div>
         </div>
 
-        {/* Overtime & Punctuality */}
+        {/* Overtime Hours (Strictly database driven) */}
         <div className="p-4 rounded-xl bg-[#F8FAFC] border border-[#E2E8F0]">
           <div className="flex items-center justify-between">
             <span className="text-[11px] font-semibold uppercase tracking-wider text-[#64748B]">
@@ -293,7 +335,7 @@ export const PayrollSummaryCalculator = ({
 
       {/* Approved Leaves Breakdown Accordion */}
       {showLeaveDetails && (
-        <div className="p-4 rounded-xl bg-[#F8FAFC] border border-[#E2E8F0] space-y-3 animate-fade-in">
+        <div className="p-4 rounded-xl bg-[#F8FAFC] border border-[#E2E8F0] space-y-3">
           <div className="flex items-center justify-between">
             <h3 className="text-xs font-bold text-[#002185] uppercase tracking-wider flex items-center gap-1.5">
               <FileCheck className="w-4 h-4 text-[#ff5500]" />
@@ -305,13 +347,13 @@ export const PayrollSummaryCalculator = ({
           </div>
 
           <div className="divide-y divide-[#E2E8F0]">
-            {(summaryData?.approvedLeavesList && summaryData.approvedLeavesList.length > 0) ? (
+            {summaryData?.approvedLeavesList && summaryData.approvedLeavesList.length > 0 ? (
               summaryData.approvedLeavesList.map((leave, idx) => (
                 <div key={idx} className="py-2.5 flex items-center justify-between text-xs">
                   <div>
                     <span className="font-semibold text-[#002185]">{leave.leaveType}</span>
                     <span className="text-[#64748B] ml-2">
-                      ({leave.startDate ? new Date(leave.startDate).toLocaleDateString() : ""} - {leave.endDate ? new Date(leave.endDate).toLocaleDateString() : ""})
+                      ({leave.startDate ? new Date(leave.startDate).toLocaleDateString("en-GH") : ""} - {leave.endDate ? new Date(leave.endDate).toLocaleDateString("en-GH") : ""})
                     </span>
                     {leave.reason && (
                       <p className="text-[11px] text-[#64748B] italic mt-0.5">"{leave.reason}"</p>
@@ -325,8 +367,8 @@ export const PayrollSummaryCalculator = ({
                 </div>
               ))
             ) : (
-              <div className="py-3 text-center text-xs text-[#64748B]">
-                Annual Leave (3 Days) credited as approved paid leave.
+              <div className="py-3 text-center text-xs text-[#64748B] italic">
+                No approved leave records for {selectedMonth}.
               </div>
             )}
           </div>
@@ -346,10 +388,10 @@ export const PayrollSummaryCalculator = ({
           </div>
 
           <div className="space-y-2.5 text-xs">
-            {/* Base Monthly Salary */}
-            <div className="flex items-center justify-between py-2 px-3 rounded-lg bg-[#F8FAFC]">
+            {/* Base Monthly Salary (Bound directly to MongoDB database record) */}
+            <div className="flex items-center justify-between py-2.5 px-3 rounded-lg bg-[#F8FAFC] border border-[#E2E8F0]">
               <div>
-                <span className="font-medium text-[#0F172A]">Base Monthly Salary</span>
+                <span className="font-semibold text-[#0F172A]">Base Monthly Salary</span>
                 <p className="text-[10px] text-[#64748B]">
                   Standard agreed monthly base rate
                 </p>
@@ -357,13 +399,13 @@ export const PayrollSummaryCalculator = ({
               <span className="font-bold text-[#002185]">{formatCurrency(baseSalary)}</span>
             </div>
 
-            {/* Dynamic Custom Earnings */}
+            {/* Dynamic Custom Earnings / Allowances */}
             {customEarnings.length > 0 ? (
               customEarnings.map((item, idx) => (
                 <div key={idx} className="flex items-center justify-between py-2 px-3 rounded-lg bg-[#F0FDF4] border border-[#BBF7D0]">
                   <div>
-                    <span className="font-medium text-[#166534]">{item.description || item.name || "Allowance"}</span>
-                    <p className="text-[10px] text-[#166534]/80">Admin Custom Allowance</p>
+                    <span className="font-medium text-[#166534]">{item.title || item.description || item.name || "Allowance"}</span>
+                    <p className="text-[10px] text-[#166534]/80">{item.description || "Admin Custom Allowance"}</p>
                   </div>
                   <div className="flex items-center gap-2">
                     <span className="font-bold text-[#16A34A]">+{formatCurrency(item.amount)}</span>
@@ -371,6 +413,7 @@ export const PayrollSummaryCalculator = ({
                       type="button"
                       onClick={() => setCustomEarnings((prev) => prev.filter((_, i) => i !== idx))}
                       className="text-xs text-rose-500 hover:text-rose-700 px-1 font-bold cursor-pointer"
+                      title="Remove allowance"
                     >
                       ×
                     </button>
@@ -378,14 +421,14 @@ export const PayrollSummaryCalculator = ({
                 </div>
               ))
             ) : (
-              <div className="py-2 px-3 rounded-lg bg-[#F8FAFC] border border-dashed border-[#E2E8F0] text-center text-[11px] text-[#94A3B8] italic">
+              <div className="py-2.5 px-3 rounded-lg bg-[#F8FAFC] border border-dashed border-[#E2E8F0] text-center text-[11px] text-[#94A3B8] italic">
                 No additional earnings recorded
               </div>
             )}
           </div>
         </div>
 
-        {/* Middle Column: Deductions (Absence & Dynamic Items) */}
+        {/* Middle Column: Itemized Deductions (Absence, Lateness & Custom Items) */}
         <div className="space-y-4">
           <div className="flex items-center justify-between border-b border-[#E2E8F0] pb-2">
             <span className="text-xs font-bold text-[#002185] uppercase tracking-wider flex items-center gap-1.5">
@@ -396,13 +439,13 @@ export const PayrollSummaryCalculator = ({
           </div>
 
           <div className="space-y-2.5 text-xs">
-            {/* Absence Deduction */}
+            {/* Absenteeism Deduction */}
             {unexcusedAbsences > 0 ? (
-              <div className="flex items-center justify-between py-2 px-3 rounded-lg bg-[#FEF2F2] border border-[#FECACA]">
+              <div className="flex items-center justify-between py-2.5 px-3 rounded-lg bg-[#FEF2F2] border border-[#FECACA]">
                 <div>
-                  <span className="font-medium text-[#DC2626]">Absent Days Deduction</span>
-                  <p className="text-[10px] text-[#DC2626]/80">
-                    {unexcusedAbsences} unexcused absent day(s) @ GH₵{absenceDeductionRate}/day
+                  <span className="font-semibold text-[#DC2626]">Absent Days Deduction</span>
+                  <p className="text-[10px] text-[#DC2626]/90">
+                    {unexcusedAbsences} unexcused absent day(s) @ GH₵{absenceDeductionRate.toFixed(2)}/day
                   </p>
                 </div>
                 <span className="font-bold text-[#DC2626]">
@@ -410,7 +453,7 @@ export const PayrollSummaryCalculator = ({
                 </span>
               </div>
             ) : (
-              <div className="flex items-center justify-between py-2 px-3 rounded-lg bg-[#F0FDF4] border border-[#BBF7D0]">
+              <div className="flex items-center justify-between py-2.5 px-3 rounded-lg bg-[#F0FDF4] border border-[#BBF7D0]">
                 <div>
                   <span className="font-medium text-[#166534]">Absence Deduction</span>
                   <p className="text-[10px] text-[#166534]/80">100% Attendance compliance recorded</p>
@@ -420,17 +463,42 @@ export const PayrollSummaryCalculator = ({
             )}
 
             {/* Lateness Penalties */}
-            {latenessPenalties > 0 ? (
-              <div className="flex items-center justify-between py-2 px-3 rounded-lg bg-[#FFFBEB] border border-[#FDE68A]">
-                <div>
-                  <span className="font-medium text-[#B45309]">Lateness Tier Penalties</span>
-                  <p className="text-[10px] text-[#B45309]/80">
-                    {lateDays} late clock-in(s) evaluated against company penalty tiers
-                  </p>
+            {latenessPenalties > 0 || lateDays > 0 ? (
+              <div className="rounded-lg bg-[#FFFBEB] border border-[#FDE68A] overflow-hidden">
+                <div className="flex items-center justify-between py-2.5 px-3">
+                  <div>
+                    <span className="font-semibold text-[#B45309]">Lateness Penalties</span>
+                    <p className="text-[10px] text-[#B45309]/90">
+                      {lateDays} late check-in(s) evaluated against company penalty tiers
+                    </p>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <span className="font-bold text-[#DC2626]">
+                      -{formatCurrency(latenessPenalties)}
+                    </span>
+                    {summaryData?.latenessBreakdown && summaryData.latenessBreakdown.length > 0 && (
+                      <button
+                        type="button"
+                        onClick={() => setShowLatenessDetails(!showLatenessDetails)}
+                        className="text-[10px] text-[#B45309] font-medium hover:underline cursor-pointer"
+                      >
+                        {showLatenessDetails ? "▲" : "▼"}
+                      </button>
+                    )}
+                  </div>
                 </div>
-                <span className="font-bold text-[#DC2626]">
-                  -{formatCurrency(latenessPenalties)}
-                </span>
+
+                {/* Itemized Lateness Tiers */}
+                {showLatenessDetails && summaryData?.latenessBreakdown && summaryData.latenessBreakdown.length > 0 && (
+                  <div className="bg-[#FFFDF5] border-t border-[#FDE68A] p-2 space-y-1 text-[10px]">
+                    {summaryData.latenessBreakdown.map((lb, lidx) => (
+                      <div key={lidx} className="flex justify-between items-center text-[#78350F] py-0.5">
+                        <span>• {lb.date}: {lb.minutesLate}m late ({lb.tier})</span>
+                        <span className="font-semibold text-rose-600">-{formatCurrency(lb.penalty)}</span>
+                      </div>
+                    ))}
+                  </div>
+                )}
               </div>
             ) : null}
 
@@ -439,8 +507,8 @@ export const PayrollSummaryCalculator = ({
               customDeductions.map((item, idx) => (
                 <div key={idx} className="flex items-center justify-between py-2 px-3 rounded-lg bg-[#FEF2F2] border border-[#FECACA]">
                   <div>
-                    <span className="font-medium text-[#991B1B]">{item.description || item.name || "Deduction"}</span>
-                    <p className="text-[10px] text-[#991B1B]/80">Admin Custom Adjustment</p>
+                    <span className="font-medium text-[#991B1B]">{item.title || item.description || item.name || "Deduction"}</span>
+                    <p className="text-[10px] text-[#991B1B]/80">{item.description || "Admin Custom Adjustment"}</p>
                   </div>
                   <div className="flex items-center gap-2">
                     <span className="font-bold text-[#DC2626]">-{formatCurrency(item.amount)}</span>
@@ -448,14 +516,15 @@ export const PayrollSummaryCalculator = ({
                       type="button"
                       onClick={() => setCustomDeductions((prev) => prev.filter((_, i) => i !== idx))}
                       className="text-xs text-rose-500 hover:text-rose-700 px-1 font-bold cursor-pointer"
+                      title="Remove deduction"
                     >
                       ×
                     </button>
                   </div>
                 </div>
               ))
-            ) : unexcusedAbsences === 0 ? (
-              <div className="py-2 px-3 rounded-lg bg-[#F8FAFC] border border-dashed border-[#E2E8F0] text-center text-[11px] text-[#94A3B8] italic">
+            ) : unexcusedAbsences === 0 && latenessPenalties === 0 ? (
+              <div className="py-2.5 px-3 rounded-lg bg-[#F8FAFC] border border-dashed border-[#E2E8F0] text-center text-[11px] text-[#94A3B8] italic">
                 No additional deductions recorded
               </div>
             ) : null}
@@ -495,10 +564,15 @@ export const PayrollSummaryCalculator = ({
                   <span className="font-semibold text-emerald-300">+{formatCurrency(totalDynamicEarnings)}</span>
                 </div>
               )}
-              {totalDeductions > 0 && (
+              {totalDeductions > 0 ? (
                 <div className="flex justify-between">
                   <span>Total Deductions:</span>
                   <span className="font-semibold text-rose-300">-{formatCurrency(totalDeductions)}</span>
+                </div>
+              ) : (
+                <div className="flex justify-between">
+                  <span>Total Deductions:</span>
+                  <span className="font-semibold text-emerald-300">GH₵0.00</span>
                 </div>
               )}
             </div>
@@ -530,7 +604,7 @@ export const PayrollSummaryCalculator = ({
 
       {/* Formula & Rule Documentation Modal / Box */}
       {showFormulaDetails && (
-        <div className="p-4 rounded-xl bg-[#F8FAFC] border border-[#E2E8F0] text-xs text-[#0F172A] space-y-2 animate-fade-in">
+        <div className="p-4 rounded-xl bg-[#F8FAFC] border border-[#E2E8F0] text-xs text-[#0F172A] space-y-2">
           <h3 className="font-bold text-[#002185] uppercase tracking-wider flex items-center gap-1.5">
             <Calculator className="w-4 h-4 text-[#ff5500]" />
             Salary Calculation Rules & Mathematical Model
@@ -540,25 +614,25 @@ export const PayrollSummaryCalculator = ({
               <strong className="text-[#002185]">Standard Working Days:</strong> Computed dynamically per calendar month (excluding weekends). Standard ~22 days.
             </li>
             <li>
-              <strong className="text-[#002185]">Daily Rate:</strong> Daily Rate = Base Salary / Standard Days ({formatCurrency(dailyRate)}).
+              <strong className="text-[#002185]">Daily Rate:</strong> Daily Rate = Base Salary / Standard Working Days ({formatCurrency(dailyRate)}).
             </li>
             <li>
               <strong className="text-[#002185]">Approved Paid Leave Rule:</strong> Annual, Sick, Maternity, and Compassionate leave requests with "Approved" status count as 100% payable working days.
             </li>
             <li>
-              <strong className="text-[#002185]">Absence Deduction:</strong> Unexcused absent days strictly deducted at a fixed rate of GH₵10.00 per absent day: <code>Unexcused Absences × GH₵10.00</code> ({formatCurrency(absentDaysDeduction)}).
+              <strong className="text-[#002185]">Absenteeism Deduction:</strong> Unexcused absent days strictly deducted at configured company rate (GH₵{absenceDeductionRate.toFixed(2)}/day): <code>{unexcusedAbsences} Absent Day(s) × GH₵{absenceDeductionRate.toFixed(2)} = {formatCurrency(absentDaysDeduction)}</code>.
             </li>
             <li>
-              <strong className="text-[#002185]">Net Pay Formula:</strong> <code>Net Pay = Base Salary + Approved Allowances - (Absent Days × 10) - Custom Admin Deductions</code>.
+              <strong className="text-[#002185]">Lateness Penalties:</strong> Late check-ins calculated against shift start time and company tiered penalties ({formatCurrency(latenessPenalties)}).
             </li>
             <li>
-              <strong className="text-[#002185]">Dynamic Custom Items:</strong> Allowances and Deductions reflect only Admin-entered items with zero hardcoded assumptions.
+              <strong className="text-[#002185]">Net Take-Home Pay Formula:</strong> <code>Net Pay = Base Monthly Salary ({formatCurrency(baseSalary)}) + Approved Allowances ({formatCurrency(totalDynamicEarnings)}) - Total Deductions ({formatCurrency(totalDeductions)}) = {formatCurrency(netSalary)}</code>.
             </li>
           </ul>
         </div>
       )}
 
-      {/* Interactive Simulation Adjuster (Expandable) */}
+      {/* Interactive Simulation Adjuster (Expandable for testing) */}
       <details className="group border border-[#E2E8F0] rounded-xl p-4 bg-[#F8FAFC]">
         <summary className="cursor-pointer font-bold text-xs text-[#002185] flex items-center justify-between list-none">
           <span className="flex items-center gap-2">
@@ -646,7 +720,7 @@ export const PayrollSummaryCalculator = ({
             <button
               type="button"
               onClick={resetOverrides}
-              className="text-[11px] text-[#ff5500] font-semibold hover:underline flex items-center gap-1"
+              className="text-[11px] text-[#ff5500] font-semibold hover:underline flex items-center gap-1 cursor-pointer"
             >
               <RefreshCw className="w-3 h-3" />
               Reset simulation to live data
@@ -659,3 +733,4 @@ export const PayrollSummaryCalculator = ({
 };
 
 export default PayrollSummaryCalculator;
+

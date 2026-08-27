@@ -1,10 +1,11 @@
 import { useState, useEffect } from "react";
-import { User, Mail, Phone, Briefcase, Key, Camera, CheckCircle2, Lock } from "lucide-react";
+import { User, Mail, Phone, Briefcase, Key, CheckCircle2, Lock } from "lucide-react";
 import { useManagement } from "../../../context/ManagementContextProvider";
 import { getAdminProfile, updateAdminProfile, changeAdminPassword } from "../../../apis/fontApis";
+import ProfilePictureUploader from "../../../components/ProfilePictureUploader";
 
 const ProfileSettings = ({ onSaveSuccess }) => {
-  const { user, setUser, setShowToast } = useManagement();
+  const { user, setUser, admin, setAdmin, setShowToast } = useManagement();
 
   const [formData, setFormData] = useState({
     fullName: user?.fullName || user?.full_name || "Administrator",
@@ -82,19 +83,24 @@ const ProfileSettings = ({ onSaveSuccess }) => {
 
     setIsSavingProfile(true);
     try {
+      const avatarUrlToSave = formData.avatar || formData.profile_image_url || "";
       const res = await updateAdminProfile({
         fullName: formData.fullName.trim(),
         full_name: formData.fullName.trim(),
         email: formData.email.trim(),
         phone: formData.phone.trim(),
-        avatar: formData.avatar,
+        avatar: avatarUrlToSave,
+        profile_image_url: avatarUrlToSave,
         position: formData.position,
         department: formData.department,
       });
 
       if (res?.data?.success) {
-        const updatedAdmin = res.data.admin || formData;
+        const updatedAdmin = res.data.admin || { ...formData, avatar: avatarUrlToSave, profile_image_url: avatarUrlToSave };
         setUser((prev) => ({ ...prev, ...updatedAdmin }));
+        if (typeof setAdmin === "function") setAdmin(updatedAdmin);
+        localStorage.setItem("adminData", JSON.stringify(updatedAdmin));
+        localStorage.setItem("userData", JSON.stringify(updatedAdmin));
         setShowToast({
           show: true,
           message: "Profile information updated successfully!",
@@ -177,38 +183,30 @@ const ProfileSettings = ({ onSaveSuccess }) => {
     }
   };
 
-  const initialLetter = (formData?.fullName || "A").trim().charAt(0).toUpperCase() || "A";
-
   return (
     <div className="space-y-8">
       {/* Profile Header Block */}
-      <div className="flex flex-col sm:flex-row items-start sm:items-center gap-5 pb-6 border-b border-slate-200 dark:border-slate-800">
-        <div className="relative">
-          <div className="w-20 h-20 sm:w-24 sm:h-24 rounded-2xl bg-gradient-to-br from-[#002185] to-[#001566] flex items-center justify-center text-3xl font-bold text-white shadow-md border border-[#002185]/20 select-none">
-            {initialLetter}
-          </div>
-          <button
-            type="button"
-            className="absolute -bottom-1 -right-1 p-2 bg-[#ff5500] hover:bg-[#002185] text-white rounded-xl shadow-md transition-colors cursor-pointer"
-            title="Update avatar"
-          >
-            <Camera className="w-4 h-4" />
-          </button>
-        </div>
+      <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-6 pb-6 border-b border-slate-200 dark:border-slate-800">
+        <ProfilePictureUploader
+          currentAvatarUrl={formData.avatar || admin?.profile_image_url || admin?.avatar}
+          userName={formData.fullName}
+          userRole="Admin"
+          onAvatarUpdated={(newUrl) => {
+            setFormData((prev) => ({ ...prev, avatar: newUrl }));
+          }}
+          size="lg"
+        />
 
-        <div className="space-y-1">
-          <h3 className="text-xl font-bold text-slate-900 dark:text-slate-100">
-            {formData.fullName || "Administrator"}
-          </h3>
-          <p className="text-xs text-slate-500 dark:text-slate-400 font-medium">
-            {formData.email} • <span className="text-[#002185] dark:text-blue-400 font-semibold">{formData.role}</span>
-          </p>
-          <div className="flex items-center gap-2 pt-1">
+        <div className="space-y-1 text-right hidden lg:block">
+          <div className="flex items-center gap-2 justify-end">
             <span className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-xs font-semibold bg-emerald-50 dark:bg-emerald-950/40 text-emerald-700 dark:text-emerald-400 border border-emerald-200 dark:border-emerald-800">
               <CheckCircle2 className="w-3 h-3" />
               Active System Account
             </span>
           </div>
+          <p className="text-xs text-slate-500 dark:text-slate-400 font-medium">
+            {formData.email} • <span className="text-[#002185] dark:text-blue-400 font-semibold">{formData.role}</span>
+          </p>
         </div>
       </div>
 

@@ -432,12 +432,22 @@ export const deleteAnnouncement = async (req, res) => {
     try {
       if (mongoose.Types.ObjectId.isValid(id)) {
         await Announcement.findByIdAndDelete(id);
-        // Clean up notifications referencing this announcement
-        await Notification.deleteMany({ announcementId: id }).catch(() => {});
+      } else {
+        await Announcement.findOneAndDelete({ _id: id });
       }
+      // Clean up notifications referencing this announcement
+      await Notification.deleteMany({
+        $or: [
+          { announcementId: id },
+          { announcementId: String(id) },
+          { "metadata.announcementId": id },
+          { "metadata.announcement_id": id },
+        ],
+      }).catch(() => {});
     } catch (dbErr) {
       console.warn("DB delete announcement error:", dbErr.message);
     }
+
 
     return res.status(200).json({
       success: true,

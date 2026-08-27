@@ -35,6 +35,29 @@ const attendanceSchema = new mongoose.Schema(
       default: "Absent",
     },
 
+    delayMinutes: {
+      type: Number,
+      default: 0,
+      min: 0,
+    },
+
+    lateMinutes: {
+      type: Number,
+      default: 0,
+      min: 0,
+    },
+
+    latePenalty: {
+      type: Number,
+      default: 0,
+      min: 0,
+    },
+
+    penaltyTier: {
+      type: String,
+      default: "",
+    },
+
     notes: {
       type: String,
       trim: true,

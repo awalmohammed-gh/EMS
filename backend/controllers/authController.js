@@ -252,16 +252,25 @@ export const employeeLogin = async (req, res) => {
 
     const cleanInput = email.trim();
     const cleanEmail = cleanInput.toLowerCase();
+    const cleanPassword = password.trim();
 
     // 1. Query database for Employee by email or employeeId
-    const employee = await Employee.findOne({
+    let employee = await Employee.findOne({
       $or: [{ email: cleanEmail }, { employeeId: cleanInput }],
-    });
+    }).select("+password");
 
+    // Fallback check User collection if needed
     if (!employee) {
+      const user = await User.findOne({ email: cleanEmail }).select("+password");
+      if (user) {
+        employee = await Employee.findOne({ email: cleanEmail }).select("+password");
+      }
+    }
+
+    if (!employee || !employee.password) {
       return res.status(401).json({
         success: false,
-        message: "Invalid email/employee ID or password.",
+        message: "Invalid credentials",
       });
     }
 
@@ -281,11 +290,11 @@ export const employeeLogin = async (req, res) => {
     }
 
     // 3. Verify password hash using bcrypt
-    const isPasswordValid = await bcrypt.compare(password, employee.password);
+    const isPasswordValid = await bcrypt.compare(cleanPassword, employee.password);
     if (!isPasswordValid) {
       return res.status(401).json({
         success: false,
-        message: "Invalid email/employee ID or password.",
+        message: "Invalid credentials",
       });
     }
 
@@ -294,7 +303,7 @@ export const employeeLogin = async (req, res) => {
       id: employee._id.toString(),
       employeeId: employee.employeeId,
       email: employee.email,
-      role: "employee",
+      role: employee.role || "employee",
       fullName: employee.fullName,
     });
 

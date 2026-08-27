@@ -13,6 +13,7 @@ import {
 } from "lucide-react";
 import { useManagement } from "../../context/ManagementContextProvider";
 import { getEmployeeMe, updateEmployeeMe } from "../../apis/fontApis";
+import ProfilePictureUploader from "../../components/ProfilePictureUploader";
 import Loading from "../../ui/Loading";
 import ErrorMessage from "../../ui/ErrorMessage";
 
@@ -102,15 +103,22 @@ const EmployeeSettings = () => {
     e.preventDefault();
     setIsSaving(true);
     try {
+      const avatarUrlToSave = profile.avatar || profile.profilePicture || profile.profile_image_url || "";
       const res = await updateEmployeeMe({
         fullName: profile.fullName,
         phone: profile.phone,
+        avatar: avatarUrlToSave,
+        profilePicture: avatarUrlToSave,
+        profile_picture: avatarUrlToSave,
+        profile_image_url: avatarUrlToSave,
       });
 
       if (res?.data?.success) {
         const updated = res.data.employee || profile;
-        setUser((prev) => ({ ...prev, ...updated }));
-        localStorage.setItem("employeeData", JSON.stringify({ ...profile, ...updated }));
+        const merged = { ...profile, ...updated, avatar: avatarUrlToSave, profilePicture: avatarUrlToSave };
+        setUser((prev) => ({ ...prev, ...merged }));
+        localStorage.setItem("employeeData", JSON.stringify(merged));
+        localStorage.setItem("userData", JSON.stringify(merged));
         setShowToast({
           show: true,
           message: "Profile details updated successfully in database!",
@@ -165,12 +173,6 @@ const EmployeeSettings = () => {
     });
   };
 
-  const avatarUrl =
-    profile.avatar ||
-    `https://ui-avatars.com/api/?name=${encodeURIComponent(
-      profile.fullName || user?.fullName || "Employee",
-    )}&background=002185&color=fff&bold=true`;
-
   if (isLoading) {
     return <Loading />;
   }
@@ -199,48 +201,47 @@ const EmployeeSettings = () => {
 
       {/* Profile Overview Card */}
       <div className="bg-[#FFFFFF] border border-[#E2E8F0] rounded-2xl p-6 shadow-sm hover:border-[#ff5500] transition-all duration-300">
-        <div className="flex flex-col sm:flex-row items-center gap-6">
-          <div className="relative w-20 h-20 rounded-2xl overflow-hidden shadow-md ring-4 ring-[#002185]/10 shrink-0">
-            <img
-              src={avatarUrl}
-              alt={profile.fullName || user?.fullName || "Employee"}
-              className="w-full h-full object-cover"
-            />
-          </div>
-          <div className="text-center sm:text-left flex-1">
-            <div className="flex flex-col sm:flex-row sm:items-center gap-2">
-              <h2 className="text-xl font-bold text-[#002185]">
-                {profile.fullName || user?.fullName || "Staff Member"}
-              </h2>
-              <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-xs font-semibold bg-[#002185]/10 text-[#002185] w-fit mx-auto sm:mx-0">
+        <div className="flex flex-col lg:flex-row items-start lg:items-center justify-between gap-6">
+          <ProfilePictureUploader
+            currentAvatarUrl={profile.avatar || user?.profilePicture || user?.avatar}
+            userName={profile.fullName || user?.fullName}
+            userRole="Employee"
+            onAvatarUpdated={(newUrl) => {
+              setProfile((prev) => ({
+                ...prev,
+                avatar: newUrl,
+                profilePicture: newUrl,
+                profile_image_url: newUrl,
+              }));
+            }}
+            size="lg"
+          />
+
+          <div className="text-left lg:text-right border-t lg:border-t-0 pt-4 lg:pt-0 border-[#E2E8F0] w-full lg:w-auto">
+            <div className="flex flex-wrap lg:justify-end items-center gap-2">
+              <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-xs font-semibold bg-[#002185]/10 text-[#002185]">
                 <Shield className="w-3 h-3" />
                 {profile.position || user?.position || "Staff Member"}
               </span>
-            </div>
-            <div className="flex flex-wrap items-center justify-center sm:justify-start gap-3 mt-2 text-xs text-[#64748B]">
-              {(profile.department || user?.department) && (
-                <>
-                  <span className="flex items-center gap-1">
-                    <Building2 className="w-3.5 h-3.5 text-[#002185]" />
-                    {profile.department || user?.department}
-                  </span>
-                  <span>•</span>
-                </>
-              )}
-              {(profile.position || user?.position) && (
-                <>
-                  <span className="flex items-center gap-1">
-                    <Briefcase className="w-3.5 h-3.5 text-[#002185]" />
-                    {profile.position || user?.position}
-                  </span>
-                  <span>•</span>
-                </>
-              )}
               {(profile.employeeId || user?.employeeId) && (
-                <span className="font-mono text-[#002185] font-semibold">
+                <span className="font-mono text-[#002185] bg-[#F8FAFC] px-2.5 py-0.5 rounded-full border border-[#E2E8F0] text-xs font-semibold">
                   ID: {profile.employeeId || user?.employeeId}
                 </span>
               )}
+            </div>
+
+            <div className="flex flex-wrap lg:justify-end items-center gap-2 mt-2 text-xs text-[#64748B]">
+              {(profile.department || user?.department) && (
+                <span className="flex items-center gap-1">
+                  <Building2 className="w-3.5 h-3.5 text-[#002185]" />
+                  {profile.department || user?.department}
+                </span>
+              )}
+              <span>•</span>
+              <span className="flex items-center gap-1">
+                <Mail className="w-3.5 h-3.5 text-[#002185]" />
+                {profile.email || user?.email}
+              </span>
             </div>
           </div>
         </div>

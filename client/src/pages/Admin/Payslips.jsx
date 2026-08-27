@@ -9,6 +9,7 @@ import {
   FileText,
   Eye,
   Calculator,
+  Banknote,
   BanknoteIcon,
   Download,
   Printer,
@@ -16,14 +17,18 @@ import {
   Trash2,
   CheckCircle2,
   MoreVertical,
+  Loader2,
+  AlertTriangle,
 } from "lucide-react";
+
 import { useManagement } from "../../context/ManagementContextProvider";
 import PayslipsModal from "../../components/modal/PayslipsModal";
 import PayrollDetailsModal from "../../components/modal/PayrollDetailsModal";
 import PayrollSummaryCalculator from "../../components/PayrollSummaryCalculator";
+import MonthlyPayrollRunTable from "../../components/MonthlyPayrollRunTable";
 import PayrollCycleHistory from "../../components/PayrollCycleHistory";
 import PenaltyPayrollImpactChart from "../../components/PenaltyPayrollImpactChart";
-import { getAllPayslips, updatePayrollStatus, deletePayroll } from "../../apis/fontApis";
+import { getAllPayslips, updatePayrollStatus, deletePayroll, getAdminPayrollSummary, namesList } from "../../apis/fontApis";
 import { downloadPayslipPDF } from "../../utils/payslipPdfGenerator";
 import {
   List,
@@ -47,6 +52,13 @@ const Payslips = () => {
   // Details Modal State
   const [selectedPayroll, setSelectedPayroll] = useState(null);
   const [showDetailsModal, setShowDetailsModal] = useState(false);
+
+  // Delete Confirmation Modal State
+  const [deleteConfirmItem, setDeleteConfirmItem] = useState(null);
+  const [isDeleting, setIsDeleting] = useState(false);
+
+  // Active Employees count from DB
+  const [activeEmployeesCount, setActiveEmployeesCount] = useState(0);
 
   // Action Menu Dropdown State for rows
   const [activeMenuId, setActiveMenuId] = useState(null);
@@ -117,8 +129,25 @@ const Payslips = () => {
     }
   };
 
+  const fetchActiveStaffSummary = async () => {
+    try {
+      const { data: summaryData } = await getAdminPayrollSummary();
+      if (summaryData?.success && summaryData?.totalEmployees !== undefined && Number(summaryData.totalEmployees) > 0) {
+        setActiveEmployeesCount(Number(summaryData.totalEmployees));
+        return;
+      }
+      const { data: namesData } = await namesList();
+      if (namesData?.success && Array.isArray(namesData?.employees)) {
+        setActiveEmployeesCount(namesData.employees.length);
+      }
+    } catch (err) {
+      console.warn("Could not fetch active employees summary:", err);
+    }
+  };
+
   useEffect(() => {
     fetchPayslips();
+    fetchActiveStaffSummary();
   }, []);
 
   // Filter Data
@@ -275,34 +304,49 @@ const Payslips = () => {
     }
   };
 
-  // Delete Action
-  const handleDelete = async (item) => {
-    const targetId = item?._id || item?.id || item?.payslipNumber;
+  // Delete Trigger Action
+  const handleDelete = (item) => {
+    setActiveMenuId(null);
+    setDeleteConfirmItem(item);
+  };
+
+  const handleConfirmDelete = async () => {
+    if (!deleteConfirmItem) return;
+    const targetId = deleteConfirmItem?._id || deleteConfirmItem?.id || deleteConfirmItem?.payslipNumber;
     if (!targetId) return;
 
-    if (!window.confirm(`Are you sure you want to delete this payroll record for ${item?.employee?.fullName || item?.employeeName}?`)) {
-      return;
-    }
-
     try {
+      setIsDeleting(true);
       const res = await deletePayroll(targetId);
-      if (res.data?.success) {
+      if (res?.data?.success || res?.status === 200) {
+        // Immediately remove from local state
+        setPayslips((prev) =>
+          prev.filter(
+            (item) =>
+              String(item._id) !== String(targetId) &&
+              String(item.id) !== String(targetId) &&
+              item.payslipNumber !== targetId
+          )
+        );
         setShowToast({
-          message: "Payroll record deleted successfully.",
+          message: "Payroll record permanently removed from the database.",
           type: "success",
           show: true,
         });
+        setDeleteConfirmItem(null);
         fetchPayslips();
+      } else {
+        throw new Error(res?.data?.message || "Failed to delete payroll record");
       }
     } catch (err) {
       console.error(err);
       setShowToast({
-        message: err.message || "Failed to delete record",
+        message: err.response?.data?.message || err.message || "Failed to delete record",
         type: "error",
         show: true,
       });
     } finally {
-      setActiveMenuId(null);
+      setIsDeleting(false);
     }
   };
 
@@ -430,6 +474,20 @@ const Payslips = () => {
         {/* Primary View Switcher Tabs */}
         <div className="flex items-center p-1.5 bg-[#F8FAFC] dark:bg-slate-800/80 border border-[#E2E8F0] dark:border-slate-800 rounded-2xl self-start flex-wrap gap-1">
           <button
+            id="tab-btn-monthly-run"
+            type="button"
+            onClick={() => setActiveViewTab("monthly-run")}
+            className={`flex items-center gap-2 px-4 py-2 rounded-xl text-xs font-bold transition-all cursor-pointer ${
+              activeViewTab === "monthly-run"
+                ? "bg-[#002185] text-white shadow-xs"
+                : "text-[#64748B] hover:text-[#002185] dark:text-slate-400"
+            }`}
+          >
+            <Banknote className="w-3.5 h-3.5 text-[#ff5500]" />
+            <span>Automated Monthly Run</span>
+          </button>
+
+          <button
             id="tab-btn-records"
             type="button"
             onClick={() => setActiveViewTab("records")}
@@ -486,6 +544,13 @@ const Payslips = () => {
           </button>
         </div>
 
+        {/* Automated Monthly Payroll Run & Calendar Audit */}
+        {activeViewTab === "monthly-run" && (
+          <div className="animate-in fade-in slide-in-from-top-4 duration-200">
+            <MonthlyPayrollRunTable />
+          </div>
+        )}
+
         {/* Dynamic Payroll & Attendance Calculator */}
         {activeViewTab === "calculator" && (
           <div className="animate-in fade-in slide-in-from-top-4 duration-200">
@@ -536,9 +601,9 @@ const Payslips = () => {
                       Total Employees
                     </p>
                     <p className="text-2xl font-bold text-[#002185] mt-1">
-                      {totalEmployees}
+                      {activeEmployeesCount || totalEmployees || 0}
                     </p>
-                    <span className="text-[10px] text-[#64748B] block mt-0.5">On Active Payroll</span>
+                    <span className="text-[10px] text-[#64748B] block mt-0.5">Active Staff on Record</span>
                   </div>
                   <div className="w-10 h-10 rounded-xl bg-[#002185] flex items-center justify-center text-white shadow-xs">
                     <User className="w-5 h-5" />
@@ -1051,6 +1116,79 @@ const Payslips = () => {
           }}
           onRefresh={fetchPayslips}
         />
+      )}
+
+      {/* Delete Confirmation Modal */}
+      {deleteConfirmItem && (
+        <div
+          id="delete-payroll-modal-overlay"
+          className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-xs animate-in fade-in duration-200"
+          onClick={() => !isDeleting && setDeleteConfirmItem(null)}
+        >
+          <div
+            id="delete-payroll-modal-container"
+            className="bg-white rounded-2xl max-w-md w-full p-6 border border-[#E2E8F0] shadow-2xl space-y-4 animate-in zoom-in-95 duration-200"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="flex items-start gap-4">
+              <div className="w-12 h-12 rounded-2xl bg-rose-50 border border-rose-100 text-[#DC2626] flex items-center justify-center shrink-0">
+                <Trash2 className="w-6 h-6" />
+              </div>
+              <div className="space-y-1">
+                <h3 className="text-base font-bold text-[#002185]">
+                  Delete Payroll Record?
+                </h3>
+                <p className="text-xs text-[#64748B]">
+                  Are you sure you want to permanently delete the payslip for{" "}
+                  <span className="font-bold text-[#0F172A]">
+                    {deleteConfirmItem?.employee?.fullName || deleteConfirmItem?.employeeName || "this employee"}
+                  </span>{" "}
+                  for the period{" "}
+                  <span className="font-semibold text-[#002185]">
+                    {deleteConfirmItem?.payMonth || deleteConfirmItem?.month || "N/A"}
+                  </span>
+                  ?
+                </p>
+              </div>
+            </div>
+
+            <div className="p-3 bg-[#FEF2F2] border border-[#FCA5A5] rounded-xl flex items-start gap-2 text-xs text-[#DC2626]">
+              <AlertTriangle className="w-4 h-4 shrink-0 mt-0.5" />
+              <span>
+                This action is irreversible and will permanently remove this payroll record from the database.
+              </span>
+            </div>
+
+            <div className="flex items-center justify-end gap-2.5 pt-2 border-t border-[#F1F5F9]">
+              <button
+                type="button"
+                disabled={isDeleting}
+                onClick={() => setDeleteConfirmItem(null)}
+                className="px-4 py-2 rounded-xl border border-[#E2E8F0] text-xs font-semibold text-[#64748B] hover:text-[#0F172A] hover:bg-[#F8FAFC] transition cursor-pointer disabled:opacity-50"
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                disabled={isDeleting}
+                onClick={handleConfirmDelete}
+                className="px-4 py-2 rounded-xl bg-[#DC2626] hover:bg-[#B91C1C] text-white text-xs font-bold transition shadow-xs flex items-center gap-1.5 cursor-pointer disabled:opacity-50"
+              >
+                {isDeleting ? (
+                  <>
+                    <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                    <span>Deleting Record...</span>
+                  </>
+                ) : (
+                  <>
+                    <Trash2 className="w-3.5 h-3.5" />
+                    <span>Delete Permanently</span>
+                  </>
+                )}
+              </button>
+            </div>
+          </div>
+        </div>
       )}
     </>
   );

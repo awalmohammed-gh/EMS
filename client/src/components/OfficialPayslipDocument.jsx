@@ -280,13 +280,41 @@ export const OfficialPayslipDocument = ({
               {data.absentDaysDeduction > 0 && (
                 <tr className="bg-white">
                   <td className="px-5 py-3 text-slate-800 text-sm pl-8">
-                    Absenteeism Penalty (GH₵10/day)
+                    <span className="font-semibold block">Absenteeism Penalty</span>
+                    <span className="text-xs text-slate-500 block">
+                      {data.absentDays} unexcused absent day{data.absentDays !== 1 ? "s" : ""} @ {formatCurrency(data.absentRate)}/day
+                    </span>
                   </td>
                   <td className="px-5 py-3 text-right font-bold text-[#dc2626] text-sm">
                     -{formatCurrency(data.absentDaysDeduction)}
                   </td>
                 </tr>
               )}
+              {data.latenessDeduction > 0 && (
+                <tr className="bg-white">
+                  <td className="px-5 py-3 text-slate-800 text-sm pl-8">
+                    <span className="font-semibold block">Lateness Penalties</span>
+                    <span className="text-xs text-slate-500 block">
+                      {data.lateDaysCount} late check-in{data.lateDaysCount !== 1 ? "s" : ""} • {data.totalLateMinutes} total late mins (Tiered matrix)
+                    </span>
+                  </td>
+                  <td className="px-5 py-3 text-right font-bold text-[#dc2626] text-sm">
+                    -{formatCurrency(data.latenessDeduction)}
+                  </td>
+                </tr>
+              )}
+              {data.tierBreakdown && data.tierBreakdown.length > 0 &&
+                data.tierBreakdown.map((tierItem, tIdx) => (
+                  <tr key={`doc-tier-${tIdx}`} className="bg-slate-50/60">
+                    <td className="px-5 py-2 text-slate-600 text-xs pl-12">
+                      • {tierItem.date || "Date"}: {tierItem.minutesLate || 0} mins late ({tierItem.tier || "Tier fine"})
+                    </td>
+                    <td className="px-5 py-2 text-right font-medium text-[#dc2626] text-xs">
+                      -{formatCurrency(tierItem.penalty || tierItem.total || 0)}
+                    </td>
+                  </tr>
+                ))
+              }
               {data.dynamicDeductions.length > 0 ? (
                 data.dynamicDeductions.map((item, idx) => (
                   <tr key={idx} className="bg-white">
@@ -298,17 +326,16 @@ export const OfficialPayslipDocument = ({
                     </td>
                   </tr>
                 ))
-              ) : (
-                !data.absentDaysDeduction && (
-                  <tr className="bg-white">
-                    <td
-                      colSpan={2}
-                      className="px-5 py-3 text-slate-400 italic text-xs pl-8"
-                    >
-                      No deductions or absenteeism penalties recorded
-                    </td>
-                  </tr>
-                )
+              ) : null}
+              {data.totalDeductions === 0 && (
+                <tr className="bg-white">
+                  <td
+                    colSpan={2}
+                    className="px-5 py-3 text-slate-400 italic text-xs pl-8"
+                  >
+                    No deductions or attendance penalties recorded (100% on-time & present)
+                  </td>
+                </tr>
               )}
             </tbody>
 

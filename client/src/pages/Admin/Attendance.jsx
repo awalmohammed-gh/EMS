@@ -20,6 +20,9 @@ import {
   Edit3,
   BarChart3,
   Fingerprint,
+  Trash2,
+  Loader2,
+  AlertTriangle,
 } from "lucide-react";
 import { useManagement } from "../../context/ManagementContextProvider";
 import Loading from "../../ui/Loading";
@@ -29,6 +32,7 @@ import {
   getAllAttendance,
   updateAttendanceRecord,
   createManualAttendanceRecord,
+  deleteAttendanceRecord,
   allEmployees,
   allLeaves,
 } from "../../apis/fontApis";
@@ -67,8 +71,47 @@ const Attendance = () => {
     notes: "",
   });
   const [isSavingAdjustment, setIsSavingAdjustment] = useState(false);
+  const [deleteConfirmAttendance, setDeleteConfirmAttendance] = useState(null);
+  const [isDeletingAttendance, setIsDeletingAttendance] = useState(false);
 
   const { showToast, setShowToast } = useManagement();
+
+  // Handle Delete Attendance Record
+  const handleConfirmDeleteAttendance = async () => {
+    if (!deleteConfirmAttendance) return;
+    const targetId = deleteConfirmAttendance._id || deleteConfirmAttendance.id;
+    if (!targetId) return;
+
+    try {
+      setIsDeletingAttendance(true);
+      const res = await deleteAttendanceRecord(targetId);
+      if (res?.data?.success || res?.status === 200) {
+        setAttendance((prev) =>
+          prev.filter(
+            (a) => String(a._id) !== String(targetId) && String(a.id) !== String(targetId)
+          )
+        );
+        setShowToast({
+          show: true,
+          message: "Attendance record permanently deleted from the database.",
+          type: "success",
+        });
+        setDeleteConfirmAttendance(null);
+        if (showDetailsModal) setShowDetailsModal(false);
+      } else {
+        throw new Error(res?.data?.message || "Failed to delete attendance record");
+      }
+    } catch (err) {
+      console.error("Error deleting attendance record:", err);
+      setShowToast({
+        show: true,
+        message: err.response?.data?.message || err.message || "Failed to delete attendance record.",
+        type: "error",
+      });
+    } finally {
+      setIsDeletingAttendance(false);
+    }
+  };
 
   // Fetch live attendance directly from database
   const fetchAttendance = async (silent = false) => {
@@ -953,7 +996,7 @@ const Attendance = () => {
                                 setSelectedAttendance(item);
                                 setShowDetailsModal(true);
                               }}
-                              className="inline-flex items-center gap-1 px-2.5 py-1.5 text-xs font-medium text-[#002185] hover:text-[#ff5500] hover:bg-[#F8FAFC] rounded-lg transition-colors"
+                              className="inline-flex items-center gap-1 px-2.5 py-1.5 text-xs font-medium text-[#002185] hover:text-[#ff5500] hover:bg-[#F8FAFC] rounded-lg transition-colors cursor-pointer"
                               title="View full record log"
                             >
                               <Eye className="h-3.5 w-3.5" />
@@ -962,10 +1005,21 @@ const Attendance = () => {
 
                             <button
                               onClick={() => handleOpenEditModal(item)}
-                              className="inline-flex items-center gap-1 px-2 py-1.5 text-xs font-medium text-[#64748B] hover:text-[#002185] hover:bg-[#F8FAFC] rounded-lg transition-colors"
+                              className="inline-flex items-center gap-1 px-2 py-1.5 text-xs font-medium text-[#64748B] hover:text-[#002185] hover:bg-[#F8FAFC] rounded-lg transition-colors cursor-pointer"
                               title="Admin adjustment override"
                             >
                               <Edit3 className="h-3.5 w-3.5" />
+                            </button>
+
+                            <button
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                setDeleteConfirmAttendance(item);
+                              }}
+                              className="inline-flex items-center gap-1 px-2 py-1.5 text-xs font-medium text-slate-400 hover:text-rose-600 hover:bg-rose-50 rounded-lg transition-colors cursor-pointer"
+                              title="Delete attendance record"
+                            >
+                              <Trash2 className="h-3.5 w-3.5" />
                             </button>
                           </div>
                         </td>
@@ -1163,22 +1217,34 @@ const Attendance = () => {
               )}
             </div>
 
-            <div className="flex items-center justify-end gap-2.5 px-6 py-4 border-t border-[#E2E8F0] bg-[#F8FAFC]">
+            <div className="flex items-center justify-between gap-2.5 px-6 py-4 border-t border-[#E2E8F0] bg-[#F8FAFC]">
               <button
                 onClick={() => {
-                  setShowDetailsModal(false);
-                  handleOpenEditModal(selectedAttendance);
+                  setDeleteConfirmAttendance(selectedAttendance);
                 }}
-                className="px-4 py-2 text-xs font-semibold text-[#002185] bg-[#FFFFFF] border border-[#E2E8F0] rounded-xl hover:bg-[#F8FAFC] transition-colors"
+                className="px-3 py-2 text-xs font-semibold text-rose-600 hover:bg-rose-50 border border-rose-200 rounded-xl transition-colors flex items-center gap-1.5 cursor-pointer"
+                title="Delete this record"
               >
-                Adjust Record
+                <Trash2 className="w-3.5 h-3.5" />
+                <span>Delete Record</span>
               </button>
-              <button
-                onClick={() => setShowDetailsModal(false)}
-                className="px-4 py-2 text-xs font-semibold text-white bg-[#002185] hover:bg-[#ff5500] rounded-xl transition-colors"
-              >
-                Close
-              </button>
+              <div className="flex items-center gap-2">
+                <button
+                  onClick={() => {
+                    setShowDetailsModal(false);
+                    handleOpenEditModal(selectedAttendance);
+                  }}
+                  className="px-4 py-2 text-xs font-semibold text-[#002185] bg-[#FFFFFF] border border-[#E2E8F0] rounded-xl hover:bg-[#F8FAFC] transition-colors cursor-pointer"
+                >
+                  Adjust Record
+                </button>
+                <button
+                  onClick={() => setShowDetailsModal(false)}
+                  className="px-4 py-2 text-xs font-semibold text-white bg-[#002185] hover:bg-[#ff5500] rounded-xl transition-colors cursor-pointer"
+                >
+                  Close
+                </button>
+              </div>
             </div>
           </div>
         </div>
@@ -1366,6 +1432,79 @@ const Attendance = () => {
           });
         }}
       />
+
+      {/* Delete Attendance Confirmation Modal */}
+      {deleteConfirmAttendance && (
+        <div
+          id="delete-attendance-modal-overlay"
+          className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-xs animate-in fade-in duration-200"
+          onClick={() => !isDeletingAttendance && setDeleteConfirmAttendance(null)}
+        >
+          <div
+            id="delete-attendance-modal-container"
+            className="bg-white rounded-2xl max-w-md w-full p-6 border border-[#E2E8F0] shadow-2xl space-y-4 animate-in zoom-in-95 duration-200"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="flex items-start gap-4">
+              <div className="w-12 h-12 rounded-2xl bg-rose-50 border border-rose-100 text-[#DC2626] flex items-center justify-center shrink-0">
+                <Trash2 className="w-6 h-6" />
+              </div>
+              <div className="space-y-1">
+                <h3 className="text-base font-bold text-[#002185]">
+                  Delete Attendance Record?
+                </h3>
+                <p className="text-xs text-[#64748B]">
+                  Are you sure you want to permanently delete the attendance log for{" "}
+                  <span className="font-bold text-[#0F172A]">
+                    {getEmployeeName(deleteConfirmAttendance)}
+                  </span>{" "}
+                  on{" "}
+                  <span className="font-semibold text-[#002185]">
+                    {formatDate(deleteConfirmAttendance?.date)}
+                  </span>
+                  ?
+                </p>
+              </div>
+            </div>
+
+            <div className="p-3 bg-[#FEF2F2] border border-[#FCA5A5] rounded-xl flex items-start gap-2 text-xs text-[#DC2626]">
+              <AlertTriangle className="w-4 h-4 shrink-0 mt-0.5" />
+              <span>
+                This action is irreversible and will permanently remove this attendance record from the database.
+              </span>
+            </div>
+
+            <div className="flex items-center justify-end gap-2.5 pt-2 border-t border-[#F1F5F9]">
+              <button
+                type="button"
+                disabled={isDeletingAttendance}
+                onClick={() => setDeleteConfirmAttendance(null)}
+                className="px-4 py-2 rounded-xl border border-[#E2E8F0] text-xs font-semibold text-[#64748B] hover:text-[#0F172A] hover:bg-[#F8FAFC] transition cursor-pointer disabled:opacity-50"
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                disabled={isDeletingAttendance}
+                onClick={handleConfirmDeleteAttendance}
+                className="px-4 py-2 rounded-xl bg-[#DC2626] hover:bg-[#B91C1C] text-white text-xs font-bold transition shadow-xs flex items-center gap-1.5 cursor-pointer disabled:opacity-50"
+              >
+                {isDeletingAttendance ? (
+                  <>
+                    <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                    <span>Deleting Record...</span>
+                  </>
+                ) : (
+                  <>
+                    <Trash2 className="w-3.5 h-3.5" />
+                    <span>Delete Permanently</span>
+                  </>
+                )}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Toast Notification */}
       {showToast?.show && (

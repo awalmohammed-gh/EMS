@@ -7,6 +7,7 @@ import { Payroll } from "../models/payrollModel.js";
 import { Attendance } from "../models/attendanceModel.js";
 import { Leave } from "../models/leaveModel.js";
 import { Settings } from "../models/adminSettingsModel.js";
+import { Notification } from "../models/notificationModel.js";
 
 // Function for creating admin account (Admin-only restricted)
 export const createAdminAccount = async (req, res) => {
@@ -274,6 +275,7 @@ export const updateAdminProfile = async (req, res) => {
       if (phone !== undefined) dbAdmin.phone = phone;
       if (avatar || profile_image_url) {
         dbAdmin.profile_image_url = avatar || profile_image_url;
+        dbAdmin.avatar = avatar || profile_image_url;
       }
       if (position) dbAdmin.position = position;
       if (department) dbAdmin.department = department;
@@ -509,6 +511,29 @@ export const deleteEmployee = async (req, res) => {
       });
     }
 
+    // Cascade clean up all associated records for this employee
+    try {
+      const empObjectId = deletedEmployee._id;
+      const empCode = deletedEmployee.employeeId;
+
+      await Promise.all([
+        Attendance.deleteMany({ employee: empObjectId }).catch(() => {}),
+        Leave.deleteMany({ employee: empObjectId }).catch(() => {}),
+        Payroll.deleteMany({ employee: empObjectId }).catch(() => {}),
+        Notification.deleteMany({
+          $or: [
+            { recipient_id: String(empObjectId) },
+            { recipient_id: empCode },
+            { recipient: empObjectId },
+            { "metadata.employeeId": empCode },
+            { "metadata.employee_id": String(empObjectId) },
+          ],
+        }).catch(() => {}),
+      ]);
+    } catch (cascadeErr) {
+      console.warn("Cascade deletion warning for employee:", cascadeErr.message);
+    }
+
     return res.status(200).json({
       success: true,
       message: `Employee "${deletedEmployee.fullName || deletedEmployee.employeeId}" has been permanently removed from the database.`,
@@ -523,6 +548,7 @@ export const deleteEmployee = async (req, res) => {
     });
   }
 };
+
 
 // Live Backend Aggregation Endpoint: GET /api/admin/dashboard-stats
 export const getDashboardStats = async (req, res) => {

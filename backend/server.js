@@ -1,10 +1,13 @@
 import "dotenv/config";
 import express from "express";
+import http from "http";
 import cors from "cors";
 import cookieParser from "cookie-parser";
 import path from "path";
+import fs from "fs";
 import { fileURLToPath } from "url";
 import { connectMongodb } from "./config/mongodb.js";
+import { initSocket } from "./utils/socket.js";
 import adminRouter from "./routes/adminRoutes.js";
 import employeeRouter from "./routes/employeeRoutes.js";
 import payrollRouter from "./routes/payrollRoutes.js";
@@ -15,12 +18,17 @@ import settingsRouter from "./routes/adminSettingsRoute.js";
 import notificationRouter from "./routes/notificationRoutes.js";
 import authRouter from "./routes/authRoutes.js";
 import announcementRouter from "./routes/announcementRoutes.js";
+import userRouter from "./routes/userRoutes.js";
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
 // app config
 const app = express();
+const server = http.createServer(app);
+const io = initSocket(server);
+app.set("io", io);
+
 const port = process.env.PORT || 3000;
 
 // middleware
@@ -34,20 +42,35 @@ app.use(
       "Authorization",
       "x-admin-token",
       "x-employee-token",
+      "x-admin-id",
+      "x-employee-id",
+      "x-role",
       "X-Requested-With",
       "Accept",
     ],
   })
 );
 app.use(cookieParser());
-app.use(express.json({ strict: false }));
-app.use(express.urlencoded({ extended: true }));
+app.use(express.json({ limit: "25mb", strict: false }));
+app.use(express.urlencoded({ limit: "25mb", extended: true }));
+
+// Ensure upload directory exists
+const uploadsStaticDir = path.resolve(__dirname, "uploads");
+const avatarsStaticDir = path.resolve(__dirname, "uploads/avatars");
+if (!fs.existsSync(avatarsStaticDir)) {
+  fs.mkdirSync(avatarsStaticDir, { recursive: true });
+}
+
+// Serve uploaded profile images and avatars
+app.use("/uploads", express.static(uploadsStaticDir));
 
 // database connection (with graceful offline fallback)
 await connectMongodb();
 
 // api endpoints
 app.use("/api/auth", authRouter);
+app.use("/api/users", userRouter);
+app.use("/api/user", userRouter);
 app.use("/api/employee", employeeRouter);
 app.use("/api/employees", employeeRouter);
 app.use("/api/admin", adminRouter);
@@ -93,6 +116,6 @@ app.use((req, res, next) => {
   next();
 });
 
-app.listen(port, "0.0.0.0", () => {
+server.listen(port, "0.0.0.0", () => {
   console.log(`Server listening on http://0.0.0.0:${port}`);
 });

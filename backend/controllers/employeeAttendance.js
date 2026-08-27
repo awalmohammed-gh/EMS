@@ -64,10 +64,20 @@ export const clockIn = async (req, res) => {
     const key = `${employeeId}_${today}`;
     const now = new Date();
 
-    // Determine status (8:30 AM threshold for standard workday)
-    const startTime = new Date();
-    startTime.setHours(8, 30, 0, 0);
-    const status = now <= startTime ? "On Time" : "Late";
+    // Fetch active CompanySettings for work start time and lateness penalty matrix
+    let settingsDoc = null;
+    try {
+      settingsDoc = await CompanySettings.getSingletonSettings();
+    } catch (err) {
+      settingsDoc = {};
+    }
+
+    const workStartTime = settingsDoc?.workStartTime || "08:00";
+    const penaltyEval = evaluateLatenessPenalty(now, workStartTime, settingsDoc || {});
+    const delayMinutes = penaltyEval.minutesLate || 0;
+    const latePenalty = penaltyEval.penalty || 0;
+    const penaltyTier = penaltyEval.tier || "";
+    const status = delayMinutes > 0 ? "Late" : "On Time";
 
     // 1. Check MongoDB for existing record today
     let existingDoc = null;
@@ -105,6 +115,10 @@ export const clockIn = async (req, res) => {
               clockIn: now,
               status: status,
               workHours: 0,
+              delayMinutes: delayMinutes,
+              lateMinutes: delayMinutes,
+              latePenalty: latePenalty,
+              penaltyTier: penaltyTier,
             },
             $setOnInsert: {
               employee: employeeId,
@@ -133,6 +147,10 @@ export const clockIn = async (req, res) => {
         clockOut: null,
         status,
         workHours: 0,
+        delayMinutes,
+        lateMinutes: delayMinutes,
+        latePenalty,
+        penaltyTier,
       };
     }
 
@@ -570,8 +588,36 @@ export const updateAttendanceRecord = async (req, res) => {
       });
     }
 
+    let settingsDoc = null;
+    try {
+      settingsDoc = await CompanySettings.getSingletonSettings();
+    } catch {
+      settingsDoc = {};
+    }
+
     const updateFields = {};
-    if (clockIn !== undefined) updateFields.clockIn = clockIn ? new Date(clockIn) : null;
+    if (clockIn !== undefined) {
+      updateFields.clockIn = clockIn ? new Date(clockIn) : null;
+      if (clockIn) {
+        const penaltyEval = evaluateLatenessPenalty(
+          new Date(clockIn),
+          settingsDoc?.workStartTime || "08:00",
+          settingsDoc || {}
+        );
+        updateFields.delayMinutes = penaltyEval.minutesLate || 0;
+        updateFields.lateMinutes = penaltyEval.minutesLate || 0;
+        updateFields.latePenalty = penaltyEval.penalty || 0;
+        updateFields.penaltyTier = penaltyEval.tier || "";
+        if (status === undefined) {
+          updateFields.status = penaltyEval.minutesLate > 0 ? "Late" : "On Time";
+        }
+      } else {
+        updateFields.delayMinutes = 0;
+        updateFields.lateMinutes = 0;
+        updateFields.latePenalty = 0;
+        updateFields.penaltyTier = "";
+      }
+    }
     if (clockOut !== undefined) updateFields.clockOut = clockOut ? new Date(clockOut) : null;
     if (status !== undefined) updateFields.status = status;
     if (notes !== undefined) updateFields.notes = notes;
@@ -674,15 +720,45 @@ export const createManualAttendance = async (req, res) => {
       calculatedHours = Number((diff / (1000 * 60 * 60)).toFixed(2));
     }
 
+    let settingsDoc = null;
+    try {
+      settingsDoc = await CompanySettings.getSingletonSettings();
+    } catch {
+      settingsDoc = {};
+    }
+
+    let delayMinutes = 0;
+    let latePenalty = 0;
+    let penaltyTier = "";
+    let finalStatus = status || "Present";
+
+    if (clockIn) {
+      const penaltyEval = evaluateLatenessPenalty(
+        new Date(clockIn),
+        settingsDoc?.workStartTime || "08:00",
+        settingsDoc || {}
+      );
+      delayMinutes = penaltyEval.minutesLate || 0;
+      latePenalty = penaltyEval.penalty || 0;
+      penaltyTier = penaltyEval.tier || "";
+      if (!status) {
+        finalStatus = delayMinutes > 0 ? "Late" : "On Time";
+      }
+    }
+
     const record = await Attendance.findOneAndUpdate(
       { employee: resolvedEmpId, date },
       {
         $set: {
           clockIn: clockIn ? new Date(clockIn) : null,
           clockOut: clockOut ? new Date(clockOut) : null,
-          status: status || "Present",
+          status: finalStatus,
           notes: notes || "Admin manual entry",
           workHours: calculatedHours,
+          delayMinutes,
+          lateMinutes: delayMinutes,
+          latePenalty,
+          penaltyTier,
         },
       },
       { upsert: true, new: true, setDefaultsOnInsert: true }
@@ -966,4 +1042,62 @@ export const bulkUploadBiometricAttendance = async (req, res) => {
     });
   }
 };
+
+// Delete attendance record permanently from database
+export const deleteAttendanceRecord = async (req, res) => {
+  try {
+    const { id } = req.params;
+
+    if (!id) {
+      return res.status(400).json({
+        success: false,
+        message: "Attendance record ID parameter is required.",
+      });
+    }
+
+    // Remove from in-memory reactive store
+    if (liveAttendanceStore instanceof Map) {
+      for (const [key, record] of liveAttendanceStore.entries()) {
+        if (
+          record &&
+          (String(record._id) === String(id) || String(record.id) === String(id))
+        ) {
+          liveAttendanceStore.delete(key);
+        }
+      }
+    } else if (Array.isArray(liveAttendanceStore)) {
+      const storeIdx = liveAttendanceStore.findIndex(
+        (a) => String(a._id) === String(id) || String(a.id) === String(id)
+      );
+      if (storeIdx !== -1) {
+        liveAttendanceStore.splice(storeIdx, 1);
+      }
+    }
+
+    // Remove from MongoDB Database
+    let deletedDoc = null;
+    try {
+      if (isValidObjectId(id)) {
+        deletedDoc = await Attendance.findByIdAndDelete(id);
+      } else {
+        deletedDoc = await Attendance.findOneAndDelete({ _id: id });
+      }
+    } catch (dbErr) {
+      console.warn("DB delete attendance error:", dbErr.message);
+    }
+
+    return res.status(200).json({
+      success: true,
+      message: "Attendance record permanently deleted from database.",
+      id,
+    });
+  } catch (error) {
+    console.error("Error deleting attendance record:", error);
+    return res.status(500).json({
+      success: false,
+      message: error.message || "Failed to delete attendance record.",
+    });
+  }
+};
+
 

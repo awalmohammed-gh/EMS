@@ -4,7 +4,6 @@ const notificationSchema = new mongoose.Schema(
   {
     recipient: {
       type: mongoose.Schema.Types.Mixed,
-      required: true,
       index: true,
     },
     // Supporting recipient_id for legacy/flexible compatibility
@@ -17,6 +16,18 @@ const notificationSchema = new mongoose.Schema(
       enum: ["admin", "employee"],
       default: "employee",
       index: true,
+    },
+    sender_id: {
+      type: String,
+      default: "system",
+    },
+    sender_role: {
+      type: String,
+      default: "system",
+    },
+    sender_name: {
+      type: String,
+      default: "System",
     },
     title: {
       type: String,
@@ -39,6 +50,10 @@ const notificationSchema = new mongoose.Schema(
     priority: {
       type: String,
       default: "normal",
+    },
+    metadata: {
+      type: mongoose.Schema.Types.Mixed,
+      default: {},
     },
     isRead: {
       type: Boolean,

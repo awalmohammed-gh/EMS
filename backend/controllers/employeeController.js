@@ -32,6 +32,10 @@ export const employeeDetails = async (req, res) => {
       employmentType: emp.employmentType || "Full-time",
       employmentDate: emp.employmentDate || new Date(),
       role: emp.role || "employee",
+      profilePicture: emp.profilePicture || emp.profile_picture || emp.avatar || emp.profile_image_url || "",
+      profile_picture: emp.profile_picture || emp.profilePicture || emp.avatar || emp.profile_image_url || "",
+      avatar: emp.avatar || emp.profilePicture || emp.profile_image_url || "",
+      profile_image_url: emp.profile_image_url || emp.avatar || emp.profilePicture || "",
       isActive: typeof emp.isActive === "boolean" ? emp.isActive : true,
       status: emp.status || (emp.isActive !== false ? "Active" : "Inactive"),
       location: emp.location || "Accra Head Office",
@@ -163,7 +167,7 @@ export const getCurrentLoggedInEmployee = async (req, res) => {
 export const updateCurrentEmployee = async (req, res) => {
   try {
     const rawId = req.employee?.id || req.employee?._id;
-    const { fullName, phone, avatar } = req.body;
+    const { fullName, phone, avatar, profilePicture, profile_picture, profile_image_url } = req.body;
     let filter = {};
 
     if (isValidObjectId(rawId)) {
@@ -186,7 +190,13 @@ export const updateCurrentEmployee = async (req, res) => {
     const updates = {};
     if (fullName) updates.fullName = fullName.trim();
     if (phone) updates.phone = phone.trim();
-    if (avatar) updates.avatar = avatar;
+    const newAvatar = avatar || profilePicture || profile_picture || profile_image_url;
+    if (newAvatar !== undefined) {
+      updates.avatar = newAvatar;
+      updates.profilePicture = newAvatar;
+      updates.profile_picture = newAvatar;
+      updates.profile_image_url = newAvatar;
+    }
 
     const updated = await Employee.findOneAndUpdate(filter, { $set: updates }, { new: true })
       .select("-password")

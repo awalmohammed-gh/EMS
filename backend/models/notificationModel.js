@@ -38,29 +38,18 @@ const notificationSchema = new mongoose.Schema(
     },
     type: {
       type: String,
-      enum: [
-        "leave_request",
-        "leave_approved",
-        "leave_rejected",
-        "payroll_published",
-        "payroll_updated",
-        "profile_updated",
-        "attendance_alert",
-        "announcement",
-        "system_update",
-        "custom",
-      ],
       default: "system_update",
+      trim: true,
     },
     category: {
       type: String,
-      enum: ["leave", "payroll", "profile", "attendance", "announcement", "system"],
       default: "system",
+      trim: true,
     },
     priority: {
       type: String,
-      enum: ["high", "medium", "low", "info"],
       default: "medium",
+      trim: true,
     },
     action_url: {
       type: String,

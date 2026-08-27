@@ -1,7 +1,9 @@
 import mongoose from "mongoose";
 import { Leave } from "../models/leaveModel.js";
 import { Employee } from "../models/employeeModel.js";
+import { Notification } from "../models/notificationModel.js";
 import { createNotificationRecord } from "./notificationController.js";
+import { emitToEmployee, emitToAll } from "../utils/socket.js";
 
 const isValidObjectId = (id) =>
   id &&
@@ -16,12 +18,12 @@ export const liveLeaveStore = [];
 const resolveEmployeeInfo = async (employeeIdOrObj) => {
   try {
     if (employeeIdOrObj && typeof employeeIdOrObj === "string" && isValidObjectId(employeeIdOrObj)) {
-      const emp = await Employee.findById(employeeIdOrObj).select("fullName employeeId department position email").lean();
+      const emp = await Employee.findById(employeeIdOrObj).select("fullName employeeId department position email usedLeaveDays totalLeaveDays leaveBalance").lean();
       if (emp) return emp;
     } else if (employeeIdOrObj) {
       const emp = await Employee.findOne({
         $or: [{ employeeId: employeeIdOrObj }, { email: employeeIdOrObj }],
-      }).select("fullName employeeId department position email").lean();
+      }).select("fullName employeeId department position email usedLeaveDays totalLeaveDays leaveBalance").lean();
       if (emp) return emp;
     }
   } catch (err) {
@@ -118,6 +120,10 @@ export const applyLeave = async (req, res) => {
     // Prepend to in-memory reactive store
     liveLeaveStore.unshift(savedLeave);
 
+    // Broadcast real-time event to Admin & Socket
+    emitToAll("leave_created", savedLeave);
+    emitToAll("leave_status_changed", savedLeave);
+
     // Generate real-time notification for Admin
     try {
       await createNotificationRecord({
@@ -167,7 +173,7 @@ export const getAllLeaves = async (req, res) => {
     let leaves = [];
     try {
       const dbLeaves = await Leave.find({})
-        .populate("employee", "fullName department position employeeId")
+        .populate("employee", "fullName department position employeeId email usedLeaveDays totalLeaveDays leaveBalance")
         .sort({ createdAt: -1 })
         .lean();
 
@@ -201,54 +207,159 @@ export const getAllLeaves = async (req, res) => {
   }
 };
 
-// Employee status for admin to check reject or approve
+// Manager / Admin Leave Approval API (PATCH /api/admin/leave/:id/status)
 export const updateLeaveStatus = async (req, res) => {
   try {
     const { id } = req.params;
-    const { status, adminRemark } = req.body;
+    const rawStatus = req.body.status || "";
+    const adminNotes = req.body.adminNotes || req.body.adminRemark || req.body.comments || req.body.rejectionReason || "";
+    const reviewerName = req.admin?.fullName || req.user?.fullName || "Management";
+    const reviewerId = String(req.admin?.id || req.admin?._id || req.user?._id || req.user?.id || "admin");
 
-    if (!["Approved", "Rejected", "Pending"].includes(status)) {
+    if (!rawStatus) {
+      return res.status(400).json({
+        success: false,
+        message: "Leave status is required.",
+      });
+    }
+
+    const normalizedLower = rawStatus.toLowerCase();
+    let normalizedStatus = "Pending";
+    if (normalizedLower === "approved") {
+      normalizedStatus = "Approved";
+    } else if (normalizedLower === "rejected") {
+      normalizedStatus = "Rejected";
+    } else if (normalizedLower === "pending") {
+      normalizedStatus = "Pending";
+    } else {
       return res.status(400).json({
         success: false,
         message: "Status must be Approved, Rejected, or Pending.",
       });
     }
 
-    // Update in live store
-    const storeItem = liveLeaveStore.find((l) => String(l._id) === String(id));
+    const reviewedAtDate = new Date();
+    let targetEmployeeId = null;
+    let targetLeaveRecord = null;
+    let daysCount = 1;
+    let startDateFormatted = "";
+    let endDateFormatted = "";
+    let leaveTypeFormatted = "Leave";
+
+    // 1. Update in live store
+    const storeItem = liveLeaveStore.find((l) => String(l._id) === String(id) || String(l.id) === String(id));
     if (storeItem) {
-      storeItem.status = status;
-      if (adminRemark) storeItem.adminRemark = adminRemark;
-      storeItem.approvedAt = new Date().toISOString();
+      storeItem.status = normalizedStatus;
+      storeItem.adminNotes = adminNotes;
+      storeItem.adminRemark = adminNotes;
+      storeItem.approvedBy = reviewerName;
+      storeItem.reviewedBy = reviewerName;
+      storeItem.reviewedAt = reviewedAtDate.toISOString();
+      storeItem.approvedAt = reviewedAtDate.toISOString();
+      storeItem.updatedAt = reviewedAtDate.toISOString();
+      targetLeaveRecord = storeItem;
+      targetEmployeeId = storeItem.employee?._id || storeItem.employee?.employeeId || storeItem.employee?.id;
+      daysCount = Number(storeItem.totalDays) || 1;
+      startDateFormatted = typeof storeItem.startDate === "string" ? storeItem.startDate.split("T")[0] : new Date(storeItem.startDate).toLocaleDateString();
+      endDateFormatted = typeof storeItem.endDate === "string" ? storeItem.endDate.split("T")[0] : new Date(storeItem.endDate).toLocaleDateString();
+      leaveTypeFormatted = storeItem.leaveType || "Leave";
     }
 
-    // Generate real-time notification for Employee
+    // 2. Update in MongoDB Database
+    let dbUpdatedLeave = null;
     try {
-      const recipientEmpId = storeItem?.employee?._id || storeItem?.employee?.employeeId;
-      const leaveType = storeItem?.leaveType || "Leave";
-      const days = storeItem?.totalDays || 1;
-      const remarkText = adminRemark ? ` Reason/Remark: "${adminRemark}"` : "";
+      if (isValidObjectId(id)) {
+        const leaveDoc = await Leave.findById(id).populate("employee");
+        if (leaveDoc) {
+          leaveDoc.status = normalizedStatus;
+          leaveDoc.adminNotes = adminNotes;
+          leaveDoc.adminRemark = adminNotes;
+          leaveDoc.approvedBy = reviewerName;
+          leaveDoc.reviewedAt = reviewedAtDate;
+          leaveDoc.approvedAt = reviewedAtDate;
+          await leaveDoc.save();
+
+          dbUpdatedLeave = leaveDoc.toObject ? leaveDoc.toObject() : leaveDoc;
+          targetLeaveRecord = dbUpdatedLeave;
+          targetEmployeeId = leaveDoc.employee?._id || leaveDoc.employee;
+          daysCount = Number(leaveDoc.totalDays) || 1;
+          startDateFormatted = leaveDoc.startDate ? new Date(leaveDoc.startDate).toISOString().split("T")[0] : "";
+          endDateFormatted = leaveDoc.endDate ? new Date(leaveDoc.endDate).toISOString().split("T")[0] : "";
+          leaveTypeFormatted = leaveDoc.leaveType || "Leave";
+
+          // Update Employee Leave Balance: Deduct approved working days from employee's leave balance
+          if (normalizedStatus === "Approved" && targetEmployeeId) {
+            try {
+              const empDoc = await Employee.findById(targetEmployeeId);
+              if (empDoc) {
+                const prevUsed = Number(empDoc.usedLeaveDays) || 0;
+                const totalAllowed = Number(empDoc.totalLeaveDays) || 20;
+                empDoc.usedLeaveDays = prevUsed + daysCount;
+                empDoc.leaveBalance = Math.max(0, totalAllowed - empDoc.usedLeaveDays);
+                await empDoc.save();
+              }
+            } catch (empErr) {
+              console.warn("Could not update employee leave balance in DB:", empErr.message);
+            }
+          }
+        }
+      }
+    } catch (dbErr) {
+      console.warn("DB fallback for updateLeaveStatus:", dbErr.message);
+    }
+
+    const finalLeave = targetLeaveRecord || {
+      _id: id,
+      status: normalizedStatus,
+      adminNotes,
+      adminRemark: adminNotes,
+      approvedBy: reviewerName,
+      reviewedAt: reviewedAtDate.toISOString(),
+      approvedAt: reviewedAtDate.toISOString(),
+    };
+
+    // Format start & end date strings if missing
+    if (!startDateFormatted && finalLeave.startDate) {
+      startDateFormatted = new Date(finalLeave.startDate).toISOString().split("T")[0];
+    }
+    if (!endDateFormatted && finalLeave.endDate) {
+      endDateFormatted = new Date(finalLeave.endDate).toISOString().split("T")[0];
+    }
+
+    // 3. Real-Time Notification Trigger
+    let notifRecord = null;
+    try {
+      const recipientEmpId = String(targetEmployeeId || (finalLeave.employee?._id || finalLeave.employee?.employeeId || ""));
+      const isApproved = normalizedStatus === "Approved";
+      const notifTitle = isApproved ? "Leave Request Approved" : "Leave Request Rejected";
+      const notifMsg = isApproved
+        ? `Your leave request for ${startDateFormatted || "selected period"} to ${endDateFormatted || "selected period"} has been approved by management.`
+        : `Your leave request for ${startDateFormatted || "selected period"} to ${endDateFormatted || "selected period"} was rejected by management.${adminNotes ? ` Note: "${adminNotes}"` : ""}`;
 
       if (recipientEmpId) {
-        await createNotificationRecord({
-          recipient_id: String(recipientEmpId),
+        notifRecord = await createNotificationRecord({
+          recipient_id: recipientEmpId,
           recipient_role: "employee",
-          sender_id: "admin",
+          sender_id: reviewerId,
           sender_role: "admin",
-          sender_name: "Human Resources / Admin",
-          title: status === "Approved" ? `Leave Request Approved` : `Leave Request ${status}`,
-          message: `Your ${days}-day ${leaveType} request has been ${status.toLowerCase()} by management.${remarkText}`,
-          type: status === "Approved" ? "leave_approved" : "leave_rejected",
+          sender_name: reviewerName,
+          title: notifTitle,
+          message: notifMsg,
+          type: "leave_status_update",
           category: "leave",
-          priority: status === "Approved" ? "high" : "medium",
+          priority: isApproved ? "high" : "medium",
           action_url: "/employee/dashboard/leave",
           action_label: "View Leave Status",
           metadata: {
             leaveId: id,
-            status,
-            adminRemark,
-            leaveType,
-            totalDays: days,
+            status: normalizedStatus,
+            adminNotes,
+            leaveType: leaveTypeFormatted,
+            totalDays: daysCount,
+            startDate: startDateFormatted,
+            endDate: endDateFormatted,
+            reviewedBy: reviewerName,
+            reviewedAt: reviewedAtDate.toISOString(),
           },
         });
       }
@@ -256,44 +367,55 @@ export const updateLeaveStatus = async (req, res) => {
       console.warn("Could not dispatch employee leave status notification:", notifErr.message);
     }
 
-    // Update in MongoDB
+    // 4. Emit WebSocket Event (io.to(employeeId).emit('leave_status_changed', updatedLeave))
     try {
-      if (mongoose.Types.ObjectId.isValid(id) && String(new mongoose.Types.ObjectId(id)) === String(id)) {
-        const leave = await Leave.findById(id);
-        if (leave) {
-          leave.status = status;
-          if (adminRemark) leave.adminRemark = adminRemark;
-          leave.approvedAt = new Date();
-          await leave.save();
-          return res.json({
-            success: true,
-            message: `Leave status updated to ${status} successfully`,
-            leave,
-          });
-        }
+      const empIdStr = String(targetEmployeeId || (finalLeave.employee?._id || finalLeave.employee?.employeeId || ""));
+      emitToEmployee(empIdStr, "leave_status_changed", {
+        leaveId: id,
+        leave: finalLeave,
+        status: normalizedStatus,
+        adminNotes,
+        reviewedBy: reviewerName,
+        reviewedAt: reviewedAtDate.toISOString(),
+        notification: notifRecord,
+      });
+
+      emitToAll("leave_status_changed", {
+        leaveId: id,
+        leave: finalLeave,
+        status: normalizedStatus,
+        adminNotes,
+        reviewedBy: reviewerName,
+        reviewedAt: reviewedAtDate.toISOString(),
+        notification: notifRecord,
+      });
+
+      if (notifRecord) {
+        emitToEmployee(empIdStr, "notification", notifRecord);
       }
-    } catch (dbErr) {
-      console.warn("DB fallback for updateLeaveStatus:", dbErr.message);
+    } catch (wsErr) {
+      console.warn("WebSocket leave event error:", wsErr.message);
     }
 
-    res.json({
+    return res.status(200).json({
       success: true,
-      message: `Leave status updated to ${status} successfully`,
-      leave: storeItem || { _id: id, status, adminRemark },
+      message: `Leave request ${normalizedStatus.toLowerCase()} successfully`,
+      leave: finalLeave,
+      data: finalLeave,
     });
   } catch (error) {
     console.error("Error in updateLeaveStatus:", error);
-    res.status(500).json({
+    return res.status(500).json({
       success: false,
-      message: error.message,
+      message: error.message || "Failed to update leave status.",
     });
   }
 };
 
-// Get employee leaves for currently authenticated employee
+// Get employee leaves for currently authenticated employee (GET /api/employee/leave-requests)
 export const getEmployeeLeave = async (req, res) => {
   try {
-    const rawEmployeeId = req.employee?.id || req.employee?._id;
+    const rawEmployeeId = req.employee?.id || req.employee?._id || req.user?.id || req.user?._id;
     let validObjectId = null;
 
     if (isValidObjectId(rawEmployeeId)) {
@@ -302,7 +424,7 @@ export const getEmployeeLeave = async (req, res) => {
       try {
         const emp = await Employee.findOne({
           $or: [{ employeeId: rawEmployeeId }, { email: rawEmployeeId }],
-        }).select("_id").lean();
+        }).select("_id usedLeaveDays totalLeaveDays leaveBalance").lean();
         if (emp) validObjectId = emp._id.toString();
       } catch (err) {
         console.warn("DB employee lookup in getEmployeeLeave:", err.message);
@@ -316,7 +438,7 @@ export const getEmployeeLeave = async (req, res) => {
         const dbLeaves = await Leave.find({
           employee: validObjectId,
         })
-          .populate("employee", "fullName employeeId department position")
+          .populate("employee", "fullName employeeId department position usedLeaveDays totalLeaveDays leaveBalance")
           .sort({ createdAt: -1 })
           .lean();
 
@@ -335,7 +457,9 @@ export const getEmployeeLeave = async (req, res) => {
         const isMatch =
           String(liveItem.employee?._id) === String(validObjectId) ||
           String(liveItem.employee?._id) === String(rawEmployeeId) ||
-          liveItem.employee?.employeeId === rawEmployeeId;
+          liveItem.employee?.employeeId === rawEmployeeId ||
+          String(liveItem.employee) === String(validObjectId) ||
+          String(liveItem.employee) === String(rawEmployeeId);
 
         if (isMatch && !existingIds.has(String(liveItem._id))) {
           leaves.unshift(liveItem);
@@ -343,19 +467,122 @@ export const getEmployeeLeave = async (req, res) => {
       });
     }
 
-    res.status(200).json({
+    // Get current employee leave balance data
+    let employeeData = null;
+    if (validObjectId) {
+      try {
+        employeeData = await Employee.findById(validObjectId).select("usedLeaveDays totalLeaveDays leaveBalance fullName").lean();
+      } catch {
+        // ignore
+      }
+    }
+
+    return res.status(200).json({
       success: true,
       leaves,
+      data: leaves,
+      total: leaves.length,
+      employeeBalance: {
+        totalDays: employeeData?.totalLeaveDays || 20,
+        usedDays: employeeData?.usedLeaveDays || 0,
+        availableDays: employeeData?.leaveBalance !== undefined ? employeeData.leaveBalance : Math.max(0, (employeeData?.totalLeaveDays || 20) - (employeeData?.usedLeaveDays || 0)),
+      },
     });
   } catch (error) {
-    res.status(500).json({
+    console.error("Error in getEmployeeLeave:", error);
+    return res.status(500).json({
       success: false,
       message: error.message,
     });
   }
 };
 
-// Aggregation route: GET /api/leave/employee-stats
+// Delete leave request permanently from database
+export const deleteLeave = async (req, res) => {
+  try {
+    const { id } = req.params;
+
+    if (!id) {
+      return res.status(400).json({
+        success: false,
+        message: "Leave request ID is required.",
+      });
+    }
+
+    const isAdmin = Boolean(
+      req.admin ||
+      req.user?.role === "admin" ||
+      req.employee?.role === "admin"
+    );
+    const requestingEmpId = req.employee?._id || req.employee?.id || req.user?._id || req.user?.id;
+
+    // 1. Remove from in-memory reactive store
+    const storeIdx = liveLeaveStore.findIndex(
+      (l) => String(l._id) === String(id) || String(l.id) === String(id)
+    );
+    if (storeIdx !== -1) {
+      const liveItem = liveLeaveStore[storeIdx];
+      // Permission check if employee
+      if (!isAdmin && requestingEmpId) {
+        const itemEmpId = String(liveItem.employee?._id || liveItem.employee?.id || liveItem.employee?.employeeId || "");
+        if (itemEmpId !== String(requestingEmpId)) {
+          return res.status(403).json({
+            success: false,
+            message: "You are not authorized to delete this leave request.",
+          });
+        }
+      }
+      liveLeaveStore.splice(storeIdx, 1);
+    }
+
+    // 2. Remove from MongoDB Database
+    let deletedDoc = null;
+    try {
+      if (isValidObjectId(id)) {
+        if (isAdmin) {
+          deletedDoc = await Leave.findByIdAndDelete(id);
+        } else if (requestingEmpId && isValidObjectId(requestingEmpId)) {
+          deletedDoc = await Leave.findOneAndDelete({
+            _id: id,
+            employee: requestingEmpId,
+          });
+        } else {
+          deletedDoc = await Leave.findByIdAndDelete(id);
+        }
+      } else {
+        deletedDoc = await Leave.findOneAndDelete({ _id: id });
+      }
+    } catch (dbErr) {
+      console.warn("DB delete leave error:", dbErr.message);
+    }
+
+    // 3. Cascade delete any notifications referencing this leave request
+    try {
+      await Notification.deleteMany({
+        $or: [
+          { "metadata.leaveId": id },
+          { "metadata.leave_id": id },
+          { "metadata.leaveId": String(id) },
+        ],
+      }).catch(() => {});
+    } catch (notifErr) {
+      console.warn("Cascade notification delete error for leave:", notifErr.message);
+    }
+
+    return res.status(200).json({
+      success: true,
+      message: "Leave request permanently deleted from database.",
+      id,
+    });
+  } catch (error) {
+    console.error("Error in deleteLeave:", error);
+    return res.status(500).json({
+      success: false,
+      message: error.message || "Failed to delete leave request.",
+    });
+  }
+};
+
 // Filter strictly by the authenticated user's ID (req.user._id or req.employee.id)
 export const getLeaveEmployeeStats = async (req, res) => {
   try {

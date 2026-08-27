@@ -2,6 +2,7 @@ import jwt from "jsonwebtoken";
 import bcrypt from "bcryptjs";
 import mongoose from "mongoose";
 import { Employee } from "../models/employeeModel.js";
+import { User } from "../models/userModel.js";
 import { Admin } from "../models/Admin.js";
 
 // Create Employee / Staff User Account with Role Assignment (Admin-Restricted)
@@ -23,15 +24,19 @@ export const createEmployeeAccount = async (req, res) => {
     const assignedRole = (role || "employee").toLowerCase().trim();
     const cleanEmail = (email || "").toLowerCase().trim();
     const name = (fullName || "").trim();
+    const plainPassword = (password || "").trim();
     const id = (employeeId || `EMP00${Math.floor(Math.random() * 900) + 100}`).trim();
-    const parsedBaseSalary = baseSalary !== undefined && baseSalary !== "" && !isNaN(Number(baseSalary)) ? Math.max(0, Number(baseSalary)) : 0;
+    const parsedBaseSalary =
+      baseSalary !== undefined && baseSalary !== "" && !isNaN(Number(baseSalary))
+        ? Math.max(0, Number(baseSalary))
+        : 0;
 
     // Validate input
     if (
       !id ||
       !name ||
       !cleanEmail ||
-      !password ||
+      !plainPassword ||
       !phone ||
       !department ||
       !position
@@ -42,7 +47,7 @@ export const createEmployeeAccount = async (req, res) => {
       });
     }
 
-    if (password.length < 6) {
+    if (plainPassword.length < 6) {
       return res.status(400).json({
         success: false,
         message: "Password must be at least 6 characters long.",
@@ -66,18 +71,15 @@ export const createEmployeeAccount = async (req, res) => {
       });
     }
 
-    // Hash password
-    const hashedPassword = await bcrypt.hash(password, 10);
-
-    // Create real MongoDB employee record with default active status and assigned role
+    // Pass plainPassword to model; schema pre-save hook handles hashing safely without double-hashing
     const employee = await Employee.create({
       employeeId: id,
       fullName: name,
       email: cleanEmail,
-      password: hashedPassword,
-      phone,
-      department,
-      position,
+      password: plainPassword,
+      phone: phone.trim(),
+      department: department.trim(),
+      position: position.trim(),
       employmentDate: employmentDate ? new Date(employmentDate) : new Date(),
       baseSalary: parsedBaseSalary,
       role: assignedRole,
@@ -85,14 +87,33 @@ export const createEmployeeAccount = async (req, res) => {
       isActive: true,
     });
 
+    // Also sync to User collection
+    try {
+      await User.findOneAndUpdate(
+        { email: cleanEmail },
+        {
+          fullName: name,
+          email: cleanEmail,
+          password: plainPassword,
+          role: assignedRole,
+          status: "active",
+          isActive: true,
+        },
+        { upsert: true, new: true, setDefaultsOnInsert: true }
+      );
+    } catch (userSyncErr) {
+      console.warn("User collection sync in createEmployeeAccount:", userSyncErr.message);
+    }
+
     // If an administrator role is assigned, also ensure Admin account entry exists
     if (assignedRole === "admin") {
       const existingAdmin = await Admin.findOne({ email: cleanEmail });
       if (!existingAdmin) {
+        const adminHash = await bcrypt.hash(plainPassword, 10);
         await Admin.create({
           full_name: name,
           email: cleanEmail,
-          password_hash: hashedPassword,
+          password_hash: adminHash,
           role: "admin",
         });
       }
@@ -105,6 +126,13 @@ export const createEmployeeAccount = async (req, res) => {
       success: true,
       message: `Account for ${name} (${assignedRole.toUpperCase()}) created successfully.`,
       employee: safeEmployee,
+      credentials: {
+        email: cleanEmail,
+        employeeId: id,
+        temporaryPassword: plainPassword,
+        role: assignedRole,
+        fullName: name,
+      },
     });
   } catch (error) {
     console.error("Error creating employee account:", error);
@@ -127,17 +155,28 @@ export const employeeLogin = async (req, res) => {
       });
     }
 
+    const cleanInput = email.trim();
+    const cleanEmail = cleanInput.toLowerCase();
+    const cleanPassword = password.trim();
     const jwtSecret = process.env.JWT_SECRET || "default_jwt_secret_key_12345";
 
-    // Query real employee document from MongoDB
-    const employee = await Employee.findOne({
-      $or: [{ email: email.toLowerCase().trim() }, { employeeId: email.trim() }],
-    });
+    // Query real employee document from MongoDB (explicitly selecting password)
+    let employee = await Employee.findOne({
+      $or: [{ email: cleanEmail }, { employeeId: cleanInput }],
+    }).select("+password");
 
+    // Fallback search in User collection
     if (!employee) {
+      const user = await User.findOne({ email: cleanEmail }).select("+password");
+      if (user) {
+        employee = await Employee.findOne({ email: cleanEmail }).select("+password");
+      }
+    }
+
+    if (!employee || !employee.password) {
       return res.status(401).json({
         success: false,
-        message: "Invalid email/employee ID or password.",
+        message: "Invalid credentials",
       });
     }
 
@@ -151,25 +190,27 @@ export const employeeLogin = async (req, res) => {
     if (employee.status === "inactive" || employee.isActive === false) {
       return res.status(403).json({
         success: false,
-        message: "Your account has been deactivated. Please contact HR.",
+        message: "Your account has been deactivated. Please contact HR or Administrator.",
       });
     }
 
-    const isPasswordMatch = await bcrypt.compare(password, employee.password);
+    const isPasswordMatch = await bcrypt.compare(cleanPassword, employee.password);
 
     if (!isPasswordMatch) {
       return res.status(401).json({
         success: false,
-        message: "Invalid email or password.",
+        message: "Invalid credentials",
       });
     }
 
     // Generate JWT
     const token = jwt.sign(
       {
-        id: employee._id,
+        id: employee._id.toString(),
         employeeId: employee.employeeId,
+        email: employee.email,
         role: employee.role || "employee",
+        fullName: employee.fullName,
       },
       jwtSecret,
       {
@@ -209,7 +250,7 @@ export const employeeLogout = async (req, res) => {
     res.clearCookie("employeeToken", {
       httpOnly: true,
       secure: process.env.NODE_ENV === "production",
-      sameSite: process.env.NODE_ENV === "production" ? "None" : "Lax",
+      sameSite: process.env.NODE_ENV === "production" ? "none" : "lax",
     });
 
     res.status(200).json({
@@ -225,6 +266,7 @@ export const employeeLogout = async (req, res) => {
     });
   }
 };
+
 
 
 

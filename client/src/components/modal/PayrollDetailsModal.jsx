@@ -16,6 +16,7 @@ import {
   Percent,
   Check,
   ShieldCheck,
+  Loader2,
 } from "lucide-react";
 import { getPayslipDetails, updatePayrollStatus, deletePayroll } from "../../apis/fontApis";
 import { useManagement } from "../../context/ManagementContextProvider";
@@ -28,6 +29,7 @@ export const PayrollDetailsModal = ({ payrollId, initialData, onClose, onRefresh
   const [error, setError] = useState(null);
   const [isUpdatingStatus, setIsUpdatingStatus] = useState(false);
   const [isDeleting, setIsDeleting] = useState(false);
+  const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
   const [activeTab, setActiveTab] = useState("breakdown"); // 'breakdown' | 'attendance' | 'print'
   const { setShowToast } = useManagement();
 
@@ -98,21 +100,17 @@ export const PayrollDetailsModal = ({ payrollId, initialData, onClose, onRefresh
     }
   };
 
-  // Handle Delete
-  const handleDelete = async () => {
+  // Handle Delete Confirmation
+  const handleConfirmDelete = async () => {
     const targetId = payroll?._id || payroll?.id || payroll?.payslipNumber || payrollId;
     if (!targetId) return;
-
-    if (!window.confirm("Are you sure you want to delete this payroll record?")) {
-      return;
-    }
 
     try {
       setIsDeleting(true);
       const res = await deletePayroll(targetId);
-      if (res.data?.success) {
+      if (res?.data?.success || res?.status === 200) {
         setShowToast({
-          message: "Payroll record deleted successfully.",
+          message: "Payroll record permanently deleted from the database.",
           type: "success",
           show: true,
         });
@@ -120,7 +118,7 @@ export const PayrollDetailsModal = ({ payrollId, initialData, onClose, onRefresh
         onClose();
       } else {
         setShowToast({
-          message: res.data?.message || "Failed to delete record",
+          message: res?.data?.message || "Failed to delete record",
           type: "error",
           show: true,
         });
@@ -128,12 +126,13 @@ export const PayrollDetailsModal = ({ payrollId, initialData, onClose, onRefresh
     } catch (err) {
       console.error(err);
       setShowToast({
-        message: err.message || "Failed to delete record",
+        message: err.response?.data?.message || err.message || "Failed to delete record",
         type: "error",
         show: true,
       });
     } finally {
       setIsDeleting(false);
+      setShowDeleteConfirm(false);
     }
   };
 
@@ -616,13 +615,13 @@ export const PayrollDetailsModal = ({ payrollId, initialData, onClose, onRefresh
             <button
               id="btn-modal-delete-payroll"
               type="button"
-              onClick={handleDelete}
+              onClick={() => setShowDeleteConfirm(true)}
               disabled={isDeleting}
-              className="px-3 py-2 border border-[#FECACA] text-[#DC2626] hover:bg-[#FEF2F2] rounded-xl text-xs font-semibold flex items-center gap-1.5 transition cursor-pointer"
+              className="px-3 py-2 border border-[#FECACA] text-[#DC2626] hover:bg-[#FEF2F2] rounded-xl text-xs font-semibold flex items-center gap-1.5 transition cursor-pointer disabled:opacity-50"
               title="Delete payroll entry"
             >
               <Trash2 className="w-3.5 h-3.5" />
-              <span className="hidden sm:inline">Delete</span>
+              <span className="hidden sm:inline">Delete Record</span>
             </button>
 
             <button
@@ -655,6 +654,46 @@ export const PayrollDetailsModal = ({ payrollId, initialData, onClose, onRefresh
             </button>
           </div>
         </div>
+
+        {/* Delete Confirmation In-Modal Card */}
+        {showDeleteConfirm && (
+          <div className="p-4 bg-rose-50 border-t border-rose-200 flex flex-col sm:flex-row items-center justify-between gap-3 animate-in fade-in">
+            <div className="flex items-center gap-2 text-xs text-[#DC2626]">
+              <AlertTriangle className="w-4 h-4 shrink-0" />
+              <span>
+                Permanently delete payslip for <strong>{employee?.fullName || "this employee"}</strong> ({payroll?.payMonth || "current period"})? This cannot be undone.
+              </span>
+            </div>
+            <div className="flex items-center gap-2 shrink-0">
+              <button
+                type="button"
+                disabled={isDeleting}
+                onClick={() => setShowDeleteConfirm(false)}
+                className="px-3 py-1.5 rounded-lg border border-[#E2E8F0] bg-white text-xs font-semibold text-[#64748B] hover:text-[#0F172A] cursor-pointer"
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                disabled={isDeleting}
+                onClick={handleConfirmDelete}
+                className="px-3 py-1.5 rounded-lg bg-[#DC2626] hover:bg-[#B91C1C] text-white text-xs font-bold transition flex items-center gap-1.5 cursor-pointer disabled:opacity-50"
+              >
+                {isDeleting ? (
+                  <>
+                    <Loader2 className="w-3 h-3 animate-spin" />
+                    <span>Deleting...</span>
+                  </>
+                ) : (
+                  <>
+                    <Trash2 className="w-3 h-3" />
+                    <span>Confirm Delete</span>
+                  </>
+                )}
+              </button>
+            </div>
+          </div>
+        )}
       </div>
     </div>
   );

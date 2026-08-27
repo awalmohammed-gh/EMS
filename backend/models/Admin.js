@@ -27,6 +27,22 @@ const adminSchema = new mongoose.Schema(
       type: String,
       default: "",
     },
+    avatar: {
+      type: String,
+      default: "",
+    },
+    phone: {
+      type: String,
+      default: "",
+    },
+    position: {
+      type: String,
+      default: "",
+    },
+    department: {
+      type: String,
+      default: "",
+    },
   },
   {
     timestamps: true,
@@ -47,14 +63,12 @@ const adminSchema = new mongoose.Schema(
   }
 );
 
-// Virtual aliases for compatibility with frontend and other modules
-adminSchema.virtual("fullName").get(function () {
-  return this.full_name;
-});
-
-adminSchema.virtual("avatar").get(function () {
-  return this.profile_image_url;
-});
+// Virtual alias for compatibility with frontend if needed
+if (!adminSchema.paths.fullName) {
+  adminSchema.virtual("fullName").get(function () {
+    return this.full_name;
+  });
+}
 
 export const Admin = mongoose.models.Admin || mongoose.model("Admin", adminSchema);
 export default Admin;
