@@ -24,7 +24,14 @@ import {
   deleteAnnouncement,
   togglePinAnnouncement,
 } from "../controllers/announcementController.js";
-import { deletePayroll, getMonthlyPayrollRun, generatePayroll, calculateMonthlyPayrollSummary } from "../controllers/payrollController.js";
+import {
+  deletePayroll,
+  getMonthlyPayrollRun,
+  generatePayroll,
+  calculateMonthlyPayrollSummary,
+  allPayslips,
+  getPayrollCycles,
+} from "../controllers/payrollController.js";
 import { employeeDetails } from "../controllers/employeeController.js";
 import { deleteLeave, updateLeaveStatus, getAllLeaves } from "../controllers/leaveController.js";
 import { deleteAttendanceRecord } from "../controllers/employeeAttendance.js";
@@ -63,6 +70,9 @@ adminRouter.get("/audit-logs", verifyAdmin, getAuditLogs);
 adminRouter.get("/settings/audit-logs", verifyAdmin, getAuditLogs);
 
 // Live Admin Dashboard Stats and Payroll Summaries
+adminRouter.get("/payroll/records", verifyAdmin, allPayslips);
+adminRouter.get("/payroll/payslips", verifyAdmin, allPayslips);
+adminRouter.get("/payroll/cycles", verifyAdmin, getPayrollCycles);
 adminRouter.post("/payroll/generate", verifyAdmin, generatePayroll);
 adminRouter.post("/payroll-generate", verifyAdmin, generatePayroll);
 adminRouter.get("/dashboard-stats", verifyAdmin, getDashboardStats);

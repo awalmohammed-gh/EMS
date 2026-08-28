@@ -162,7 +162,7 @@ export const getPenaltyImpactAnalytics = async (req, res) => {
 
         headcount = uniqueEmpMap.size || activeEmployees.length;
         const totalBase = activeEmployees.reduce((sum, e) => sum + (Number(e.salary || e.basicSalary || e.baseSalary || 0)), 0);
-        grossPayroll = totalBase > 0 ? totalBase : (headcount * 4500);
+        grossPayroll = totalBase > 0 ? totalBase : 0;
       } else {
         // Zero-state: Strictly 0 values when no records exist
         absenceDeductions = 0;

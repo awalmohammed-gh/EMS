@@ -25,78 +25,13 @@ export const PayrollCycleHistory = ({ onSelectCycle = null }) => {
     try {
       const res = await getPayrollCycles();
       if (res?.data?.success) {
-        setCycles(res.data.cycles || []);
+        setCycles(res.data.cycles || res.data.data || []);
       } else {
-        // Fallback seed
-        setCycles([
-          {
-            month: "August 2026",
-            status: "Completed",
-            generatedDate: "2026-08-25",
-            lastUpdated: "2026-08-25T10:00:00Z",
-            employeeCount: 15,
-            grossExpenditure: 68500,
-            netExpenditure: 62450,
-            totalAbsenceDeductions: 840,
-            totalLatenessPenalties: 620,
-            totalAttendancePenalties: 1460,
-            totalPenaltiesWaived: 150,
-            totalAllowances: 5400,
-            paidCount: 15,
-            pendingCount: 0,
-          },
-          {
-            month: "July 2026",
-            status: "Completed",
-            generatedDate: "2026-07-25",
-            lastUpdated: "2026-07-25T10:00:00Z",
-            employeeCount: 15,
-            grossExpenditure: 66200,
-            netExpenditure: 60420,
-            totalAbsenceDeductions: 960,
-            totalLatenessPenalties: 580,
-            totalAttendancePenalties: 1540,
-            totalPenaltiesWaived: 110,
-            totalAllowances: 5200,
-            paidCount: 15,
-            pendingCount: 0,
-          },
-          {
-            month: "June 2026",
-            status: "Completed",
-            generatedDate: "2026-06-25",
-            lastUpdated: "2026-06-25T10:00:00Z",
-            employeeCount: 15,
-            grossExpenditure: 64500,
-            netExpenditure: 58980,
-            totalAbsenceDeductions: 890,
-            totalLatenessPenalties: 630,
-            totalAttendancePenalties: 1520,
-            totalPenaltiesWaived: 70,
-            totalAllowances: 5000,
-            paidCount: 15,
-            pendingCount: 0,
-          },
-          {
-            month: "May 2026",
-            status: "Completed",
-            generatedDate: "2026-05-25",
-            lastUpdated: "2026-05-25T10:00:00Z",
-            employeeCount: 14,
-            grossExpenditure: 61800,
-            netExpenditure: 56700,
-            totalAbsenceDeductions: 780,
-            totalLatenessPenalties: 510,
-            totalAttendancePenalties: 1290,
-            totalPenaltiesWaived: 140,
-            totalAllowances: 4800,
-            paidCount: 14,
-            pendingCount: 0,
-          },
-        ]);
+        setCycles([]);
       }
     } catch (err) {
       console.warn("Failed to fetch payroll cycles:", err);
+      setCycles([]);
     } finally {
       setLoading(false);
     }

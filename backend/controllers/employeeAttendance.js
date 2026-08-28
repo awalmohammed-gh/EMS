@@ -37,7 +37,7 @@ const resolveEmployeeObjectId = async (idOrKey) => {
 // Clock in handler - Automatic real-time recording
 export const clockIn = async (req, res) => {
   try {
-    let employeeId = req.employee?.id || req.employee?._id;
+    let employeeId = req.user?._id || req.user?.id || req.employee?.id || req.employee?._id || req.body?.employeeId;
     const resolvedId = await resolveEmployeeObjectId(employeeId);
     if (resolvedId) employeeId = resolvedId;
 
@@ -53,16 +53,21 @@ export const clockIn = async (req, res) => {
     if (isValidObjectId(employeeId)) {
       try {
         employeeDoc = await Employee.findById(employeeId)
-          .select("fullName employeeId department position email avatar profile_picture")
+          .select("fullName employeeId department position email avatar profile_picture baseSalary salary")
           .lean();
       } catch (err) {
         console.warn("Could not fetch employee details for clockIn:", err.message);
       }
     }
 
+    const employeeCode = employeeDoc?.employeeId || req.employee?.employeeId || "";
     const today = new Date().toISOString().split("T")[0];
     const key = `${employeeId}_${today}`;
-    const now = new Date();
+
+    // Parse check-in timestamp (from body or server clock)
+    const checkInTimestamp = req.body?.clockInTime || req.body?.timestamp || req.body?.clockIn || new Date();
+    const now = new Date(checkInTimestamp);
+    const validNow = !isNaN(now.getTime()) ? now : new Date();
 
     // Fetch active CompanySettings for work start time and lateness penalty matrix
     let settingsDoc = null;
@@ -73,10 +78,10 @@ export const clockIn = async (req, res) => {
     }
 
     const workStartTime = settingsDoc?.workStartTime || "08:00";
-    const penaltyEval = evaluateLatenessPenalty(now, workStartTime, settingsDoc || {});
-    const delayMinutes = penaltyEval.minutesLate || 0;
-    const latePenalty = penaltyEval.penalty || 0;
-    const penaltyTier = penaltyEval.tier || "";
+    const penaltyEval = evaluateLatenessPenalty(validNow, workStartTime, settingsDoc || {});
+    const delayMinutes = penaltyEval.delayMinutes ?? penaltyEval.minutesLate ?? 0;
+    const latePenalty = penaltyEval.latePenalty ?? penaltyEval.penalty ?? 0;
+    const penaltyTier = penaltyEval.tier || (delayMinutes > 0 ? "Late" : "On Time");
     const status = delayMinutes > 0 ? "Late" : "On Time";
 
     // 1. Check MongoDB for existing record today
@@ -92,15 +97,20 @@ export const clockIn = async (req, res) => {
       }
     }
 
-    if (existingDoc && existingDoc.clockIn) {
+    if (existingDoc && (existingDoc.clockIn || existingDoc.clockInTime)) {
       liveAttendanceStore.set(key, existingDoc);
       return res.status(200).json({
         success: true,
         alreadyClockedIn: true,
         message: "You have already clocked in today.",
         attendance: existingDoc,
+        status: existingDoc.lateMinutes > 0 || (existingDoc.status || "").toLowerCase() === "late" ? "late" : "on-time",
+        delayMinutes: existingDoc.delayMinutes ?? existingDoc.lateMinutes ?? 0,
+        lateMinutes: existingDoc.lateMinutes ?? existingDoc.delayMinutes ?? 0,
+        latePenalty: existingDoc.latePenalty || 0,
+        penaltyTier: existingDoc.penaltyTier || "",
         hasClockedIn: true,
-        hasClockedOut: Boolean(existingDoc.clockOut),
+        hasClockedOut: Boolean(existingDoc.clockOut || existingDoc.clockOutTime),
       });
     }
 
@@ -112,7 +122,9 @@ export const clockIn = async (req, res) => {
           { employee: employeeId, date: today },
           {
             $set: {
-              clockIn: now,
+              employeeId: employeeCode,
+              clockIn: validNow,
+              clockInTime: validNow,
               status: status,
               workHours: 0,
               delayMinutes: delayMinutes,
@@ -124,6 +136,7 @@ export const clockIn = async (req, res) => {
               employee: employeeId,
               date: today,
               clockOut: null,
+              clockOutTime: null,
               notes: "",
             },
           },
@@ -142,9 +155,12 @@ export const clockIn = async (req, res) => {
       savedRecord = {
         _id: "att_" + Date.now(),
         employee: employeeDoc || { _id: employeeId, fullName: req.employee?.fullName || "Employee" },
+        employeeId: employeeCode,
         date: today,
-        clockIn: now.toISOString(),
+        clockIn: validNow.toISOString(),
+        clockInTime: validNow.toISOString(),
         clockOut: null,
+        clockOutTime: null,
         status,
         workHours: 0,
         delayMinutes,
@@ -161,7 +177,7 @@ export const clockIn = async (req, res) => {
     try {
       const empName = employeeDoc?.fullName || req.employee?.fullName || "Employee";
       const empCode = employeeDoc?.employeeId || req.employee?.employeeId || "Staff";
-      const timeStr = now.toLocaleTimeString("en-US", { hour: "2-digit", minute: "2-digit" });
+      const timeStr = validNow.toLocaleTimeString("en-US", { hour: "2-digit", minute: "2-digit" });
 
       await createNotificationRecord({
         recipient_id: "admin",
@@ -181,27 +197,13 @@ export const clockIn = async (req, res) => {
           employeeName: empName,
           date: today,
           status,
-          clockIn: now.toISOString(),
+          clockIn: validNow.toISOString(),
         },
       });
+
       // If late, also push an automated in-app notification directly to the employee
       if (status === "Late") {
         try {
-          let settingsDoc = null;
-          try {
-            settingsDoc = await CompanySettings.getSingletonSettings();
-          } catch {
-            settingsDoc = {};
-          }
-          const penaltyEval = evaluateLatenessPenalty(
-            now,
-            settingsDoc?.workStartTime || "08:00",
-            settingsDoc || {}
-          );
-          const penaltyAmount = penaltyEval.penalty || 0;
-          const minutesLate = penaltyEval.minutesLate || 0;
-          const tierName = penaltyEval.tier || "Late";
-
           await createNotificationRecord({
             recipient_id: String(employeeId),
             recipient_role: "employee",
@@ -209,9 +211,9 @@ export const clockIn = async (req, res) => {
             sender_role: "system",
             sender_name: "Attendance System",
             title: "⚠️ Lateness Penalty Alert: Upcoming Payslip Impact",
-            message: `You clocked in late today at ${timeStr} (${minutesLate} min late). A penalty of GH₵${penaltyAmount.toFixed(
+            message: `You clocked in late today at ${timeStr} (${delayMinutes} min late). A penalty of GH₵${Number(latePenalty).toFixed(
               2
-            )} (${tierName}) will be deducted from your upcoming payslip.`,
+            )} (${penaltyTier}) will be deducted from your upcoming payslip.`,
             type: "penalty_alert",
             category: "payroll",
             priority: "high",
@@ -219,10 +221,10 @@ export const clockIn = async (req, res) => {
             action_label: "View Payslip Impact",
             metadata: {
               date: today,
-              clockIn: now.toISOString(),
-              minutesLate,
-              penaltyAmount,
-              tier: tierName,
+              clockIn: validNow.toISOString(),
+              minutesLate: delayMinutes,
+              penaltyAmount: latePenalty,
+              tier: penaltyTier,
             },
           });
         } catch (empNotifErr) {
@@ -238,6 +240,11 @@ export const clockIn = async (req, res) => {
       alreadyClockedIn: false,
       message: `Clock in successful (${status})!`,
       attendance: savedRecord,
+      status: delayMinutes > 0 ? "late" : "on-time",
+      delayMinutes,
+      lateMinutes: delayMinutes,
+      latePenalty,
+      penaltyTier,
       hasClockedIn: true,
       hasClockedOut: false,
     });
@@ -579,7 +586,21 @@ export const getTodayAttendance = async (req, res) => {
 export const updateAttendanceRecord = async (req, res) => {
   try {
     const { id } = req.params;
-    const { clockIn, clockOut, status, notes, workHours } = req.body;
+    const {
+      clockIn,
+      clockOut,
+      status,
+      notes,
+      workHours,
+      delayMinutes,
+      lateMinutes,
+      latePenalty,
+      penaltyTier,
+      isExcused,
+      excuseReason,
+      flaggedForReview,
+      flagReason,
+    } = req.body;
 
     if (!isValidObjectId(id)) {
       return res.status(400).json({
@@ -618,6 +639,17 @@ export const updateAttendanceRecord = async (req, res) => {
         updateFields.penaltyTier = "";
       }
     }
+
+    // Explicit overrides
+    if (delayMinutes !== undefined) updateFields.delayMinutes = Number(delayMinutes);
+    if (lateMinutes !== undefined) updateFields.lateMinutes = Number(lateMinutes);
+    if (latePenalty !== undefined) updateFields.latePenalty = Number(latePenalty);
+    if (penaltyTier !== undefined) updateFields.penaltyTier = penaltyTier;
+    if (isExcused !== undefined) updateFields.isExcused = Boolean(isExcused);
+    if (excuseReason !== undefined) updateFields.excuseReason = excuseReason;
+    if (flaggedForReview !== undefined) updateFields.flaggedForReview = Boolean(flaggedForReview);
+    if (flagReason !== undefined) updateFields.flagReason = flagReason;
+
     if (clockOut !== undefined) updateFields.clockOut = clockOut ? new Date(clockOut) : null;
     if (status !== undefined) updateFields.status = status;
     if (notes !== undefined) updateFields.notes = notes;
@@ -682,6 +714,251 @@ export const updateAttendanceRecord = async (req, res) => {
     return res.status(200).json({
       success: true,
       message: "Attendance record updated successfully.",
+      attendance: updated,
+    });
+  } catch (error) {
+    return res.status(500).json({
+      success: false,
+      message: error.message,
+    });
+  }
+};
+
+// Manager Quick Action: Excuse lateness entry
+export const excuseAttendanceRecord = async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { reason, status = "Present" } = req.body;
+
+    if (!isValidObjectId(id)) {
+      return res.status(400).json({
+        success: false,
+        message: "Invalid attendance record ID.",
+      });
+    }
+
+    const existing = await Attendance.findById(id);
+    if (!existing) {
+      return res.status(404).json({
+        success: false,
+        message: "Attendance record not found.",
+      });
+    }
+
+    const adminName = req.admin?.fullName || req.user?.fullName || "Manager";
+    const excuseNote = `[Excused by ${adminName}: ${reason || "Lateness penalty waived"}]`;
+    const updatedNote = existing.notes ? `${existing.notes} | ${excuseNote}` : excuseNote;
+
+    const updateFields = {
+      isExcused: true,
+      excuseReason: reason || "Lateness penalty waived by management",
+      excusedBy: adminName,
+      excusedAt: new Date(),
+      latePenalty: 0,
+      penaltyTier: "Excused",
+      status: status || "Present",
+      notes: updatedNote,
+    };
+
+    const updated = await Attendance.findByIdAndUpdate(id, { $set: updateFields }, { new: true })
+      .populate("employee", "fullName department position employeeId email avatar")
+      .lean();
+
+    // Push notification to employee
+    try {
+      const targetEmpId = String(updated.employee?._id || updated.employee || "");
+      await createNotificationRecord({
+        recipient_id: targetEmpId,
+        recipient_role: "employee",
+        sender_id: String(req.admin?.id || "admin"),
+        sender_role: "admin",
+        sender_name: adminName,
+        title: "🎉 Lateness Penalty Excused",
+        message: `Your lateness on ${updated.date} has been excused by ${adminName}. The payroll penalty has been waived. Reason: "${reason || "Management discretion"}"`,
+        type: "general",
+        category: "attendance",
+        priority: "medium",
+        action_url: "/employee/dashboard/attendance",
+        action_label: "View Attendance Log",
+        metadata: { date: updated.date, isExcused: true, reason },
+      });
+    } catch (notifErr) {
+      console.warn("Failed to push excuse notification:", notifErr.message);
+    }
+
+    return res.status(200).json({
+      success: true,
+      message: `Lateness for ${updated.employee?.fullName || "employee"} on ${updated.date} has been excused.`,
+      attendance: updated,
+    });
+  } catch (error) {
+    return res.status(500).json({
+      success: false,
+      message: error.message,
+    });
+  }
+};
+
+// Manager Quick Action: Flag attendance record for HR/disciplinary review
+export const flagAttendanceRecord = async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { reason, severity = "warning" } = req.body;
+
+    if (!isValidObjectId(id)) {
+      return res.status(400).json({
+        success: false,
+        message: "Invalid attendance record ID.",
+      });
+    }
+
+    const existing = await Attendance.findById(id);
+    if (!existing) {
+      return res.status(404).json({
+        success: false,
+        message: "Attendance record not found.",
+      });
+    }
+
+    const adminName = req.admin?.fullName || req.user?.fullName || "Manager";
+    const flagNote = `[Flagged by ${adminName}: ${reason || "Flagged for HR/Manager review"}]`;
+    const updatedNote = existing.notes ? `${existing.notes} | ${flagNote}` : flagNote;
+
+    const updateFields = {
+      flaggedForReview: true,
+      flagReason: reason || "Flagged for HR/Manager Review",
+      flaggedBy: adminName,
+      flaggedAt: new Date(),
+      notes: updatedNote,
+    };
+
+    const updated = await Attendance.findByIdAndUpdate(id, { $set: updateFields }, { new: true })
+      .populate("employee", "fullName department position employeeId email avatar")
+      .lean();
+
+    // Push notification to employee
+    try {
+      const targetEmpId = String(updated.employee?._id || updated.employee || "");
+      await createNotificationRecord({
+        recipient_id: targetEmpId,
+        recipient_role: "employee",
+        sender_id: String(req.admin?.id || "admin"),
+        sender_role: "admin",
+        sender_name: adminName,
+        title: "⚠️ Attendance Record Flagged for Review",
+        message: `Your attendance on ${updated.date} has been flagged for administrative review: "${reason || "Requires review"}".`,
+        type: "penalty_alert",
+        category: "attendance",
+        priority: "high",
+        action_url: "/employee/dashboard/attendance",
+        action_label: "View Attendance Log",
+        metadata: { date: updated.date, flagReason: reason, severity },
+      });
+    } catch (notifErr) {
+      console.warn("Failed to push flag notification:", notifErr.message);
+    }
+
+    return res.status(200).json({
+      success: true,
+      message: `Attendance on ${updated.date} flagged for review.`,
+      attendance: updated,
+    });
+  } catch (error) {
+    return res.status(500).json({
+      success: false,
+      message: error.message,
+    });
+  }
+};
+
+// Manager Quick Action: Unflag attendance record
+export const unflagAttendanceRecord = async (req, res) => {
+  try {
+    const { id } = req.params;
+
+    if (!isValidObjectId(id)) {
+      return res.status(400).json({
+        success: false,
+        message: "Invalid attendance record ID.",
+      });
+    }
+
+    const updated = await Attendance.findByIdAndUpdate(
+      id,
+      { $set: { flaggedForReview: false, flagReason: "", flaggedBy: "", flaggedAt: null } },
+      { new: true }
+    )
+      .populate("employee", "fullName department position employeeId email avatar")
+      .lean();
+
+    if (!updated) {
+      return res.status(404).json({
+        success: false,
+        message: "Attendance record not found.",
+      });
+    }
+
+    return res.status(200).json({
+      success: true,
+      message: "Attendance flag removed.",
+      attendance: updated,
+    });
+  } catch (error) {
+    return res.status(500).json({
+      success: false,
+      message: error.message,
+    });
+  }
+};
+
+// Manager Quick Action: Recalculate default penalty
+export const recalculateAttendanceRecord = async (req, res) => {
+  try {
+    const { id } = req.params;
+
+    if (!isValidObjectId(id)) {
+      return res.status(400).json({
+        success: false,
+        message: "Invalid attendance record ID.",
+      });
+    }
+
+    const record = await Attendance.findById(id);
+    if (!record) {
+      return res.status(404).json({
+        success: false,
+        message: "Attendance record not found.",
+      });
+    }
+
+    const settingsDoc = await CompanySettings.getSingletonSettings().catch(() => ({}));
+    const updateFields = {
+      isExcused: false,
+      excuseReason: "",
+      excusedBy: "",
+      excusedAt: null,
+    };
+
+    if (record.clockIn) {
+      const penaltyEval = evaluateLatenessPenalty(
+        new Date(record.clockIn),
+        settingsDoc?.workStartTime || "08:00",
+        settingsDoc || {}
+      );
+      updateFields.delayMinutes = penaltyEval.minutesLate || 0;
+      updateFields.lateMinutes = penaltyEval.minutesLate || 0;
+      updateFields.latePenalty = penaltyEval.penalty || 0;
+      updateFields.penaltyTier = penaltyEval.tier || "";
+      updateFields.status = penaltyEval.minutesLate > 0 ? "Late" : "On Time";
+    }
+
+    const updated = await Attendance.findByIdAndUpdate(id, { $set: updateFields }, { new: true })
+      .populate("employee", "fullName department position employeeId email avatar")
+      .lean();
+
+    return res.status(200).json({
+      success: true,
+      message: "Attendance penalties and status recalculated according to policy.",
       attendance: updated,
     });
   } catch (error) {
@@ -1039,6 +1316,122 @@ export const bulkUploadBiometricAttendance = async (req, res) => {
     return res.status(500).json({
       success: false,
       message: error.message || "Failed to process bulk biometric attendance upload.",
+    });
+  }
+};
+
+// Sync & Re-evaluate attendance lateness & penalty logs for current pay period
+export const syncAttendancePenalties = async (req, res) => {
+  try {
+    let employeeId =
+      req.user?._id ||
+      req.user?.id ||
+      req.employee?.id ||
+      req.employee?._id ||
+      req.body?.employeeId ||
+      req.query?.employeeId;
+
+    const isAdmin = req.user?.role === "admin" || req.user?.role === "superadmin" || req.body?.all === true;
+    const resolvedId = employeeId ? await resolveEmployeeObjectId(employeeId) : null;
+
+    let settingsDoc = null;
+    try {
+      settingsDoc = await CompanySettings.getSingletonSettings();
+    } catch {
+      settingsDoc = {};
+    }
+
+    const workStartTime = settingsDoc?.workStartTime || "08:00";
+    const now = new Date();
+    const currentYear = Number(req.query?.year || req.body?.year || now.getFullYear());
+    const currentMonth = Number(req.query?.month || req.body?.month || (now.getMonth() + 1));
+    const monthPrefix = `${currentYear}-${String(currentMonth).padStart(2, "0")}`;
+
+    // Build filter for records in the current pay period
+    let filter = {};
+    if (!isAdmin && resolvedId) {
+      filter = {
+        employee: resolvedId,
+        $or: [
+          { date: { $regex: `^${monthPrefix}` } },
+          { clockIn: { $gte: new Date(currentYear, currentMonth - 1, 1), $lte: new Date(currentYear, currentMonth, 0, 23, 59, 59) } },
+        ],
+      };
+    } else {
+      filter = {
+        $or: [
+          { date: { $regex: `^${monthPrefix}` } },
+          { clockIn: { $gte: new Date(currentYear, currentMonth - 1, 1), $lte: new Date(currentYear, currentMonth, 0, 23, 59, 59) } },
+        ],
+      };
+    }
+
+    const records = await Attendance.find(filter).populate("employee", "fullName employeeId email baseSalary");
+
+    let recordsEvaluated = 0;
+    let latenessCount = 0;
+    let totalPenaltyDeductions = 0;
+
+    for (const record of records) {
+      if (record.clockIn) {
+        const checkInDate = new Date(record.clockIn);
+        if (!isNaN(checkInDate.getTime())) {
+          const evalResult = evaluateLatenessPenalty(checkInDate, workStartTime, settingsDoc || {});
+          const delayMins = evalResult.delayMinutes ?? evalResult.minutesLate ?? 0;
+          const penaltyVal = evalResult.latePenalty ?? evalResult.penalty ?? 0;
+          const tierName = evalResult.tier || (delayMins > 0 ? "Late" : "On Time");
+
+          record.delayMinutes = delayMins;
+          record.lateMinutes = delayMins;
+          record.latePenalty = penaltyVal;
+          record.penaltyTier = tierName;
+
+          if (delayMins > 0) {
+            record.status = "Late";
+            latenessCount += 1;
+            totalPenaltyDeductions += penaltyVal;
+          } else if (record.status === "Late") {
+            record.status = "On Time";
+          }
+
+          await record.save();
+          recordsEvaluated += 1;
+
+          // Update liveAttendanceStore as well
+          const empIdStr = String(record.employee?._id || record.employee || "");
+          const dateStr = record.date || checkInDate.toISOString().split("T")[0];
+          if (empIdStr && dateStr) {
+            const liveKey = `${empIdStr}_${dateStr}`;
+            if (liveAttendanceStore.has(liveKey)) {
+              const liveRec = liveAttendanceStore.get(liveKey);
+              liveAttendanceStore.set(liveKey, {
+                ...liveRec,
+                delayMinutes: delayMins,
+                lateMinutes: delayMins,
+                latePenalty: penaltyVal,
+                penaltyTier: tierName,
+                status: record.status,
+              });
+            }
+          }
+        }
+      }
+    }
+
+    return res.status(200).json({
+      success: true,
+      message: `Successfully re-evaluated attendance logs for ${recordsEvaluated} records in pay period ${monthPrefix}.`,
+      recordsEvaluated,
+      latenessCount,
+      totalPenaltyDeductions,
+      payPeriod: monthPrefix,
+      workStartTime,
+    });
+  } catch (error) {
+    console.error("Error in syncAttendancePenalties:", error);
+    return res.status(500).json({
+      success: false,
+      message: error.message || "Failed to re-evaluate attendance penalty logs.",
     });
   }
 };

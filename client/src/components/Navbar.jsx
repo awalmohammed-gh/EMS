@@ -64,25 +64,6 @@ export const Navbar = ({
       !isEmployeeRoute &&
       propsRole !== "employee");
 
-  // Derive current page title from pathname
-  const getPageTitle = () => {
-    const path = location.pathname.toLowerCase();
-    if (path.includes("/attendance")) return "Attendance";
-    if (path.includes("/employees")) return "Employees";
-    if (path.includes("/leave")) return "Leave Management";
-    if (path.includes("/payroll") || path.includes("/payslips")) return "Payslips";
-    if (path.includes("/settings")) return "Settings";
-    if (
-      path === "/admin/dashboard" ||
-      path === "/employee/dashboard" ||
-      path.endsWith("/dashboard") ||
-      path.endsWith("/dashboard/")
-    ) {
-      return "Dashboard Overview";
-    }
-    return "Dashboard Overview";
-  };
-
   // Close dropdown on click outside
   useEffect(() => {
     const handleClickOutside = (event) => {
@@ -130,8 +111,8 @@ export const Navbar = ({
     >
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
         <div className="flex items-center justify-between h-16">
-          {/* Left Section: Mobile Hamburger Toggle + Page Title */}
-          <div className="flex items-center gap-3">
+          {/* Left Section: Mobile Hamburger Toggle */}
+          <div className="flex items-center">
             {/* Hamburger Button (lg:hidden) */}
             <button
               id="mobile-menu-toggle-button"
@@ -142,12 +123,6 @@ export const Navbar = ({
             >
               <Menu className="w-6 h-6" />
             </button>
-
-            <div>
-              <h1 className="text-base sm:text-lg font-bold text-[#0F172A] dark:text-slate-100 tracking-tight truncate max-w-[170px] sm:max-w-xs md:max-w-md">
-                {getPageTitle()}
-              </h1>
-            </div>
           </div>
 
           {/* Right Section: Theme Toggle + Notification Bell + User Profile Menu */}
@@ -290,7 +265,7 @@ export const Navbar = ({
                   </div>
 
                   {/* Navigation Links */}
-                  <div className="py-1">
+                  <div className="py-1 px-2 space-y-0.5">
                     <Link
                       to={
                         isAdmin
@@ -298,7 +273,7 @@ export const Navbar = ({
                           : "/employee/dashboard/settings"
                       }
                       onClick={() => setIsProfileMenuOpen(false)}
-                      className="flex items-center gap-3 px-4 py-2.5 text-xs font-semibold text-[#0F172A] dark:text-slate-200 hover:bg-[#F8FAFC] dark:hover:bg-slate-800 hover:text-[#002185] dark:hover:text-blue-400 transition-all duration-200 border-l-2 border-transparent hover:border-[#002185] dark:hover:border-blue-400"
+                      className="flex items-center gap-3 px-3 py-2 text-xs font-semibold text-[#0F172A] dark:text-slate-200 hover:bg-[#F8FAFC] dark:hover:bg-slate-800 hover:text-[#002185] dark:hover:text-blue-400 rounded-xl transition-colors duration-150"
                       role="menuitem"
                     >
                       <Settings className="w-4 h-4 text-[#64748B] dark:text-slate-400" />
@@ -312,7 +287,7 @@ export const Navbar = ({
                           : "/employee/dashboard/leave"
                       }
                       onClick={() => setIsProfileMenuOpen(false)}
-                      className="flex items-center gap-3 px-4 py-2.5 text-xs font-semibold text-[#0F172A] dark:text-slate-200 hover:bg-[#F8FAFC] dark:hover:bg-slate-800 hover:text-[#002185] dark:hover:text-blue-400 transition-all duration-200 border-l-2 border-transparent hover:border-[#002185] dark:hover:border-blue-400"
+                      className="flex items-center gap-3 px-3 py-2 text-xs font-semibold text-[#0F172A] dark:text-slate-200 hover:bg-[#F8FAFC] dark:hover:bg-slate-800 hover:text-[#002185] dark:hover:text-blue-400 rounded-xl transition-colors duration-150"
                       role="menuitem"
                     >
                       <Calendar className="w-4 h-4 text-[#64748B] dark:text-slate-400" />
@@ -323,7 +298,7 @@ export const Navbar = ({
                       <Link
                         to="/employee/dashboard"
                         onClick={() => setIsProfileMenuOpen(false)}
-                        className="flex items-center justify-between px-4 py-2.5 text-xs font-semibold text-[#64748B] dark:text-slate-300 hover:bg-[#F8FAFC] dark:hover:bg-slate-800 hover:text-[#002185] dark:hover:text-blue-400 transition-all duration-200 border-l-2 border-transparent hover:border-[#002185] dark:hover:border-blue-400"
+                        className="flex items-center justify-between px-3 py-2 text-xs font-semibold text-[#64748B] dark:text-slate-300 hover:bg-[#F8FAFC] dark:hover:bg-slate-800 hover:text-[#002185] dark:hover:text-blue-400 rounded-xl transition-colors duration-150"
                         role="menuitem"
                       >
                         <span className="flex items-center gap-3">

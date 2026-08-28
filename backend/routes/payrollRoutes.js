@@ -52,6 +52,7 @@ payrollRouter.post("/employee/salary-projection", employeeAuth, getSalaryProject
 
 // Payroll generation & listing
 payrollRouter.post("/generate", verifyAdmin, generatePayroll);
+payrollRouter.get("/records", verifyAdmin, allPayslips);
 payrollRouter.get("/payslips", verifyAdmin, allPayslips);
 payrollRouter.get("/list", verifyAdmin, allPayslips);
 

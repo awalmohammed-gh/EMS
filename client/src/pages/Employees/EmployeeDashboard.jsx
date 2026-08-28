@@ -3,6 +3,7 @@ import {
   attendanceClockIn,
   attendanceClockOut,
   employeeDashboardOverview,
+  syncAttendance,
 } from "../../apis/fontApis";
 import {
   UserCheck,
@@ -14,14 +15,13 @@ import {
   Briefcase,
   LogIn,
   LogOut,
-  AlertCircle,
   TrendingDown,
   Eye,
   Download,
-  CheckCircle,
   Clock,
   Zap,
   X,
+  RefreshCw,
 } from "lucide-react";
 import Loading from "../../ui/Loading";
 import ErrorMessage from "../../ui/ErrorMessage";
@@ -31,11 +31,13 @@ import EmployeeLeaveChart from "../../components/EmployeeLeaveChart";
 import AnnouncementBoard from "../../components/AnnouncementBoard";
 import ApplyLeaveModal from "../../components/modal/ApplyLeaveModal";
 import EmployeePayslipsModal from "../../components/modal/EmployeePayslipsModal";
+import ClockInOutCard from "../../components/ClockInOutCard";
 
 const EmployeeDashboard = () => {
   const [dashboardData, setDashboardData] = useState(null);
   const [isLoading, setIsLoading] = useState(false);
   const [isError, setIsError] = useState(null);
+  const [isSyncingAttendance, setIsSyncingAttendance] = useState(false);
   const [attendanceData, setAttendanceData] = useState({
     date: null,
     clockIn: null,
@@ -108,6 +110,43 @@ const EmployeeDashboard = () => {
       });
     } finally {
       setIsLoading(false);
+    }
+  };
+
+  // Manual Sync Attendance & Re-evaluate lateness penalty logs
+  const handleSyncAttendance = async () => {
+    try {
+      setIsSyncingAttendance(true);
+      const { data } = await syncAttendance();
+      if (data && data.success) {
+        setShowToast({
+          show: true,
+          message:
+            data.message ||
+            `Attendance & lateness penalties synced successfully (${data.recordsEvaluated || 0} logs verified).`,
+          type: "success",
+        });
+        await fetchEmployeeDashboardData();
+      } else {
+        setShowToast({
+          show: true,
+          message: data?.message || "Attendance sync completed.",
+          type: "info",
+        });
+        await fetchEmployeeDashboardData();
+      }
+    } catch (err) {
+      console.error("Error syncing attendance:", err);
+      setShowToast({
+        show: true,
+        message:
+          err.response?.data?.message ||
+          err.message ||
+          "Failed to re-evaluate attendance logs.",
+        type: "error",
+      });
+    } finally {
+      setIsSyncingAttendance(false);
     }
   };
 
@@ -317,21 +356,6 @@ const EmployeeDashboard = () => {
     }
   };
 
-  // Format time
-  const formatTime = (timeString) => {
-    if (!timeString) return "--:--";
-    try {
-      const date = new Date(timeString);
-      return date.toLocaleTimeString("en-US", {
-        hour: "2-digit",
-        minute: "2-digit",
-        hour12: true,
-      });
-    } catch {
-      return timeString;
-    }
-  };
-
   const getStatusColor = (status) => {
     const s = String(status || "").toLowerCase();
     switch (s) {
@@ -340,44 +364,17 @@ const EmployeeDashboard = () => {
       case "present":
       case "on time":
       case "ontime":
-        return "bg-[#16A34A] text-white";
+        return "bg-[#ECFDF5] text-[#0F7A47] border border-[#A7E8C7]";
       case "pending":
-        return "bg-[#F59E0B] text-white";
+        return "bg-[#FFF7E6] text-[#A5620A] border border-[#F5D398]";
       case "rejected":
       case "absent":
-        return "bg-[#DC2626] text-white";
+        return "bg-[#FDECEC] text-[#B32020] border border-[#F3B9B9]";
       case "late":
-        return "bg-[#F97316] text-white";
+        return "bg-[#FFF0E6] text-[#C24A0A] border border-[#F6C7A3]";
       default:
-        return "bg-[#64748B] text-white";
+        return "bg-[#F1F3F6] text-[#51606F] border border-[#DCE2E8]";
     }
-  };
-
-  const getStatusBadgeColor = (status) => {
-    const s = String(status || "").toLowerCase();
-    switch (s) {
-      case "present":
-      case "on time":
-      case "ontime":
-        return "bg-[#16A34A] text-white";
-      case "late":
-        return "bg-[#F97316] text-white";
-      case "absent":
-        return "bg-[#DC2626] text-white";
-      default:
-        return "bg-[#64748B] text-white";
-    }
-  };
-
-  const formatAttendanceStatusLabel = (status) => {
-    if (!status) return "Clocked In";
-    const s = String(status).toLowerCase();
-    if (s === "present") return "Present (On Time)";
-    if (s === "late") return "Present (Late)";
-    if (s === "absent") return "Absent";
-    if (s === "on_leave" || s === "on leave") return "On Leave";
-    if (s === "not_clocked_in") return "Not Clocked In";
-    return status;
   };
 
 
@@ -423,20 +420,20 @@ const EmployeeDashboard = () => {
       case "active":
         return {
           label: "Active",
-          className: "bg-[#16A34A] text-white",
-          dotColor: "bg-[#16A34A]",
+          className: "bg-[#ECFDF5] text-[#0F7A47] border border-[#A7E8C7]",
+          dotColor: "bg-[#0F7A47]",
         };
       case "suspended":
         return {
           label: "Suspended",
-          className: "bg-[#DC2626] text-white",
-          dotColor: "bg-[#DC2626]",
+          className: "bg-[#FDECEC] text-[#B32020] border border-[#F3B9B9]",
+          dotColor: "bg-[#B32020]",
         };
       case "inactive":
       default:
         return {
           label: "Inactive",
-          className: "bg-[#64748B] text-white",
+          className: "bg-[#F1F3F6] text-[#51606F] border border-[#DCE2E8]",
           dotColor: "bg-[#64748B]",
         };
     }
@@ -460,15 +457,15 @@ const EmployeeDashboard = () => {
       title: "Present Days",
       value: overview.presentDays !== undefined ? overview.presentDays : 0,
       icon: UserCheck,
-      description: `Late: ${overview.lateDays || 0} | On Time: ${overview.onTimeDays || 0}`,
-      color: "bg-[#16A34A]",
+      description: `Late ${overview.lateDays || 0} · On time ${overview.onTimeDays || 0}`,
+      accent: "#0F7A47",
     },
     {
       title: "Leave Balance",
       value: `${overview.remainingLeaveDays !== undefined ? overview.remainingLeaveDays : overview.leaveBalance || 0} days`,
       icon: CalendarDays,
-      description: `Used: ${overview.usedLeaveDays || 0} | Pending: ${overview.pendingLeaveDays || 0}`,
-      color: "bg-[#002185]",
+      description: `Used ${overview.usedLeaveDays || 0} · Pending ${overview.pendingLeaveDays || 0}`,
+      accent: "#002185",
     },
     {
       title: "Late Days",
@@ -476,8 +473,8 @@ const EmployeeDashboard = () => {
       icon: TrendingDown,
       description: overview.totalLateMinutes
         ? `${overview.totalLateMinutes} mins total delay`
-        : `Deduction: GH₵${(overview.totalLatenessDeduction || 0).toFixed(2)}`,
-      color: "bg-[#F97316]",
+        : `Deduction GH₵${(overview.totalLatenessDeduction || 0).toFixed(2)}`,
+      accent: "#C24A0A",
     },
     {
       title: "Net Salary",
@@ -486,13 +483,13 @@ const EmployeeDashboard = () => {
       description: latestPayslip.month
         ? formatMonth(latestPayslip.month)
         : "Projected net take-home",
-      color: "bg-[#002185]",
+      accent: "#002185",
     },
   ];
 
   // Attendance summary (MTD Live Calculation)
   const attendanceSummary = {
-    totalDays: (overview.presentDays || 0) + (overview.absentDays || 0),
+    totalDays: totalDays,
     present: overview.presentDays !== undefined ? overview.presentDays : 0,
     late: overview.lateDays !== undefined ? overview.lateDays : 0,
     absent: overview.absentDays !== undefined ? overview.absentDays : 0,
@@ -506,12 +503,12 @@ const EmployeeDashboard = () => {
   };
 
   return (
-    <div className="space-y-8">
+    <div className="w-full max-w-7xl mx-auto p-4 sm:p-6 lg:p-8 space-y-6 overflow-x-hidden">
       {/* Header with Profile */}
-      <div className="bg-[#FFFFFF] border border-[#E2E8F0] rounded-2xl p-6 shadow-sm hover:border-[#ff5500] transition-all duration-300">
-        <div className="flex flex-col md:flex-row items-start md:items-center justify-between gap-4">
+      <div className="bg-white border border-[#E5E9EE] rounded-xl p-6">
+        <div className="flex flex-col md:flex-row items-start md:items-center justify-between gap-5">
           <div className="flex items-center gap-4">
-            <div className="relative w-16 h-16 rounded-2xl overflow-hidden bg-[#002185] flex items-center justify-center shadow-md ring-4 ring-[#002185]/10 shrink-0">
+            <div className="relative w-14 h-14 rounded-lg overflow-hidden bg-[#002185] flex items-center justify-center shrink-0">
               {employee.avatar || employee.profile_picture || employee.avatar_url ? (
                 <img
                   src={employee.avatar || employee.profile_picture || employee.avatar_url}
@@ -519,7 +516,7 @@ const EmployeeDashboard = () => {
                   className="w-full h-full object-cover"
                 />
               ) : (
-                <div className="w-full h-full bg-[#ff5500] text-white flex items-center justify-center font-bold text-lg select-none">
+                <div className="w-full h-full bg-[#002185] text-white flex items-center justify-center font-semibold text-base select-none">
                   {employee.fullName
                     ? employee.fullName
                         .trim()
@@ -531,409 +528,327 @@ const EmployeeDashboard = () => {
                     : "MA"}
                 </div>
               )}
-              <span className={`absolute -bottom-1 -right-1 w-4 h-4 rounded-full border-2 border-white ${accountBadge.dotColor}`} />
+              <span className={`absolute -bottom-0.5 -right-0.5 w-3 h-3 rounded-full border-2 border-white ${accountBadge.dotColor}`} />
             </div>
             <div>
-              <h1 className="text-2xl font-bold text-[#002185]">
-                Welcome back, {employee.fullName || user?.fullName || "Mohammed Awal"}!
+              <h1 className="text-xl font-semibold text-[#0F1B33] tracking-tight">
+                Welcome back, {employee.fullName || user?.fullName || "Mohammed Awal"}
               </h1>
-              <div className="flex flex-wrap items-center gap-3 mt-1.5 text-sm text-[#64748B]">
-                <span className="flex items-center gap-1.5 bg-[#F8FAFC] rounded-full px-2.5 py-1">
-                  <Briefcase className="w-3.5 h-3.5 text-[#002185]" />
+              <div className="flex flex-wrap items-center gap-x-4 gap-y-1.5 mt-2 text-sm text-[#5B6B7C]">
+                <span className="flex items-center gap-1.5">
+                  <Briefcase className="w-3.5 h-3.5 text-[#8B98A6]" />
                   {employee.position || user?.position || "Frontend Developer"}
                 </span>
-                <span className="flex items-center gap-1.5 bg-[#F8FAFC] rounded-full px-2.5 py-1">
-                  <Building2 className="w-3.5 h-3.5 text-[#002185]" />
+                <span className="flex items-center gap-1.5">
+                  <Building2 className="w-3.5 h-3.5 text-[#8B98A6]" />
                   {employee.department || user?.department || "Engineering"}
                 </span>
-                <span className="flex items-center gap-1.5 bg-[#F8FAFC] rounded-full px-2.5 py-1">
-                  <Mail className="w-3.5 h-3.5 text-[#002185]" />
+                <span className="flex items-center gap-1.5">
+                  <Mail className="w-3.5 h-3.5 text-[#8B98A6]" />
                   {employee.email || user?.email || "awalm8043@gmail.com"}
                 </span>
               </div>
             </div>
           </div>
-          <div className="flex items-center gap-3">
+          <div className="flex flex-wrap items-center gap-2.5">
+            <button
+              id="btn-sync-attendance"
+              type="button"
+              onClick={handleSyncAttendance}
+              disabled={isSyncingAttendance}
+              className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold text-[#002185] bg-[#F0F4FE] hover:bg-[#E1EAFE] border border-[#C7D7FE] transition-colors cursor-pointer disabled:opacity-60"
+              title="Re-evaluate lateness delay and tiered penalty calculations for current pay period"
+            >
+              <RefreshCw
+                className={`w-3.5 h-3.5 ${
+                  isSyncingAttendance ? "animate-spin text-[#002185]" : "text-[#002185]"
+                }`}
+              />
+              <span>{isSyncingAttendance ? "Syncing..." : "Sync Attendance"}</span>
+            </button>
             <span
-              className={`px-3 py-1.5 rounded-full text-xs font-semibold ${accountBadge.className}`}
+              className={`px-2.5 py-1 rounded-md text-xs font-medium ${accountBadge.className}`}
             >
               {accountBadge.label}
             </span>
             {(employee.employeeId || employee._id) && (
-              <span className="text-sm text-[#64748B] bg-[#F8FAFC] px-3 py-1.5 rounded-xl border border-[#E2E8F0] font-medium font-mono">
-                ID: {employee.employeeId || employee._id?.slice(-6)}
+              <span className="text-xs text-[#5B6B7C] bg-[#F7F8FA] px-2.5 py-1 rounded-md border border-[#E5E9EE] font-mono">
+                ID {employee.employeeId || employee._id?.slice(-6)}
               </span>
             )}
           </div>
         </div>
       </div>
 
-      {/* Today's Attendance */}
-      <div className="relative overflow-hidden bg-[#FFFFFF] border border-[#E2E8F0] rounded-2xl shadow-sm hover:border-[#ff5500] transition-all duration-300">
-        <div className="pointer-events-none absolute -top-20 -right-20 w-64 h-64 rounded-full bg-[#002185]/5 blur-3xl" />
-        <div className="pointer-events-none absolute -bottom-16 -left-16 w-48 h-48 rounded-full bg-[#ff5500]/5 blur-3xl" />
+      {/* Main Dashboard Overview Body */}
+      <div className="space-y-6">
+        {/* User-Friendly Clock In / Clock Out Card */}
+        <ClockInOutCard
+          attendanceData={attendanceData}
+          hasClockedIn={hasClockedIn}
+          hasClockedOut={hasClockedOut}
+          isLoading={isLoading}
+          onClockIn={handleClockIn}
+          onClockOut={handleClockOut}
+          userRole={user?.role}
+        />
 
-        <div className="relative p-6 md:p-7">
-          <div className="flex items-center gap-2 mb-6">
-            <div className="w-9 h-9 rounded-xl bg-[#002185] flex items-center justify-center shrink-0">
-              <Clock className="w-4.5 h-4.5 text-white" />
-            </div>
-            <h3 className="text-xs font-semibold text-[#64748B] uppercase tracking-wider">
-              Today's Attendance
-            </h3>
-          </div>
-
-          <div className="flex flex-col xl:flex-row xl:items-center gap-6">
-            <div className="flex items-center gap-4 shrink-0">
-              <div
-                className={`w-14 h-14 rounded-2xl flex items-center justify-center shrink-0 ${
-                  hasClockedIn ? "bg-[#F0FDF4]" : "bg-[#F8FAFC]"
-                }`}
-              >
-                {hasClockedIn ? (
-                  <CheckCircle className="w-7 h-7 text-[#16A34A]" />
-                ) : (
-                  <AlertCircle className="w-7 h-7 text-[#94A3B8]" />
-                )}
-              </div>
-              <div>
-                <p className="text-2xl font-bold text-[#002185] leading-tight">
-                  {hasClockedIn
-                    ? formatAttendanceStatusLabel(attendanceData.status)
-                    : "Not Clocked In"}
-                </p>
-                {hasClockedIn && attendanceData.status ? (
-                  <span
-                    className={`inline-flex items-center gap-1 mt-1.5 px-2.5 py-1 rounded-full text-xs font-medium ${getStatusBadgeColor(
-                      attendanceData.status,
-                    )}`}
-                  >
-                    <CheckCircle className="w-3 h-3" />
-                    {formatAttendanceStatusLabel(attendanceData.status)}
-                  </span>
-                ) : !hasClockedIn ? (
-                  <span className="inline-flex items-center gap-1 mt-1.5 px-2.5 py-1 rounded-full text-xs font-medium bg-[#64748B] text-white">
-                    <AlertCircle className="w-3 h-3" />
-                    Not Clocked In
-                  </span>
-                ) : null}
-              </div>
-            </div>
-
-            <div className="grid grid-cols-3 gap-3 flex-1 xl:max-w-md">
-              <div className="rounded-xl bg-[#F8FAFC] border border-[#E2E8F0] p-3 text-center">
-                <LogIn className="w-4 h-4 text-[#16A34A] mx-auto mb-1.5" />
-                <p className="text-[10px] font-medium uppercase tracking-wide text-[#64748B]">
-                  Check In
-                </p>
-                <p className="text-sm font-bold text-[#002185] mt-0.5">
-                  {hasClockedIn ? formatTime(attendanceData.clockIn) : "--:--"}
-                </p>
-              </div>
-              <div className="rounded-xl bg-[#F8FAFC] border border-[#E2E8F0] p-3 text-center">
-                <LogOut className="w-4 h-4 text-[#ff5500] mx-auto mb-1.5" />
-                <p className="text-[10px] font-medium uppercase tracking-wide text-[#64748B]">
-                  Check Out
-                </p>
-                <p className="text-sm font-bold text-[#002185] mt-0.5">
-                  {hasClockedOut
-                    ? formatTime(attendanceData.clockOut)
-                    : "--:--"}
-                </p>
-              </div>
-              <div className="rounded-xl bg-[#F8FAFC] border border-[#E2E8F0] p-3 text-center">
-                <Clock className="w-4 h-4 text-[#002185] mx-auto mb-1.5" />
-                <p className="text-[10px] font-medium uppercase tracking-wide text-[#64748B]">
-                  Hours
-                </p>
-                <p className="text-sm font-bold text-[#002185] mt-0.5">
-                  {attendanceData.workHours || 0}h
-                </p>
-              </div>
-            </div>
-
-            <div className="flex items-center gap-2.5 xl:ml-auto">
-              <button
-                onClick={handleClockIn}
-                disabled={hasClockedIn || isLoading}
-                className={`flex items-center gap-2 px-5 py-2.5 rounded-full text-sm font-semibold shadow-sm transition-all duration-300 ${
-                  hasClockedIn || isLoading
-                    ? "bg-[#E2E8F0] text-[#64748B] cursor-not-allowed"
-                    : "bg-[#002185] text-white hover:bg-[#ff5500] hover:shadow-lg hover:-translate-y-0.5"
-                }`}
-              >
-                <LogIn className="w-4 h-4" />
-                {isLoading ? "Processing..." : "Clock In"}
-              </button>
-              <button
-                onClick={handleClockOut}
-                disabled={!hasClockedIn || hasClockedOut || isLoading}
-                className={`flex items-center gap-2 px-5 py-2.5 rounded-full text-sm font-semibold transition-all duration-300 ${
-                  !hasClockedIn || hasClockedOut || isLoading
-                    ? "bg-[#E2E8F0] text-[#64748B] cursor-not-allowed"
-                    : "bg-[#ff5500] text-white hover:bg-[#002185] shadow-sm hover:shadow-lg hover:-translate-y-0.5"
-                }`}
-              >
-                <LogOut className="w-4 h-4" />
-                {isLoading ? "Processing..." : "Clock Out"}
-              </button>
-            </div>
-          </div>
-        </div>
-      </div>
-
-      {/* Stats Cards */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6">
-        {statsCards.map((stat, index) => {
-          const IconComponent = stat.icon;
-          return (
-            <div
-              key={index}
-              className="bg-[#FFFFFF] border border-[#E2E8F0] rounded-2xl p-6 shadow-sm hover:shadow-md hover:border-[#ff5500] transition-all duration-300"
-            >
-              <div className="flex items-center justify-between">
-                <div className="min-w-0">
-                  <p className="text-sm font-medium text-[#64748B]">
-                    {stat.title}
-                  </p>
-                  <p className="text-2xl font-bold text-[#002185] mt-2 truncate">
+        {/* Stats Cards */}
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+            {statsCards.map((stat, index) => {
+              const IconComponent = stat.icon;
+              return (
+                <div
+                  key={index}
+                  className="bg-white border border-[#E5E9EE] rounded-xl p-5"
+                >
+                  <div className="flex items-center gap-1.5 text-[#8B98A6]">
+                    <IconComponent className="w-3.5 h-3.5" />
+                    <p className="text-xs font-medium">{stat.title}</p>
+                  </div>
+                  <p className="text-2xl font-semibold text-[#0F1B33] mt-2 tracking-tight truncate">
                     {stat.value}
                   </p>
-                  <p className="text-xs text-[#64748B] mt-1">
+                  <p className="text-xs text-[#8B98A6] mt-1.5">
                     {stat.description}
                   </p>
                 </div>
-                <div
-                  className={`w-12 h-12 rounded-2xl ${stat.color} flex items-center justify-center shrink-0 shadow-sm`}
-                >
-                  <IconComponent className="w-6 h-6 text-white" />
+              );
+            })}
+          </div>
+
+          {/* Company Announcement Board */}
+          <AnnouncementBoard role="employee" />
+
+          {/* Attendance Summary & Leave Balance */}
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+            {/* Attendance Summary */}
+            <div className="bg-white border border-[#E5E9EE] rounded-xl p-6">
+              <h3 className="text-sm font-semibold text-[#0F1B33] mb-4 flex items-center gap-2">
+                <UserCheck className="w-4 h-4 text-[#8B98A6]" />
+                Attendance Summary
+              </h3>
+              <div className="space-y-0">
+                <div className="flex justify-between items-center py-2.5 border-b border-[#EEF1F4]">
+                  <span className="text-sm text-[#5B6B7C]">Total Days</span>
+                  <span className="text-sm font-semibold text-[#0F1B33]">
+                    {attendanceSummary.totalDays}
+                  </span>
+                </div>
+                <div className="flex justify-between items-center py-2.5 border-b border-[#EEF1F4]">
+                  <span className="text-sm text-[#5B6B7C]">Present</span>
+                  <span className="text-sm font-semibold text-[#0F7A47]">
+                    {attendanceSummary.present}
+                  </span>
+                </div>
+                <div className="flex justify-between items-center py-2.5 border-b border-[#EEF1F4]">
+                  <span className="text-sm text-[#5B6B7C]">Late</span>
+                  <span className="text-sm font-semibold text-[#C24A0A]">
+                    {attendanceSummary.late}
+                  </span>
+                </div>
+                <div className="flex justify-between items-center py-2.5">
+                  <span className="text-sm text-[#5B6B7C]">Absent</span>
+                  <span className="text-sm font-semibold text-[#B32020]">
+                    {attendanceSummary.absent}
+                  </span>
                 </div>
               </div>
             </div>
-          );
-        })}
-      </div>
 
-      {/* Company Announcement Board */}
-      <AnnouncementBoard role="employee" />
-
-      {/* Attendance Summary & Leave Balance */}
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-        {/* Attendance Summary */}
-        <div className="bg-[#FFFFFF] border border-[#E2E8F0] rounded-2xl p-6 shadow-sm hover:border-[#ff5500] transition-all duration-300">
-          <h3 className="text-lg font-semibold text-[#002185] mb-4 flex items-center gap-2">
-            <UserCheck className="w-5 h-5 text-[#ff5500]" />
-            Attendance Summary
-          </h3>
-          <div className="space-y-3">
-            <div className="flex justify-between items-center pb-2 border-b border-[#E2E8F0]">
-              <span className="text-sm text-[#64748B]">Total Days</span>
-              <span className="text-sm font-semibold text-[#002185]">
-                {attendanceSummary.totalDays}
-              </span>
-            </div>
-            <div className="flex justify-between items-center pb-2 border-b border-[#E2E8F0]">
-              <span className="text-sm text-[#64748B]">Present</span>
-              <span className="text-sm font-semibold text-[#16A34A]">
-                {attendanceSummary.present}
-              </span>
-            </div>
-            <div className="flex justify-between items-center pb-2 border-b border-[#E2E8F0]">
-              <span className="text-sm text-[#64748B]">Late</span>
-              <span className="text-sm font-semibold text-[#F97316]">
-                {attendanceSummary.late}
-              </span>
-            </div>
-            <div className="flex justify-between items-center">
-              <span className="text-sm text-[#64748B]">Absent</span>
-              <span className="text-sm font-semibold text-[#DC2626]">
-                {attendanceSummary.absent}
-              </span>
-            </div>
-          </div>
-        </div>
-
-        {/* Leave Balance */}
-        <div className="bg-[#FFFFFF] border border-[#E2E8F0] rounded-2xl p-6 shadow-sm hover:border-[#ff5500] transition-all duration-300">
-          <h3 className="text-lg font-semibold text-[#002185] mb-4 flex items-center gap-2">
-            <CalendarDays className="w-5 h-5 text-[#ff5500]" />
-            Leave Balance
-          </h3>
-          <div className="space-y-3">
-            <div className="flex justify-between items-center pb-2 border-b border-[#E2E8F0]">
-              <span className="text-sm text-[#64748B]">Total Leave</span>
-              <span className="text-sm font-semibold text-[#002185]">
-                {leaveBalance.total} days
-              </span>
-            </div>
-            <div className="flex justify-between items-center pb-2 border-b border-[#E2E8F0]">
-              <span className="text-sm text-[#64748B]">Used</span>
-              <span className="text-sm font-semibold text-[#F97316]">
-                {leaveBalance.used} days
-              </span>
-            </div>
-            <div className="flex justify-between items-center">
-              <span className="text-sm text-[#64748B]">Remaining</span>
-              <span className="text-sm font-semibold text-[#16A34A]">
-                {leaveBalance.remaining} days
-              </span>
-            </div>
-          </div>
-        </div>
-      </div>
-
-      {/* Requests by Leave Type Chart (Live Database Records) & Recent Leave Requests */}
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-        {/* Dynamic Leave Type Distribution Chart */}
-        <EmployeeLeaveChart
-          onApplyLeave={() => {
-            navigate("/employee/dashboard/leave");
-            window.scrollTo({ top: 0, behavior: "smooth" });
-          }}
-        />
-
-        {/* Recent Leave Requests */}
-        <div className="bg-[#FFFFFF] border border-[#E2E8F0] rounded-2xl p-6 shadow-sm hover:border-[#ff5500] transition-all duration-300 flex flex-col justify-between">
-          <div>
-            <div className="flex items-center justify-between mb-4">
-              <h3 className="text-lg font-semibold text-[#002185] flex items-center gap-2">
-                <CalendarCheck className="w-5 h-5 text-[#ff5500]" />
-                Recent Leave Requests
+            {/* Leave Balance */}
+            <div className="bg-white border border-[#E5E9EE] rounded-xl p-6">
+              <h3 className="text-sm font-semibold text-[#0F1B33] mb-4 flex items-center gap-2">
+                <CalendarDays className="w-4 h-4 text-[#8B98A6]" />
+                Leave Balance
               </h3>
-              <button
-                onClick={() =>{navigate("/employee/dashboard/leave");scrollTo({top:0, behavior:"smooth"})}}
-                className="text-sm text-[#002185] hover:text-[#ff5500] font-medium transition-colors duration-300"
-              >
-                View All →
-              </button>
+              <div className="space-y-0">
+                <div className="flex justify-between items-center py-2.5 border-b border-[#EEF1F4]">
+                  <span className="text-sm text-[#5B6B7C]">Total Leave</span>
+                  <span className="text-sm font-semibold text-[#0F1B33]">
+                    {leaveBalance.total} days
+                  </span>
+                </div>
+                <div className="flex justify-between items-center py-2.5 border-b border-[#EEF1F4]">
+                  <span className="text-sm text-[#5B6B7C]">Used</span>
+                  <span className="text-sm font-semibold text-[#C24A0A]">
+                    {leaveBalance.used} days
+                  </span>
+                </div>
+                <div className="flex justify-between items-center py-2.5">
+                  <span className="text-sm text-[#5B6B7C]">Remaining</span>
+                  <span className="text-sm font-semibold text-[#0F7A47]">
+                    {leaveBalance.remaining} days
+                  </span>
+                </div>
+              </div>
             </div>
-            <div className="space-y-3">
-              {recentLeaves && recentLeaves.length > 0 ? (
-                recentLeaves.slice(0, 4).map((request, index) => (
-                  <div
-                    key={index}
-                    className="flex items-center justify-between py-2 border-b border-[#E2E8F0] last:border-0"
-                  >
-                    <div>
-                      <p className="text-sm font-medium text-[#002185]">
-                        {request.leaveType || "Leave Request"}
-                      </p>
-                      <p className="text-xs text-[#64748B]">
-                        {formatDate(request.startDate)} -{" "}
-                        {formatDate(request.endDate)} ({request.days || 0} days)
-                      </p>
-                    </div>
-                    <span
-                      className={`px-2 py-1 rounded-full text-xs font-medium ${getStatusColor(request.status)}`}
-                    >
-                      {request.status || "Pending"}
-                    </span>
-                  </div>
-                ))
-              ) : (
-                <div className="text-center py-8 text-[#64748B]">
-                  <CalendarCheck className="w-12 h-12 mx-auto mb-3 text-[#94A3B8]" />
-                  <p className="text-sm font-medium text-slate-700">No leave requests found</p>
-                  <p className="text-xs text-slate-400 mt-0.5">You have not submitted any time-off requests yet.</p>
+          </div>
+
+          {/* Requests by Leave Type Chart (Live Database Records) & Recent Leave Requests */}
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+            {/* Dynamic Leave Type Distribution Chart */}
+            <EmployeeLeaveChart
+              onApplyLeave={() => {
+                navigate("/employee/dashboard/leave");
+                window.scrollTo({ top: 0, behavior: "smooth" });
+              }}
+            />
+
+            {/* Recent Leave Requests */}
+            <div className="bg-white border border-[#E5E9EE] rounded-xl p-6 flex flex-col justify-between">
+              <div>
+                <div className="flex items-center justify-between mb-4">
+                  <h3 className="text-sm font-semibold text-[#0F1B33] flex items-center gap-2">
+                    <CalendarCheck className="w-4 h-4 text-[#8B98A6]" />
+                    Recent Leave Requests
+                  </h3>
                   <button
-                    onClick={() =>{
+                    onClick={() => {
                       navigate("/employee/dashboard/leave");
                       scrollTo({ top: 0, behavior: "smooth" });
                     }}
-                    className="mt-3 inline-flex items-center gap-1.5 px-3 py-1.5 bg-[#002185] text-white rounded-lg text-xs font-semibold hover:bg-[#ff5500] transition-colors"
+                    className="text-xs text-[#002185] hover:underline font-medium"
                   >
-                    Apply for Leave →
+                    View all
                   </button>
+                </div>
+                <div className="space-y-0">
+                  {recentLeaves && recentLeaves.length > 0 ? (
+                    recentLeaves.slice(0, 4).map((request, index) => (
+                      <div
+                        key={index}
+                        className="flex items-center justify-between py-2.5 border-b border-[#EEF1F4] last:border-0"
+                      >
+                        <div>
+                          <p className="text-sm font-medium text-[#0F1B33]">
+                            {request.leaveType || "Leave Request"}
+                          </p>
+                          <p className="text-xs text-[#8B98A6] mt-0.5">
+                            {formatDate(request.startDate)} –{" "}
+                            {formatDate(request.endDate)} ({request.days || 0} days)
+                          </p>
+                        </div>
+                        <span
+                          className={`px-2 py-0.5 rounded-md text-[11px] font-medium ${getStatusColor(
+                            request.status,
+                          )}`}
+                        >
+                          {request.status || "Pending"}
+                        </span>
+                      </div>
+                    ))
+                  ) : (
+                    <div className="text-center py-8">
+                      <CalendarCheck className="w-8 h-8 mx-auto mb-3 text-[#C6CDD5]" />
+                      <p className="text-sm font-medium text-[#0F1B33]">
+                        No leave requests found
+                      </p>
+                      <p className="text-xs text-[#8B98A6] mt-0.5">
+                        You have not submitted any time-off requests yet.
+                      </p>
+                      <button
+                        onClick={() => {
+                          navigate("/employee/dashboard/leave");
+                          scrollTo({ top: 0, behavior: "smooth" });
+                        }}
+                        className="mt-3 inline-flex items-center gap-1.5 px-3 py-1.5 bg-[#002185] text-white rounded-lg text-xs font-medium hover:bg-[#001a6b] transition-colors"
+                      >
+                        Apply for Leave
+                      </button>
+                    </div>
+                  )}
+                </div>
+              </div>
+            </div>
+          </div>
+
+          {/* Latest Payslip */}
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+            <div className="bg-white border border-[#E5E9EE] rounded-xl p-6">
+              <div className="flex items-center justify-between mb-4">
+                <h3 className="text-sm font-semibold text-[#0F1B33] flex items-center gap-2">
+                  <Banknote className="w-4 h-4 text-[#8B98A6]" />
+                  Latest Payslip
+                </h3>
+                <button
+                  onClick={() => {
+                    navigate("/employee/dashboard/payslips");
+                    scrollTo({ top: 0, behavior: "smooth" });
+                  }}
+                  className="text-xs text-[#002185] hover:underline font-medium"
+                >
+                  View all
+                </button>
+              </div>
+              {latestPayslip && latestPayslip.amount ? (
+                <div className="space-y-0">
+                  <div className="flex justify-between items-center py-2.5 border-b border-[#EEF1F4]">
+                    <span className="text-sm text-[#5B6B7C]">Month</span>
+                    <span className="text-sm font-semibold text-[#0F1B33]">
+                      {formatMonth(latestPayslip.month)}
+                    </span>
+                  </div>
+                  <div className="flex justify-between items-center py-2.5 border-b border-[#EEF1F4]">
+                    <span className="text-sm text-[#5B6B7C]">Gross Salary</span>
+                    <span className="text-sm font-semibold text-[#0F1B33]">
+                      {formatCurrency(latestPayslip.amount)}
+                    </span>
+                  </div>
+                  <div className="flex justify-between items-center py-2.5 border-b border-[#EEF1F4]">
+                    <span className="text-sm text-[#5B6B7C]">Status</span>
+                    <span
+                      className={`px-2 py-0.5 rounded-md text-[11px] font-medium ${getStatusColor(
+                        "Paid",
+                      )}`}
+                    >
+                      Paid
+                    </span>
+                  </div>
+                  <div className="flex justify-between items-center pt-3">
+                    <span className="text-sm font-semibold text-[#0F1B33]">
+                      Net Salary
+                    </span>
+                    <span className="text-lg font-semibold text-[#0F1B33] tracking-tight">
+                      {formatCurrency(
+                        overview.netSalary || latestPayslip.amount || 0,
+                      )}
+                    </span>
+                  </div>
+                  <div className="flex gap-2 mt-4 pt-4 border-t border-[#EEF1F4]">
+                    <button
+                      type="button"
+                      onClick={() => {
+                        navigate("/employee/dashboard/payslips");
+                        scrollTo({ top: 0, behavior: "smooth" });
+                      }}
+                      className="flex-1 flex items-center justify-center gap-2 px-4 py-2 bg-[#002185] text-white rounded-lg hover:bg-[#001a6b] transition-colors text-sm font-medium cursor-pointer"
+                    >
+                      <Eye className="w-4 h-4" />
+                      View
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        navigate("/employee/dashboard/payslips");
+                        scrollTo({ top: 0, behavior: "smooth" });
+                      }}
+                      className="flex-1 flex items-center justify-center gap-2 px-4 py-2 border border-[#E5E9EE] text-[#5B6B7C] rounded-lg hover:border-[#002185] hover:text-[#002185] transition-colors text-sm font-medium cursor-pointer"
+                    >
+                      <Download className="w-4 h-4" />
+                      Download
+                    </button>
+                  </div>
+                </div>
+              ) : (
+                <div className="text-center py-8">
+                  <Banknote className="w-8 h-8 mx-auto mb-3 text-[#C6CDD5]" />
+                  <p className="text-sm text-[#8B98A6]">No payslip available</p>
                 </div>
               )}
             </div>
           </div>
         </div>
-      </div>
-
-      {/* Latest Payslip */}
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-        <div className="bg-[#FFFFFF] border border-[#E2E8F0] rounded-2xl p-6 shadow-sm hover:border-[#ff5500] transition-all duration-300">
-          <div className="flex items-center justify-between mb-4">
-            <h3 className="text-lg font-semibold text-[#002185] flex items-center gap-2">
-              <Banknote className="w-5 h-5 text-[#ff5500]" />
-              Latest Payslip
-            </h3>
-            <button
-              onClick={() => {
-                navigate("/employee/dashboard/payslips");
-                scrollTo({ top: 0, behavior: "smooth" });
-              }}
-              className="text-sm text-[#002185] hover:text-[#ff5500] font-medium transition-colors duration-300"
-            >
-              View All →
-            </button>
-          </div>
-          {latestPayslip && latestPayslip.amount ? (
-            <div className="space-y-3">
-              <div className="flex justify-between items-center pb-2 border-b border-[#E2E8F0]">
-                <span className="text-sm text-[#64748B]">Month</span>
-                <span className="text-sm font-semibold text-[#002185]">
-                  {formatMonth(latestPayslip.month)}
-                </span>
-              </div>
-              <div className="flex justify-between items-center pb-2 border-b border-[#E2E8F0]">
-                <span className="text-sm text-[#64748B]">Gross Salary</span>
-                <span className="text-sm font-semibold text-[#002185]">
-                  {formatCurrency(latestPayslip.amount)}
-                </span>
-              </div>
-              <div className="flex justify-between items-center pb-2 border-b border-[#E2E8F0]">
-                <span className="text-sm text-[#64748B]">Status</span>
-                <span
-                  className={`px-2 py-1 rounded-full text-xs font-medium ${getStatusColor("Paid")}`}
-                >
-                  Paid
-                </span>
-              </div>
-              <div className="flex justify-between items-center pt-2">
-                <span className="text-sm font-semibold text-[#002185]">
-                  Net Salary
-                </span>
-                <span className="text-lg font-bold text-[#002185]">
-                  {formatCurrency(
-                    overview.netSalary || latestPayslip.amount || 0,
-                  )}
-                </span>
-              </div>
-              <div className="flex gap-2 mt-4 pt-4 border-t border-[#E2E8F0]">
-                <button
-                  type="button"
-                  onClick={() => {
-                    navigate("/employee/dashboard/payslips");
-                    scrollTo({ top: 0, behavior: "smooth" });
-                  }}
-                  className="flex-1 flex items-center justify-center gap-2 px-4 py-2 bg-[#002185] text-white rounded-lg hover:bg-[#ff5500] transition-all duration-300 text-sm font-medium cursor-pointer"
-                >
-                  <Eye className="w-4 h-4" />
-                  View
-                </button>
-                <button
-                  type="button"
-                  onClick={() => {
-                    navigate("/employee/dashboard/payslips");
-                    scrollTo({ top: 0, behavior: "smooth" });
-                  }}
-                  className="flex-1 flex items-center justify-center gap-2 px-4 py-2 border border-[#E2E8F0] text-[#64748B] rounded-lg hover:border-[#ff5500] hover:text-[#ff5500] transition-all duration-300 text-sm font-medium cursor-pointer"
-                >
-                  <Download className="w-4 h-4" />
-                  Download
-                </button>
-              </div>
-            </div>
-          ) : (
-            <div className="text-center py-8 text-[#64748B]">
-              <Banknote className="w-12 h-12 mx-auto mb-3 text-[#94A3B8]" />
-              <p className="text-sm">No payslip available</p>
-            </div>
-          )}
-        </div>
-      </div>
 
       {/* Quick Actions Floating Action Menu (Mobile & Desktop Accessible) */}
       <div className="fixed bottom-6 right-6 z-40 sm:bottom-8 sm:right-8">
@@ -941,18 +856,41 @@ const EmployeeDashboard = () => {
         {quickActionsOpen && (
           <div
             onClick={() => setQuickActionsOpen(false)}
-            className="fixed inset-0 bg-[#0F172A]/30 backdrop-blur-xs z-30 animate-fade-in"
+            className="fixed inset-0 bg-[#0F1B33]/20 z-30"
           />
         )}
 
         {/* Floating Menu Action Items */}
         <div
-          className={`relative z-40 flex flex-col items-end gap-3 transition-all duration-300 ${
+          className={`relative z-40 flex flex-col items-end gap-2 transition-all duration-200 ${
             quickActionsOpen
               ? "opacity-100 translate-y-0 pointer-events-auto"
-              : "opacity-0 translate-y-6 pointer-events-none"
+              : "opacity-0 translate-y-3 pointer-events-none"
           }`}
         >
+          {/* Action 0: Sync Attendance */}
+          <button
+            id="quick-action-sync-attendance"
+            type="button"
+            disabled={isSyncingAttendance}
+            onClick={async () => {
+              setQuickActionsOpen(false);
+              await handleSyncAttendance();
+            }}
+            className="group flex items-center gap-3 pl-4 pr-3 py-2 rounded-lg bg-[#0F1B33] shadow-lg hover:bg-[#1A2947] transition-colors duration-150 cursor-pointer disabled:opacity-60"
+          >
+            <span className="text-xs font-medium text-white whitespace-nowrap">
+              {isSyncingAttendance ? "Syncing Logs..." : "Sync Attendance"}
+            </span>
+            <div className="w-6 h-6 rounded-md flex items-center justify-center text-white bg-white/10">
+              <RefreshCw
+                className={`w-3.5 h-3.5 ${
+                  isSyncingAttendance ? "animate-spin text-white" : "text-white"
+                }`}
+              />
+            </div>
+          </button>
+
           {/* Action 1: Clock In / Clock Out */}
           <button
             id="quick-action-clock-in-out"
@@ -967,30 +905,22 @@ const EmployeeDashboard = () => {
                 navigate("/employee/dashboard/attendance");
               }
             }}
-            className="group flex items-center gap-3 px-4 py-2.5 rounded-full bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 shadow-xl hover:shadow-2xl transition-all duration-200 cursor-pointer"
+            className="group flex items-center gap-3 pl-4 pr-3 py-2 rounded-lg bg-[#0F1B33] shadow-lg hover:bg-[#1A2947] transition-colors duration-150 cursor-pointer"
           >
-            <span className="text-xs font-bold text-slate-800 dark:text-slate-100 group-hover:text-[#002185] dark:group-hover:text-blue-400 whitespace-nowrap">
+            <span className="text-xs font-medium text-white whitespace-nowrap">
               {!attendanceData.clockIn
                 ? "Clock In Now"
                 : !attendanceData.clockOut
                 ? "Clock Out Now"
                 : "View Today's Attendance"}
             </span>
-            <div
-              className={`w-9 h-9 rounded-full flex items-center justify-center text-white shadow-sm transition-transform duration-200 group-hover:scale-110 ${
-                !attendanceData.clockIn
-                  ? "bg-emerald-600"
-                  : !attendanceData.clockOut
-                  ? "bg-amber-600"
-                  : "bg-blue-600"
-              }`}
-            >
+            <div className="w-6 h-6 rounded-md flex items-center justify-center text-white bg-white/10">
               {!attendanceData.clockIn ? (
-                <LogIn className="w-4 h-4" />
+                <LogIn className="w-3.5 h-3.5" />
               ) : !attendanceData.clockOut ? (
-                <LogOut className="w-4 h-4" />
+                <LogOut className="w-3.5 h-3.5" />
               ) : (
-                <Clock className="w-4 h-4" />
+                <Clock className="w-3.5 h-3.5" />
               )}
             </div>
           </button>
@@ -1003,13 +933,13 @@ const EmployeeDashboard = () => {
               setQuickActionsOpen(false);
               setShowApplyLeaveModal(true);
             }}
-            className="group flex items-center gap-3 px-4 py-2.5 rounded-full bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 shadow-xl hover:shadow-2xl transition-all duration-200 cursor-pointer"
+            className="group flex items-center gap-3 pl-4 pr-3 py-2 rounded-lg bg-[#0F1B33] shadow-lg hover:bg-[#1A2947] transition-colors duration-150 cursor-pointer"
           >
-            <span className="text-xs font-bold text-slate-800 dark:text-slate-100 group-hover:text-[#002185] dark:group-hover:text-blue-400 whitespace-nowrap">
+            <span className="text-xs font-medium text-white whitespace-nowrap">
               Request Leave
             </span>
-            <div className="w-9 h-9 rounded-full bg-[#002185] flex items-center justify-center text-white shadow-sm transition-transform duration-200 group-hover:scale-110">
-              <CalendarCheck className="w-4 h-4" />
+            <div className="w-6 h-6 rounded-md flex items-center justify-center text-white bg-white/10">
+              <CalendarCheck className="w-3.5 h-3.5" />
             </div>
           </button>
 
@@ -1025,13 +955,13 @@ const EmployeeDashboard = () => {
                 navigate("/employee/dashboard/payslips");
               }
             }}
-            className="group flex items-center gap-3 px-4 py-2.5 rounded-full bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 shadow-xl hover:shadow-2xl transition-all duration-200 cursor-pointer"
+            className="group flex items-center gap-3 pl-4 pr-3 py-2 rounded-lg bg-[#0F1B33] shadow-lg hover:bg-[#1A2947] transition-colors duration-150 cursor-pointer"
           >
-            <span className="text-xs font-bold text-slate-800 dark:text-slate-100 group-hover:text-[#002185] dark:group-hover:text-blue-400 whitespace-nowrap">
+            <span className="text-xs font-medium text-white whitespace-nowrap">
               View Payslip
             </span>
-            <div className="w-9 h-9 rounded-full bg-[#ff5500] flex items-center justify-center text-white shadow-sm transition-transform duration-200 group-hover:scale-110">
-              <Banknote className="w-4 h-4" />
+            <div className="w-6 h-6 rounded-md flex items-center justify-center text-white bg-white/10">
+              <Banknote className="w-3.5 h-3.5" />
             </div>
           </button>
         </div>
@@ -1044,18 +974,16 @@ const EmployeeDashboard = () => {
             aria-expanded={quickActionsOpen}
             aria-label="Quick Actions Floating Menu"
             onClick={() => setQuickActionsOpen((prev) => !prev)}
-            className={`flex items-center gap-2 h-13 px-4 sm:px-5 rounded-full bg-[#002185] hover:bg-[#ff5500] text-white shadow-2xl transition-all duration-300 transform hover:scale-105 active:scale-95 cursor-pointer border-2 border-white/20 ${
-              quickActionsOpen ? "bg-[#ff5500] ring-4 ring-[#ff5500]/30 rotate-0" : ""
+            className={`flex items-center gap-2 h-11 px-4 rounded-lg text-white shadow-lg transition-colors duration-150 cursor-pointer ${
+              quickActionsOpen ? "bg-[#C24A0A]" : "bg-[#002185] hover:bg-[#001a6b]"
             }`}
           >
-            <div className="transition-transform duration-300">
-              {quickActionsOpen ? (
-                <X className="w-5 h-5 animate-spin-once" />
-              ) : (
-                <Zap className="w-5 h-5 text-amber-400 fill-amber-400" />
-              )}
-            </div>
-            <span className="text-xs font-bold tracking-wide uppercase">
+            {quickActionsOpen ? (
+              <X className="w-4 h-4" />
+            ) : (
+              <Zap className="w-4 h-4" />
+            )}
+            <span className="text-xs font-semibold tracking-wide">
               {quickActionsOpen ? "Close" : "Quick Actions"}
             </span>
           </button>

@@ -288,118 +288,123 @@ export const Leave = () => {
   }
 
   return (
-    <div id="admin-leave-management" className="space-y-6">
-      {/* Header */}
-      <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
-        <div className="flex items-center gap-3">
-          <div className="flex h-11 w-11 items-center justify-center rounded-xl bg-[#002185] shrink-0 shadow-xs">
-            <CalendarClock className="h-5 w-5 text-white" />
+    <div id="admin-leave-management" className="w-full max-w-7xl mx-auto p-4 sm:p-6 lg:p-8 space-y-6 overflow-x-hidden">
+      {/* Header Banner */}
+      <div className="bg-white dark:bg-slate-900 border border-slate-200/80 dark:border-slate-800/80 rounded-2xl sm:rounded-3xl p-5 sm:p-6 shadow-sm dark:shadow-black/20">
+        <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
+          <div className="flex items-center gap-3.5">
+            <div className="p-2.5 rounded-xl bg-blue-500/10 text-blue-600 dark:text-blue-400 border border-blue-500/20 shrink-0">
+              <CalendarClock className="h-6 w-6" />
+            </div>
+            <div>
+              <div className="flex items-center gap-2.5">
+                <h1 className="text-xl sm:text-2xl font-bold tracking-tight text-slate-900 dark:text-white">
+                  Leave Requests Management
+                </h1>
+                {pendingRequests > 0 && (
+                  <span className="px-2.5 py-0.5 rounded-full text-xs font-semibold bg-amber-500/10 text-amber-600 dark:text-amber-400 border border-amber-500/20">
+                    {pendingRequests} Action Required
+                  </span>
+                )}
+              </div>
+              <p className="text-xs sm:text-sm text-slate-500 dark:text-slate-400 mt-0.5">
+                Review and approve or reject employee leave requests with direct database sync and calendar tracking.
+              </p>
+            </div>
           </div>
-          <div>
-            <h1 className="text-2xl font-bold text-[#002185] tracking-tight">
-              Leave Requests Management
-            </h1>
-            <p className="text-xs text-[#64748B] mt-0.5">
-              Review and approve or reject employee leave requests with direct database sync
-            </p>
+
+          {/* View Switcher Tabs */}
+          <div className="flex items-center p-1 bg-slate-100 dark:bg-slate-800/80 border border-slate-200/80 dark:border-slate-700/80 rounded-xl self-stretch sm:self-auto flex-wrap gap-1">
+            <button
+              type="button"
+              onClick={() => setActiveTab("pending")}
+              className={`flex items-center gap-2 px-3 py-1.5 rounded-lg text-xs font-semibold transition-all cursor-pointer ${
+                activeTab === "pending"
+                  ? "bg-blue-600 text-white shadow-xs"
+                  : "text-slate-600 dark:text-slate-400 hover:text-blue-600 dark:hover:text-blue-400"
+              }`}
+            >
+              <LayoutGrid className="w-3.5 h-3.5" />
+              <span>Pending Review</span>
+              {pendingRequests > 0 && (
+                <span
+                  className={`px-1.5 py-0.2 rounded-full text-[10px] font-bold ${
+                    activeTab === "pending"
+                      ? "bg-white/20 text-white"
+                      : "bg-amber-100 dark:bg-amber-950 text-amber-700 dark:text-amber-400 border border-amber-300 dark:border-amber-800"
+                  }`}
+                >
+                  {pendingRequests}
+                </span>
+              )}
+            </button>
+
+            <button
+              type="button"
+              onClick={() => setActiveTab("calendar")}
+              className={`flex items-center gap-2 px-3 py-1.5 rounded-lg text-xs font-semibold transition-all cursor-pointer ${
+                activeTab === "calendar"
+                  ? "bg-blue-600 text-white shadow-xs"
+                  : "text-slate-600 dark:text-slate-400 hover:text-blue-600 dark:hover:text-blue-400"
+              }`}
+            >
+              <Calendar className="w-3.5 h-3.5" />
+              <span>Team Calendar</span>
+            </button>
+
+            <button
+              type="button"
+              onClick={() => setActiveTab("all")}
+              className={`flex items-center gap-2 px-3 py-1.5 rounded-lg text-xs font-semibold transition-all cursor-pointer ${
+                activeTab === "all"
+                  ? "bg-blue-600 text-white shadow-xs"
+                  : "text-slate-600 dark:text-slate-400 hover:text-blue-600 dark:hover:text-blue-400"
+              }`}
+            >
+              <List className="w-3.5 h-3.5" />
+              <span>All Records ({totalRequests})</span>
+            </button>
           </div>
-        </div>
-
-        {/* View Switcher Tabs */}
-        <div className="flex items-center p-1 bg-[#F8FAFC] border border-[#E2E8F0] rounded-xl self-stretch sm:self-auto flex-wrap gap-1">
-          <button
-            type="button"
-            onClick={() => setActiveTab("pending")}
-            className={`flex items-center gap-2 px-3.5 py-1.5 rounded-lg text-xs font-bold transition-all cursor-pointer ${
-              activeTab === "pending"
-                ? "bg-[#002185] text-white shadow-xs"
-                : "text-[#64748B] hover:text-[#002185]"
-            }`}
-          >
-            <LayoutGrid className="w-3.5 h-3.5" />
-            <span>Pending Dashboard</span>
-            {pendingRequests > 0 && (
-              <span
-                className={`px-1.5 py-0.2 rounded-full text-[10px] font-black ${
-                  activeTab === "pending"
-                    ? "bg-[#ff5500] text-white"
-                    : "bg-[#FFFBEB] text-[#B45309] border border-[#F59E0B]/40"
-                }`}
-              >
-                {pendingRequests}
-              </span>
-            )}
-          </button>
-
-          <button
-            type="button"
-            onClick={() => setActiveTab("calendar")}
-            className={`flex items-center gap-2 px-3.5 py-1.5 rounded-lg text-xs font-bold transition-all cursor-pointer ${
-              activeTab === "calendar"
-                ? "bg-[#002185] text-white shadow-xs"
-                : "text-[#64748B] hover:text-[#002185]"
-            }`}
-          >
-            <Calendar className="w-3.5 h-3.5" />
-            <span>Team Leave Calendar</span>
-          </button>
-
-          <button
-            type="button"
-            onClick={() => setActiveTab("all")}
-            className={`flex items-center gap-2 px-3.5 py-1.5 rounded-lg text-xs font-bold transition-all cursor-pointer ${
-              activeTab === "all"
-                ? "bg-[#002185] text-white shadow-xs"
-                : "text-[#64748B] hover:text-[#002185]"
-            }`}
-          >
-            <List className="w-3.5 h-3.5" />
-            <span>All Leave Records ({totalRequests})</span>
-          </button>
         </div>
       </div>
 
       {/* Summary KPI Cards */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 sm:gap-5">
         <div
           onClick={() => {
             setActiveTab("all");
             setFilterStatus("All");
           }}
-          className="cursor-pointer relative overflow-hidden bg-[#FFFFFF] border border-[#E2E8F0] rounded-xl p-5 shadow-sm hover:shadow-md hover:border-[#002185] transition-all duration-300"
+          className="cursor-pointer bg-white dark:bg-slate-900 border border-slate-200/80 dark:border-slate-800/80 rounded-2xl sm:rounded-3xl p-5 shadow-sm dark:shadow-black/20 hover:border-blue-500/50 transition-all flex items-center justify-between group"
         >
-          <div className="flex items-center justify-between">
-            <div>
-              <p className="text-xs font-medium text-[#64748B] uppercase tracking-wide">
-                Total Requests
-              </p>
-              <p className="text-2xl font-bold text-[#002185] mt-1.5">
-                {totalRequests}
-              </p>
-            </div>
-            <div className="w-11 h-11 rounded-full bg-[#002185] flex items-center justify-center">
-              <Users className="w-5 h-5 text-white" />
-            </div>
+          <div>
+            <p className="text-xs font-semibold text-slate-400 uppercase tracking-wider">
+              Total Requests
+            </p>
+            <p className="text-2xl font-bold text-slate-900 dark:text-white mt-1">
+              {totalRequests}
+            </p>
+          </div>
+          <div className="w-11 h-11 rounded-xl bg-blue-500/10 text-blue-600 dark:text-blue-400 border border-blue-500/20 flex items-center justify-center">
+            <Users className="w-5 h-5" />
           </div>
         </div>
 
         <div
           onClick={() => setActiveTab("pending")}
-          className="cursor-pointer relative overflow-hidden bg-[#FFFFFF] border-2 border-[#F59E0B]/50 hover:border-[#ff5500] rounded-xl p-5 shadow-sm hover:shadow-md transition-all duration-300"
+          className="cursor-pointer bg-white dark:bg-slate-900 border border-amber-200 dark:border-amber-900/60 rounded-2xl sm:rounded-3xl p-5 shadow-sm dark:shadow-black/20 hover:border-amber-500 transition-all flex items-center justify-between group"
         >
-          <div className="flex items-center justify-between">
-            <div>
-              <p className="text-xs font-semibold text-[#B45309] uppercase tracking-wide flex items-center gap-1">
-                <span>Action Pending</span>
-                <span className="w-2 h-2 rounded-full bg-[#F59E0B] animate-pulse" />
-              </p>
-              <p className="text-2xl font-bold text-[#F59E0B] mt-1.5">
-                {pendingRequests}
-              </p>
-            </div>
-            <div className="w-11 h-11 rounded-full bg-[#FFFBEB] flex items-center justify-center">
-              <ClockIcon className="w-5 h-5 text-[#F59E0B]" />
-            </div>
+          <div>
+            <p className="text-xs font-semibold text-amber-600 dark:text-amber-400 uppercase tracking-wider flex items-center gap-1.5">
+              <span>Action Pending</span>
+              {pendingRequests > 0 && <span className="w-2 h-2 rounded-full bg-amber-500 animate-pulse" />}
+            </p>
+            <p className="text-2xl font-bold text-amber-600 dark:text-amber-400 mt-1">
+              {pendingRequests}
+            </p>
+          </div>
+          <div className="w-11 h-11 rounded-xl bg-amber-500/10 text-amber-600 dark:text-amber-400 border border-amber-500/20 flex items-center justify-center">
+            <ClockIcon className="w-5 h-5" />
           </div>
         </div>
 
@@ -408,20 +413,18 @@ export const Leave = () => {
             setActiveTab("all");
             setFilterStatus("Approved");
           }}
-          className="cursor-pointer relative overflow-hidden bg-[#FFFFFF] border border-[#E2E8F0] rounded-xl p-5 shadow-sm hover:shadow-md hover:border-[#16A34A] transition-all duration-300"
+          className="cursor-pointer bg-white dark:bg-slate-900 border border-slate-200/80 dark:border-slate-800/80 rounded-2xl sm:rounded-3xl p-5 shadow-sm dark:shadow-black/20 hover:border-emerald-500/50 transition-all flex items-center justify-between group"
         >
-          <div className="flex items-center justify-between">
-            <div>
-              <p className="text-xs font-medium text-[#64748B] uppercase tracking-wide">
-                Approved
-              </p>
-              <p className="text-2xl font-bold text-[#16A34A] mt-1.5">
-                {approvedRequests}
-              </p>
-            </div>
-            <div className="w-11 h-11 rounded-full bg-[#F0FDF4] flex items-center justify-center">
-              <CheckCircle className="w-5 h-5 text-[#16A34A]" />
-            </div>
+          <div>
+            <p className="text-xs font-semibold text-slate-400 uppercase tracking-wider">
+              Approved
+            </p>
+            <p className="text-2xl font-bold text-emerald-600 dark:text-emerald-400 mt-1">
+              {approvedRequests}
+            </p>
+          </div>
+          <div className="w-11 h-11 rounded-xl bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border border-emerald-500/20 flex items-center justify-center">
+            <CheckCircle className="w-5 h-5" />
           </div>
         </div>
 
@@ -430,20 +433,18 @@ export const Leave = () => {
             setActiveTab("all");
             setFilterStatus("Rejected");
           }}
-          className="cursor-pointer relative overflow-hidden bg-[#FFFFFF] border border-[#E2E8F0] rounded-xl p-5 shadow-sm hover:shadow-md hover:border-[#DC2626] transition-all duration-300"
+          className="cursor-pointer bg-white dark:bg-slate-900 border border-slate-200/80 dark:border-slate-800/80 rounded-2xl sm:rounded-3xl p-5 shadow-sm dark:shadow-black/20 hover:border-rose-500/50 transition-all flex items-center justify-between group"
         >
-          <div className="flex items-center justify-between">
-            <div>
-              <p className="text-xs font-medium text-[#64748B] uppercase tracking-wide">
-                Rejected
-              </p>
-              <p className="text-2xl font-bold text-[#DC2626] mt-1.5">
-                {rejectedRequests}
-              </p>
-            </div>
-            <div className="w-11 h-11 rounded-full bg-[#FEF2F2] flex items-center justify-center">
-              <XCircle className="w-5 h-5 text-[#DC2626]" />
-            </div>
+          <div>
+            <p className="text-xs font-semibold text-slate-400 uppercase tracking-wider">
+              Rejected
+            </p>
+            <p className="text-2xl font-bold text-rose-600 dark:text-rose-400 mt-1">
+              {rejectedRequests}
+            </p>
+          </div>
+          <div className="w-11 h-11 rounded-xl bg-rose-500/10 text-rose-600 dark:text-rose-400 border border-rose-500/20 flex items-center justify-center">
+            <XCircle className="w-5 h-5" />
           </div>
         </div>
       </div>
@@ -473,28 +474,28 @@ export const Leave = () => {
       {activeTab === "all" && (
         <div className="space-y-4">
           {/* Search Bar & Filters */}
-          <div className="bg-[#FFFFFF] border border-[#E2E8F0] rounded-xl p-3 shadow-sm">
+          <div className="bg-white dark:bg-slate-900 border border-slate-200/80 dark:border-slate-800/80 rounded-2xl sm:rounded-3xl p-4 sm:p-5 shadow-sm dark:shadow-black/20">
             <div className="flex flex-col sm:flex-row gap-3">
               <div className="flex-1 relative">
                 <div className="absolute inset-y-0 left-0 pl-3.5 flex items-center pointer-events-none">
-                  <Search className="h-4 w-4 text-[#64748B]" />
+                  <Search className="h-4 w-4 text-slate-400" />
                 </div>
                 <input
                   type="text"
                   placeholder="Search by employee, department, or leave type..."
                   value={search}
                   onChange={(e) => setSearch(e.target.value)}
-                  className="w-full pl-10 pr-4 py-2.5 border border-[#E2E8F0] rounded-lg bg-[#FFFFFF] text-[#0F172A] text-sm placeholder-[#94A3B8] focus:outline-none focus:ring-2 focus:ring-[#ff5500] focus:border-transparent transition-all duration-200"
+                  className="w-full pl-10 pr-4 py-2.5 border border-slate-200/80 dark:border-slate-700/80 rounded-xl bg-slate-50 dark:bg-slate-950/60 text-slate-900 dark:text-white text-xs placeholder-slate-400 focus:outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500 transition-all"
                 />
               </div>
               <div className="flex items-center gap-2 shrink-0">
-                <div className="hidden sm:flex items-center gap-1.5 pl-1 pr-2 text-[#94A3B8]">
+                <div className="hidden sm:flex items-center gap-1.5 pl-1 pr-2 text-slate-400">
                   <SlidersHorizontal className="h-4 w-4" />
                 </div>
                 <select
                   value={filterStatus}
                   onChange={(e) => setFilterStatus(e.target.value)}
-                  className="px-3.5 py-2.5 border border-[#E2E8F0] rounded-lg bg-[#FFFFFF] text-[#0F172A] focus:outline-none focus:ring-2 focus:ring-[#ff5500] focus:border-transparent transition-all duration-200 text-sm cursor-pointer hover:border-[#ff5500]"
+                  className="px-3.5 py-2.5 border border-slate-200/80 dark:border-slate-700/80 rounded-xl bg-slate-50 dark:bg-slate-950/60 text-slate-700 dark:text-slate-200 focus:outline-none focus:border-blue-500 transition-all text-xs cursor-pointer hover:border-blue-500"
                 >
                   {statusOptions.map((status) => (
                     <option key={status} value={status}>
@@ -505,7 +506,7 @@ export const Leave = () => {
                 <select
                   value={filterType}
                   onChange={(e) => setFilterType(e.target.value)}
-                  className="px-3.5 py-2.5 border border-[#E2E8F0] rounded-lg bg-[#FFFFFF] text-[#0F172A] focus:outline-none focus:ring-2 focus:ring-[#ff5500] focus:border-transparent transition-all duration-200 text-sm cursor-pointer hover:border-[#ff5500]"
+                  className="px-3.5 py-2.5 border border-slate-200/80 dark:border-slate-700/80 rounded-xl bg-slate-50 dark:bg-slate-950/60 text-slate-700 dark:text-slate-200 focus:outline-none focus:border-blue-500 transition-all text-xs cursor-pointer hover:border-blue-500"
                 >
                   {leaveTypes.map((type) => (
                     <option key={type} value={type}>
@@ -518,22 +519,22 @@ export const Leave = () => {
           </div>
 
           {/* Results Count */}
-          <div className="flex items-center justify-between text-xs text-[#64748B]">
+          <div className="flex items-center justify-between text-xs text-slate-500 dark:text-slate-400 px-1">
             <span>
               Showing{" "}
-              <span className="font-semibold text-[#002185]">
+              <span className="font-bold text-slate-900 dark:text-white">
                 {filteredData.length}
               </span>{" "}
               of{" "}
-              <span className="font-semibold text-[#002185]">{requests.length}</span>{" "}
+              <span className="font-bold text-slate-900 dark:text-white">{requests.length}</span>{" "}
               leave records
             </span>
           </div>
 
           {/* Table Container */}
-          <div className="border border-[#E2E8F0] rounded-xl overflow-hidden shadow-sm hover:shadow-md transition-all duration-300">
+          <div className="bg-white dark:bg-slate-900 border border-slate-200/80 dark:border-slate-800/80 rounded-2xl sm:rounded-3xl overflow-hidden shadow-sm dark:shadow-black/20">
             {/* Table Header */}
-            <div className="hidden lg:grid grid-cols-12 gap-2 px-4 py-3 bg-[#F8FAFC] border-b border-[#E2E8F0] text-xs font-semibold text-[#64748B] uppercase tracking-wider">
+            <div className="hidden lg:grid grid-cols-12 gap-2 px-5 py-3.5 bg-slate-50 dark:bg-slate-800/50 border-b border-slate-200/80 dark:border-slate-800/80 text-xs font-semibold text-slate-400 uppercase tracking-wider">
               <div className="col-span-3">Employee</div>
               <div className="col-span-2">Department</div>
               <div className="col-span-2">Date Range</div>
@@ -543,7 +544,7 @@ export const Leave = () => {
             </div>
 
             {/* Main Content */}
-            <div className="divide-y divide-[#E2E8F0] bg-[#FFFFFF]">
+            <div className="divide-y divide-slate-100 dark:divide-slate-800/80">
               {filteredData.length > 0 ? (
                 filteredData.map((leave) => {
                   const leaveId = leave._id;
@@ -558,50 +559,50 @@ export const Leave = () => {
                   return (
                     <div
                       key={leaveId}
-                      className="hover:bg-[#F8FAFC] transition-colors duration-150"
+                      className="hover:bg-slate-50/80 dark:hover:bg-slate-800/40 transition-colors"
                     >
                       {/* Desktop View */}
-                      <div className="hidden lg:grid grid-cols-12 gap-2 items-center px-4 py-3.5">
+                      <div className="hidden lg:grid grid-cols-12 gap-2 items-center px-5 py-3.5">
                         <div className="col-span-3 flex items-center gap-2.5 min-w-0">
-                          <div className="w-9 h-9 rounded-xl bg-[#002185] flex items-center justify-center shrink-0 text-white font-bold text-xs">
+                          <div className="w-9 h-9 rounded-xl bg-blue-600 flex items-center justify-center shrink-0 text-white font-bold text-xs shadow-2xs">
                             {employeeName.charAt(0).toUpperCase()}
                           </div>
                           <div className="min-w-0">
-                            <p className="text-sm font-bold text-[#002185] truncate">
+                            <p className="text-sm font-bold text-slate-900 dark:text-white truncate">
                               {employeeName}
                             </p>
-                            <p className="text-xs text-[#64748B]">{employeeId}</p>
+                            <p className="text-xs text-slate-400 font-mono">{employeeId}</p>
                           </div>
                         </div>
 
                         <div className="col-span-2">
-                          <p className="text-xs font-medium text-[#334155] flex items-center gap-1.5">
-                            <Building2 className="w-3.5 h-3.5 text-[#94A3B8] shrink-0" />
+                          <p className="text-xs font-medium text-slate-700 dark:text-slate-300 flex items-center gap-1.5">
+                            <Building2 className="w-3.5 h-3.5 text-slate-400 shrink-0" />
                             {department}
                           </p>
-                          <span className="inline-block mt-1 text-[10px] font-semibold text-[#002185] bg-[#F8FAFC] border border-[#E2E8F0] rounded-full px-2 py-0.5">
+                          <span className="inline-block mt-1 text-[10px] font-semibold text-blue-600 dark:text-blue-400 bg-blue-500/10 border border-blue-500/20 rounded-full px-2 py-0.5">
                             {leaveType}
                           </span>
                         </div>
 
                         <div className="col-span-2">
-                          <p className="text-xs text-[#64748B] flex items-center gap-1.5">
-                            <CalendarDays className="w-3.5 h-3.5 shrink-0 text-[#002185]" />
+                          <p className="text-xs text-slate-500 dark:text-slate-400 flex items-center gap-1.5">
+                            <CalendarDays className="w-3.5 h-3.5 shrink-0 text-blue-600 dark:text-blue-400" />
                             <span className="flex items-center gap-1">
                               {formatDate(leave.startDate)}
-                              <ArrowRight className="w-3 h-3 text-[#ff5500]" />
+                              <ArrowRight className="w-3 h-3 text-slate-400" />
                               {formatDate(leave.endDate)}
                             </span>
                           </p>
                           {leave.reason && (
-                            <p className="text-[10px] text-[#64748B] italic truncate mt-0.5">
+                            <p className="text-[10px] text-slate-400 italic truncate mt-0.5">
                               "{leave.reason}"
                             </p>
                           )}
                         </div>
 
                         <div className="col-span-1 text-center">
-                          <span className="inline-flex items-center justify-center min-w-[2rem] text-xs font-bold text-[#002185] tabular-nums bg-[#F8FAFC] border border-[#E2E8F0] rounded-md px-2 py-1">
+                          <span className="inline-flex items-center justify-center min-w-[2rem] text-xs font-bold text-slate-800 dark:text-slate-200 tabular-nums bg-slate-100 dark:bg-slate-800 rounded-md px-2 py-1">
                             {totalDays}d
                           </span>
                         </div>
@@ -613,7 +614,7 @@ export const Leave = () => {
                               handleStatusChange(leaveId, e.target.value)
                             }
                             disabled={isUpdating}
-                            className={`text-xs font-bold pl-3 pr-7 py-1.5 rounded-full border appearance-none cursor-pointer focus:outline-none focus:ring-2 transition-colors duration-150 ${getStatusSelectStyles(
+                            className={`text-xs font-semibold pl-3 pr-7 py-1.5 rounded-full border appearance-none cursor-pointer focus:outline-none transition-colors ${getStatusSelectStyles(
                               status
                             )} ${isUpdating ? "opacity-50 cursor-not-allowed" : ""}`}
                             style={{
@@ -638,7 +639,7 @@ export const Leave = () => {
                               onClick={() => handleStatusChange(leaveId, "Approved")}
                               disabled={isUpdating}
                               title="Click to Approve request"
-                              className="px-2.5 py-1 rounded-lg bg-[#16A34A] hover:bg-[#15803D] text-white text-[11px] font-bold transition-all shadow-2xs flex items-center gap-1 cursor-pointer disabled:opacity-50"
+                              className="px-2.5 py-1 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white text-[11px] font-semibold transition-all shadow-2xs flex items-center gap-1 cursor-pointer disabled:opacity-50"
                             >
                               <Check className="w-3 h-3" />
                               <span>Approve</span>
@@ -651,9 +652,9 @@ export const Leave = () => {
                               onClick={() => handleStatusChange(leaveId, "Rejected")}
                               disabled={isUpdating}
                               title="Click to Reject request"
-                              className="px-2.5 py-1 rounded-lg bg-white hover:bg-[#FEF2F2] border border-[#DC2626]/40 hover:border-[#DC2626] text-[#DC2626] text-[11px] font-bold transition-all shadow-2xs flex items-center gap-1 cursor-pointer disabled:opacity-50"
+                              className="px-2.5 py-1 rounded-xl bg-white dark:bg-slate-800 hover:bg-rose-50 dark:hover:bg-rose-950/30 border border-rose-300 dark:border-rose-800 text-rose-600 dark:text-rose-400 text-[11px] font-semibold transition-all shadow-2xs flex items-center gap-1 cursor-pointer disabled:opacity-50"
                             >
-                              <X className="w-3 h-3 text-[#DC2626]" />
+                              <X className="w-3 h-3 text-rose-600 dark:text-rose-400" />
                               <span>Reject</span>
                             </button>
                           )}
@@ -665,7 +666,7 @@ export const Leave = () => {
                               setDeleteConfirmLeave(leave);
                             }}
                             title="Permanently delete leave record"
-                            className="p-1.5 rounded-lg border border-slate-200 hover:border-rose-300 hover:bg-rose-50 text-slate-400 hover:text-rose-600 transition cursor-pointer"
+                            className="p-1.5 rounded-xl border border-slate-200 dark:border-slate-700 hover:border-rose-300 hover:bg-rose-50 dark:hover:bg-rose-950/30 text-slate-400 hover:text-rose-600 transition cursor-pointer"
                           >
                             <Trash2 className="w-3.5 h-3.5" />
                           </button>
@@ -676,36 +677,36 @@ export const Leave = () => {
                       <div className="lg:hidden p-4 space-y-3">
                         <div className="flex items-center justify-between">
                           <div className="flex items-center gap-2.5">
-                            <div className="w-10 h-10 rounded-xl bg-[#002185] flex items-center justify-center shrink-0 text-white font-bold text-sm">
+                            <div className="w-10 h-10 rounded-xl bg-blue-600 flex items-center justify-center shrink-0 text-white font-bold text-sm">
                               {employeeName.charAt(0).toUpperCase()}
                             </div>
                             <div>
-                              <p className="text-sm font-bold text-[#002185]">
+                              <p className="text-sm font-bold text-slate-900 dark:text-white">
                                 {employeeName}
                               </p>
-                              <p className="text-xs text-[#64748B] flex items-center gap-1">
+                              <p className="text-xs text-slate-400 flex items-center gap-1">
                                 <Building2 className="w-3 h-3" />
                                 {department}
                               </p>
                             </div>
                           </div>
-                          <span className="text-xs font-bold text-[#002185] bg-[#F8FAFC] rounded-md px-2 py-1 border border-[#E2E8F0]">
+                          <span className="text-xs font-bold text-blue-600 dark:text-blue-400 bg-blue-50 dark:bg-blue-950/40 rounded-md px-2 py-1 border border-blue-200 dark:border-blue-800">
                             {totalDays} days
                           </span>
                         </div>
 
                         {leave.reason && (
-                          <div className="p-2 rounded-lg bg-[#F8FAFC] text-xs text-[#475569] italic">
+                          <div className="p-2.5 rounded-xl bg-slate-50 dark:bg-slate-950/60 border border-slate-200/80 dark:border-slate-800/80 text-xs text-slate-600 dark:text-slate-300 italic">
                             "{leave.reason}"
                           </div>
                         )}
 
-                        <div className="grid grid-cols-3 gap-2 pt-2 border-t border-[#E2E8F0]">
+                        <div className="grid grid-cols-3 gap-2 pt-2 border-t border-slate-100 dark:border-slate-800/80">
                           <button
                             type="button"
                             onClick={() => handleStatusChange(leaveId, "Rejected")}
                             disabled={isUpdating || status === "Rejected"}
-                            className="py-2 px-2 rounded-lg bg-white border border-[#DC2626]/30 text-[#DC2626] text-xs font-bold flex items-center justify-center gap-1 disabled:opacity-40"
+                            className="py-2 px-2 rounded-xl bg-white dark:bg-slate-800 border border-rose-300 dark:border-rose-800 text-rose-600 dark:text-rose-400 text-xs font-semibold flex items-center justify-center gap-1 disabled:opacity-40"
                           >
                             <X className="w-3 h-3" />
                             <span>Reject</span>
@@ -714,7 +715,7 @@ export const Leave = () => {
                             type="button"
                             onClick={() => handleStatusChange(leaveId, "Approved")}
                             disabled={isUpdating || status === "Approved"}
-                            className="py-2 px-2 rounded-lg bg-[#16A34A] text-white text-xs font-bold flex items-center justify-center gap-1 disabled:opacity-40 shadow-2xs"
+                            className="py-2 px-2 rounded-xl bg-emerald-600 text-white text-xs font-semibold flex items-center justify-center gap-1 disabled:opacity-40 shadow-2xs"
                           >
                             <Check className="w-3 h-3" />
                             <span>Approve</span>
@@ -722,7 +723,7 @@ export const Leave = () => {
                           <button
                             type="button"
                             onClick={() => setDeleteConfirmLeave(leave)}
-                            className="py-2 px-2 rounded-lg bg-white border border-rose-200 text-rose-600 hover:bg-rose-50 text-xs font-bold flex items-center justify-center gap-1 transition"
+                            className="py-2 px-2 rounded-xl bg-white dark:bg-slate-800 border border-rose-200 dark:border-rose-800 text-rose-600 dark:text-rose-400 hover:bg-rose-50 text-xs font-semibold flex items-center justify-center gap-1 transition"
                           >
                             <Trash2 className="w-3 h-3" />
                             <span>Delete</span>
@@ -734,16 +735,16 @@ export const Leave = () => {
                 })
               ) : (
                 /* Empty State */
-                <div className="text-center py-14 bg-[#FFFFFF]">
+                <div className="text-center py-14 bg-white dark:bg-slate-900">
                   <div className="flex justify-center mb-4">
-                    <div className="w-14 h-14 rounded-full bg-[#F8FAFC] flex items-center justify-center">
-                      <FileText className="w-6 h-6 text-[#94A3B8]" />
+                    <div className="w-14 h-14 rounded-full bg-slate-50 dark:bg-slate-800 text-slate-400 flex items-center justify-center">
+                      <FileText className="w-6 h-6" />
                     </div>
                   </div>
-                  <h3 className="text-base font-semibold text-[#002185]">
+                  <h3 className="text-base font-bold text-slate-900 dark:text-white">
                     No leave records found
                   </h3>
-                  <p className="text-xs text-[#64748B] mt-1">
+                  <p className="text-xs text-slate-400 mt-1">
                     Try adjusting your search or filter criteria
                   </p>
                 </div>
@@ -757,29 +758,29 @@ export const Leave = () => {
       {deleteConfirmLeave && (
         <div
           id="delete-leave-modal-overlay"
-          className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-xs animate-in fade-in duration-200"
+          className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-xs animate-fade-in"
           onClick={() => !isDeleting && setDeleteConfirmLeave(null)}
         >
           <div
             id="delete-leave-modal-container"
-            className="bg-white rounded-2xl max-w-md w-full p-6 border border-[#E2E8F0] shadow-2xl space-y-4 animate-in zoom-in-95 duration-200"
+            className="bg-white dark:bg-slate-900 rounded-2xl sm:rounded-3xl max-w-md w-full p-6 border border-slate-200 dark:border-slate-800 shadow-2xl space-y-4"
             onClick={(e) => e.stopPropagation()}
           >
             <div className="flex items-start gap-4">
-              <div className="w-12 h-12 rounded-2xl bg-rose-50 border border-rose-100 text-[#DC2626] flex items-center justify-center shrink-0">
+              <div className="w-12 h-12 rounded-2xl bg-rose-50 dark:bg-rose-950/50 border border-rose-100 dark:border-rose-900 text-rose-600 dark:text-rose-400 flex items-center justify-center shrink-0">
                 <Trash2 className="w-6 h-6" />
               </div>
               <div className="space-y-1">
-                <h3 className="text-base font-bold text-[#002185]">
+                <h3 className="text-base font-bold text-slate-900 dark:text-white">
                   Delete Leave Record?
                 </h3>
-                <p className="text-xs text-[#64748B]">
+                <p className="text-xs text-slate-500 dark:text-slate-400">
                   Are you sure you want to permanently delete the{" "}
-                  <span className="font-bold text-[#0F172A]">
+                  <span className="font-bold text-slate-900 dark:text-white">
                     {deleteConfirmLeave?.leaveType || "leave"}
                   </span>{" "}
                   request for{" "}
-                  <span className="font-bold text-[#0F172A]">
+                  <span className="font-bold text-slate-900 dark:text-white">
                     {deleteConfirmLeave?.employee?.fullName || "this employee"}
                   </span>
                   ?
@@ -787,19 +788,19 @@ export const Leave = () => {
               </div>
             </div>
 
-            <div className="p-3 bg-[#FEF2F2] border border-[#FCA5A5] rounded-xl flex items-start gap-2 text-xs text-[#DC2626]">
+            <div className="p-3 bg-rose-50 dark:bg-rose-950/40 border border-rose-200 dark:border-rose-800 rounded-xl flex items-start gap-2 text-xs text-rose-700 dark:text-rose-300">
               <AlertTriangle className="w-4 h-4 shrink-0 mt-0.5" />
               <span>
-                This action is irreversible and will permanently remove this leave request and associated records from the database.
+                This action is irreversible and will permanently remove this leave request from the database.
               </span>
             </div>
 
-            <div className="flex items-center justify-end gap-2.5 pt-2 border-t border-[#F1F5F9]">
+            <div className="flex items-center justify-end gap-2.5 pt-2 border-t border-slate-100 dark:border-slate-800">
               <button
                 type="button"
                 disabled={isDeleting}
                 onClick={() => setDeleteConfirmLeave(null)}
-                className="px-4 py-2 rounded-xl border border-[#E2E8F0] text-xs font-semibold text-[#64748B] hover:text-[#0F172A] hover:bg-[#F8FAFC] transition cursor-pointer disabled:opacity-50"
+                className="px-4 py-2 rounded-xl border border-slate-200 dark:border-slate-700 text-xs font-semibold text-slate-600 dark:text-slate-400 hover:text-slate-900 hover:bg-slate-50 transition cursor-pointer disabled:opacity-50"
               >
                 Cancel
               </button>
@@ -807,12 +808,12 @@ export const Leave = () => {
                 type="button"
                 disabled={isDeleting}
                 onClick={handleConfirmDelete}
-                className="px-4 py-2 rounded-xl bg-[#DC2626] hover:bg-[#B91C1C] text-white text-xs font-bold transition shadow-xs flex items-center gap-1.5 cursor-pointer disabled:opacity-50"
+                className="px-4 py-2 rounded-xl bg-rose-600 hover:bg-rose-700 text-white text-xs font-semibold transition shadow-sm flex items-center gap-1.5 cursor-pointer disabled:opacity-50"
               >
                 {isDeleting ? (
                   <>
                     <Loader2 className="w-3.5 h-3.5 animate-spin" />
-                    <span>Deleting Record...</span>
+                    <span>Deleting...</span>
                   </>
                 ) : (
                   <>

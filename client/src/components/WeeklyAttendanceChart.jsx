@@ -15,7 +15,6 @@ import {
   Clock,
   CheckCircle2,
   AlertCircle,
-  BarChart3,
 } from "lucide-react";
 
 // Standard days of the week template
@@ -36,45 +35,45 @@ const CustomTooltip = ({ active, payload, label }) => {
     const attendanceRate = totalHeadcount > 0 ? Math.round(((data.present || 0) / totalHeadcount) * 100) : 0;
 
     return (
-      <div className="bg-[#002185] text-white p-3.5 rounded-xl shadow-xl border border-white/10 text-xs min-w-[190px]">
-        <div className="flex items-center justify-between border-b border-white/15 pb-2 mb-2">
-          <span className="font-bold text-sm tracking-wide text-white">
+      <div className="bg-[#0F1B33] text-white p-3 rounded-lg shadow-lg border border-[#2A3B54] text-xs min-w-[180px]">
+        <div className="flex items-center justify-between border-b border-[#2A3B54] pb-2 mb-2">
+          <span className="font-semibold text-xs text-white">
             {data.fullDay || data.fullWeek || label}
           </span>
-          <span className="bg-[#16A34A] text-white px-2 py-0.5 rounded-full text-[10px] font-bold">
+          <span className="bg-[#ECFDF5] text-[#0F7A47] px-2 py-0.5 rounded text-[10px] font-medium border border-[#A7E8C7]">
             {data.rate || attendanceRate}% Rate
           </span>
         </div>
 
         <div className="space-y-1.5">
           <div className="flex items-center justify-between">
-            <span className="flex items-center gap-1.5 text-white/80">
-              <span className="w-2.5 h-2.5 rounded-full bg-[#16A34A] inline-block" />
+            <span className="flex items-center gap-1.5 text-[#B7C0CA]">
+              <span className="w-2 h-2 rounded-full bg-[#0F7A47] inline-block" />
               On Time / Present:
             </span>
-            <span className="font-bold text-white">{data.present || 0}</span>
+            <span className="font-medium text-white">{data.present || 0}</span>
           </div>
 
           <div className="flex items-center justify-between">
-            <span className="flex items-center gap-1.5 text-white/80">
-              <span className="w-2.5 h-2.5 rounded-full bg-[#F59E0B] inline-block" />
+            <span className="flex items-center gap-1.5 text-[#B7C0CA]">
+              <span className="w-2 h-2 rounded-full bg-[#C24A0A] inline-block" />
               Late Arrival:
             </span>
-            <span className="font-bold text-white">{data.late || 0}</span>
+            <span className="font-medium text-white">{data.late || 0}</span>
           </div>
 
           <div className="flex items-center justify-between">
-            <span className="flex items-center gap-1.5 text-white/80">
-              <span className="w-2.5 h-2.5 rounded-full bg-[#DC2626] inline-block" />
+            <span className="flex items-center gap-1.5 text-[#B7C0CA]">
+              <span className="w-2 h-2 rounded-full bg-[#B32020] inline-block" />
               Absent / Leave:
             </span>
-            <span className="font-bold text-white">{data.absent || 0}</span>
+            <span className="font-medium text-white">{data.absent || 0}</span>
           </div>
 
           {data.totalHours && (
-            <div className="flex items-center justify-between pt-1.5 border-t border-white/10 text-white/70">
+            <div className="flex items-center justify-between pt-1.5 border-t border-[#2A3B54] text-[#8B98A6]">
               <span>Total Hours:</span>
-              <span className="font-semibold text-white">{data.totalHours} hrs</span>
+              <span className="font-medium text-white">{data.totalHours} hrs</span>
             </div>
           )}
         </div>
@@ -200,39 +199,36 @@ export const WeeklyAttendanceChart = ({
   return (
     <div
       id="weekly-attendance-trends-chart-container"
-      className="bg-[#FFFFFF] border border-[#E2E8F0] rounded-2xl p-6 shadow-sm hover:border-[#ff5500] transition-all duration-300 space-y-6"
+      className="bg-white border border-[#E5E9EE] rounded-xl p-6 space-y-6"
     >
       {/* Header & Controls */}
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-b border-[#E2E8F0] pb-5">
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-b border-[#E5E9EE] pb-5">
         <div>
           <div className="flex items-center gap-2">
-            <div className="p-2 rounded-xl bg-[#002185]/5 text-[#002185]">
-              <BarChart3 className="w-5 h-5" />
-            </div>
-            <h3 className="text-lg font-bold text-[#002185] tracking-tight">{title}</h3>
+            <h3 className="text-base font-semibold text-[#0F1B33] tracking-tight">{title}</h3>
           </div>
-          <p className="text-xs text-[#64748B] mt-1">{subtitle}</p>
+          <p className="text-xs text-[#5B6B7C] mt-0.5">{subtitle}</p>
         </div>
 
         <div className="flex flex-wrap items-center gap-2">
           {/* Chart Display Style Toggle */}
-          <div className="inline-flex items-center bg-[#F8FAFC] border border-[#E2E8F0] p-1 rounded-xl text-xs font-medium">
+          <div className="inline-flex items-center bg-[#F7F8FA] border border-[#E5E9EE] p-0.5 rounded-lg text-xs font-medium">
             <button
               onClick={() => setChartType("stacked")}
-              className={`px-3 py-1 rounded-lg transition-all ${
+              className={`px-3 py-1 rounded-md transition-all ${
                 chartType === "stacked"
                   ? "bg-[#002185] text-white shadow-xs"
-                  : "text-[#64748B] hover:text-[#002185]"
+                  : "text-[#5B6B7C] hover:text-[#0F1B33]"
               }`}
             >
               Stacked
             </button>
             <button
               onClick={() => setChartType("grouped")}
-              className={`px-3 py-1 rounded-lg transition-all ${
+              className={`px-3 py-1 rounded-md transition-all ${
                 chartType === "grouped"
                   ? "bg-[#002185] text-white shadow-xs"
-                  : "text-[#64748B] hover:text-[#002185]"
+                  : "text-[#5B6B7C] hover:text-[#0F1B33]"
               }`}
             >
               Grouped
@@ -240,23 +236,23 @@ export const WeeklyAttendanceChart = ({
           </div>
 
           {/* Timeframe Filter Switcher */}
-          <div className="inline-flex items-center bg-[#F8FAFC] border border-[#E2E8F0] p-1 rounded-xl text-xs font-medium">
+          <div className="inline-flex items-center bg-[#F7F8FA] border border-[#E5E9EE] p-0.5 rounded-lg text-xs font-medium">
             <button
               onClick={() => setTimeframe("week")}
-              className={`px-3 py-1 rounded-lg transition-all ${
+              className={`px-3 py-1 rounded-md transition-all ${
                 timeframe === "week"
-                  ? "bg-[#ff5500] text-white shadow-xs font-semibold"
-                  : "text-[#64748B] hover:text-[#ff5500]"
+                  ? "bg-[#002185] text-white shadow-xs font-medium"
+                  : "text-[#5B6B7C] hover:text-[#0F1B33]"
               }`}
             >
               Current Week
             </button>
             <button
               onClick={() => setTimeframe("month")}
-              className={`px-3 py-1 rounded-lg transition-all ${
+              className={`px-3 py-1 rounded-md transition-all ${
                 timeframe === "month"
-                  ? "bg-[#ff5500] text-white shadow-xs font-semibold"
-                  : "text-[#64748B] hover:text-[#ff5500]"
+                  ? "bg-[#002185] text-white shadow-xs font-medium"
+                  : "text-[#5B6B7C] hover:text-[#0F1B33]"
               }`}
             >
               Monthly Weeks
@@ -267,40 +263,40 @@ export const WeeklyAttendanceChart = ({
 
       {/* KPI Highlights Ribbon */}
       <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
-        <div className="rounded-xl border border-[#E2E8F0] bg-[#F8FAFC] p-3">
-          <div className="flex items-center gap-2 text-[#16A34A] text-xs font-medium">
+        <div className="rounded-lg border border-[#E5E9EE] bg-[#F7F8FA] p-3.5">
+          <div className="flex items-center gap-1.5 text-[#0F7A47] text-xs font-medium">
             <CheckCircle2 className="w-3.5 h-3.5" />
             <span>On-Time Rate</span>
           </div>
-          <p className="text-xl font-bold text-[#002185] mt-1">{summaryMetrics.punctuality}%</p>
-          <span className="text-[11px] text-[#64748B]">Punctuality target met</span>
+          <p className="text-xl font-semibold text-[#0F1B33] mt-1">{summaryMetrics.punctuality}%</p>
+          <span className="text-[11px] text-[#8B98A6]">Punctuality target met</span>
         </div>
 
-        <div className="rounded-xl border border-[#E2E8F0] bg-[#F8FAFC] p-3">
-          <div className="flex items-center gap-2 text-[#002185] text-xs font-medium">
+        <div className="rounded-lg border border-[#E5E9EE] bg-[#F7F8FA] p-3.5">
+          <div className="flex items-center gap-1.5 text-[#002185] text-xs font-medium">
             <Users className="w-3.5 h-3.5" />
-            <span>Total Checked In</span>
+            <span>Total Logged</span>
           </div>
-          <p className="text-xl font-bold text-[#002185] mt-1">{summaryMetrics.totalPresent}</p>
-          <span className="text-[11px] text-[#64748B]">Active attendances</span>
+          <p className="text-xl font-semibold text-[#0F1B33] mt-1">{summaryMetrics.totalPresent}</p>
+          <span className="text-[11px] text-[#8B98A6]">Active shifts recorded</span>
         </div>
 
-        <div className="rounded-xl border border-[#E2E8F0] bg-[#F8FAFC] p-3">
-          <div className="flex items-center gap-2 text-[#F59E0B] text-xs font-medium">
+        <div className="rounded-lg border border-[#E5E9EE] bg-[#F7F8FA] p-3.5">
+          <div className="flex items-center gap-1.5 text-[#C24A0A] text-xs font-medium">
             <Clock className="w-3.5 h-3.5" />
             <span>Late Arrivals</span>
           </div>
-          <p className="text-xl font-bold text-[#F59E0B] mt-1">{summaryMetrics.totalLate}</p>
-          <span className="text-[11px] text-[#64748B]">Past 8:30 AM mark</span>
+          <p className="text-xl font-semibold text-[#C24A0A] mt-1">{summaryMetrics.totalLate}</p>
+          <span className="text-[11px] text-[#8B98A6]">Past scheduled time</span>
         </div>
 
-        <div className="rounded-xl border border-[#E2E8F0] bg-[#F8FAFC] p-3">
-          <div className="flex items-center gap-2 text-[#DC2626] text-xs font-medium">
+        <div className="rounded-lg border border-[#E5E9EE] bg-[#F7F8FA] p-3.5">
+          <div className="flex items-center gap-1.5 text-[#B32020] text-xs font-medium">
             <AlertCircle className="w-3.5 h-3.5" />
             <span>Absences / Leaves</span>
           </div>
-          <p className="text-xl font-bold text-[#DC2626] mt-1">{summaryMetrics.totalAbsent}</p>
-          <span className="text-[11px] text-[#64748B]">Approved leaves / out</span>
+          <p className="text-xl font-semibold text-[#B32020] mt-1">{summaryMetrics.totalAbsent}</p>
+          <span className="text-[11px] text-[#8B98A6]">Approved leaves / unexcused</span>
         </div>
       </div>
 
@@ -312,68 +308,68 @@ export const WeeklyAttendanceChart = ({
             margin={{ top: 10, right: 15, left: -15, bottom: 0 }}
             barCategoryGap={chartType === "stacked" ? "35%" : "20%"}
           >
-            <CartesianGrid strokeDasharray="3 3" stroke="#E2E8F0" vertical={false} />
+            <CartesianGrid strokeDasharray="3 3" stroke="#EEF1F4" vertical={false} />
             <XAxis
               dataKey={xDataKey}
               tickLine={false}
-              axisLine={{ stroke: "#E2E8F0" }}
-              tick={{ fill: "#64748B", fontSize: 12, fontWeight: 500 }}
+              axisLine={{ stroke: "#E5E9EE" }}
+              tick={{ fill: "#5B6B7C", fontSize: 12, fontWeight: 500 }}
             />
             <YAxis
               tickLine={false}
-              axisLine={{ stroke: "#E2E8F0" }}
-              tick={{ fill: "#64748B", fontSize: 12 }}
+              axisLine={{ stroke: "#E5E9EE" }}
+              tick={{ fill: "#5B6B7C", fontSize: 12 }}
               allowDecimals={false}
             />
-            <Tooltip content={<CustomTooltip />} cursor={{ fill: "#F1F5F9", opacity: 0.6 }} />
+            <Tooltip content={<CustomTooltip />} cursor={{ fill: "#F7F8FA", opacity: 0.8 }} />
             <Legend
               verticalAlign="top"
               align="right"
               iconType="circle"
-              wrapperStyle={{ paddingBottom: 12, fontSize: "12px", color: "#64748B" }}
+              wrapperStyle={{ paddingBottom: 12, fontSize: "12px", color: "#5B6B7C" }}
             />
             <Bar
               dataKey="present"
               name="On Time / Present"
-              fill="#16A34A"
+              fill="#0F7A47"
               stackId={chartType === "stacked" ? "attendance" : undefined}
-              radius={chartType === "stacked" ? [0, 0, 0, 0] : [6, 6, 0, 0]}
+              radius={chartType === "stacked" ? [0, 0, 0, 0] : [4, 4, 0, 0]}
             />
             <Bar
               dataKey="late"
               name="Late Check-In"
-              fill="#F59E0B"
+              fill="#C24A0A"
               stackId={chartType === "stacked" ? "attendance" : undefined}
-              radius={chartType === "stacked" ? [0, 0, 0, 0] : [6, 6, 0, 0]}
+              radius={chartType === "stacked" ? [0, 0, 0, 0] : [4, 4, 0, 0]}
             />
             <Bar
               dataKey="absent"
               name="Absent / On Leave"
-              fill="#DC2626"
+              fill="#B32020"
               stackId={chartType === "stacked" ? "attendance" : undefined}
-              radius={chartType === "stacked" ? [6, 6, 0, 0] : [6, 6, 0, 0]}
+              radius={chartType === "stacked" ? [4, 4, 0, 0] : [4, 4, 0, 0]}
             />
           </BarChart>
         </ResponsiveContainer>
       </div>
 
       {/* Footer Info / Insight */}
-      <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 pt-3 border-t border-[#E2E8F0] text-xs text-[#64748B]">
+      <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 pt-3 border-t border-[#E5E9EE] text-xs text-[#5B6B7C]">
         <div className="flex items-center gap-2">
-          <TrendingUp className="w-4 h-4 text-[#16A34A]" />
+          <TrendingUp className="w-4 h-4 text-[#0F7A47]" />
           <span>
-            Highest attendance recorded on <strong className="text-[#002185]">Wednesday (100% Rate)</strong>.
+            Punctuality and attendance metrics computed dynamically from your real check-in history.
           </span>
         </div>
         <div className="flex items-center gap-3">
           <span className="flex items-center gap-1.5">
-            <span className="w-2 h-2 rounded-full bg-[#16A34A]" /> On Time
+            <span className="w-2 h-2 rounded-full bg-[#0F7A47]" /> On Time
           </span>
           <span className="flex items-center gap-1.5">
-            <span className="w-2 h-2 rounded-full bg-[#F59E0B]" /> Late (&gt;8:30 AM)
+            <span className="w-2 h-2 rounded-full bg-[#C24A0A]" /> Late
           </span>
           <span className="flex items-center gap-1.5">
-            <span className="w-2 h-2 rounded-full bg-[#DC2626]" /> Absent
+            <span className="w-2 h-2 rounded-full bg-[#B32020]" /> Absent
           </span>
         </div>
       </div>

@@ -3,6 +3,7 @@ import {
   createEmployeeAccount,
   employeeLogin,
   employeeLogout,
+  changeEmployeePassword,
 } from "../controllers/employeeAuthentication.js";
 import { verifyAdmin } from "../middleware/authAdmin.js";
 import {
@@ -78,6 +79,9 @@ employeeRouter.get("/payslip/:id", employeeAuth, getEmployeePayslipBreakdownById
 employeeRouter.get("/me", employeeAuth, getCurrentLoggedInEmployee);
 employeeRouter.put("/me", employeeAuth, updateCurrentEmployee);
 employeeRouter.put("/profile", employeeAuth, updateCurrentEmployee);
+employeeRouter.put("/change-password", employeeAuth, changeEmployeePassword);
+employeeRouter.put("/password", employeeAuth, changeEmployeePassword);
+employeeRouter.post("/change-password", employeeAuth, changeEmployeePassword);
 employeeRouter.get("/all-employees", employeeDetails);
 employeeRouter.get("/all", employeeDetails);
 employeeRouter.get("/directory", employeeDetails);

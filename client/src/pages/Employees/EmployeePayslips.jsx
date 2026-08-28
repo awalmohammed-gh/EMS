@@ -140,7 +140,7 @@ const EmployeePayslips = () => {
 
   return (
     <>
-      <div className="space-y-6">
+      <div className="w-full max-w-7xl mx-auto p-4 sm:p-6 lg:p-8 space-y-6 overflow-x-hidden">
         {/* Header */}
         <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
           <div>

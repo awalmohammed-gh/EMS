@@ -149,7 +149,17 @@ export const getActiveCompanySettings = async () => {
  */
 export const evaluateLateness = (clockInInput, workStartTime = "08:00", settings = {}) => {
   if (!clockInInput) {
-    return { isLate: false, minutesLate: 0, penalty: 0, tier: "On Time", clockInFormatted: "--" };
+    return {
+      isLate: false,
+      status: "on-time",
+      minutesLate: 0,
+      lateMinutes: 0,
+      delayMinutes: 0,
+      penalty: 0,
+      latePenalty: 0,
+      tier: "On Time",
+      clockInFormatted: "--",
+    };
   }
 
   let startHour = 8;
@@ -194,7 +204,17 @@ export const evaluateLateness = (clockInInput, workStartTime = "08:00", settings
   }
 
   if (!clockInDate || isNaN(clockInDate.getTime())) {
-    return { isLate: false, minutesLate: 0, penalty: 0, tier: "On Time", clockInFormatted: "--" };
+    return {
+      isLate: false,
+      status: "on-time",
+      minutesLate: 0,
+      lateMinutes: 0,
+      delayMinutes: 0,
+      penalty: 0,
+      latePenalty: 0,
+      tier: "On Time",
+      clockInFormatted: "--",
+    };
   }
 
   const clockInHour = clockInDate.getHours();
@@ -202,52 +222,82 @@ export const evaluateLateness = (clockInInput, workStartTime = "08:00", settings
 
   const startTotalMinutes = startHour * 60 + startMinute;
   const clockInTotalMinutes = clockInHour * 60 + clockInMinute;
-  const minutesLate = clockInTotalMinutes - startTotalMinutes;
+  const delayMinutes = Math.max(0, clockInTotalMinutes - startTotalMinutes);
 
-  if (minutesLate <= 0) {
+  if (delayMinutes === 0) {
     return {
       isLate: false,
+      status: "on-time",
       minutesLate: 0,
+      lateMinutes: 0,
+      delayMinutes: 0,
       penalty: 0,
+      latePenalty: 0,
       tier: "On Time",
       clockInFormatted: clockInDate.toLocaleTimeString("en-GH", { hour: "2-digit", minute: "2-digit" }),
     };
   }
 
-  const t1 = Number(settings.lateTier1_amount || 5);
-  const t2 = Number(settings.lateTier2_amount || 10);
-  const t3 = Number(settings.lateTier3_amount || 20);
-  const t4 = Number(settings.lateTier4_amount || 30);
-  const t5 = Number(settings.lateTier5_amount || 50);
-  const t6 = Number(settings.lateTier6_amount || 75);
+  // Check if custom latenessTiers array is configured in CompanySettings
+  if (Array.isArray(settings.latenessTiers) && settings.latenessTiers.length > 0) {
+    const matchedTier = settings.latenessTiers.find(
+      (t) => delayMinutes >= t.minMinutes && delayMinutes <= t.maxMinutes
+    );
+    if (matchedTier) {
+      const fineAmount = Number(matchedTier.fine || 0);
+      const tierName = matchedTier.name || `Tier ${matchedTier.tier}`;
+      return {
+        isLate: true,
+        status: "late",
+        minutesLate: delayMinutes,
+        lateMinutes: delayMinutes,
+        delayMinutes,
+        penalty: fineAmount,
+        latePenalty: fineAmount,
+        tier: tierName,
+        clockInFormatted: clockInDate.toLocaleTimeString("en-GH", { hour: "2-digit", minute: "2-digit" }),
+      };
+    }
+  }
+
+  const t1 = settings.lateTier1_amount !== undefined && settings.lateTier1_amount !== null && Number(settings.lateTier1_amount) >= 0 ? Number(settings.lateTier1_amount) : 10;
+  const t2 = settings.lateTier2_amount !== undefined && settings.lateTier2_amount !== null && Number(settings.lateTier2_amount) >= 0 ? Number(settings.lateTier2_amount) : 30;
+  const t3 = settings.lateTier3_amount !== undefined && settings.lateTier3_amount !== null && Number(settings.lateTier3_amount) >= 0 ? Number(settings.lateTier3_amount) : 50;
+  const t4 = settings.lateTier4_amount !== undefined && settings.lateTier4_amount !== null && Number(settings.lateTier4_amount) >= 0 ? Number(settings.lateTier4_amount) : 75;
+  const t5 = settings.lateTier5_amount !== undefined && settings.lateTier5_amount !== null && Number(settings.lateTier5_amount) >= 0 ? Number(settings.lateTier5_amount) : 100;
+  const t6 = settings.lateTier6_amount !== undefined && settings.lateTier6_amount !== null && Number(settings.lateTier6_amount) >= 0 ? Number(settings.lateTier6_amount) : 150;
 
   let penalty = 0;
   let tier = "";
 
-  if (minutesLate >= 1 && minutesLate <= 30) {
+  if (delayMinutes >= 1 && delayMinutes <= 30) {
     penalty = t1;
-    tier = "1–30 mins (Tier 1)";
-  } else if (minutesLate >= 31 && minutesLate <= 60) {
+    tier = "1–30 mins late (Tier 1)";
+  } else if (delayMinutes >= 31 && delayMinutes <= 60) {
     penalty = t2;
-    tier = "31–60 mins (Tier 2)";
-  } else if (minutesLate >= 61 && minutesLate <= 120) {
+    tier = "31–60 mins late (Tier 2)";
+  } else if (delayMinutes >= 61 && delayMinutes <= 120) {
     penalty = t3;
     tier = "61–120 mins / 1–2 hrs (Tier 3)";
-  } else if (minutesLate >= 121 && minutesLate <= 180) {
+  } else if (delayMinutes >= 121 && delayMinutes <= 180) {
     penalty = t4;
     tier = "121–180 mins / 2–3 hrs (Tier 4)";
-  } else if (minutesLate >= 181 && minutesLate <= 240) {
+  } else if (delayMinutes >= 181 && delayMinutes <= 240) {
     penalty = t5;
     tier = "181–240 mins / 3–4 hrs (Tier 5)";
   } else {
     penalty = t6;
-    tier = "241–300+ mins / 4–5+ hrs (Tier 6)";
+    tier = "241+ mins / 4+ hrs (Tier 6)";
   }
 
   return {
     isLate: true,
-    minutesLate,
+    status: "late",
+    minutesLate: delayMinutes,
+    lateMinutes: delayMinutes,
+    delayMinutes,
     penalty,
+    latePenalty: penalty,
     tier,
     clockInFormatted: clockInDate.toLocaleTimeString("en-GH", { hour: "2-digit", minute: "2-digit" }),
   };

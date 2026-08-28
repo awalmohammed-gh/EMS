@@ -69,56 +69,63 @@ const Employees = () => {
   }, []);
 
   return (
-    <div className="space-y-6">
-      {/* Page Header */}
-      <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
-        <div>
-          <div className="flex items-center gap-2">
-            <h1 className="text-3xl font-black text-[#002185] tracking-tight">
-              Employee Directory
-            </h1>
-            <span className="px-2.5 py-0.5 rounded-full text-xs font-bold bg-[#002185]/10 text-[#002185] border border-[#002185]/20">
-              {employees.length} Staff Members
-            </span>
+    <div className="w-full max-w-7xl mx-auto p-4 sm:p-6 lg:p-8 space-y-6 overflow-x-hidden">
+      {/* Page Header Banner */}
+      <div className="bg-white dark:bg-slate-900 border border-slate-200/80 dark:border-slate-800/80 rounded-2xl sm:rounded-3xl p-5 sm:p-6 shadow-sm dark:shadow-black/20">
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+          <div className="flex items-center gap-3.5">
+            <div className="p-2.5 rounded-xl bg-blue-500/10 text-blue-600 dark:text-blue-400 border border-blue-500/20 shrink-0">
+              <UserPlus className="w-6 h-6" />
+            </div>
+            <div>
+              <div className="flex items-center gap-2.5">
+                <h1 className="text-xl sm:text-2xl font-bold tracking-tight text-slate-900 dark:text-white">
+                  Employee Directory
+                </h1>
+                <span className="px-2.5 py-0.5 rounded-full text-xs font-semibold bg-blue-500/10 dark:bg-blue-950/60 text-blue-600 dark:text-blue-400 border border-blue-500/20">
+                  {employees.length} Staff Members
+                </span>
+              </div>
+              <p className="text-xs sm:text-sm text-slate-500 dark:text-slate-400 mt-0.5">
+                Searchable staff directory linked with database records, roles, contact info, and availability.
+              </p>
+            </div>
           </div>
-          <p className="text-xs sm:text-sm text-[#64748B] mt-1">
-            Searchable staff directory linked with database records, roles, contact info, and availability.
-          </p>
-        </div>
 
-        <div className="flex flex-wrap items-center gap-2.5">
-          <button
-            type="button"
-            onClick={handleDownloadAllCSV}
-            disabled={isExporting || employees.length === 0}
-            title="Download complete employee directory CSV"
-            className={`px-3.5 py-2.5 rounded-xl border text-xs font-bold transition-all flex items-center gap-2 shadow-xs cursor-pointer disabled:opacity-50 ${
-              exportSuccess
-                ? "bg-green-600 text-white border-green-600"
-                : "border-[#E2E8F0] hover:border-[#002185] text-[#002185] bg-white hover:bg-[#F8FAFC]"
-            }`}
-          >
-            {exportSuccess ? (
-              <>
-                <Check className="w-3.5 h-3.5 text-white" />
-                <span>CSV Exported!</span>
-              </>
-            ) : (
-              <>
-                <Download className="w-3.5 h-3.5" />
-                <span>Download CSV</span>
-              </>
-            )}
-          </button>
+          <div className="flex flex-wrap items-center gap-2.5 self-start sm:self-auto">
+            <button
+              type="button"
+              onClick={handleDownloadAllCSV}
+              disabled={isExporting || employees.length === 0}
+              title="Download complete employee directory CSV"
+              className={`px-3.5 py-2 rounded-xl border text-xs font-semibold transition-all flex items-center gap-2 shadow-2xs cursor-pointer disabled:opacity-50 ${
+                exportSuccess
+                  ? "bg-emerald-600 text-white border-emerald-600"
+                  : "border-slate-200 dark:border-slate-700 hover:border-blue-500 text-slate-700 dark:text-slate-300 bg-slate-50 dark:bg-slate-800 hover:bg-slate-100 dark:hover:bg-slate-750"
+              }`}
+            >
+              {exportSuccess ? (
+                <>
+                  <Check className="w-3.5 h-3.5 text-white" />
+                  <span>CSV Exported!</span>
+                </>
+              ) : (
+                <>
+                  <Download className="w-3.5 h-3.5 text-slate-500 dark:text-slate-400" />
+                  <span>Download CSV</span>
+                </>
+              )}
+            </button>
 
-          <button
-            type="button"
-            onClick={() => setShowEmployeeModal(true)}
-            className="px-4 py-2.5 rounded-xl bg-[#002185] hover:bg-[#ff5500] text-xs font-bold text-white transition-all duration-200 shadow-sm hover:shadow-md flex items-center gap-2 cursor-pointer"
-          >
-            <UserPlus className="w-4 h-4" />
-            <span>Add Staff Member</span>
-          </button>
+            <button
+              type="button"
+              onClick={() => setShowEmployeeModal(true)}
+              className="px-4 py-2 rounded-xl bg-blue-600 hover:bg-blue-700 text-xs font-semibold text-white transition-all shadow-sm flex items-center gap-2 cursor-pointer"
+            >
+              <UserPlus className="w-4 h-4" />
+              <span>Add Staff Member</span>
+            </button>
+          </div>
         </div>
       </div>
 

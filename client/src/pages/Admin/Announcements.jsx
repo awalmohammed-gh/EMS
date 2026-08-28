@@ -256,7 +256,7 @@ const AdminAnnouncements = () => {
   const unpinnedList = displayedAnnouncements.filter((a) => !a.isPinned);
 
   return (
-    <div className="space-y-6 pb-12">
+    <div className="w-full max-w-7xl mx-auto p-4 sm:p-6 lg:p-8 space-y-6 overflow-x-hidden">
       {/* Toast Alert */}
       {toastMessage && (
         <div
@@ -275,7 +275,7 @@ const AdminAnnouncements = () => {
           <button
             type="button"
             onClick={() => setToastMessage(null)}
-            className="text-slate-400 hover:text-slate-600 dark:hover:text-white ml-2"
+            className="text-slate-400 hover:text-slate-600 dark:hover:text-white ml-2 cursor-pointer"
           >
             <X className="w-3.5 h-3.5" />
           </button>
@@ -283,93 +283,93 @@ const AdminAnnouncements = () => {
       )}
 
       {/* Header Banner */}
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 bg-white dark:bg-slate-900 p-6 rounded-2xl border border-[#E2E8F0] dark:border-slate-800 shadow-xs">
-        <div>
-          <div className="flex items-center gap-2.5">
-            <div className="w-10 h-10 rounded-xl bg-[#002185]/10 dark:bg-blue-500/20 text-[#002185] dark:text-blue-400 flex items-center justify-center font-bold">
-              <Megaphone className="w-5 h-5 text-[#002185] dark:text-blue-400" />
+      <div className="bg-white dark:bg-slate-900 border border-slate-200/80 dark:border-slate-800/80 rounded-2xl sm:rounded-3xl p-5 sm:p-6 shadow-sm dark:shadow-black/20">
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+          <div className="flex items-center gap-3.5">
+            <div className="p-2.5 rounded-xl bg-blue-500/10 text-blue-600 dark:text-blue-400 border border-blue-500/20 shrink-0">
+              <Megaphone className="h-6 w-6" />
             </div>
             <div>
-              <h1 className="text-2xl sm:text-3xl font-bold text-[#002185] dark:text-white tracking-tight">
+              <h1 className="text-xl sm:text-2xl font-bold text-slate-900 dark:text-white tracking-tight">
                 Company Announcement Board
               </h1>
-              <p className="text-xs sm:text-sm text-[#64748B] dark:text-slate-400 mt-0.5">
-                Manage organization-wide announcements and automatically broadcast alerts to active employees.
+              <p className="text-xs sm:text-sm text-slate-500 dark:text-slate-400 mt-0.5">
+                Manage organization-wide announcements and automatically broadcast alerts to active employees
               </p>
             </div>
           </div>
-        </div>
 
-        <div className="flex items-center gap-2.5 self-start sm:self-auto">
-          <button
-            type="button"
-            onClick={() => fetchBoardData()}
-            disabled={isLoading}
-            className="p-2.5 rounded-xl border border-[#E2E8F0] dark:border-slate-700 bg-white dark:bg-slate-800 text-[#64748B] dark:text-slate-300 hover:text-[#002185] dark:hover:text-blue-400 transition-colors cursor-pointer"
-            title="Refresh announcements"
-          >
-            <RefreshCw className={`w-4 h-4 ${isLoading ? "animate-spin text-[#002185]" : ""}`} />
-          </button>
+          <div className="flex items-center gap-2.5 self-start sm:self-auto">
+            <button
+              type="button"
+              onClick={() => fetchBoardData()}
+              disabled={isLoading}
+              className="p-2.5 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-700 dark:text-slate-300 hover:text-blue-600 dark:hover:text-blue-400 transition-colors cursor-pointer"
+              title="Refresh announcements"
+            >
+              <RefreshCw className={`w-4 h-4 ${isLoading ? "animate-spin text-blue-600" : ""}`} />
+            </button>
 
-          <button
-            id="admin-create-announcement-btn"
-            type="button"
-            onClick={handleOpenCreateModal}
-            className="inline-flex items-center gap-2 px-4 py-2.5 bg-[#002185] hover:bg-[#ff5500] text-white text-xs sm:text-sm font-bold rounded-xl shadow-xs transition-all duration-200 cursor-pointer"
-          >
-            <Plus className="w-4 h-4" />
-            <span>Create Announcement</span>
-          </button>
+            <button
+              id="admin-create-announcement-btn"
+              type="button"
+              onClick={handleOpenCreateModal}
+              className="inline-flex items-center gap-2 px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white text-xs sm:text-sm font-semibold rounded-xl shadow-sm transition-all duration-200 cursor-pointer"
+            >
+              <Plus className="w-4 h-4" />
+              <span>Create Announcement</span>
+            </button>
+          </div>
         </div>
       </div>
 
       {/* Metric Cards Summary */}
-      <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-        <div className="bg-white dark:bg-slate-900 border border-[#E2E8F0] dark:border-slate-800 rounded-2xl p-4 sm:p-5 shadow-xs flex items-center justify-between">
+      <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 sm:gap-5">
+        <div className="bg-white dark:bg-slate-900 border border-slate-200/80 dark:border-slate-800/80 rounded-2xl sm:rounded-3xl p-5 shadow-sm dark:shadow-black/20 flex items-center justify-between">
           <div>
-            <p className="text-xs font-semibold uppercase tracking-wider text-[#64748B] dark:text-slate-400">
+            <p className="text-xs font-semibold uppercase tracking-wider text-slate-400">
               Total Bulletins
             </p>
-            <p className="text-2xl sm:text-3xl font-bold text-[#002185] dark:text-white mt-1">
+            <p className="text-2xl sm:text-3xl font-bold text-slate-900 dark:text-white mt-1">
               {announcements.length}
             </p>
           </div>
-          <div className="w-11 h-11 rounded-xl bg-[#002185]/10 dark:bg-blue-500/20 text-[#002185] dark:text-blue-400 flex items-center justify-center">
+          <div className="w-11 h-11 rounded-xl bg-blue-500/10 text-blue-600 dark:text-blue-400 border border-blue-500/20 flex items-center justify-center shrink-0">
             <Megaphone className="w-5 h-5" />
           </div>
         </div>
 
-        <div className="bg-white dark:bg-slate-900 border border-[#E2E8F0] dark:border-slate-800 rounded-2xl p-4 sm:p-5 shadow-xs flex items-center justify-between">
+        <div className="bg-white dark:bg-slate-900 border border-slate-200/80 dark:border-slate-800/80 rounded-2xl sm:rounded-3xl p-5 shadow-sm dark:shadow-black/20 flex items-center justify-between">
           <div>
-            <p className="text-xs font-semibold uppercase tracking-wider text-[#64748B] dark:text-slate-400">
+            <p className="text-xs font-semibold uppercase tracking-wider text-slate-400">
               Pinned on Dashboard
             </p>
-            <p className="text-2xl sm:text-3xl font-bold text-[#ff5500] mt-1">
+            <p className="text-2xl sm:text-3xl font-bold text-blue-600 dark:text-blue-400 mt-1">
               {pinnedList.length}
             </p>
           </div>
-          <div className="w-11 h-11 rounded-xl bg-[#ff5500]/10 text-[#ff5500] flex items-center justify-center">
-            <Pin className="w-5 h-5 fill-[#ff5500]" />
+          <div className="w-11 h-11 rounded-xl bg-blue-500/10 text-blue-600 dark:text-blue-400 border border-blue-500/20 flex items-center justify-center shrink-0">
+            <Pin className="w-5 h-5 fill-current" />
           </div>
         </div>
 
-        <div className="bg-white dark:bg-slate-900 border border-[#E2E8F0] dark:border-slate-800 rounded-2xl p-4 sm:p-5 shadow-xs flex items-center justify-between">
+        <div className="bg-white dark:bg-slate-900 border border-slate-200/80 dark:border-slate-800/80 rounded-2xl sm:rounded-3xl p-5 shadow-sm dark:shadow-black/20 flex items-center justify-between">
           <div>
-            <p className="text-xs font-semibold uppercase tracking-wider text-[#64748B] dark:text-slate-400">
+            <p className="text-xs font-semibold uppercase tracking-wider text-slate-400">
               Broadcast Delivery
             </p>
-            <p className="text-2xl sm:text-3xl font-bold text-[#16A34A] mt-1">
+            <p className="text-2xl sm:text-3xl font-bold text-emerald-600 dark:text-emerald-400 mt-1">
               Real-time
             </p>
           </div>
-          <div className="w-11 h-11 rounded-xl bg-[#16A34A]/10 text-[#16A34A] flex items-center justify-center">
+          <div className="w-11 h-11 rounded-xl bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border border-emerald-500/20 flex items-center justify-center shrink-0">
             <Users className="w-5 h-5" />
           </div>
         </div>
       </div>
 
       {/* Main Board Container */}
-      <div className="bg-white dark:bg-slate-900 border border-[#E2E8F0] dark:border-slate-800 rounded-2xl p-6 shadow-xs space-y-5">
+      <div className="bg-white dark:bg-slate-900 border border-slate-200/80 dark:border-slate-800/80 rounded-2xl sm:rounded-3xl p-5 sm:p-6 shadow-sm dark:shadow-black/20 space-y-5">
         {/* Filters & Search Toolbar */}
         <div className="flex flex-col md:flex-row md:items-center justify-between gap-3 border-b border-[#E2E8F0] dark:border-slate-800 pb-4">
           {/* Category Tabs */}

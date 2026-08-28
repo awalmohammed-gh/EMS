@@ -300,7 +300,7 @@ const EmployeeLeave = () => {
 
   return (
     <>
-      <div id="employee-leave-portal" className="space-y-6">
+      <div id="employee-leave-portal" className="w-full max-w-7xl mx-auto p-4 sm:p-6 lg:p-8 space-y-6 overflow-x-hidden">
         {/* Header */}
         <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
           <div className="flex items-center gap-3">

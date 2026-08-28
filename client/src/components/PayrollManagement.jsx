@@ -1,12 +1,10 @@
-import React, { useState, useEffect, useCallback, useMemo } from "react";
+import { useState, useEffect, useCallback, useMemo } from "react";
 import { useNavigate } from "react-router-dom";
 import {
   Users,
   Search,
-  Filter,
   DollarSign,
   Calendar,
-  Building2,
   FileText,
   Download,
   Printer,
@@ -16,21 +14,13 @@ import {
   CheckCircle2,
   Clock,
   ArrowUpDown,
-  MoreVertical,
-  Trash2,
   Eye,
-  SlidersHorizontal,
-  ChevronDown,
-  UserX,
-  UserCheck,
-  Briefcase,
 } from "lucide-react";
 
 import {
   getAllPayslips,
   namesList,
   updatePayrollStatus,
-  deletePayroll,
 } from "../apis/fontApis";
 import { useManagement } from "../context/ManagementContextProvider";
 import PayslipsModal from "./modal/PayslipsModal";
@@ -59,9 +49,6 @@ export const PayrollManagement = () => {
   // Modals & Action States
   const [selectedPayroll, setSelectedPayroll] = useState(null);
   const [showDetailsModal, setShowDetailsModal] = useState(false);
-  const [actionMenuOpenId, setActionMenuOpenId] = useState(null);
-  const [isDeleting, setIsDeleting] = useState(false);
-  const [deleteConfirmId, setDeleteConfirmId] = useState(null);
 
   // Load both active employees and payslips from backend
   const fetchData = useCallback(async (isSilent = false) => {
@@ -296,23 +283,23 @@ export const PayrollManagement = () => {
     const s = (status || "published").toLowerCase();
     if (s === "paid") {
       return (
-        <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-xs font-bold bg-emerald-100 text-emerald-800 dark:bg-emerald-950/80 dark:text-emerald-300 border border-emerald-300 dark:border-emerald-800">
-          <CheckCircle2 className="w-3.5 h-3.5" />
+        <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-xs font-semibold bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border border-emerald-500/20">
+          <CheckCircle2 className="w-3 h-3" />
           Paid
         </span>
       );
     }
     if (s === "pending" || s === "draft") {
       return (
-        <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-xs font-bold bg-amber-100 text-amber-800 dark:bg-amber-950/80 dark:text-amber-300 border border-amber-300 dark:border-amber-800">
-          <Clock className="w-3.5 h-3.5" />
+        <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-xs font-semibold bg-amber-500/10 text-amber-600 dark:text-amber-400 border border-amber-500/20">
+          <Clock className="w-3 h-3" />
           Pending
         </span>
       );
     }
     return (
-      <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-xs font-bold bg-blue-100 text-blue-800 dark:bg-blue-950/80 dark:text-blue-300 border border-blue-300 dark:border-blue-800">
-        <FileText className="w-3.5 h-3.5" />
+      <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-xs font-semibold bg-blue-500/10 text-blue-600 dark:text-blue-400 border border-blue-500/20">
+        <FileText className="w-3 h-3" />
         Published
       </span>
     );
@@ -337,136 +324,108 @@ export const PayrollManagement = () => {
         message: err.response?.data?.message || "Failed to update status.",
         type: "error",
       });
-    } finally {
-      setActionMenuOpenId(null);
-    }
-  };
-
-  // Delete Payroll Handler
-  const handleDeletePayroll = async (id) => {
-    try {
-      setIsDeleting(true);
-      const res = await deletePayroll(id);
-      if (res.data?.success) {
-        setShowToast({
-          show: true,
-          message: "Payroll record deleted successfully.",
-          type: "success",
-        });
-        setDeleteConfirmId(null);
-        fetchData(true);
-      }
-    } catch (err) {
-      console.error("Delete error:", err);
-      setShowToast({
-        show: true,
-        message: err.response?.data?.message || "Failed to delete payroll record.",
-        type: "error",
-      });
-    } finally {
-      setIsDeleting(false);
     }
   };
 
   return (
     <div id="payroll-management-container" className="space-y-6">
       {/* Top Banner & Action Controls */}
-      <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 bg-white dark:bg-slate-900 p-6 rounded-2xl border border-slate-200 dark:border-slate-800 shadow-xs">
-        <div>
-          <div className="flex items-center gap-2.5">
-            <div className="w-10 h-10 rounded-xl bg-[#002185]/10 dark:bg-blue-500/20 text-[#002185] dark:text-blue-400 flex items-center justify-center font-bold">
-              <DollarSign className="w-5 h-5" />
+      <div className="bg-white dark:bg-slate-900 border border-slate-200/80 dark:border-slate-800/80 rounded-2xl sm:rounded-3xl p-5 sm:p-6 shadow-sm dark:shadow-black/20">
+        <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
+          <div className="flex items-center gap-3.5">
+            <div className="p-2.5 rounded-xl bg-blue-500/10 text-blue-600 dark:text-blue-400 border border-blue-500/20 shrink-0">
+              <DollarSign className="h-6 w-6" />
             </div>
             <div>
-              <h1 className="text-xl sm:text-2xl font-bold text-slate-900 dark:text-white">
+              <h1 className="text-xl sm:text-2xl font-bold tracking-tight text-slate-900 dark:text-white">
                 Payroll Management
               </h1>
-              <p className="text-xs sm:text-sm text-slate-500 dark:text-slate-400">
+              <p className="text-xs sm:text-sm text-slate-500 dark:text-slate-400 mt-0.5">
                 Manage employee disbursements, salary calculations, and attendance penalties
               </p>
             </div>
           </div>
-        </div>
 
-        <div className="flex items-center gap-3 flex-wrap">
-          <button
-            id="payroll-refresh-btn"
-            type="button"
-            onClick={() => fetchData(true)}
-            disabled={isRefreshing || isLoading}
-            className="p-2.5 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-700 dark:text-slate-200 hover:bg-slate-50 dark:hover:bg-slate-750 transition-colors shadow-2xs cursor-pointer flex items-center gap-2 text-sm font-medium disabled:opacity-50"
-          >
-            <RefreshCw className={`w-4 h-4 ${isRefreshing ? "animate-spin text-[#002185]" : ""}`} />
-            <span className="hidden sm:inline">Refresh</span>
-          </button>
+          <div className="flex items-center gap-2.5 flex-wrap">
+            <button
+              id="payroll-refresh-btn"
+              type="button"
+              onClick={() => fetchData(true)}
+              disabled={isRefreshing || isLoading}
+              className="px-3.5 py-2 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-700 dark:text-slate-200 hover:bg-slate-50 dark:hover:bg-slate-750 transition-colors shadow-2xs cursor-pointer flex items-center gap-2 text-xs font-semibold disabled:opacity-50"
+            >
+              <RefreshCw className={`w-3.5 h-3.5 ${isRefreshing ? "animate-spin text-blue-600" : ""}`} />
+              <span>Refresh</span>
+            </button>
 
-          <button
-            id="payroll-generate-payslip-btn"
-            type="button"
-            onClick={() => setShowPayslipsModal(true)}
-            className="px-4 py-2.5 rounded-xl bg-[#002185] hover:bg-[#ff5500] text-white font-bold text-sm shadow-md hover:shadow-lg transition-all duration-200 cursor-pointer flex items-center gap-2"
-          >
-            <Plus className="w-4 h-4" />
-            <span>Generate Payslip</span>
-          </button>
+            <button
+              id="payroll-generate-payslip-btn"
+              type="button"
+              onClick={() => setShowPayslipsModal(true)}
+              className="px-4 py-2 rounded-xl bg-blue-600 hover:bg-blue-700 text-white font-semibold text-xs shadow-sm transition-all cursor-pointer flex items-center gap-2"
+            >
+              <Plus className="w-4 h-4" />
+              <span>Generate Payslip</span>
+            </button>
+          </div>
         </div>
       </div>
 
       {/* Metrics Row */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-        <div className="bg-white dark:bg-slate-900 p-5 rounded-2xl border border-slate-200 dark:border-slate-800 shadow-xs flex items-center gap-4">
-          <div className="w-12 h-12 rounded-xl bg-blue-50 dark:bg-blue-950/60 text-[#002185] dark:text-blue-400 flex items-center justify-center shrink-0">
-            <Users className="w-6 h-6" />
-          </div>
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 sm:gap-5">
+        <div className="bg-white dark:bg-slate-900 border border-slate-200/80 dark:border-slate-800/80 rounded-2xl sm:rounded-3xl p-5 shadow-sm dark:shadow-black/20 flex items-center justify-between">
           <div>
-            <p className="text-xs font-semibold uppercase text-slate-400">Active Staff</p>
-            <p className="text-2xl font-bold text-slate-900 dark:text-white">
+            <p className="text-xs font-semibold uppercase tracking-wider text-slate-400">Active Staff</p>
+            <p className="text-2xl font-bold text-slate-900 dark:text-white mt-1">
               {employees.length}
             </p>
           </div>
+          <div className="w-11 h-11 rounded-xl bg-blue-500/10 text-blue-600 dark:text-blue-400 border border-blue-500/20 flex items-center justify-center shrink-0">
+            <Users className="w-5 h-5" />
+          </div>
         </div>
 
-        <div className="bg-white dark:bg-slate-900 p-5 rounded-2xl border border-slate-200 dark:border-slate-800 shadow-xs flex items-center gap-4">
-          <div className="w-12 h-12 rounded-xl bg-emerald-50 dark:bg-emerald-950/60 text-emerald-600 dark:text-emerald-400 flex items-center justify-center shrink-0">
-            <FileText className="w-6 h-6" />
-          </div>
+        <div className="bg-white dark:bg-slate-900 border border-slate-200/80 dark:border-slate-800/80 rounded-2xl sm:rounded-3xl p-5 shadow-sm dark:shadow-black/20 flex items-center justify-between">
           <div>
-            <p className="text-xs font-semibold uppercase text-slate-400">Total Payslips</p>
-            <p className="text-2xl font-bold text-slate-900 dark:text-white">
+            <p className="text-xs font-semibold uppercase tracking-wider text-slate-400">Total Payslips</p>
+            <p className="text-2xl font-bold text-slate-900 dark:text-white mt-1">
               {payslips.length}
             </p>
           </div>
+          <div className="w-11 h-11 rounded-xl bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border border-emerald-500/20 flex items-center justify-center shrink-0">
+            <FileText className="w-5 h-5" />
+          </div>
         </div>
 
-        <div className="bg-white dark:bg-slate-900 p-5 rounded-2xl border border-slate-200 dark:border-slate-800 shadow-xs flex items-center gap-4">
-          <div className="w-12 h-12 rounded-xl bg-purple-50 dark:bg-purple-950/60 text-purple-600 dark:text-purple-400 flex items-center justify-center shrink-0">
-            <DollarSign className="w-6 h-6" />
-          </div>
+        <div className="bg-white dark:bg-slate-900 border border-slate-200/80 dark:border-slate-800/80 rounded-2xl sm:rounded-3xl p-5 shadow-sm dark:shadow-black/20 flex items-center justify-between">
           <div>
-            <p className="text-xs font-semibold uppercase text-slate-400">Net Disbursements</p>
-            <p className="text-xl font-bold text-slate-900 dark:text-white">
+            <p className="text-xs font-semibold uppercase tracking-wider text-slate-400">Net Disbursements</p>
+            <p className="text-2xl font-bold text-slate-900 dark:text-white mt-1">
               {formatCurrency(mappedRecords.reduce((acc, r) => acc + (r.netPay || 0), 0))}
             </p>
           </div>
+          <div className="w-11 h-11 rounded-xl bg-purple-500/10 text-purple-600 dark:text-purple-400 border border-purple-500/20 flex items-center justify-center shrink-0">
+            <DollarSign className="w-5 h-5" />
+          </div>
         </div>
 
-        <div className="bg-white dark:bg-slate-900 p-5 rounded-2xl border border-slate-200 dark:border-slate-800 shadow-xs flex items-center gap-4">
-          <div className="w-12 h-12 rounded-xl bg-rose-50 dark:bg-rose-950/60 text-rose-600 dark:text-rose-400 flex items-center justify-center shrink-0">
-            <AlertCircle className="w-6 h-6" />
-          </div>
+        <div className="bg-white dark:bg-slate-900 border border-slate-200/80 dark:border-slate-800/80 rounded-2xl sm:rounded-3xl p-5 shadow-sm dark:shadow-black/20 flex items-center justify-between">
           <div>
-            <p className="text-xs font-semibold uppercase text-slate-400">Attendance Penalties</p>
-            <p className="text-xl font-bold text-rose-600 dark:text-rose-400">
+            <p className="text-xs font-semibold uppercase tracking-wider text-slate-400">Attendance Penalties</p>
+            <p className="text-2xl font-bold text-rose-600 dark:text-rose-400 mt-1">
               {formatCurrency(
                 mappedRecords.reduce((acc, r) => acc + (r.totalAttendanceDeductions || 0), 0)
               )}
             </p>
           </div>
+          <div className="w-11 h-11 rounded-xl bg-rose-500/10 text-rose-600 dark:text-rose-400 border border-rose-500/20 flex items-center justify-center shrink-0">
+            <AlertCircle className="w-5 h-5" />
+          </div>
         </div>
       </div>
 
       {/* Filter and Search Toolbar */}
-      <div className="bg-white dark:bg-slate-900 p-4 rounded-2xl border border-slate-200 dark:border-slate-800 shadow-xs flex flex-col md:flex-row items-stretch md:items-center justify-between gap-3">
+      <div className="bg-white dark:bg-slate-900 border border-slate-200/80 dark:border-slate-800/80 rounded-2xl sm:rounded-3xl p-4 sm:p-5 shadow-sm dark:shadow-black/20 flex flex-col md:flex-row items-stretch md:items-center justify-between gap-3">
         <div className="relative flex-1">
           <Search className="w-4 h-4 absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400" />
           <input
@@ -475,7 +434,7 @@ export const PayrollManagement = () => {
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
             placeholder="Search by employee name, ID, department, or payslip #..."
-            className="w-full pl-10 pr-4 py-2 text-sm bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl focus:outline-none focus:ring-2 focus:ring-[#002185]/20 focus:border-[#002185] dark:text-white"
+            className="w-full pl-10 pr-4 py-2.5 text-xs bg-slate-50 dark:bg-slate-950/60 border border-slate-200/80 dark:border-slate-700/80 rounded-xl focus:outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500 text-slate-900 dark:text-white placeholder-slate-400 transition-all"
           />
         </div>
 
@@ -486,7 +445,7 @@ export const PayrollManagement = () => {
             value={departmentFilter}
             onChange={(e) => setDepartmentFilter(e.target.value)}
             aria-label="Filter by department"
-            className="px-3 py-2 text-xs font-semibold bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl text-slate-700 dark:text-slate-300 focus:outline-none focus:ring-2 focus:ring-[#002185]/20"
+            className="px-3.5 py-2.5 text-xs font-semibold bg-slate-50 dark:bg-slate-950/60 border border-slate-200/80 dark:border-slate-700/80 rounded-xl text-slate-700 dark:text-slate-300 focus:outline-none focus:border-blue-500 transition-all cursor-pointer"
           >
             <option value="all">All Departments</option>
             {departments.map((dept) => (
@@ -502,7 +461,7 @@ export const PayrollManagement = () => {
             value={selectedMonth}
             onChange={(e) => setSelectedMonth(e.target.value)}
             aria-label="Filter by pay month"
-            className="px-3 py-2 text-xs font-semibold bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl text-slate-700 dark:text-slate-300 focus:outline-none focus:ring-2 focus:ring-[#002185]/20"
+            className="px-3.5 py-2.5 text-xs font-semibold bg-slate-50 dark:bg-slate-950/60 border border-slate-200/80 dark:border-slate-700/80 rounded-xl text-slate-700 dark:text-slate-300 focus:outline-none focus:border-blue-500 transition-all cursor-pointer"
           >
             <option value="all">All Months</option>
             {months.map((m) => (
@@ -518,7 +477,7 @@ export const PayrollManagement = () => {
             value={statusFilter}
             onChange={(e) => setStatusFilter(e.target.value)}
             aria-label="Filter by status"
-            className="px-3 py-2 text-xs font-semibold bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl text-slate-700 dark:text-slate-300 focus:outline-none focus:ring-2 focus:ring-[#002185]/20"
+            className="px-3.5 py-2.5 text-xs font-semibold bg-slate-50 dark:bg-slate-950/60 border border-slate-200/80 dark:border-slate-700/80 rounded-xl text-slate-700 dark:text-slate-300 focus:outline-none focus:border-blue-500 transition-all cursor-pointer"
           >
             <option value="all">All Statuses</option>
             <option value="published">Published</option>
@@ -529,11 +488,11 @@ export const PayrollManagement = () => {
       </div>
 
       {/* Main Table Container */}
-      <div className="bg-white dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-slate-800 shadow-xs overflow-hidden">
+      <div className="bg-white dark:bg-slate-900 rounded-2xl sm:rounded-3xl border border-slate-200/80 dark:border-slate-800/80 shadow-sm dark:shadow-black/20 overflow-hidden">
         {isLoading ? (
           <div className="py-24 flex flex-col items-center justify-center gap-3 text-slate-400">
-            <RefreshCw className="w-8 h-8 animate-spin text-[#002185]" />
-            <p className="text-sm font-semibold text-slate-600 dark:text-slate-300">
+            <RefreshCw className="w-8 h-8 animate-spin text-blue-600" />
+            <p className="text-xs font-semibold text-slate-600 dark:text-slate-300">
               Loading active employees and payroll records...
             </p>
           </div>
@@ -549,7 +508,7 @@ export const PayrollManagement = () => {
             <button
               type="button"
               onClick={() => fetchData()}
-              className="mt-2 px-4 py-2 rounded-xl bg-[#002185] text-white text-xs font-bold hover:bg-[#ff5500] transition-colors"
+              className="mt-2 px-4 py-2 rounded-xl bg-blue-600 text-white text-xs font-semibold hover:bg-blue-700 transition-colors"
             >
               Retry Loading
             </button>
@@ -559,10 +518,10 @@ export const PayrollManagement = () => {
             <div className="w-16 h-16 rounded-2xl bg-slate-100 dark:bg-slate-800 text-slate-400 flex items-center justify-center">
               <FileText className="w-8 h-8" />
             </div>
-            <h3 className="text-lg font-bold text-slate-900 dark:text-white">
+            <h3 className="text-base font-bold text-slate-900 dark:text-white">
               No Payroll Records Found
             </h3>
-            <p className="text-sm text-slate-500 dark:text-slate-400 max-w-md">
+            <p className="text-xs text-slate-500 dark:text-slate-400 max-w-md">
               {searchQuery || departmentFilter !== "all" || statusFilter !== "all" || selectedMonth !== "all"
                 ? "No payroll records match the selected filter criteria. Try clearing the filters."
                 : "No payslips have been generated yet. Click 'Generate Payslip' to calculate monthly salaries."}
@@ -571,7 +530,7 @@ export const PayrollManagement = () => {
               id="payroll-empty-generate-btn"
               type="button"
               onClick={() => setShowPayslipsModal(true)}
-              className="mt-2 px-5 py-2.5 rounded-xl bg-[#002185] hover:bg-[#ff5500] text-white text-xs sm:text-sm font-bold shadow-md transition-all flex items-center gap-2"
+              className="mt-2 px-4 py-2 rounded-xl bg-blue-600 hover:bg-blue-700 text-white text-xs font-semibold shadow-sm transition-all flex items-center gap-2"
             >
               <Plus className="w-4 h-4" />
               <span>Generate First Payslip</span>
@@ -579,10 +538,10 @@ export const PayrollManagement = () => {
           </div>
         ) : (
           <div className="overflow-x-auto">
-            <table className="w-full text-left text-sm">
-              <thead className="bg-slate-50 dark:bg-slate-850 text-slate-500 dark:text-slate-400 text-xs uppercase font-bold border-b border-slate-200 dark:border-slate-800">
+            <table className="w-full text-left text-xs">
+              <thead className="bg-slate-50 dark:bg-slate-800/50 text-slate-400 text-xs uppercase font-semibold border-b border-slate-200/80 dark:border-slate-800/80 tracking-wider">
                 <tr>
-                  <th className="py-3.5 px-4 cursor-pointer" onClick={() => handleSort("fullName")}>
+                  <th className="py-3.5 px-5 cursor-pointer" onClick={() => handleSort("fullName")}>
                     <div className="flex items-center gap-1.5">
                       <span>Employee</span>
                       <ArrowUpDown className="w-3.5 h-3.5" />
@@ -609,28 +568,28 @@ export const PayrollManagement = () => {
                     </div>
                   </th>
                   <th className="py-3.5 px-4 text-center">Status</th>
-                  <th className="py-3.5 px-4 text-right">Actions</th>
+                  <th className="py-3.5 px-5 text-right">Actions</th>
                 </tr>
               </thead>
-              <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
+              <tbody className="divide-y divide-slate-100 dark:divide-slate-800/80">
                 {filteredRecords.map((record) => {
                   const initial = record.fullName?.charAt(0)?.toUpperCase() || "E";
                   return (
                     <tr
                       key={record.id}
-                      className="hover:bg-slate-50/80 dark:hover:bg-slate-800/50 transition-colors group"
+                      className="hover:bg-slate-50/80 dark:hover:bg-slate-800/40 transition-colors group"
                     >
                       {/* Employee Column */}
-                      <td className="py-3.5 px-4">
+                      <td className="py-3.5 px-5">
                         <div className="flex items-center gap-3">
                           {record.avatar ? (
                             <img
                               src={record.avatar}
                               alt={record.fullName}
-                              className="w-9 h-9 rounded-full object-cover border border-slate-200 dark:border-slate-700"
+                              className="w-9 h-9 rounded-xl object-cover border border-slate-200 dark:border-slate-700"
                             />
                           ) : (
-                            <div className="w-9 h-9 rounded-full bg-[#002185] dark:bg-blue-600 text-white font-bold flex items-center justify-center text-xs">
+                            <div className="w-9 h-9 rounded-xl bg-blue-600 text-white font-bold flex items-center justify-center text-xs shadow-2xs">
                               {initial}
                             </div>
                           )}
@@ -680,7 +639,7 @@ export const PayrollManagement = () => {
                       </td>
 
                       {/* Net Pay */}
-                      <td className="py-3.5 px-4 text-right font-bold text-[#002185] dark:text-blue-400 text-base">
+                      <td className="py-3.5 px-4 text-right font-bold text-blue-600 dark:text-blue-400 text-sm">
                         {formatCurrency(record.netPay)}
                       </td>
 

@@ -222,26 +222,26 @@ export const EmployeeDirectory = ({
     switch (raw) {
       case "active":
         return {
-          bg: "bg-[#F0FDF4] text-[#16A34A] border-[#16A34A]/30",
-          dot: "bg-[#16A34A]",
+          bg: "bg-emerald-50 dark:bg-emerald-950/40 text-emerald-700 dark:text-emerald-300 border-emerald-200 dark:border-emerald-800/60",
+          dot: "bg-emerald-500",
           label: "Active",
         };
       case "suspended":
         return {
-          bg: "bg-[#FEF2F2] text-[#DC2626] border-[#DC2626]/30",
-          dot: "bg-[#DC2626]",
+          bg: "bg-rose-50 dark:bg-rose-950/40 text-rose-700 dark:text-rose-300 border-rose-200 dark:border-rose-800/60",
+          dot: "bg-rose-500",
           label: "Suspended",
         };
       case "inactive":
         return {
-          bg: "bg-[#FFFBEB] text-[#B45309] border-[#F59E0B]/30",
-          dot: "bg-[#F59E0B]",
+          bg: "bg-amber-50 dark:bg-amber-950/40 text-amber-700 dark:text-amber-300 border-amber-200 dark:border-amber-800/60",
+          dot: "bg-amber-500",
           label: "Inactive",
         };
       default:
         return {
-          bg: "bg-[#F8FAFC] text-[#64748B] border-[#64748B]/30",
-          dot: "bg-[#64748B]",
+          bg: "bg-slate-50 dark:bg-slate-800/60 text-slate-700 dark:text-slate-300 border-slate-200 dark:border-slate-700",
+          dot: "bg-slate-500",
           label: raw.charAt(0).toUpperCase() + raw.slice(1),
         };
     }
@@ -261,48 +261,45 @@ export const EmployeeDirectory = ({
   };
 
   return (
-    <div id="employee-directory-component" className="space-y-5">
-      {/* Top Banner & KPI Stat Chips */}
-      <div className="bg-[#FFFFFF] border border-[#E2E8F0] rounded-2xl p-5 shadow-xs">
+    <div id="employee-directory-component" className="space-y-6">
+      {/* Top Filter / Search Bar & KPI Stat Chips */}
+      <div className="bg-white dark:bg-slate-900 border border-slate-200/80 dark:border-slate-800/80 rounded-2xl sm:rounded-3xl p-5 sm:p-6 shadow-sm dark:shadow-black/20">
         <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4">
-          <div>
-            <div className="flex items-center gap-2">
-              <span className="px-2.5 py-0.5 rounded-full text-[10px] font-bold bg-[#002185] text-white uppercase tracking-wider">
-                Staff Directory
-              </span>
-              <span className="text-xs text-[#64748B] font-medium">
-                Live Database Connection
-              </span>
+          <div className="flex items-center gap-3">
+            <div className="p-2 rounded-xl bg-blue-500/10 text-blue-600 dark:text-blue-400 border border-blue-500/20 shrink-0">
+              <Users className="w-5 h-5" />
             </div>
-            <h2 className="text-xl font-bold text-[#002185] mt-1">
-              Staff Members & Contact Directory
-            </h2>
-            <p className="text-xs text-[#64748B] mt-0.5">
-              Search, filter, and access staff contact details, department roles, and real-time active status.
-            </p>
+            <div>
+              <h2 className="text-base sm:text-lg font-bold text-slate-900 dark:text-white tracking-tight">
+                Staff Members & Directory
+              </h2>
+              <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">
+                Search, filter, and access staff contact details, department roles, and real-time status.
+              </p>
+            </div>
           </div>
 
           {/* Quick Metrics Bar */}
-          <div className="flex flex-wrap items-center gap-2 sm:gap-3">
-            <div className="px-3 py-2 rounded-xl bg-[#F8FAFC] border border-[#E2E8F0] text-center min-w-[70px]">
-              <div className="text-sm font-bold text-[#002185]">{metrics.total}</div>
-              <div className="text-[10px] text-[#64748B] font-medium uppercase">Total Staff</div>
+          <div className="flex flex-wrap items-center gap-2 sm:gap-2.5">
+            <div className="px-3 py-1.5 rounded-xl bg-slate-50 dark:bg-slate-950/60 border border-slate-200/80 dark:border-slate-800/80 text-center min-w-[65px]">
+              <div className="text-sm font-bold text-slate-900 dark:text-white">{metrics.total}</div>
+              <div className="text-[10px] text-slate-400 font-semibold uppercase tracking-wider">Total</div>
             </div>
-            <div className="px-3 py-2 rounded-xl bg-[#F0FDF4] border border-[#16A34A]/20 text-center min-w-[70px]">
-              <div className="text-sm font-bold text-[#16A34A]">{metrics.active}</div>
-              <div className="text-[10px] text-[#16A34A] font-medium uppercase">Active</div>
+            <div className="px-3 py-1.5 rounded-xl bg-emerald-50/60 dark:bg-emerald-950/30 border border-emerald-200 dark:border-emerald-800/60 text-center min-w-[65px]">
+              <div className="text-sm font-bold text-emerald-600 dark:text-emerald-400">{metrics.active}</div>
+              <div className="text-[10px] text-emerald-700 dark:text-emerald-300 font-semibold uppercase tracking-wider">Active</div>
             </div>
-            <div className="px-3 py-2 rounded-xl bg-[#FFFBEB] border border-[#F59E0B]/20 text-center min-w-[70px]">
-              <div className="text-sm font-bold text-[#B45309]">{metrics.inactive}</div>
-              <div className="text-[10px] text-[#B45309] font-medium uppercase">Inactive</div>
+            <div className="px-3 py-1.5 rounded-xl bg-amber-50/60 dark:bg-amber-950/30 border border-amber-200 dark:border-amber-800/60 text-center min-w-[65px]">
+              <div className="text-sm font-bold text-amber-600 dark:text-amber-400">{metrics.inactive}</div>
+              <div className="text-[10px] text-amber-700 dark:text-amber-300 font-semibold uppercase tracking-wider">Inactive</div>
             </div>
-            <div className="px-3 py-2 rounded-xl bg-[#FEF2F2] border border-[#DC2626]/20 text-center min-w-[70px]">
-              <div className="text-sm font-bold text-[#DC2626]">{metrics.suspended}</div>
-              <div className="text-[10px] text-[#DC2626] font-medium uppercase">Suspended</div>
+            <div className="px-3 py-1.5 rounded-xl bg-rose-50/60 dark:bg-rose-950/30 border border-rose-200 dark:border-rose-800/60 text-center min-w-[65px]">
+              <div className="text-sm font-bold text-rose-600 dark:text-rose-400">{metrics.suspended}</div>
+              <div className="text-[10px] text-rose-700 dark:text-rose-300 font-semibold uppercase tracking-wider">Suspended</div>
             </div>
-            <div className="px-3 py-2 rounded-xl bg-[#F8FAFC] border border-[#E2E8F0] text-center min-w-[70px]">
-              <div className="text-sm font-bold text-[#002185]">{metrics.deptsCount}</div>
-              <div className="text-[10px] text-[#64748B] font-medium uppercase">Depts</div>
+            <div className="px-3 py-1.5 rounded-xl bg-slate-50 dark:bg-slate-950/60 border border-slate-200/80 dark:border-slate-800/80 text-center min-w-[65px]">
+              <div className="text-sm font-bold text-blue-600 dark:text-blue-400">{metrics.deptsCount}</div>
+              <div className="text-[10px] text-slate-400 font-semibold uppercase tracking-wider">Depts</div>
             </div>
           </div>
         </div>
@@ -312,22 +309,22 @@ export const EmployeeDirectory = ({
           <div
             className={`mt-4 p-3 rounded-xl text-xs font-semibold flex items-center justify-between border ${
               actionMessage.type === "success"
-                ? "bg-[#F0FDF4] text-[#16A34A] border-[#16A34A]/30"
-                : "bg-[#FEF2F2] text-[#DC2626] border-[#DC2626]/30"
+                ? "bg-emerald-50 dark:bg-emerald-950/40 text-emerald-700 dark:text-emerald-300 border-emerald-200 dark:border-emerald-800/60"
+                : "bg-rose-50 dark:bg-rose-950/40 text-rose-700 dark:text-rose-300 border-rose-200 dark:border-rose-800/60"
             }`}
           >
             <div className="flex items-center gap-2">
               {actionMessage.type === "success" ? (
-                <Check className="w-4 h-4 text-[#16A34A]" />
+                <Check className="w-4 h-4 text-emerald-600 dark:text-emerald-400" />
               ) : (
-                <AlertTriangle className="w-4 h-4 text-[#DC2626]" />
+                <AlertTriangle className="w-4 h-4 text-rose-600 dark:text-rose-400" />
               )}
               <span>{actionMessage.text}</span>
             </div>
             <button
               type="button"
               onClick={() => setActionMessage(null)}
-              className="text-[#64748B] hover:text-[#0F172A] p-0.5 cursor-pointer"
+              className="text-slate-400 hover:text-slate-700 dark:hover:text-slate-200 p-0.5 cursor-pointer"
             >
               <X className="w-3.5 h-3.5" />
             </button>
@@ -335,10 +332,10 @@ export const EmployeeDirectory = ({
         )}
 
         {/* Search Input and Filter Bar */}
-        <div className="mt-4 pt-4 border-t border-[#E2E8F0] flex flex-col md:flex-row gap-3">
+        <div className="mt-4 pt-4 border-t border-slate-100 dark:border-slate-800/80 flex flex-col md:flex-row gap-3">
           {/* Search Bar */}
           <div className="flex-1 relative">
-            <div className="absolute inset-y-0 left-0 pl-3.5 flex items-center pointer-events-none text-[#94A3B8]">
+            <div className="absolute inset-y-0 left-0 pl-3.5 flex items-center pointer-events-none text-slate-400">
               <Search className="w-4 h-4" />
             </div>
             <input
@@ -346,13 +343,13 @@ export const EmployeeDirectory = ({
               value={search}
               onChange={(e) => setSearch(e.target.value)}
               placeholder="Search by name, role, email, phone, employee ID, location..."
-              className="w-full pl-10 pr-4 py-2.5 bg-[#F8FAFC] border border-[#E2E8F0] rounded-xl text-xs text-[#0F172A] placeholder-[#94A3B8] focus:bg-white focus:outline-none focus:border-[#002185] focus:ring-1 focus:ring-[#002185] transition-all"
+              className="w-full pl-10 pr-4 py-2.5 bg-slate-50 dark:bg-slate-950/60 border border-slate-200/80 dark:border-slate-800/80 rounded-xl text-xs text-slate-900 dark:text-white placeholder-slate-400 focus:bg-white dark:focus:bg-slate-900 focus:outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500 transition-all"
             />
             {search && (
               <button
                 type="button"
                 onClick={() => setSearch("")}
-                className="absolute inset-y-0 right-0 pr-3 flex items-center text-[#94A3B8] hover:text-[#0F172A]"
+                className="absolute inset-y-0 right-0 pr-3 flex items-center text-slate-400 hover:text-slate-700 dark:hover:text-slate-200"
               >
                 <X className="w-3.5 h-3.5" />
               </button>
@@ -364,7 +361,7 @@ export const EmployeeDirectory = ({
             <select
               value={selectedDepartment}
               onChange={(e) => setSelectedDepartment(e.target.value)}
-              className="px-3 py-2.5 bg-[#F8FAFC] border border-[#E2E8F0] rounded-xl text-xs text-[#0F172A] focus:outline-none focus:border-[#002185] cursor-pointer hover:border-[#002185] transition-all shrink-0"
+              className="px-3 py-2.5 bg-slate-50 dark:bg-slate-950/60 border border-slate-200/80 dark:border-slate-800/80 rounded-xl text-xs text-slate-700 dark:text-slate-200 focus:outline-none focus:border-blue-500 cursor-pointer hover:border-blue-500 transition-all shrink-0"
             >
               {departments.map((dept) => (
                 <option key={dept} value={dept}>
@@ -377,7 +374,7 @@ export const EmployeeDirectory = ({
             <select
               value={selectedStatus}
               onChange={(e) => setSelectedStatus(e.target.value)}
-              className="px-3 py-2.5 bg-[#F8FAFC] border border-[#E2E8F0] rounded-xl text-xs text-[#0F172A] focus:outline-none focus:border-[#002185] cursor-pointer hover:border-[#002185] transition-all shrink-0"
+              className="px-3 py-2.5 bg-slate-50 dark:bg-slate-950/60 border border-slate-200/80 dark:border-slate-800/80 rounded-xl text-xs text-slate-700 dark:text-slate-200 focus:outline-none focus:border-blue-500 cursor-pointer hover:border-blue-500 transition-all shrink-0"
             >
               {statusOptions.map((st) => (
                 <option key={st} value={st}>
@@ -387,15 +384,15 @@ export const EmployeeDirectory = ({
             </select>
 
             {/* View Mode Switcher */}
-            <div className="flex items-center p-1 bg-[#F1F5F9] rounded-xl border border-[#E2E8F0] shrink-0">
+            <div className="flex items-center p-1 bg-slate-100 dark:bg-slate-800/80 rounded-xl border border-slate-200/80 dark:border-slate-700/80 shrink-0">
               <button
                 type="button"
                 onClick={() => setViewMode("grid")}
                 title="Grid Card View"
                 className={`p-1.5 rounded-lg text-xs font-medium transition-all cursor-pointer ${
                   viewMode === "grid"
-                    ? "bg-[#002185] text-white shadow-xs"
-                    : "text-[#64748B] hover:text-[#002185]"
+                    ? "bg-blue-600 text-white shadow-xs"
+                    : "text-slate-500 dark:text-slate-400 hover:text-blue-600 dark:hover:text-blue-400"
                 }`}
               >
                 <LayoutGrid className="w-4 h-4" />
@@ -406,8 +403,8 @@ export const EmployeeDirectory = ({
                 title="Table List View"
                 className={`p-1.5 rounded-lg text-xs font-medium transition-all cursor-pointer ${
                   viewMode === "table"
-                    ? "bg-[#002185] text-white shadow-xs"
-                    : "text-[#64748B] hover:text-[#002185]"
+                    ? "bg-blue-600 text-white shadow-xs"
+                    : "text-slate-500 dark:text-slate-400 hover:text-blue-600 dark:hover:text-blue-400"
                 }`}
               >
                 <List className="w-4 h-4" />
@@ -420,10 +417,10 @@ export const EmployeeDirectory = ({
               onClick={handleExportCSV}
               disabled={isExporting || employees.length === 0}
               title={`Download CSV export (${filteredEmployees.length} records)`}
-              className={`px-3 py-2 rounded-xl text-xs font-bold transition-all flex items-center gap-1.5 shrink-0 shadow-xs cursor-pointer disabled:opacity-50 ${
+              className={`px-3 py-2 rounded-xl text-xs font-semibold transition-all flex items-center gap-1.5 shrink-0 shadow-2xs cursor-pointer disabled:opacity-50 ${
                 exportSuccess
-                  ? "bg-green-600 text-white border border-green-600"
-                  : "bg-[#F8FAFC] hover:bg-[#002185] text-[#002185] hover:text-white border border-[#E2E8F0] hover:border-[#002185]"
+                  ? "bg-emerald-600 text-white border border-emerald-600"
+                  : "bg-slate-50 dark:bg-slate-800/80 hover:bg-blue-600 hover:text-white text-slate-700 dark:text-slate-300 border border-slate-200/80 dark:border-slate-700/80 hover:border-blue-600"
               }`}
             >
               {exportSuccess ? (
@@ -434,8 +431,8 @@ export const EmployeeDirectory = ({
               ) : (
                 <>
                   <Download className="w-3.5 h-3.5" />
-                  <span>Download CSV</span>
-                  <span className="ml-0.5 px-1.5 py-0.2 rounded-full text-[10px] bg-black/10 text-current">
+                  <span>CSV</span>
+                  <span className="ml-0.5 px-1.5 py-0.2 rounded-full text-[10px] bg-slate-200 dark:bg-slate-700 text-current font-bold">
                     {filteredEmployees.length}
                   </span>
                 </>
@@ -446,23 +443,23 @@ export const EmployeeDirectory = ({
 
         {/* Filter tags summary */}
         {(search || selectedDepartment !== "All" || selectedStatus !== "All") && (
-          <div className="mt-3 flex items-center justify-between text-xs text-[#64748B] bg-[#F8FAFC] p-2.5 rounded-xl border border-[#E2E8F0]">
+          <div className="mt-3 flex items-center justify-between text-xs text-slate-500 dark:text-slate-400 bg-slate-50 dark:bg-slate-950/60 p-2.5 rounded-xl border border-slate-200/80 dark:border-slate-800/80">
             <div className="flex items-center gap-2">
-              <FileSpreadsheet className="w-3.5 h-3.5 text-[#002185]" />
+              <FileSpreadsheet className="w-3.5 h-3.5 text-blue-600 dark:text-blue-400" />
               <span>
-                Showing <strong className="text-[#002185]">{filteredEmployees.length}</strong> matching results of {employees.length} total staff
+                Showing <strong className="text-slate-900 dark:text-white">{filteredEmployees.length}</strong> matching results of {employees.length} total staff
               </span>
             </div>
             <div className="flex items-center gap-3">
               <button
                 type="button"
                 onClick={handleExportCSV}
-                className="text-[#002185] hover:text-[#ff5500] font-bold cursor-pointer inline-flex items-center gap-1 text-[11px]"
+                className="text-blue-600 dark:text-blue-400 hover:underline font-semibold cursor-pointer inline-flex items-center gap-1 text-[11px]"
               >
                 <Download className="w-3 h-3" />
-                Export Filtered View
+                Export Filtered
               </button>
-              <span className="text-[#CBD5E1]">|</span>
+              <span className="text-slate-300 dark:text-slate-700">|</span>
               <button
                 type="button"
                 onClick={() => {
@@ -470,7 +467,7 @@ export const EmployeeDirectory = ({
                   setSelectedDepartment("All");
                   setSelectedStatus("All");
                 }}
-                className="text-[#ff5500] hover:underline font-semibold cursor-pointer"
+                className="text-orange-600 dark:text-orange-400 hover:underline font-semibold cursor-pointer"
               >
                 Clear Filters
               </button>
@@ -481,7 +478,7 @@ export const EmployeeDirectory = ({
 
       {/* Grid Card View */}
       {viewMode === "grid" && (
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 sm:gap-5">
           {filteredEmployees.map((emp) => {
             const badge = getStatusBadge(emp.status, emp.isActive);
             const empId = emp._id || emp.employeeId;
@@ -496,7 +493,7 @@ export const EmployeeDirectory = ({
               <div
                 key={empId}
                 id={`directory-card-${emp.employeeId || empId}`}
-                className="bg-[#FFFFFF] border border-[#E2E8F0] hover:border-[#002185] rounded-2xl p-5 shadow-xs hover:shadow-md transition-all duration-300 flex flex-col justify-between group"
+                className="bg-white dark:bg-slate-900 border border-slate-200/80 dark:border-slate-800/80 hover:border-blue-500/50 dark:hover:border-blue-500/50 rounded-2xl sm:rounded-3xl p-5 sm:p-6 shadow-sm dark:shadow-black/20 transition-all flex flex-col justify-between group"
               >
                 <div>
                   {/* Top Row: Avatar, Name, ID & Status Badge */}
@@ -507,15 +504,15 @@ export const EmployeeDirectory = ({
                         name={emp.fullName}
                         size="lg"
                         shape="rounded"
-                        className="w-12 h-12 rounded-2xl shrink-0 group-hover:scale-105 transition-transform shadow-xs"
+                        className="w-12 h-12 rounded-2xl shrink-0 shadow-2xs"
                         fallbackInitials={initials}
                       />
                       <div className="min-w-0">
-                        <h3 className="text-sm font-bold text-[#002185] truncate group-hover:text-[#ff5500] transition-colors">
+                        <h3 className="text-sm font-bold text-slate-900 dark:text-white truncate group-hover:text-blue-600 dark:group-hover:text-blue-400 transition-colors">
                           {emp.fullName}
                         </h3>
-                        <div className="flex items-center gap-1.5 text-xs text-[#64748B] mt-0.5">
-                          <span className="font-mono bg-[#F8FAFC] px-1.5 py-0.5 rounded border border-[#E2E8F0] text-[10px] font-semibold text-[#002185]">
+                        <div className="flex items-center gap-1.5 text-xs text-slate-500 dark:text-slate-400 mt-0.5">
+                          <span className="font-mono bg-slate-50 dark:bg-slate-950/60 px-1.5 py-0.5 rounded border border-slate-200/80 dark:border-slate-800/80 text-[10px] font-semibold text-blue-600 dark:text-blue-400">
                             {emp.employeeId || "EMP"}
                           </span>
                           <span className="truncate">{emp.department}</span>
@@ -524,7 +521,7 @@ export const EmployeeDirectory = ({
                     </div>
 
                     <span
-                      className={`inline-flex items-center gap-1 text-[10px] font-bold px-2.5 py-1 rounded-full border shrink-0 ${badge.bg}`}
+                      className={`inline-flex items-center gap-1 text-[10px] font-semibold px-2.5 py-1 rounded-full border shrink-0 ${badge.bg}`}
                     >
                       <span className={`w-1.5 h-1.5 rounded-full ${badge.dot}`} />
                       {badge.label}
@@ -532,18 +529,18 @@ export const EmployeeDirectory = ({
                   </div>
 
                   {/* Role Title */}
-                  <div className="mt-3.5 flex items-center gap-1.5 text-xs font-semibold text-[#0F172A] bg-[#F8FAFC] p-2.5 rounded-xl border border-[#E2E8F0]">
-                    <Briefcase className="w-3.5 h-3.5 text-[#ff5500] shrink-0" />
+                  <div className="mt-3.5 flex items-center gap-1.5 text-xs font-semibold text-slate-800 dark:text-slate-200 bg-slate-50 dark:bg-slate-950/60 p-2.5 rounded-xl border border-slate-200/80 dark:border-slate-800/80">
+                    <Briefcase className="w-3.5 h-3.5 text-blue-600 dark:text-blue-400 shrink-0" />
                     <span className="truncate">{emp.position || "Staff Member"}</span>
                   </div>
 
                   {/* Admin Status Quick Switcher */}
                   {isAdmin && (
-                    <div className="mt-3 p-2.5 bg-[#F8FAFC] rounded-xl border border-[#E2E8F0] space-y-1.5">
-                      <div className="text-[10px] font-bold text-[#64748B] uppercase tracking-wider flex items-center justify-between">
+                    <div className="mt-3 p-2.5 bg-slate-50 dark:bg-slate-950/60 rounded-xl border border-slate-200/80 dark:border-slate-800/80 space-y-1.5">
+                      <div className="text-[10px] font-semibold text-slate-400 uppercase tracking-wider flex items-center justify-between">
                         <span>Account Status</span>
                         {statusUpdatingId === empId && (
-                          <Loader2 className="w-3 h-3 text-[#002185] animate-spin" />
+                          <Loader2 className="w-3 h-3 text-blue-600 animate-spin" />
                         )}
                       </div>
                       <div className="grid grid-cols-3 gap-1">
@@ -556,14 +553,14 @@ export const EmployeeDirectory = ({
                               type="button"
                               disabled={statusUpdatingId === empId || isCurrent}
                               onClick={() => handleStatusChange(empId, st)}
-                              className={`px-2 py-1 rounded-lg text-[10px] font-bold capitalize transition-all cursor-pointer ${
+                              className={`px-2 py-1 rounded-lg text-[10px] font-semibold capitalize transition-all cursor-pointer ${
                                 isCurrent
                                   ? st === "active"
-                                    ? "bg-[#16A34A] text-white shadow-xs"
+                                    ? "bg-emerald-600 text-white shadow-xs"
                                     : st === "suspended"
-                                    ? "bg-[#DC2626] text-white shadow-xs"
-                                    : "bg-[#F59E0B] text-white shadow-xs"
-                                  : "bg-white border border-[#E2E8F0] text-[#64748B] hover:border-[#002185] hover:text-[#002185]"
+                                    ? "bg-rose-600 text-white shadow-xs"
+                                    : "bg-amber-600 text-white shadow-xs"
+                                  : "bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 text-slate-600 dark:text-slate-400 hover:border-blue-500 hover:text-blue-600"
                               } disabled:opacity-60`}
                             >
                               {st}
@@ -575,24 +572,24 @@ export const EmployeeDirectory = ({
                   )}
 
                   {/* Contact Details Info Box */}
-                  <div className="mt-3 space-y-2 text-xs">
+                  <div className="mt-3 space-y-1.5 text-xs">
                     {/* Email */}
-                    <div className="flex items-center justify-between p-2 rounded-lg hover:bg-[#F8FAFC] transition-colors group/item">
+                    <div className="flex items-center justify-between p-2 rounded-lg hover:bg-slate-50 dark:hover:bg-slate-800/60 transition-colors group/item">
                       <a
                         href={`mailto:${emp.email}`}
-                        className="flex items-center gap-2 text-[#475569] hover:text-[#002185] truncate"
+                        className="flex items-center gap-2 text-slate-600 dark:text-slate-300 hover:text-blue-600 dark:hover:text-blue-400 truncate"
                       >
-                        <Mail className="w-3.5 h-3.5 text-[#64748B] shrink-0" />
+                        <Mail className="w-3.5 h-3.5 text-slate-400 shrink-0" />
                         <span className="truncate">{emp.email || "No email"}</span>
                       </a>
                       <button
                         type="button"
                         onClick={() => handleCopy(emp.email, `email_${empId}`)}
                         title="Copy email"
-                        className="text-[#94A3B8] hover:text-[#002185] p-1 rounded transition-colors cursor-pointer"
+                        className="text-slate-400 hover:text-blue-600 p-1 rounded transition-colors cursor-pointer"
                       >
                         {copiedField === `email_${empId}` ? (
-                          <Check className="w-3 h-3 text-[#16A34A]" />
+                          <Check className="w-3 h-3 text-emerald-600" />
                         ) : (
                           <Copy className="w-3 h-3" />
                         )}
@@ -600,22 +597,22 @@ export const EmployeeDirectory = ({
                     </div>
 
                     {/* Phone */}
-                    <div className="flex items-center justify-between p-2 rounded-lg hover:bg-[#F8FAFC] transition-colors group/item">
+                    <div className="flex items-center justify-between p-2 rounded-lg hover:bg-slate-50 dark:hover:bg-slate-800/60 transition-colors group/item">
                       <a
                         href={`tel:${emp.phone}`}
-                        className="flex items-center gap-2 text-[#475569] hover:text-[#002185] truncate"
+                        className="flex items-center gap-2 text-slate-600 dark:text-slate-300 hover:text-blue-600 dark:hover:text-blue-400 truncate"
                       >
-                        <Phone className="w-3.5 h-3.5 text-[#64748B] shrink-0" />
+                        <Phone className="w-3.5 h-3.5 text-slate-400 shrink-0" />
                         <span>{emp.phone || "+233 24 000 0000"}</span>
                       </a>
                       <button
                         type="button"
                         onClick={() => handleCopy(emp.phone, `phone_${empId}`)}
                         title="Copy phone number"
-                        className="text-[#94A3B8] hover:text-[#002185] p-1 rounded transition-colors cursor-pointer"
+                        className="text-slate-400 hover:text-blue-600 p-1 rounded transition-colors cursor-pointer"
                       >
                         {copiedField === `phone_${empId}` ? (
-                          <Check className="w-3 h-3 text-[#16A34A]" />
+                          <Check className="w-3 h-3 text-emerald-600" />
                         ) : (
                           <Copy className="w-3 h-3" />
                         )}
@@ -623,37 +620,37 @@ export const EmployeeDirectory = ({
                     </div>
 
                     {/* Location */}
-                    <div className="flex items-center gap-2 px-2 py-1 text-[#64748B] text-[11px]">
-                      <MapPin className="w-3 h-3 text-[#94A3B8] shrink-0" />
+                    <div className="flex items-center gap-2 px-2 py-1 text-slate-400 text-[11px]">
+                      <MapPin className="w-3 h-3 text-slate-400 shrink-0" />
                       <span>{emp.location || "Accra Head Office"}</span>
                     </div>
                   </div>
                 </div>
 
                 {/* Footer Action */}
-                <div className="mt-4 pt-3 border-t border-[#E2E8F0] flex items-center justify-between gap-2">
+                <div className="mt-4 pt-3 border-t border-slate-100 dark:border-slate-800/80 flex items-center justify-between gap-2">
                   {isAdmin ? (
                     <button
                       type="button"
                       onClick={() => setEmployeeToDelete(emp)}
-                      className="px-2.5 py-1.5 rounded-lg border border-[#FCA5A5] text-[#DC2626] hover:bg-[#FEF2F2] text-xs font-bold transition-all flex items-center gap-1.5 cursor-pointer"
+                      className="px-2.5 py-1.5 rounded-lg border border-rose-200 dark:border-rose-800 text-rose-600 dark:text-rose-400 hover:bg-rose-50 dark:hover:bg-rose-950/30 text-xs font-semibold transition-all flex items-center gap-1.5 cursor-pointer"
                       title="Delete employee permanently"
                     >
                       <Trash2 className="w-3.5 h-3.5" />
                       <span>Delete</span>
                     </button>
                   ) : (
-                    <span className="text-[10px] text-[#94A3B8] font-medium">
+                    <span className="text-[10px] text-slate-400 font-medium">
                       Type: {emp.employmentType || "Full-time"}
                     </span>
                   )}
                   <button
                     type="button"
                     onClick={() => setSelectedEmployee(emp)}
-                    className="px-3 py-1.5 rounded-lg bg-[#002185] hover:bg-[#ff5500] text-white text-xs font-bold transition-all shadow-2xs flex items-center gap-1 cursor-pointer"
+                    className="px-3 py-1.5 rounded-xl bg-blue-600 hover:bg-blue-700 text-white text-xs font-semibold transition-all shadow-sm flex items-center gap-1 cursor-pointer"
                   >
                     <span>View Profile</span>
-                    <ChevronRight className="w-3 h-3" />
+                    <ChevronRight className="w-3.5 h-3.5" />
                   </button>
                 </div>
               </div>
@@ -664,10 +661,10 @@ export const EmployeeDirectory = ({
 
       {/* Table / List View */}
       {viewMode === "table" && (
-        <div className="bg-[#FFFFFF] border border-[#E2E8F0] rounded-2xl overflow-hidden shadow-xs">
+        <div className="bg-white dark:bg-slate-900 border border-slate-200/80 dark:border-slate-800/80 rounded-2xl sm:rounded-3xl overflow-hidden shadow-sm dark:shadow-black/20">
           <div className="overflow-x-auto">
             <table className="w-full text-left text-xs">
-              <thead className="bg-[#F8FAFC] border-b border-[#E2E8F0] text-[#64748B] uppercase font-semibold text-[11px] tracking-wider">
+              <thead className="bg-slate-50 dark:bg-slate-800/50 border-b border-slate-200/80 dark:border-slate-800/80 text-slate-400 uppercase font-semibold text-xs tracking-wider">
                 <tr>
                   <th className="px-4 py-3.5">Staff Member</th>
                   <th className="px-4 py-3.5">ID</th>
@@ -679,7 +676,7 @@ export const EmployeeDirectory = ({
                   <th className="px-4 py-3.5 text-right">Actions</th>
                 </tr>
               </thead>
-              <tbody className="divide-y divide-[#E2E8F0]">
+              <tbody className="divide-y divide-slate-100 dark:divide-slate-800/80">
                 {filteredEmployees.map((emp) => {
                   const badge = getStatusBadge(emp.status, emp.isActive);
                   const empId = emp._id || emp.employeeId;
@@ -695,7 +692,7 @@ export const EmployeeDirectory = ({
                   return (
                     <tr
                       key={empId}
-                      className="hover:bg-[#F8FAFC] transition-colors"
+                      className="hover:bg-slate-50/80 dark:hover:bg-slate-800/40 transition-colors"
                     >
                       {/* Name & Avatar */}
                       <td className="px-4 py-3">
@@ -709,10 +706,10 @@ export const EmployeeDirectory = ({
                             fallbackInitials={initials}
                           />
                           <div>
-                            <div className="font-bold text-[#002185]">
+                            <div className="font-bold text-slate-900 dark:text-white">
                               {emp.fullName}
                             </div>
-                            <div className="text-[11px] text-[#64748B]">
+                            <div className="text-[11px] text-slate-500 dark:text-slate-400">
                               {emp.role || "Employee"}
                             </div>
                           </div>
@@ -720,41 +717,41 @@ export const EmployeeDirectory = ({
                       </td>
 
                       {/* Employee ID */}
-                      <td className="px-4 py-3 font-mono font-semibold text-[#002185]">
+                      <td className="px-4 py-3 font-mono font-semibold text-blue-600 dark:text-blue-400">
                         {emp.employeeId || "EMP"}
                       </td>
 
                       {/* Role & Dept */}
                       <td className="px-4 py-3">
-                        <div className="font-semibold text-[#0F172A]">
+                        <div className="font-semibold text-slate-800 dark:text-slate-200">
                           {emp.position || "Staff Member"}
                         </div>
-                        <div className="text-[11px] text-[#64748B]">
+                        <div className="text-[11px] text-slate-500 dark:text-slate-400">
                           {emp.department}
                         </div>
                       </td>
 
                       {/* Contact Details */}
                       <td className="px-4 py-3 space-y-0.5">
-                        <div className="flex items-center gap-1.5 text-[#0F172A]">
-                          <Mail className="w-3 h-3 text-[#64748B]" />
+                        <div className="flex items-center gap-1.5 text-slate-700 dark:text-slate-300">
+                          <Mail className="w-3 h-3 text-slate-400" />
                           <a
                             href={`mailto:${emp.email}`}
-                            className="hover:text-[#002185] hover:underline truncate max-w-[160px]"
+                            className="hover:text-blue-600 hover:underline truncate max-w-[160px]"
                           >
                             {emp.email}
                           </a>
                         </div>
-                        <div className="flex items-center gap-1.5 text-[#64748B]">
+                        <div className="flex items-center gap-1.5 text-slate-500 dark:text-slate-400">
                           <Phone className="w-3 h-3" />
                           <span>{emp.phone || "+233 24 000 0000"}</span>
                         </div>
                       </td>
 
                       {/* Location */}
-                      <td className="px-4 py-3 text-[#64748B]">
+                      <td className="px-4 py-3 text-slate-500 dark:text-slate-400">
                         <div className="flex items-center gap-1">
-                          <MapPin className="w-3 h-3 text-[#94A3B8]" />
+                          <MapPin className="w-3 h-3 text-slate-400" />
                           <span>{emp.location || "Accra Head Office"}</span>
                         </div>
                       </td>
@@ -762,7 +759,7 @@ export const EmployeeDirectory = ({
                       {/* Status Badge */}
                       <td className="px-4 py-3 text-center">
                         <span
-                          className={`inline-flex items-center gap-1 text-[10px] font-bold px-2.5 py-1 rounded-full border ${badge.bg}`}
+                          className={`inline-flex items-center gap-1 text-[10px] font-semibold px-2.5 py-1 rounded-full border ${badge.bg}`}
                         >
                           <span className={`w-1.5 h-1.5 rounded-full ${badge.dot}`} />
                           {badge.label}
@@ -772,21 +769,21 @@ export const EmployeeDirectory = ({
                       {/* Change Status Action (Admin only) */}
                       {isAdmin && (
                         <td className="px-4 py-3 text-center">
-                          <div className="inline-flex items-center gap-1 p-1 bg-[#F1F5F9] rounded-xl border border-[#E2E8F0]">
+                          <div className="inline-flex items-center gap-1 p-1 bg-slate-100 dark:bg-slate-800 rounded-xl border border-slate-200 dark:border-slate-700">
                             {["active", "inactive", "suspended"].map((st) => (
                               <button
                                 key={st}
                                 type="button"
                                 disabled={isUpdatingThis || currentStatus === st}
                                 onClick={() => handleStatusChange(empId, st)}
-                                className={`px-2 py-1 rounded-lg text-[10px] font-bold capitalize transition-all cursor-pointer ${
+                                className={`px-2 py-1 rounded-lg text-[10px] font-semibold capitalize transition-all cursor-pointer ${
                                   currentStatus === st
                                     ? st === "active"
-                                      ? "bg-[#16A34A] text-white shadow-xs"
+                                      ? "bg-emerald-600 text-white shadow-xs"
                                       : st === "suspended"
-                                      ? "bg-[#DC2626] text-white shadow-xs"
-                                      : "bg-[#F59E0B] text-white shadow-xs"
-                                    : "bg-white hover:bg-[#F8FAFC] text-[#64748B] hover:text-[#002185]"
+                                      ? "bg-rose-600 text-white shadow-xs"
+                                      : "bg-amber-600 text-white shadow-xs"
+                                    : "bg-white dark:bg-slate-900 hover:bg-slate-50 dark:hover:bg-slate-750 text-slate-600 dark:text-slate-400 hover:text-blue-600"
                                 } disabled:opacity-50`}
                                 title={`Set status to ${st}`}
                               >
@@ -803,7 +800,7 @@ export const EmployeeDirectory = ({
                           <button
                             type="button"
                             onClick={() => setSelectedEmployee(emp)}
-                            className="px-3 py-1.5 rounded-lg bg-[#F1F5F9] hover:bg-[#002185] hover:text-white text-[#002185] text-xs font-semibold transition-all cursor-pointer"
+                            className="px-3 py-1.5 rounded-xl bg-slate-100 dark:bg-slate-800 hover:bg-blue-600 hover:text-white text-slate-700 dark:text-slate-300 text-xs font-semibold transition-all cursor-pointer"
                           >
                             Details
                           </button>
@@ -811,7 +808,7 @@ export const EmployeeDirectory = ({
                             <button
                               type="button"
                               onClick={() => setEmployeeToDelete(emp)}
-                              className="p-1.5 rounded-lg border border-[#FCA5A5] text-[#DC2626] hover:bg-[#FEF2F2] transition-colors cursor-pointer"
+                              className="p-1.5 rounded-xl border border-rose-200 dark:border-rose-800 text-rose-600 dark:text-rose-400 hover:bg-rose-50 dark:hover:bg-rose-950/30 transition-colors cursor-pointer"
                               title="Delete employee permanently"
                             >
                               <Trash2 className="w-4 h-4" />
@@ -830,14 +827,14 @@ export const EmployeeDirectory = ({
 
       {/* Empty State */}
       {filteredEmployees.length === 0 && (
-        <div className="bg-[#FFFFFF] border border-[#E2E8F0] rounded-2xl p-12 text-center shadow-xs">
-          <div className="w-14 h-14 rounded-full bg-[#F8FAFC] text-[#64748B] flex items-center justify-center mx-auto mb-3">
+        <div className="bg-white dark:bg-slate-900 border border-slate-200/80 dark:border-slate-800/80 rounded-2xl sm:rounded-3xl p-12 text-center shadow-sm dark:shadow-black/20">
+          <div className="w-14 h-14 rounded-full bg-slate-50 dark:bg-slate-800 text-slate-400 flex items-center justify-center mx-auto mb-3">
             <Users className="w-6 h-6" />
           </div>
-          <h3 className="text-base font-bold text-[#002185]">
+          <h3 className="text-base font-bold text-slate-900 dark:text-white">
             No matching staff members found
           </h3>
-          <p className="text-xs text-[#64748B] mt-1 max-w-sm mx-auto">
+          <p className="text-xs text-slate-500 dark:text-slate-400 mt-1 max-w-sm mx-auto">
             Try adjusting your search query or clear the filter selections to view all registered staff.
           </p>
           <button
@@ -847,7 +844,7 @@ export const EmployeeDirectory = ({
               setSelectedDepartment("All");
               setSelectedStatus("All");
             }}
-            className="mt-4 px-4 py-2 bg-[#002185] text-white text-xs font-bold rounded-xl hover:bg-[#ff5500] transition-colors cursor-pointer"
+            className="mt-4 px-4 py-2 bg-blue-600 text-white text-xs font-semibold rounded-xl hover:bg-blue-700 transition-colors cursor-pointer shadow-sm"
           >
             Clear All Filters
           </button>

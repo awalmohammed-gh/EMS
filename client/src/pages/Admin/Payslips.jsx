@@ -112,7 +112,7 @@ const Payslips = () => {
       setError(null);
       const { data } = await getAllPayslips();
       if (data.success) {
-        setPayslips(data.list || []);
+        setPayslips(data.list || data.records || data.payslips || []);
       } else {
         setError(data.message || "Failed to fetch payroll records.");
         setShowToast({
@@ -430,32 +430,37 @@ const Payslips = () => {
   }
 
   return (
-    <>
-      <div className="space-y-6">
-        {/* Header Section */}
+    <div className="w-full max-w-7xl mx-auto p-4 sm:p-6 lg:p-8 space-y-6 overflow-x-hidden">
+      {/* Header Section */}
+      <div className="bg-white dark:bg-slate-900 border border-slate-200/80 dark:border-slate-800/80 rounded-2xl sm:rounded-3xl p-5 sm:p-6 shadow-sm dark:shadow-black/20">
         <div className="flex flex-col lg:flex-row items-start lg:items-center justify-between gap-4">
-          <div>
-            <h1 className="text-2xl font-bold text-[#002185] tracking-tight">
-              Payroll Management
-            </h1>
-            <p className="text-sm text-[#64748B] mt-1">
-              Employee payroll table, payslip generation, and attendance-based salary calculations with fixed absence deductions.
-            </p>
+          <div className="flex items-center gap-3.5">
+            <div className="p-2.5 rounded-xl bg-blue-500/10 text-blue-600 dark:text-blue-400 border border-blue-500/20 shrink-0">
+              <Banknote className="h-6 w-6" />
+            </div>
+            <div>
+              <h1 className="text-xl sm:text-2xl font-bold tracking-tight text-slate-900 dark:text-white">
+                Payroll Management
+              </h1>
+              <p className="text-xs sm:text-sm text-slate-500 dark:text-slate-400 mt-0.5">
+                Employee payroll table, payslip generation, and attendance-based salary calculations
+              </p>
+            </div>
           </div>
           <div className="flex items-center gap-2.5 flex-wrap">
             <button
               type="button"
               onClick={handleExportReport}
-              className="px-3.5 py-2.5 bg-white border border-[#E2E8F0] hover:bg-[#F8FAFC] text-[#0F172A] rounded-xl transition-all duration-200 text-xs font-bold flex items-center gap-2 shadow-xs cursor-pointer"
+              className="px-3.5 py-2 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 hover:bg-slate-50 dark:hover:bg-slate-750 text-slate-700 dark:text-slate-200 rounded-xl transition-all duration-200 text-xs font-semibold flex items-center gap-2 shadow-2xs cursor-pointer"
               title="Export filtered records to CSV"
             >
-              <Download className="w-4 h-4 text-[#002185]" />
-              Export CSV
+              <Download className="w-3.5 h-3.5 text-blue-600 dark:text-blue-400" />
+              <span>Export CSV</span>
             </button>
 
-            <div className="text-xs text-[#64748B] bg-[#FFFFFF] px-3.5 py-2.5 rounded-xl border border-[#E2E8F0] shadow-xs flex items-center gap-1.5 font-medium">
-              <Calendar className="h-4 w-4 text-[#ff5500]" />
-              <span className="font-semibold text-[#002185]">
+            <div className="text-xs text-slate-600 dark:text-slate-300 bg-slate-50 dark:bg-slate-800 px-3.5 py-2 rounded-xl border border-slate-200 dark:border-slate-700 flex items-center gap-1.5 font-medium">
+              <Calendar className="h-3.5 w-3.5 text-blue-600 dark:text-blue-400" />
+              <span className="font-semibold text-slate-900 dark:text-white">
                 {currentMonth} {currentYear}
               </span>
             </div>
@@ -463,553 +468,450 @@ const Payslips = () => {
             <button
               type="button"
               onClick={() => setShowPayslipsModal(true)}
-              className="px-4 py-2.5 bg-[#002185] hover:bg-[#ff5500] text-white rounded-xl transition-all duration-300 shadow-sm hover:shadow-md text-xs font-bold flex items-center gap-2 cursor-pointer"
+              className="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-xl transition-all shadow-sm text-xs font-semibold flex items-center gap-2 cursor-pointer"
             >
-              <FileText className="w-4 h-4" />
-              Generate Payslip
+              <FileText className="w-3.5 h-3.5" />
+              <span>Generate Payslip</span>
             </button>
           </div>
         </div>
+      </div>
 
-        {/* Primary View Switcher Tabs */}
-        <div className="flex items-center p-1.5 bg-[#F8FAFC] dark:bg-slate-800/80 border border-[#E2E8F0] dark:border-slate-800 rounded-2xl self-start flex-wrap gap-1">
-          <button
-            id="tab-btn-monthly-run"
-            type="button"
-            onClick={() => setActiveViewTab("monthly-run")}
-            className={`flex items-center gap-2 px-4 py-2 rounded-xl text-xs font-bold transition-all cursor-pointer ${
-              activeViewTab === "monthly-run"
-                ? "bg-[#002185] text-white shadow-xs"
-                : "text-[#64748B] hover:text-[#002185] dark:text-slate-400"
-            }`}
-          >
-            <Banknote className="w-3.5 h-3.5 text-[#ff5500]" />
-            <span>Automated Monthly Run</span>
-          </button>
+      {/* Primary View Switcher Tabs */}
+      <div className="flex items-center p-1 bg-slate-100 dark:bg-slate-800/80 border border-slate-200/80 dark:border-slate-700/80 rounded-2xl self-start flex-wrap gap-1">
+        <button
+          id="tab-btn-monthly-run"
+          type="button"
+          onClick={() => setActiveViewTab("monthly-run")}
+          className={`flex items-center gap-2 px-3.5 py-2 rounded-xl text-xs font-semibold transition-all cursor-pointer ${
+            activeViewTab === "monthly-run"
+              ? "bg-white dark:bg-slate-900 text-blue-600 dark:text-blue-400 shadow-xs"
+              : "text-slate-600 hover:text-slate-900 dark:text-slate-400 dark:hover:text-slate-200"
+          }`}
+        >
+          <Banknote className="w-3.5 h-3.5" />
+          <span>Automated Monthly Run</span>
+        </button>
 
-          <button
-            id="tab-btn-records"
-            type="button"
-            onClick={() => setActiveViewTab("records")}
-            className={`flex items-center gap-2 px-4 py-2 rounded-xl text-xs font-bold transition-all cursor-pointer ${
-              activeViewTab === "records"
-                ? "bg-[#002185] text-white shadow-xs"
-                : "text-[#64748B] hover:text-[#002185] dark:text-slate-400"
-            }`}
-          >
-            <List className="w-3.5 h-3.5" />
-            <span>Payroll Records ({payslips.length})</span>
-          </button>
+        <button
+          id="tab-btn-records"
+          type="button"
+          onClick={() => setActiveViewTab("records")}
+          className={`flex items-center gap-2 px-3.5 py-2 rounded-xl text-xs font-semibold transition-all cursor-pointer ${
+            activeViewTab === "records"
+              ? "bg-white dark:bg-slate-900 text-blue-600 dark:text-blue-400 shadow-xs"
+              : "text-slate-600 hover:text-slate-900 dark:text-slate-400 dark:hover:text-slate-200"
+          }`}
+        >
+          <List className="w-3.5 h-3.5" />
+          <span>Payroll Records ({payslips.length})</span>
+        </button>
 
-          <button
-            id="tab-btn-cycles"
-            type="button"
-            onClick={() => setActiveViewTab("cycles")}
-            className={`flex items-center gap-2 px-4 py-2 rounded-xl text-xs font-bold transition-all cursor-pointer ${
-              activeViewTab === "cycles"
-                ? "bg-[#002185] text-white shadow-xs"
-                : "text-[#64748B] hover:text-[#002185] dark:text-slate-400"
-            }`}
-          >
-            <History className="w-3.5 h-3.5" />
-            <span>Cycle History</span>
-          </button>
+        <button
+          id="tab-btn-cycles"
+          type="button"
+          onClick={() => setActiveViewTab("cycles")}
+          className={`flex items-center gap-2 px-3.5 py-2 rounded-xl text-xs font-semibold transition-all cursor-pointer ${
+            activeViewTab === "cycles"
+              ? "bg-white dark:bg-slate-900 text-blue-600 dark:text-blue-400 shadow-xs"
+              : "text-slate-600 hover:text-slate-900 dark:text-slate-400 dark:hover:text-slate-200"
+          }`}
+        >
+          <History className="w-3.5 h-3.5" />
+          <span>Cycle History</span>
+        </button>
 
-          <button
-            id="tab-btn-impact"
-            type="button"
-            onClick={() => setActiveViewTab("impact")}
-            className={`flex items-center gap-2 px-4 py-2 rounded-xl text-xs font-bold transition-all cursor-pointer ${
-              activeViewTab === "impact"
-                ? "bg-[#002185] text-white shadow-xs"
-                : "text-[#64748B] hover:text-[#002185] dark:text-slate-400"
-            }`}
-          >
-            <TrendingDown className="w-3.5 h-3.5" />
-            <span>Penalty Impact Analytics</span>
-          </button>
+        <button
+          id="tab-btn-impact"
+          type="button"
+          onClick={() => setActiveViewTab("impact")}
+          className={`flex items-center gap-2 px-3.5 py-2 rounded-xl text-xs font-semibold transition-all cursor-pointer ${
+            activeViewTab === "impact"
+              ? "bg-white dark:bg-slate-900 text-blue-600 dark:text-blue-400 shadow-xs"
+              : "text-slate-600 hover:text-slate-900 dark:text-slate-400 dark:hover:text-slate-200"
+          }`}
+        >
+          <TrendingDown className="w-3.5 h-3.5" />
+          <span>Penalty Impact Analytics</span>
+        </button>
 
-          <button
-            id="tab-btn-calculator"
-            type="button"
-            onClick={() => setActiveViewTab("calculator")}
-            className={`flex items-center gap-2 px-4 py-2 rounded-xl text-xs font-bold transition-all cursor-pointer ${
-              activeViewTab === "calculator"
-                ? "bg-[#002185] text-white shadow-xs"
-                : "text-[#64748B] hover:text-[#002185] dark:text-slate-400"
-            }`}
-          >
-            <Calculator className="w-3.5 h-3.5 text-[#ff5500]" />
-            <span>Attendance & Salary Calculator</span>
-          </button>
+        <button
+          id="tab-btn-calculator"
+          type="button"
+          onClick={() => setActiveViewTab("calculator")}
+          className={`flex items-center gap-2 px-3.5 py-2 rounded-xl text-xs font-semibold transition-all cursor-pointer ${
+            activeViewTab === "calculator"
+              ? "bg-white dark:bg-slate-900 text-blue-600 dark:text-blue-400 shadow-xs"
+              : "text-slate-600 hover:text-slate-900 dark:text-slate-400 dark:hover:text-slate-200"
+          }`}
+        >
+          <Calculator className="w-3.5 h-3.5" />
+          <span>Attendance & Salary Calculator</span>
+        </button>
+      </div>
+
+      {/* Automated Monthly Payroll Run & Calendar Audit */}
+      {activeViewTab === "monthly-run" && (
+        <div className="animate-in fade-in duration-200">
+          <MonthlyPayrollRunTable />
         </div>
+      )}
 
-        {/* Automated Monthly Payroll Run & Calendar Audit */}
-        {activeViewTab === "monthly-run" && (
-          <div className="animate-in fade-in slide-in-from-top-4 duration-200">
-            <MonthlyPayrollRunTable />
-          </div>
-        )}
-
-        {/* Dynamic Payroll & Attendance Calculator */}
-        {activeViewTab === "calculator" && (
-          <div className="animate-in fade-in slide-in-from-top-4 duration-200">
-            <PayrollSummaryCalculator
-              onApplyCalculatedValues={(_calculatedData) => {
-                setShowPayslipsModal(true);
-              }}
-            />
-          </div>
-        )}
-
-        {/* Payroll Cycle History */}
-        {activeViewTab === "cycles" && (
-          <div className="animate-in fade-in slide-in-from-top-4 duration-200">
-            <PayrollCycleHistory
-              onSelectCycle={(cycleMonth) => {
-                setFilterMonth(cycleMonth.split(" ")[0]);
-                setActiveViewTab("records");
-              }}
-            />
-          </div>
-        )}
-
-        {/* Penalty Impact Analytics Dashboard Chart */}
-        {activeViewTab === "impact" && (
-          <div className="animate-in fade-in slide-in-from-top-4 duration-200">
-            <PenaltyPayrollImpactChart />
-          </div>
-        )}
-
-        {/* Error Message */}
-        {error && (
-          <ErrorMessage
-            message={error}
-            onRetry={fetchPayslips}
-            onClose={() => setError(null)}
+      {/* Dynamic Payroll & Attendance Calculator */}
+      {activeViewTab === "calculator" && (
+        <div className="animate-in fade-in duration-200">
+          <PayrollSummaryCalculator
+            onApplyCalculatedValues={(_calculatedData) => {
+              setShowPayslipsModal(true);
+            }}
           />
-        )}
+        </div>
+      )}
 
-        {/* Tab 3: Records Table View */}
-        {activeViewTab === "records" && !error && (
-          <>
-            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3.5">
-              <div className="bg-[#FFFFFF] border border-[#E2E8F0] rounded-xl p-4 sm:p-5 shadow-xs">
-                <div className="flex items-center justify-between">
-                  <div>
-                    <p className="text-[11px] font-bold text-[#64748B] uppercase tracking-wider">
-                      Total Employees
-                    </p>
-                    <p className="text-2xl font-bold text-[#002185] mt-1">
-                      {activeEmployeesCount || totalEmployees || 0}
-                    </p>
-                    <span className="text-[10px] text-[#64748B] block mt-0.5">Active Staff on Record</span>
-                  </div>
-                  <div className="w-10 h-10 rounded-xl bg-[#002185] flex items-center justify-center text-white shadow-xs">
-                    <User className="w-5 h-5" />
-                  </div>
-                </div>
-              </div>
+      {/* Payroll Cycle History */}
+      {activeViewTab === "cycles" && (
+        <div className="animate-in fade-in duration-200">
+          <PayrollCycleHistory
+            onSelectCycle={(cycleMonth) => {
+              setFilterMonth(cycleMonth.split(" ")[0]);
+              setActiveViewTab("records");
+            }}
+          />
+        </div>
+      )}
 
-              <div className="bg-[#FFFFFF] border border-[#E2E8F0] rounded-xl p-4 sm:p-5 shadow-xs">
-                <div className="flex items-center justify-between">
-                  <div>
-                    <p className="text-[11px] font-bold text-[#166534] uppercase tracking-wider">
-                      Total Paid Out
-                    </p>
-                    <p className="text-2xl font-bold text-[#16A34A] mt-1">
-                      {formatCurrency(totalPaid)}
-                    </p>
-                    <span className="text-[10px] text-[#166534] block mt-0.5">Disbursed to Staff</span>
-                  </div>
-                  <div className="w-10 h-10 rounded-xl bg-[#F0FDF4] border border-[#BBF7D0] flex items-center justify-center text-[#16A34A]">
-                    <BanknoteIcon className="w-5 h-5" />
-                  </div>
-                </div>
-              </div>
+      {/* Penalty Impact Analytics Dashboard Chart */}
+      {activeViewTab === "impact" && (
+        <div className="animate-in fade-in duration-200">
+          <PenaltyPayrollImpactChart />
+        </div>
+      )}
 
-              <div className="bg-[#FFFFFF] border border-[#E2E8F0] rounded-xl p-4 sm:p-5 shadow-xs">
-                <div className="flex items-center justify-between">
-                  <div>
-                    <p className="text-[11px] font-bold text-[#92400E] uppercase tracking-wider">
-                      Pending Approvals
-                    </p>
-                    <p className="text-2xl font-bold text-[#F59E0B] mt-1">
-                      {formatCurrency(totalPending)}
-                    </p>
-                    <span className="text-[10px] text-[#92400E] block mt-0.5">Awaiting Transfer</span>
-                  </div>
-                  <div className="w-10 h-10 rounded-xl bg-[#FFFBEB] border border-[#FDE68A] flex items-center justify-center text-[#F59E0B]">
-                    <Clock className="w-5 h-5" />
-                  </div>
-                </div>
-              </div>
+      {/* Error Message */}
+      {error && (
+        <ErrorMessage
+          message={error}
+          onRetry={fetchPayslips}
+          onClose={() => setError(null)}
+        />
+      )}
 
-              <div className="bg-[#FFFFFF] border border-[#E2E8F0] rounded-xl p-4 sm:p-5 shadow-xs">
-                <div className="flex items-center justify-between">
-                  <div>
-                    <p className="text-[11px] font-bold text-[#64748B] uppercase tracking-wider">
-                      Taxes & Deductions
-                    </p>
-                    <p className="text-2xl font-bold text-[#DC2626] mt-1">
-                      {formatCurrency(totalDeductions)}
-                    </p>
-                    <span className="text-[10px] text-[#64748B] block mt-0.5">SSNIT & PAYE Withheld</span>
-                  </div>
-                  <div className="w-10 h-10 rounded-xl bg-[#FEF2F2] border border-[#FECACA] flex items-center justify-center text-[#DC2626]">
-                    <FileText className="w-5 h-5" />
-                  </div>
-                </div>
-              </div>
-            </div>
-
-            {/* Search Bar & Filters */}
-            <div className="flex flex-col sm:flex-row gap-3">
-              <div className="flex-1 relative">
-                <div className="absolute inset-y-0 left-0 pl-3.5 flex items-center pointer-events-none">
-                  <Search className="h-4 w-4 text-[#64748B]" />
-                </div>
-                <input
-                  type="text"
-                  placeholder="Search by employee name, ID, or department..."
-                  value={search}
-                  onChange={(e) => setSearch(e.target.value)}
-                  className="w-full pl-10 pr-4 py-2.5 border border-[#E2E8F0] rounded-xl bg-[#FFFFFF] text-[#0F172A] text-sm placeholder-[#94A3B8] focus:outline-none focus:ring-2 focus:ring-[#ff5500] focus:border-transparent transition-all duration-200"
-                />
-              </div>
-              <div className="flex flex-wrap items-center gap-2">
-                <select
-                  value={filterStatus}
-                  onChange={(e) => setFilterStatus(e.target.value)}
-                  className="px-3.5 py-2.5 border border-[#E2E8F0] rounded-xl bg-[#FFFFFF] text-[#0F172A] focus:outline-none focus:ring-2 focus:ring-[#ff5500] focus:border-transparent text-xs font-semibold cursor-pointer hover:border-[#ff5500]"
-                >
-                  {statusOptions.map((status) => (
-                    <option key={status} value={status}>
-                      Status: {status}
-                    </option>
-                  ))}
-                </select>
-
-                <select
-                  value={filterMonth}
-                  onChange={(e) => setFilterMonth(e.target.value)}
-                  className="px-3.5 py-2.5 border border-[#E2E8F0] rounded-xl bg-[#FFFFFF] text-[#0F172A] focus:outline-none focus:ring-2 focus:ring-[#ff5500] focus:border-transparent text-xs font-semibold cursor-pointer hover:border-[#ff5500]"
-                >
-                  {allMonths.map((month) => (
-                    <option key={month} value={month}>
-                      {month}
-                    </option>
-                  ))}
-                </select>
-
-                <button
-                  type="button"
-                  onClick={fetchPayslips}
-                  disabled={isLoading}
-                  title="Refresh Table Data"
-                  className="p-2.5 rounded-xl border border-[#E2E8F0] bg-white text-[#64748B] hover:text-[#002185] hover:bg-[#F8FAFC] transition cursor-pointer"
-                >
-                  <RefreshCw className={`w-4 h-4 ${isLoading ? "animate-spin text-[#002185]" : ""}`} />
-                </button>
-              </div>
-            </div>
-
-            {/* Results Count Summary */}
-            <div className="flex items-center justify-between text-xs text-[#64748B]">
+      {/* Tab: Records Table View */}
+      {activeViewTab === "records" && !error && (
+        <>
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 sm:gap-5">
+            <div className="bg-white dark:bg-slate-900 border border-slate-200/80 dark:border-slate-800/80 rounded-2xl sm:rounded-3xl p-5 shadow-sm dark:shadow-black/20 flex items-center justify-between">
               <div>
-                Showing{" "}
-                <span className="font-bold text-[#002185]">
-                  {filteredData.length}
-                </span>{" "}
-                of{" "}
-                <span className="font-bold text-[#002185]">
-                  {payslips.length}
-                </span>{" "}
-                payroll entries
+                <p className="text-xs font-semibold uppercase tracking-wider text-slate-400">
+                  Total Employees
+                </p>
+                <p className="text-2xl font-bold text-slate-900 dark:text-white mt-1">
+                  {activeEmployeesCount || totalEmployees || 0}
+                </p>
+                <span className="text-xs text-slate-500 dark:text-slate-400 block mt-0.5">Active Staff on Record</span>
               </div>
-              {filterMonth !== "All Months" && (
-                <span className="bg-[#EFF6FF] text-[#1E40AF] px-2.5 py-0.5 rounded-full font-medium border border-[#BFDBFE]">
-                  Month: {filterMonth}
-                </span>
-              )}
+              <div className="w-11 h-11 rounded-xl bg-blue-500/10 text-blue-600 dark:text-blue-400 border border-blue-500/20 flex items-center justify-center shrink-0">
+                <User className="w-5 h-5" />
+              </div>
             </div>
 
-            {/* Main Payroll Table */}
-            <div className="border border-[#E2E8F0] rounded-2xl overflow-hidden shadow-xs bg-white">
-              {/* Table Header */}
-              <div className="hidden lg:grid grid-cols-12 gap-3 px-5 py-3.5 bg-[#F8FAFC] border-b border-[#E2E8F0] text-xs font-bold text-[#64748B] uppercase tracking-wider">
-                <div className="col-span-4">Employee Details</div>
-                <div className="col-span-2">Department</div>
-                <div className="col-span-2">Pay Period</div>
-                <div className="col-span-1">Status</div>
-                <div className="col-span-2 text-right">Net Salary</div>
-                <div className="col-span-1 text-right">Actions</div>
+            <div className="bg-white dark:bg-slate-900 border border-slate-200/80 dark:border-slate-800/80 rounded-2xl sm:rounded-3xl p-5 shadow-sm dark:shadow-black/20 flex items-center justify-between">
+              <div>
+                <p className="text-xs font-semibold uppercase tracking-wider text-slate-400">
+                  Total Paid Out
+                </p>
+                <p className="text-2xl font-bold text-emerald-600 dark:text-emerald-400 mt-1">
+                  {formatCurrency(totalPaid)}
+                </p>
+                <span className="text-xs text-slate-500 dark:text-slate-400 block mt-0.5">Disbursed to Staff</span>
               </div>
+              <div className="w-11 h-11 rounded-xl bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border border-emerald-500/20 flex items-center justify-center shrink-0">
+                <BanknoteIcon className="w-5 h-5" />
+              </div>
+            </div>
 
-              {/* Main Content Rows */}
-              <div className="divide-y divide-[#E2E8F0]">
-                {filteredData.map((pay, index) => {
-                  const empName = pay?.employee?.fullName || pay?.employeeName || "Employee";
-                  const empId = pay?.employee?.employeeId || pay?.employeeId || "EMP001";
-                  const dept = pay?.employee?.department || pay?.department || "Operations";
-                  const pos = pay?.employee?.position || pay?.position || "Staff";
-                  const payMonth = pay?.payMonth || pay?.month || "August 2026";
-                  const net = Number(pay?.netSalary || 0);
-                  const isMenuOpen = activeMenuId === (pay?._id || pay?.id || index);
+            <div className="bg-white dark:bg-slate-900 border border-slate-200/80 dark:border-slate-800/80 rounded-2xl sm:rounded-3xl p-5 shadow-sm dark:shadow-black/20 flex items-center justify-between">
+              <div>
+                <p className="text-xs font-semibold uppercase tracking-wider text-slate-400">
+                  Pending Approvals
+                </p>
+                <p className="text-2xl font-bold text-amber-600 dark:text-amber-400 mt-1">
+                  {formatCurrency(totalPending)}
+                </p>
+                <span className="text-xs text-slate-500 dark:text-slate-400 block mt-0.5">Awaiting Transfer</span>
+              </div>
+              <div className="w-11 h-11 rounded-xl bg-amber-500/10 text-amber-600 dark:text-amber-400 border border-amber-500/20 flex items-center justify-center shrink-0">
+                <Clock className="w-5 h-5" />
+              </div>
+            </div>
 
-                  return (
-                    <div
-                      key={pay?._id || pay?.id || index}
-                      className="hover:bg-[#F8FAFC]/80 transition-colors duration-150"
-                    >
-                      {/* Desktop Grid Row */}
-                      <div className="hidden lg:grid grid-cols-12 gap-3 items-center px-5 py-3.5">
-                        {/* Employee Details */}
-                        <div className="col-span-4 flex items-center gap-3">
-                          <div className="w-9 h-9 rounded-xl bg-[#002185] flex items-center justify-center text-white font-bold text-xs shrink-0 shadow-xs">
-                            {getInitials(empName)}
-                          </div>
-                          <div>
-                            <button
-                              type="button"
-                              onClick={() => handleViewDetails(pay)}
-                              className="text-sm font-bold text-[#002185] hover:text-[#ff5500] transition text-left cursor-pointer"
-                            >
-                              {empName}
-                            </button>
-                            <p className="text-xs text-[#64748B] flex items-center gap-2">
-                              <span>ID: {empId}</span>
-                              <span>•</span>
-                              <span>{pos}</span>
-                            </p>
-                          </div>
+            <div className="bg-white dark:bg-slate-900 border border-slate-200/80 dark:border-slate-800/80 rounded-2xl sm:rounded-3xl p-5 shadow-sm dark:shadow-black/20 flex items-center justify-between">
+              <div>
+                <p className="text-xs font-semibold uppercase tracking-wider text-slate-400">
+                  Taxes & Deductions
+                </p>
+                <p className="text-2xl font-bold text-rose-600 dark:text-rose-400 mt-1">
+                  {formatCurrency(totalDeductions)}
+                </p>
+                <span className="text-xs text-slate-500 dark:text-slate-400 block mt-0.5">SSNIT & PAYE Withheld</span>
+              </div>
+              <div className="w-11 h-11 rounded-xl bg-rose-500/10 text-rose-600 dark:text-rose-400 border border-rose-500/20 flex items-center justify-center shrink-0">
+                <FileText className="w-5 h-5" />
+              </div>
+            </div>
+          </div>
+
+          {/* Search Bar & Filters */}
+          <div className="bg-white dark:bg-slate-900 border border-slate-200/80 dark:border-slate-800/80 rounded-2xl sm:rounded-3xl p-4 sm:p-5 shadow-sm dark:shadow-black/20 flex flex-col md:flex-row items-stretch md:items-center justify-between gap-3">
+            <div className="flex-1 relative">
+              <Search className="w-4 h-4 absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400" />
+              <input
+                type="text"
+                placeholder="Search by employee name, ID, or department..."
+                value={search}
+                onChange={(e) => setSearch(e.target.value)}
+                className="w-full pl-10 pr-4 py-2.5 text-xs bg-slate-50 dark:bg-slate-950/60 border border-slate-200/80 dark:border-slate-700/80 rounded-xl focus:outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500 text-slate-900 dark:text-white placeholder-slate-400 transition-all"
+              />
+            </div>
+            <div className="flex flex-wrap items-center gap-2">
+              <select
+                value={filterStatus}
+                onChange={(e) => setFilterStatus(e.target.value)}
+                aria-label="Filter by Status"
+                className="px-3.5 py-2.5 text-xs font-semibold bg-slate-50 dark:bg-slate-950/60 border border-slate-200/80 dark:border-slate-700/80 rounded-xl text-slate-700 dark:text-slate-300 focus:outline-none focus:border-blue-500 transition-all cursor-pointer"
+              >
+                {statusOptions.map((status) => (
+                  <option key={status} value={status}>
+                    Status: {status}
+                  </option>
+                ))}
+              </select>
+
+              <select
+                value={filterMonth}
+                onChange={(e) => setFilterMonth(e.target.value)}
+                aria-label="Filter by Month"
+                className="px-3.5 py-2.5 text-xs font-semibold bg-slate-50 dark:bg-slate-950/60 border border-slate-200/80 dark:border-slate-700/80 rounded-xl text-slate-700 dark:text-slate-300 focus:outline-none focus:border-blue-500 transition-all cursor-pointer"
+              >
+                {allMonths.map((month) => (
+                  <option key={month} value={month}>
+                    {month}
+                  </option>
+                ))}
+              </select>
+
+              <button
+                type="button"
+                onClick={fetchPayslips}
+                disabled={isLoading}
+                title="Refresh Table Data"
+                className="p-2.5 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-700 dark:text-slate-200 hover:bg-slate-50 dark:hover:bg-slate-750 transition cursor-pointer"
+              >
+                <RefreshCw className={`w-4 h-4 ${isLoading ? "animate-spin text-blue-600" : ""}`} />
+              </button>
+            </div>
+          </div>
+
+          {/* Results Count Summary */}
+          <div className="flex items-center justify-between text-xs text-slate-500 dark:text-slate-400">
+            <div>
+              Showing{" "}
+              <span className="font-bold text-slate-900 dark:text-white">
+                {filteredData.length}
+              </span>{" "}
+              of{" "}
+              <span className="font-bold text-slate-900 dark:text-white">
+                {payslips.length}
+              </span>{" "}
+              payroll entries
+            </div>
+            {filterMonth !== "All Months" && (
+              <span className="bg-blue-500/10 text-blue-600 dark:text-blue-400 px-2.5 py-0.5 rounded-full font-semibold border border-blue-500/20">
+                Month: {filterMonth}
+              </span>
+            )}
+          </div>
+
+          {/* Main Payroll Table */}
+          <div className="bg-white dark:bg-slate-900 rounded-2xl sm:rounded-3xl border border-slate-200/80 dark:border-slate-800/80 shadow-sm dark:shadow-black/20 overflow-hidden">
+            {/* Table Header */}
+            <div className="hidden lg:grid grid-cols-12 gap-3 px-5 py-3.5 bg-slate-50 dark:bg-slate-800/50 border-b border-slate-200/80 dark:border-slate-800/80 text-xs font-semibold text-slate-400 uppercase tracking-wider">
+              <div className="col-span-4">Employee Details</div>
+              <div className="col-span-2">Department</div>
+              <div className="col-span-2">Pay Period</div>
+              <div className="col-span-1">Status</div>
+              <div className="col-span-2 text-right">Net Salary</div>
+              <div className="col-span-1 text-right">Actions</div>
+            </div>
+
+            {/* Main Content Rows */}
+            <div className="divide-y divide-slate-100 dark:divide-slate-800/80">
+              {filteredData.map((pay, index) => {
+                const empName = pay?.employee?.fullName || pay?.employeeName || "Employee";
+                const empId = pay?.employee?.employeeId || pay?.employeeId || "EMP001";
+                const dept = pay?.employee?.department || pay?.department || "Operations";
+                const pos = pay?.employee?.position || pay?.position || "Staff";
+                const payMonth = pay?.payMonth || pay?.month || "August 2026";
+                const net = Number(pay?.netSalary || 0);
+                const isMenuOpen = activeMenuId === (pay?._id || pay?.id || index);
+
+                return (
+                  <div
+                    key={pay?._id || pay?.id || index}
+                    className="hover:bg-slate-50/80 dark:hover:bg-slate-800/40 transition-colors duration-150"
+                  >
+                    {/* Desktop Grid Row */}
+                    <div className="hidden lg:grid grid-cols-12 gap-3 items-center px-5 py-3.5">
+                      {/* Employee Details */}
+                      <div className="col-span-4 flex items-center gap-3">
+                        <div className="w-9 h-9 rounded-xl bg-blue-600 flex items-center justify-center text-white font-bold text-xs shrink-0 shadow-2xs">
+                          {getInitials(empName)}
                         </div>
-
-                        {/* Department */}
-                        <div className="col-span-2">
-                          <p className="text-xs font-medium text-[#334155] flex items-center gap-1.5">
-                            <Building2 className="w-3.5 h-3.5 text-[#94A3B8] shrink-0" />
-                            {dept}
+                        <div>
+                          <button
+                            type="button"
+                            onClick={() => handleViewDetails(pay)}
+                            className="text-xs font-bold text-slate-900 dark:text-white hover:text-blue-600 dark:hover:text-blue-400 transition text-left cursor-pointer"
+                          >
+                            {empName}
+                          </button>
+                          <p className="text-xs text-slate-400 flex items-center gap-2">
+                            <span>ID: {empId}</span>
+                            <span>•</span>
+                            <span>{pos}</span>
                           </p>
-                        </div>
-
-                        {/* Pay Month */}
-                        <div className="col-span-2">
-                          <p className="text-xs font-semibold text-[#0F172A] flex items-center gap-1">
-                            <Calendar className="w-3.5 h-3.5 text-[#ff5500]" />
-                            {payMonth}
-                          </p>
-                          <span className="text-[10px] text-[#94A3B8] block">
-                            Paid: {formatDate(pay?.paymentDate)}
-                          </span>
-                        </div>
-
-                        {/* Status */}
-                        <div className="col-span-1">
-                          <span
-                            className={`text-[11px] font-bold px-2.5 py-0.5 rounded-full ${getStatusColor(
-                              pay?.status || "Paid"
-                            )}`}
-                          >
-                            {pay?.status || "Paid"}
-                          </span>
-                        </div>
-
-                        {/* Net Salary */}
-                        <div className="col-span-2 text-right">
-                          <p className="text-sm font-bold text-[#002185] tabular-nums">
-                            {formatCurrency(net)}
-                          </p>
-                          <span className="text-[10px] text-[#64748B]">
-                            Basic: {formatCurrency(pay?.basicSalary)}
-                          </span>
-                        </div>
-
-                        {/* Actions */}
-                        <div className="col-span-1 flex items-center justify-end gap-1 relative">
-                          {/* Eye Icon ("View Details") */}
-                          <button
-                            id={`btn-view-details-${pay?._id || index}`}
-                            type="button"
-                            onClick={(e) => {
-                              e.stopPropagation();
-                              handleViewDetails(pay);
-                            }}
-                            className="p-1.5 text-[#002185] hover:text-[#ff5500] hover:bg-[#F1F5F9] rounded-lg transition-all duration-200 cursor-pointer"
-                            title="View Complete Breakdown"
-                          >
-                            <Eye className="w-4 h-4" />
-                          </button>
-
-                          {/* Download PDF Icon */}
-                          <button
-                            id={`btn-download-pdf-${pay?._id || index}`}
-                            type="button"
-                            onClick={(e) => {
-                              e.stopPropagation();
-                              handleDownloadPDF(pay);
-                            }}
-                            className="p-1.5 text-[#16A34A] hover:text-[#002185] hover:bg-[#F1F5F9] rounded-lg transition-all duration-200 cursor-pointer"
-                            title="Download PDF Payslip"
-                          >
-                            <Download className="w-4 h-4" />
-                          </button>
-
-                          {/* Print Icon */}
-                          <button
-                            id={`btn-print-payslip-${pay?._id || index}`}
-                            type="button"
-                            onClick={(e) => {
-                              e.stopPropagation();
-                              navigate(`/print-payslips/${pay?._id || pay?.id || pay?.payslipNumber}`);
-                            }}
-                            className="p-1.5 text-[#64748B] hover:text-[#002185] hover:bg-[#F1F5F9] rounded-lg transition-all duration-200 cursor-pointer"
-                            title="Print Payslip Document"
-                          >
-                            <Printer className="w-4 h-4" />
-                          </button>
-
-                          {/* Delete Icon */}
-                          <button
-                            id={`btn-delete-payslip-${pay?._id || index}`}
-                            type="button"
-                            onClick={(e) => {
-                              e.stopPropagation();
-                              handleDelete(pay);
-                            }}
-                            className="p-1.5 text-[#DC2626] hover:text-red-700 hover:bg-[#FEF2F2] rounded-lg transition-all duration-200 cursor-pointer"
-                            title="Delete Payroll Record"
-                          >
-                            <Trash2 className="w-4 h-4" />
-                          </button>
-
-                          {/* More Options Dropdown */}
-                          <button
-                            type="button"
-                            onClick={(e) => {
-                              e.stopPropagation();
-                              setActiveMenuId(
-                                isMenuOpen ? null : (pay?._id || pay?.id || index)
-                              );
-                            }}
-                            className="p-1.5 text-[#64748B] hover:text-[#002185] hover:bg-[#F1F5F9] rounded-lg transition-all duration-200 cursor-pointer"
-                            title="More Options"
-                          >
-                            <MoreVertical className="w-4 h-4" />
-                          </button>
-
-                          {/* Dropdown Menu Popup */}
-                          {isMenuOpen && (
-                            <div
-                              onClick={(e) => e.stopPropagation()}
-                              className="absolute right-0 top-8 w-48 bg-white rounded-xl shadow-xl border border-[#E2E8F0] py-1.5 z-30 animate-in fade-in duration-150"
-                            >
-                              <button
-                                type="button"
-                                onClick={(e) => {
-                                  e.stopPropagation();
-                                  handleViewDetails(pay);
-                                }}
-                                className="w-full text-left px-3.5 py-1.5 text-xs text-[#0F172A] hover:bg-[#F8FAFC] flex items-center gap-2 cursor-pointer font-medium"
-                              >
-                                <Eye className="w-3.5 h-3.5 text-[#002185]" />
-                                View Full Breakdown
-                              </button>
-                              <button
-                                type="button"
-                                onClick={(e) => {
-                                  e.stopPropagation();
-                                  handleDownloadPDF(pay);
-                                }}
-                                className="w-full text-left px-3.5 py-1.5 text-xs text-[#16A34A] hover:bg-[#F0FDF4] flex items-center gap-2 cursor-pointer font-medium"
-                              >
-                                <Download className="w-3.5 h-3.5" />
-                                Download PDF
-                              </button>
-                              <button
-                                type="button"
-                                onClick={(e) => {
-                                  e.stopPropagation();
-                                  handleQuickStatusUpdate(pay, "Paid");
-                                }}
-                                className="w-full text-left px-3.5 py-1.5 text-xs text-[#16A34A] hover:bg-[#F0FDF4] flex items-center gap-2 cursor-pointer"
-                              >
-                                <CheckCircle2 className="w-3.5 h-3.5" />
-                                Mark as Paid
-                              </button>
-                              <button
-                                type="button"
-                                onClick={(e) => {
-                                  e.stopPropagation();
-                                  handleQuickStatusUpdate(pay, "Pending");
-                                }}
-                                className="w-full text-left px-3.5 py-1.5 text-xs text-[#F59E0B] hover:bg-[#FFFBEB] flex items-center gap-2 cursor-pointer"
-                              >
-                                <Clock className="w-3.5 h-3.5" />
-                                Mark as Pending
-                              </button>
-                              <button
-                                type="button"
-                                onClick={(e) => {
-                                  e.stopPropagation();
-                                  navigate(`/print-payslips/${pay?._id || pay?.id || pay?.payslipNumber}`);
-                                }}
-                                className="w-full text-left px-3.5 py-1.5 text-xs text-[#002185] hover:bg-[#F8FAFC] flex items-center gap-2 cursor-pointer"
-                              >
-                                <Printer className="w-3.5 h-3.5" />
-                                Print Payslip View
-                              </button>
-                              <div className="border-t border-[#E2E8F0] my-1"></div>
-                              <button
-                                type="button"
-                                onClick={(e) => {
-                                  e.stopPropagation();
-                                  handleDelete(pay);
-                                }}
-                                className="w-full text-left px-3.5 py-1.5 text-xs text-[#DC2626] hover:bg-[#FEF2F2] flex items-center gap-2 cursor-pointer font-semibold"
-                              >
-                                <Trash2 className="w-3.5 h-3.5" />
-                                Delete Record
-                              </button>
-                            </div>
-                          )}
                         </div>
                       </div>
 
-                      {/* Mobile Card Row */}
-                      <div className="lg:hidden p-4 space-y-3">
-                        <div className="flex items-center justify-between">
-                          <div className="flex items-center gap-2.5">
-                            <div className="w-9 h-9 rounded-xl bg-[#002185] flex items-center justify-center text-white font-bold text-xs shrink-0">
-                              {getInitials(empName)}
-                            </div>
-                            <div>
-                              <button
-                                type="button"
-                                onClick={(e) => {
-                                  e.stopPropagation();
-                                  handleViewDetails(pay);
-                                }}
-                                className="text-sm font-bold text-[#002185] hover:text-[#ff5500] text-left cursor-pointer"
-                              >
-                                {empName}
-                              </button>
-                              <p className="text-xs text-[#64748B]">
-                                {dept} • {empId}
-                              </p>
-                            </div>
-                          </div>
-                          <div className="flex items-center gap-1">
+                      {/* Department */}
+                      <div className="col-span-2">
+                        <p className="text-xs font-medium text-slate-700 dark:text-slate-300 flex items-center gap-1.5">
+                          <Building2 className="w-3.5 h-3.5 text-slate-400 shrink-0" />
+                          {dept}
+                        </p>
+                      </div>
+
+                      {/* Pay Month */}
+                      <div className="col-span-2">
+                        <p className="text-xs font-semibold text-slate-900 dark:text-white flex items-center gap-1">
+                          <Calendar className="w-3.5 h-3.5 text-slate-400" />
+                          {payMonth}
+                        </p>
+                        <span className="text-[10px] text-slate-400 block">
+                          Paid: {formatDate(pay?.paymentDate)}
+                        </span>
+                      </div>
+
+                      {/* Status */}
+                      <div className="col-span-1">
+                        <span
+                          className={`text-[11px] font-semibold px-2.5 py-0.5 rounded-full ${getStatusColor(
+                            pay?.status || "Paid"
+                          )}`}
+                        >
+                          {pay?.status || "Paid"}
+                        </span>
+                      </div>
+
+                      {/* Net Salary */}
+                      <div className="col-span-2 text-right">
+                        <p className="text-sm font-bold text-blue-600 dark:text-blue-400 tabular-nums">
+                          {formatCurrency(net)}
+                        </p>
+                        <span className="text-[10px] text-slate-400">
+                          Basic: {formatCurrency(pay?.basicSalary)}
+                        </span>
+                      </div>
+
+                      {/* Actions */}
+                      <div className="col-span-1 flex items-center justify-end gap-1 relative">
+                        {/* Eye Icon ("View Details") */}
+                        <button
+                          id={`btn-view-details-${pay?._id || index}`}
+                          type="button"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            handleViewDetails(pay);
+                          }}
+                          className="p-1.5 text-slate-400 hover:text-blue-600 hover:bg-slate-100 dark:hover:bg-slate-800 rounded-lg transition-all cursor-pointer"
+                          title="View Complete Breakdown"
+                        >
+                          <Eye className="w-4 h-4" />
+                        </button>
+
+                        {/* Download PDF Icon */}
+                        <button
+                          id={`btn-download-pdf-${pay?._id || index}`}
+                          type="button"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            handleDownloadPDF(pay);
+                          }}
+                          className="p-1.5 text-slate-400 hover:text-emerald-600 hover:bg-slate-100 dark:hover:bg-slate-800 rounded-lg transition-all cursor-pointer"
+                          title="Download PDF Payslip"
+                        >
+                          <Download className="w-4 h-4" />
+                        </button>
+
+                        {/* Print Icon */}
+                        <button
+                          id={`btn-print-payslip-${pay?._id || index}`}
+                          type="button"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            navigate(`/print-payslips/${pay?._id || pay?.id || pay?.payslipNumber}`);
+                          }}
+                          className="p-1.5 text-slate-400 hover:text-blue-600 hover:bg-slate-100 dark:hover:bg-slate-800 rounded-lg transition-all cursor-pointer"
+                          title="Print Payslip Document"
+                        >
+                          <Printer className="w-4 h-4" />
+                        </button>
+
+                        {/* Delete Icon */}
+                        <button
+                          id={`btn-delete-payslip-${pay?._id || index}`}
+                          type="button"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            handleDelete(pay);
+                          }}
+                          className="p-1.5 text-slate-400 hover:text-rose-600 hover:bg-rose-50 dark:hover:bg-rose-950/60 rounded-lg transition-all cursor-pointer"
+                          title="Delete Payroll Record"
+                        >
+                          <Trash2 className="w-4 h-4" />
+                        </button>
+
+                        {/* More Options Dropdown */}
+                        <button
+                          type="button"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            setActiveMenuId(
+                              isMenuOpen ? null : (pay?._id || pay?.id || index)
+                            );
+                          }}
+                          className="p-1.5 text-slate-400 hover:text-slate-700 dark:hover:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-800 rounded-lg transition-all cursor-pointer"
+                          title="More Options"
+                        >
+                          <MoreVertical className="w-4 h-4" />
+                        </button>
+
+                        {/* Dropdown Menu Popup */}
+                        {isMenuOpen && (
+                          <div
+                            onClick={(e) => e.stopPropagation()}
+                            className="absolute right-0 top-8 w-48 bg-white dark:bg-slate-800 rounded-xl shadow-xl border border-slate-200 dark:border-slate-700 py-1.5 z-30 animate-in fade-in duration-150"
+                          >
                             <button
                               type="button"
                               onClick={(e) => {
                                 e.stopPropagation();
                                 handleViewDetails(pay);
                               }}
-                              className="p-2 text-[#002185] hover:bg-[#F1F5F9] rounded-lg transition cursor-pointer"
-                              title="View Details"
+                              className="w-full text-left px-3.5 py-1.5 text-xs text-slate-700 dark:text-slate-200 hover:bg-slate-50 dark:hover:bg-slate-750 flex items-center gap-2 cursor-pointer font-medium"
                             >
-                              <Eye className="w-4 h-4" />
+                              <Eye className="w-3.5 h-3.5 text-blue-600 dark:text-blue-400" />
+                              View Full Breakdown
                             </button>
                             <button
                               type="button"
@@ -1017,10 +919,32 @@ const Payslips = () => {
                                 e.stopPropagation();
                                 handleDownloadPDF(pay);
                               }}
-                              className="p-2 text-[#16A34A] hover:bg-[#F0FDF4] rounded-lg transition cursor-pointer"
-                              title="Download PDF"
+                              className="w-full text-left px-3.5 py-1.5 text-xs text-emerald-600 dark:text-emerald-400 hover:bg-emerald-50 dark:hover:bg-emerald-950/60 flex items-center gap-2 cursor-pointer font-medium"
                             >
-                              <Download className="w-4 h-4" />
+                              <Download className="w-3.5 h-3.5" />
+                              Download PDF
+                            </button>
+                            <button
+                              type="button"
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                handleQuickStatusUpdate(pay, "Paid");
+                              }}
+                              className="w-full text-left px-3.5 py-1.5 text-xs text-emerald-600 dark:text-emerald-400 hover:bg-emerald-50 dark:hover:bg-emerald-950/60 flex items-center gap-2 cursor-pointer"
+                            >
+                              <CheckCircle2 className="w-3.5 h-3.5" />
+                              Mark as Paid
+                            </button>
+                            <button
+                              type="button"
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                handleQuickStatusUpdate(pay, "Pending");
+                              }}
+                              className="w-full text-left px-3.5 py-1.5 text-xs text-amber-600 dark:text-amber-400 hover:bg-amber-50 dark:hover:bg-amber-950/60 flex items-center gap-2 cursor-pointer"
+                            >
+                              <Clock className="w-3.5 h-3.5" />
+                              Mark as Pending
                             </button>
                             <button
                               type="button"
@@ -1028,74 +952,147 @@ const Payslips = () => {
                                 e.stopPropagation();
                                 navigate(`/print-payslips/${pay?._id || pay?.id || pay?.payslipNumber}`);
                               }}
-                              className="p-2 text-[#64748B] hover:bg-[#F1F5F9] rounded-lg transition cursor-pointer"
-                              title="Print"
+                              className="w-full text-left px-3.5 py-1.5 text-xs text-slate-700 dark:text-slate-200 hover:bg-slate-50 dark:hover:bg-slate-750 flex items-center gap-2 cursor-pointer"
                             >
-                              <Printer className="w-4 h-4" />
+                              <Printer className="w-3.5 h-3.5" />
+                              Print Payslip View
                             </button>
+                            <div className="border-t border-slate-100 dark:border-slate-700 my-1"></div>
                             <button
                               type="button"
                               onClick={(e) => {
                                 e.stopPropagation();
                                 handleDelete(pay);
                               }}
-                              className="p-2 text-[#DC2626] hover:bg-[#FEF2F2] rounded-lg transition cursor-pointer"
-                              title="Delete"
+                              className="w-full text-left px-3.5 py-1.5 text-xs text-rose-600 dark:text-rose-400 hover:bg-rose-50 dark:hover:bg-rose-950/60 flex items-center gap-2 cursor-pointer font-semibold"
                             >
-                              <Trash2 className="w-4 h-4" />
+                              <Trash2 className="w-3.5 h-3.5" />
+                              Delete Record
                             </button>
                           </div>
-                        </div>
+                        )}
+                      </div>
+                    </div>
 
-                        <div className="flex items-center justify-between pt-2 border-t border-[#F1F5F9] text-xs">
+                    {/* Mobile Card Row */}
+                    <div className="lg:hidden p-4 space-y-3">
+                      <div className="flex items-center justify-between">
+                        <div className="flex items-center gap-2.5">
+                          <div className="w-9 h-9 rounded-xl bg-blue-600 flex items-center justify-center text-white font-bold text-xs shrink-0 shadow-2xs">
+                            {getInitials(empName)}
+                          </div>
                           <div>
-                            <span className="text-[#64748B] block">{payMonth}</span>
-                            <span
-                              className={`inline-block mt-1 text-[10px] font-bold px-2 py-0.5 rounded-full ${getStatusColor(
-                                pay?.status || "Paid"
-                              )}`}
+                            <button
+                              type="button"
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                handleViewDetails(pay);
+                              }}
+                              className="text-xs font-bold text-slate-900 dark:text-white hover:text-blue-600 dark:hover:text-blue-400 text-left cursor-pointer"
                             >
-                              {pay?.status || "Paid"}
-                            </span>
+                              {empName}
+                            </button>
+                            <p className="text-xs text-slate-400">
+                              {dept} • {empId}
+                            </p>
                           </div>
-                          <div className="text-right">
-                            <span className="text-[10px] text-[#64748B] block">Net Take-Home</span>
-                            <span className="text-sm font-bold text-[#002185]">
-                              {formatCurrency(net)}
-                            </span>
-                          </div>
+                        </div>
+                        <div className="flex items-center gap-1">
+                          <button
+                            type="button"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              handleViewDetails(pay);
+                            }}
+                            className="p-1.5 text-slate-400 hover:text-blue-600 hover:bg-slate-100 dark:hover:bg-slate-800 rounded-lg transition cursor-pointer"
+                            title="View Details"
+                          >
+                            <Eye className="w-4 h-4" />
+                          </button>
+                          <button
+                            type="button"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              handleDownloadPDF(pay);
+                            }}
+                            className="p-1.5 text-slate-400 hover:text-emerald-600 hover:bg-slate-100 dark:hover:bg-slate-800 rounded-lg transition cursor-pointer"
+                            title="Download PDF"
+                          >
+                            <Download className="w-4 h-4" />
+                          </button>
+                          <button
+                            type="button"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              navigate(`/print-payslips/${pay?._id || pay?.id || pay?.payslipNumber}`);
+                            }}
+                            className="p-1.5 text-slate-400 hover:text-blue-600 hover:bg-slate-100 dark:hover:bg-slate-800 rounded-lg transition cursor-pointer"
+                            title="Print"
+                          >
+                            <Printer className="w-4 h-4" />
+                          </button>
+                          <button
+                            type="button"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              handleDelete(pay);
+                            }}
+                            className="p-1.5 text-slate-400 hover:text-rose-600 hover:bg-rose-50 dark:hover:bg-rose-950/60 rounded-lg transition cursor-pointer"
+                            title="Delete"
+                          >
+                            <Trash2 className="w-4 h-4" />
+                          </button>
+                        </div>
+                      </div>
+
+                      <div className="flex items-center justify-between pt-2 border-t border-slate-100 dark:border-slate-800 text-xs">
+                        <div>
+                          <span className="text-slate-500 dark:text-slate-400 block">{payMonth}</span>
+                          <span
+                            className={`inline-block mt-1 text-[10px] font-semibold px-2 py-0.5 rounded-full ${getStatusColor(
+                              pay?.status || "Paid"
+                            )}`}
+                          >
+                            {pay?.status || "Paid"}
+                          </span>
+                        </div>
+                        <div className="text-right">
+                          <span className="text-[10px] text-slate-400 block">Net Take-Home</span>
+                          <span className="text-xs font-bold text-blue-600 dark:text-blue-400">
+                            {formatCurrency(net)}
+                          </span>
                         </div>
                       </div>
                     </div>
-                  );
-                })}
-              </div>
-
-              {/* Empty State */}
-              {filteredData.length === 0 && (
-                <div className="text-center py-16 px-4 bg-white">
-                  <div className="w-14 h-14 rounded-2xl bg-[#F8FAFC] border border-[#E2E8F0] flex items-center justify-center mx-auto mb-3">
-                    <FileText className="w-6 h-6 text-[#94A3B8]" />
                   </div>
-                  <h3 className="text-sm font-bold text-[#002185]">
-                    No payroll records found
-                  </h3>
-                  <p className="text-xs text-[#64748B] mt-1 max-w-sm mx-auto">
-                    Try adjusting your search keywords, month selection, or generate a new payslip.
-                  </p>
-                  <button
-                    type="button"
-                    onClick={() => setShowPayslipsModal(true)}
-                    className="mt-4 px-4 py-2 bg-[#002185] text-white rounded-xl text-xs font-bold hover:bg-[#ff5500] transition cursor-pointer"
-                  >
-                    Generate First Payslip
-                  </button>
-                </div>
-              )}
+                );
+              })}
             </div>
-          </>
-        )}
-      </div>
+
+            {/* Empty State */}
+            {filteredData.length === 0 && (
+              <div className="text-center py-16 px-4">
+                <div className="w-14 h-14 rounded-2xl bg-slate-100 dark:bg-slate-800 flex items-center justify-center mx-auto mb-3 text-slate-400">
+                  <FileText className="w-6 h-6" />
+                </div>
+                <h3 className="text-base font-bold text-slate-900 dark:text-white">
+                  No payroll records found
+                </h3>
+                <p className="text-xs text-slate-500 dark:text-slate-400 mt-1 max-w-sm mx-auto">
+                  Try adjusting your search keywords, month selection, or generate a new payslip.
+                </p>
+                <button
+                  type="button"
+                  onClick={() => setShowPayslipsModal(true)}
+                  className="mt-4 px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-xl text-xs font-semibold transition cursor-pointer shadow-sm"
+                >
+                  Generate First Payslip
+                </button>
+              </div>
+            )}
+          </div>
+        </>
+      )}
 
       {/* Modal - Generate Payslip */}
       {showPayslipsModal && (
@@ -1127,24 +1124,24 @@ const Payslips = () => {
         >
           <div
             id="delete-payroll-modal-container"
-            className="bg-white rounded-2xl max-w-md w-full p-6 border border-[#E2E8F0] shadow-2xl space-y-4 animate-in zoom-in-95 duration-200"
+            className="bg-white dark:bg-slate-900 rounded-2xl max-w-md w-full p-6 border border-slate-200 dark:border-slate-800 shadow-2xl space-y-4 animate-in zoom-in-95 duration-200"
             onClick={(e) => e.stopPropagation()}
           >
             <div className="flex items-start gap-4">
-              <div className="w-12 h-12 rounded-2xl bg-rose-50 border border-rose-100 text-[#DC2626] flex items-center justify-center shrink-0">
+              <div className="w-12 h-12 rounded-2xl bg-rose-500/10 border border-rose-500/20 text-rose-600 dark:text-rose-400 flex items-center justify-center shrink-0">
                 <Trash2 className="w-6 h-6" />
               </div>
               <div className="space-y-1">
-                <h3 className="text-base font-bold text-[#002185]">
+                <h3 className="text-base font-bold text-slate-900 dark:text-white">
                   Delete Payroll Record?
                 </h3>
-                <p className="text-xs text-[#64748B]">
+                <p className="text-xs text-slate-500 dark:text-slate-400">
                   Are you sure you want to permanently delete the payslip for{" "}
-                  <span className="font-bold text-[#0F172A]">
+                  <span className="font-bold text-slate-900 dark:text-white">
                     {deleteConfirmItem?.employee?.fullName || deleteConfirmItem?.employeeName || "this employee"}
                   </span>{" "}
                   for the period{" "}
-                  <span className="font-semibold text-[#002185]">
+                  <span className="font-semibold text-blue-600 dark:text-blue-400">
                     {deleteConfirmItem?.payMonth || deleteConfirmItem?.month || "N/A"}
                   </span>
                   ?
@@ -1152,19 +1149,19 @@ const Payslips = () => {
               </div>
             </div>
 
-            <div className="p-3 bg-[#FEF2F2] border border-[#FCA5A5] rounded-xl flex items-start gap-2 text-xs text-[#DC2626]">
+            <div className="p-3 bg-rose-50 dark:bg-rose-950/60 border border-rose-200 dark:border-rose-800 rounded-xl flex items-start gap-2 text-xs text-rose-600 dark:text-rose-400">
               <AlertTriangle className="w-4 h-4 shrink-0 mt-0.5" />
               <span>
                 This action is irreversible and will permanently remove this payroll record from the database.
               </span>
             </div>
 
-            <div className="flex items-center justify-end gap-2.5 pt-2 border-t border-[#F1F5F9]">
+            <div className="flex items-center justify-end gap-2.5 pt-2 border-t border-slate-100 dark:border-slate-800">
               <button
                 type="button"
                 disabled={isDeleting}
                 onClick={() => setDeleteConfirmItem(null)}
-                className="px-4 py-2 rounded-xl border border-[#E2E8F0] text-xs font-semibold text-[#64748B] hover:text-[#0F172A] hover:bg-[#F8FAFC] transition cursor-pointer disabled:opacity-50"
+                className="px-4 py-2 rounded-xl border border-slate-200 dark:border-slate-700 text-xs font-semibold text-slate-600 dark:text-slate-300 hover:text-slate-900 dark:hover:text-white hover:bg-slate-50 dark:hover:bg-slate-800 transition cursor-pointer disabled:opacity-50"
               >
                 Cancel
               </button>
@@ -1172,7 +1169,7 @@ const Payslips = () => {
                 type="button"
                 disabled={isDeleting}
                 onClick={handleConfirmDelete}
-                className="px-4 py-2 rounded-xl bg-[#DC2626] hover:bg-[#B91C1C] text-white text-xs font-bold transition shadow-xs flex items-center gap-1.5 cursor-pointer disabled:opacity-50"
+                className="px-4 py-2 rounded-xl bg-rose-600 hover:bg-rose-700 text-white text-xs font-semibold transition shadow-xs flex items-center gap-1.5 cursor-pointer disabled:opacity-50"
               >
                 {isDeleting ? (
                   <>
@@ -1190,7 +1187,7 @@ const Payslips = () => {
           </div>
         </div>
       )}
-    </>
+    </div>
   );
 };
 

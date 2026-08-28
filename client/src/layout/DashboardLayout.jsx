@@ -52,9 +52,7 @@ export const DashboardLayout = ({ role: propRole }) => {
 
         {/* Scrollable Page Content Area */}
         <main className="flex-1 overflow-y-auto bg-[#F8FAFC] dark:bg-slate-900 transition-colors duration-200">
-          <div className="p-3.5 sm:p-6 lg:p-8 max-w-7xl mx-auto w-full min-w-0">
-            <Outlet />
-          </div>
+          <Outlet />
         </main>
       </div>
     </div>

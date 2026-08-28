@@ -267,6 +267,91 @@ export const employeeLogout = async (req, res) => {
   }
 };
 
+// Employee Change Password
+export const changeEmployeePassword = async (req, res) => {
+  try {
+    const { currentPassword, newPassword } = req.body;
+    const rawId = req.employee?.id || req.employee?._id;
+
+    if (!currentPassword || !newPassword) {
+      return res.status(400).json({
+        success: false,
+        message: "Current password and new password are required.",
+      });
+    }
+
+    if (newPassword.length < 6) {
+      return res.status(400).json({
+        success: false,
+        message: "New password must be at least 6 characters long.",
+      });
+    }
+
+    let filter = {};
+    if (isValidObjectId(rawId)) {
+      filter = { _id: rawId };
+    } else if (rawId) {
+      filter = {
+        $or: [{ employeeId: req.employee?.employeeId || rawId }, { email: rawId }],
+      };
+    } else {
+      const active = await Employee.findOne({ isActive: true });
+      if (active) filter = { _id: active._id };
+      else {
+        return res.status(404).json({
+          success: false,
+          message: "Employee account not found.",
+        });
+      }
+    }
+
+    const employee = await Employee.findOne(filter);
+    if (!employee) {
+      return res.status(404).json({
+        success: false,
+        message: "Employee record not found.",
+      });
+    }
+
+    if (employee.password) {
+      const isMatch = await bcrypt.compare(currentPassword, employee.password);
+      if (!isMatch) {
+        return res.status(400).json({
+          success: false,
+          message: "Current password is incorrect.",
+        });
+      }
+    }
+
+    employee.password = newPassword;
+    await employee.save();
+
+    // Also update User collection if exists
+    try {
+      if (employee.email) {
+        const userRec = await User.findOne({ email: employee.email });
+        if (userRec) {
+          userRec.password = newPassword;
+          await userRec.save();
+        }
+      }
+    } catch (uErr) {
+      console.warn("User password sync warning:", uErr.message);
+    }
+
+    res.status(200).json({
+      success: true,
+      message: "Password updated successfully.",
+    });
+  } catch (error) {
+    console.error("Error in changeEmployeePassword:", error);
+    res.status(500).json({
+      success: false,
+      message: error.message || "Failed to update password.",
+    });
+  }
+};
+
 
 
 

@@ -8,6 +8,11 @@ const attendanceSchema = new mongoose.Schema(
       required: true,
     },
 
+    employeeId: {
+      type: String,
+      default: "",
+    },
+
     date: {
       type: String, 
       required: true,
@@ -18,7 +23,17 @@ const attendanceSchema = new mongoose.Schema(
       default: null,
     },
 
+    clockInTime: {
+      type: Date,
+      default: null,
+    },
+
     clockOut: {
+      type: Date,
+      default: null,
+    },
+
+    clockOutTime: {
       type: Date,
       default: null,
     },
@@ -31,7 +46,6 @@ const attendanceSchema = new mongoose.Schema(
 
     status: {
       type: String,
-      enum: ["On Time", "Late", "Absent", "Present", "On Leave"],
       default: "Absent",
     },
 
@@ -63,6 +77,48 @@ const attendanceSchema = new mongoose.Schema(
       trim: true,
       default: "",
     },
+
+    isExcused: {
+      type: Boolean,
+      default: false,
+    },
+
+    excuseReason: {
+      type: String,
+      trim: true,
+      default: "",
+    },
+
+    excusedBy: {
+      type: String,
+      default: "",
+    },
+
+    excusedAt: {
+      type: Date,
+      default: null,
+    },
+
+    flaggedForReview: {
+      type: Boolean,
+      default: false,
+    },
+
+    flagReason: {
+      type: String,
+      trim: true,
+      default: "",
+    },
+
+    flaggedBy: {
+      type: String,
+      default: "",
+    },
+
+    flaggedAt: {
+      type: Date,
+      default: null,
+    },
   },
   {
     timestamps: true,
@@ -73,3 +129,4 @@ const attendanceSchema = new mongoose.Schema(
 attendanceSchema.index({ employee: 1, date: 1 }, { unique: true });
 
 export const Attendance = mongoose.models.Attendance || mongoose.model("Attendance", attendanceSchema);
+

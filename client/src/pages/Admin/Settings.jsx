@@ -120,49 +120,51 @@ const SettingsContent = () => {
   const ActiveIcon = activeTabMeta.icon;
 
   return (
-    <div className="space-y-6 max-w-7xl mx-auto pb-12">
+    <div className="w-full max-w-7xl mx-auto p-4 sm:p-6 lg:p-8 space-y-6 overflow-x-hidden">
       {/* Header Banner */}
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 bg-white dark:bg-slate-900 p-6 rounded-3xl border border-slate-200/80 dark:border-slate-800 shadow-xs">
-        <div className="flex items-center gap-4">
-          <div className="w-12 h-12 rounded-2xl bg-gradient-to-br from-[#002185] to-[#001566] text-white flex items-center justify-center shadow-sm shrink-0">
-            <SettingsIcon className="w-6 h-6" />
-          </div>
-          <div>
-            <div className="flex items-center gap-2">
-              <h1 className="text-xl font-black tracking-tight text-slate-900 dark:text-slate-100">
-                System & Admin Settings
-              </h1>
-              <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[10px] font-bold bg-[#002185]/10 dark:bg-blue-950/60 text-[#002185] dark:text-blue-400 border border-[#002185]/20">
-                <Sparkles className="w-2.5 h-2.5" />
-                Live Cloud Sync
-              </span>
+      <div className="bg-white dark:bg-slate-900 border border-slate-200/80 dark:border-slate-800/80 rounded-2xl sm:rounded-3xl p-5 sm:p-6 shadow-sm dark:shadow-black/20">
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+          <div className="flex items-center gap-3.5">
+            <div className="p-2.5 rounded-xl bg-blue-500/10 text-blue-600 dark:text-blue-400 border border-blue-500/20 shrink-0">
+              <SettingsIcon className="h-6 w-6" />
             </div>
-            <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">
-              Manage organization preferences, administrator credentials, security, and automated workflows
-            </p>
+            <div>
+              <div className="flex items-center gap-2">
+                <h1 className="text-xl sm:text-2xl font-bold tracking-tight text-slate-900 dark:text-white">
+                  System & Admin Settings
+                </h1>
+                <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[10px] font-semibold bg-blue-500/10 text-blue-600 dark:text-blue-400 border border-blue-500/20">
+                  <Sparkles className="w-2.5 h-2.5" />
+                  Live Sync
+                </span>
+              </div>
+              <p className="text-xs sm:text-sm text-slate-500 dark:text-slate-400 mt-0.5">
+                Manage organization preferences, administrator credentials, security, and automated workflows
+              </p>
+            </div>
           </div>
-        </div>
 
-        <div className="flex items-center gap-2">
-          <button
-            type="button"
-            onClick={handleRefresh}
-            disabled={isRefreshing}
-            className="inline-flex items-center gap-2 px-3.5 py-2 rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 hover:bg-slate-100 dark:hover:bg-slate-750 text-slate-700 dark:text-slate-300 text-xs font-bold transition-all shadow-2xs cursor-pointer disabled:opacity-50"
-            title="Reload settings from database"
-          >
-            <RefreshCw className={`w-3.5 h-3.5 ${isRefreshing ? "animate-spin text-[#002185]" : ""}`} />
-            <span>{isRefreshing ? "Syncing..." : "Sync DB"}</span>
-          </button>
+          <div className="flex items-center gap-2">
+            <button
+              type="button"
+              onClick={handleRefresh}
+              disabled={isRefreshing}
+              className="inline-flex items-center gap-2 px-3.5 py-2 rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 hover:bg-slate-100 dark:hover:bg-slate-750 text-slate-700 dark:text-slate-300 text-xs font-semibold transition-all shadow-2xs cursor-pointer disabled:opacity-50"
+              title="Reload settings from database"
+            >
+              <RefreshCw className={`w-3.5 h-3.5 ${isRefreshing ? "animate-spin text-blue-600" : ""}`} />
+              <span>{isRefreshing ? "Syncing..." : "Sync DB"}</span>
+            </button>
+          </div>
         </div>
       </div>
 
       {/* Main Settings Grid: Navigation Sidebar + Tab Canvas */}
       <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 items-start">
         {/* Navigation Sidebar */}
-        <div className="lg:col-span-4 bg-white dark:bg-slate-900 rounded-3xl border border-slate-200/80 dark:border-slate-800 p-3 sm:p-4 shadow-xs space-y-1.5">
+        <div className="lg:col-span-4 bg-white dark:bg-slate-900 rounded-2xl sm:rounded-3xl border border-slate-200/80 dark:border-slate-800/80 p-3 sm:p-4 shadow-sm dark:shadow-black/20 space-y-1.5">
           <div className="px-3 py-2">
-            <span className="text-[11px] font-bold uppercase tracking-wider text-slate-400 dark:text-slate-500">
+            <span className="text-xs font-semibold uppercase tracking-wider text-slate-400">
               Configuration Modules
             </span>
           </div>
@@ -177,30 +179,30 @@ const SettingsContent = () => {
                   type="button"
                   key={tab.id}
                   onClick={() => setActiveTab(tab.id)}
-                  className={`w-full flex items-center gap-3.5 px-3.5 py-3 rounded-2xl text-left transition-all cursor-pointer ${
+                  className={`w-full flex items-center gap-3 px-3.5 py-2.5 rounded-xl text-left transition-all cursor-pointer ${
                     isActive
-                      ? "bg-[#002185] text-white shadow-md shadow-[#002185]/20 font-bold"
+                      ? "bg-blue-600 text-white shadow-sm font-semibold"
                       : "text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800/80 font-medium"
                   }`}
                 >
                   <div
-                    className={`w-9 h-9 rounded-xl flex items-center justify-center shrink-0 transition-colors ${
+                    className={`w-8 h-8 rounded-lg flex items-center justify-center shrink-0 transition-colors ${
                       isActive
                         ? "bg-white/20 text-white"
-                        : "bg-slate-100 dark:bg-slate-800 text-slate-500 dark:text-slate-400 group-hover:text-slate-800"
+                        : "bg-slate-100 dark:bg-slate-800 text-slate-500 dark:text-slate-400"
                     }`}
                   >
                     <Icon className="w-4 h-4" />
                   </div>
                   <div className="min-w-0 flex-1">
-                    <div className="text-xs font-bold truncate leading-tight">
+                    <div className="text-xs font-semibold truncate leading-tight">
                       {tab.label}
                     </div>
                     <div
                       className={`text-[10px] truncate mt-0.5 ${
                         isActive
-                          ? "text-blue-100 font-medium"
-                          : "text-slate-400 dark:text-slate-500"
+                          ? "text-blue-100"
+                          : "text-slate-400"
                       }`}
                     >
                       {tab.desc}
@@ -213,14 +215,14 @@ const SettingsContent = () => {
 
           {/* Quick User Identity Badge in Sidebar */}
           <div className="mt-4 pt-4 border-t border-slate-100 dark:border-slate-800 px-3 py-2 flex items-center gap-3">
-            <div className="w-8 h-8 rounded-xl bg-gradient-to-tr from-[#ff5500] to-amber-500 text-white flex items-center justify-center text-xs font-black shadow-xs shrink-0">
+            <div className="w-8 h-8 rounded-xl bg-blue-600 text-white flex items-center justify-center text-xs font-bold shadow-2xs shrink-0">
               {(user?.fullName || user?.full_name || "A").charAt(0).toUpperCase()}
             </div>
             <div className="min-w-0 flex-1">
-              <div className="text-xs font-bold text-slate-800 dark:text-slate-200 truncate">
+              <div className="text-xs font-semibold text-slate-900 dark:text-white truncate">
                 {user?.fullName || user?.full_name || "Administrator"}
               </div>
-              <div className="text-[10px] text-slate-400 dark:text-slate-500 truncate">
+              <div className="text-[10px] text-slate-400 truncate">
                 {user?.email || "admin@eyenit.com"}
               </div>
             </div>
@@ -228,14 +230,14 @@ const SettingsContent = () => {
         </div>
 
         {/* Tab Canvas Area */}
-        <div className="lg:col-span-8 bg-white dark:bg-slate-900 rounded-3xl border border-slate-200/80 dark:border-slate-800 p-6 sm:p-8 shadow-xs">
+        <div className="lg:col-span-8 bg-white dark:bg-slate-900 rounded-2xl sm:rounded-3xl border border-slate-200/80 dark:border-slate-800/80 p-5 sm:p-7 shadow-sm dark:shadow-black/20">
           {/* Active Tab Subheader */}
-          <div className="flex items-center gap-3 pb-6 mb-6 border-b border-slate-200 dark:border-slate-800">
-            <div className="w-10 h-10 rounded-xl bg-[#002185]/10 dark:bg-blue-900/30 text-[#002185] dark:text-blue-400 flex items-center justify-center shrink-0">
+          <div className="flex items-center gap-3 pb-5 mb-6 border-b border-slate-100 dark:border-slate-800">
+            <div className="w-10 h-10 rounded-xl bg-blue-500/10 text-blue-600 dark:text-blue-400 border border-blue-500/20 flex items-center justify-center shrink-0">
               <ActiveIcon className="w-5 h-5" />
             </div>
             <div>
-              <h2 className="text-base font-bold text-slate-900 dark:text-slate-100">
+              <h2 className="text-base font-bold text-slate-900 dark:text-white">
                 {activeTabMeta.label}
               </h2>
               <p className="text-xs text-slate-500 dark:text-slate-400">

@@ -39,6 +39,9 @@ export const getEmployeeMe = () => {
 export const updateEmployeeMe = (data) => {
   return api.put("/employee/me", data);
 };
+export const changeEmployeePassword = (data) => {
+  return api.put("/employee/change-password", data);
+};
 
 export const updateEmployeeStatus = (id, status) => {
   return api.put(`/admin/employees/${id}/status`, { status });
@@ -138,8 +141,20 @@ export const calculatePayrollSummary = (params) => {
   });
 };
 
-export const getAllPayslips = (data) => {
-  return api.get("/pay/payslips", data);
+export const getAllPayslips = (params) => {
+  const config = params && params.params ? params : { params };
+  return api.get("/admin/payroll/records", config).catch(() => {
+    return api.get("/pay/payslips", config);
+  });
+};
+
+export const getPayrollRecords = (params) => {
+  const config = params && params.params ? params : { params };
+  return api.get("/admin/payroll/records", config).catch(() => {
+    return api.get("/pay/records", config).catch(() => {
+      return api.get("/pay/payslips", config);
+    });
+  });
 };
 
 export const getPayrollById = (id) => {
@@ -155,7 +170,9 @@ export const updatePayrollStatus = (id, data) => {
 };
 
 export const deletePayroll = (id) => {
-  return api.delete(`/pay/${id}`);
+  return api.delete(`/admin/payroll/${id}`).catch(() => {
+    return api.delete(`/pay/${id}`);
+  });
 };
 
 export const exportPayrollReport = (params) => {
@@ -167,11 +184,15 @@ export const getPayrollAnalytics = (params) => {
 };
 
 export const getPayrollCycles = (params) => {
-  return api.get("/pay/cycles", { params });
+  return api.get("/admin/payroll/cycles", { params }).catch(() => {
+    return api.get("/pay/cycles", { params });
+  });
 };
 
 export const getPenaltyImpactAnalytics = (params) => {
-  return api.get("/pay/penalty-impact", { params });
+  return api.get("/admin/analytics/penalty-impact", { params }).catch(() => {
+    return api.get("/pay/penalty-impact", { params });
+  });
 };
 
 export const getEmployeeLivePayrollSummary = (params) => {
@@ -208,6 +229,14 @@ export const getMyPayslips = () => {
   });
 };
 
+export const syncAttendance = (data = {}) => {
+  return api.post("/attendance/sync", data);
+};
+
+export const syncAttendancePenalties = (data = {}) => {
+  return api.post("/attendance/sync-penalties", data);
+};
+
 //attendance
 export const attendanceClockIn = () => {
   return api.post("/attendance/clock-in");
@@ -235,6 +264,22 @@ export const getNowAttendance = () =>{
 
 export const updateAttendanceRecord = (id, data) => {
   return api.put(`/attendance/record/${id}`, data);
+};
+
+export const excuseAttendanceRecord = (id, data) => {
+  return api.put(`/attendance/record/${id}/excuse`, data);
+};
+
+export const flagAttendanceRecord = (id, data) => {
+  return api.put(`/attendance/record/${id}/flag`, data);
+};
+
+export const unflagAttendanceRecord = (id) => {
+  return api.put(`/attendance/record/${id}/unflag`);
+};
+
+export const recalculateAttendanceRecord = (id) => {
+  return api.put(`/attendance/record/${id}/recalculate`);
 };
 
 export const deleteAttendanceRecord = (id) => {
