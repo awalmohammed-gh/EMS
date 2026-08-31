@@ -612,66 +612,11 @@ export const getDashboardStats = async (req, res) => {
   }
 };
 
+import { getAdminPayrollSummary as payrollAdminSummary } from "./payrollAdminController.js";
+
 // Live Backend Aggregation Endpoint: GET /api/admin/payroll/summary
 export const getAdminPayrollSummary = async (req, res) => {
-  try {
-    let totalPayroll = 0;
-    let totalPayrollDisbursed = 0;
-    let pendingDisbursements = 0;
-    let employeesPaidCount = 0;
-    let totalEmployees = 0;
-
-    try {
-      totalEmployees = await Employee.countDocuments({
-        $or: [{ status: "active" }, { status: { $exists: false }, isActive: { $ne: false } }],
-      });
-    } catch (err) {
-      console.warn("DB employee count error in getAdminPayrollSummary:", err.message);
-    }
-
-    try {
-      const payrollRecords = await Payroll.find({}).lean();
-      if (payrollRecords && payrollRecords.length > 0) {
-        payrollRecords.forEach((p) => {
-          const net = Number(p.netPay !== undefined ? p.netPay : (p.netSalary !== undefined ? p.netSalary : (p.basicSalary || 0)));
-          const status = (p.status || "").toLowerCase().trim();
-
-          totalPayroll += net;
-          if (status === "paid") {
-            totalPayrollDisbursed += net;
-            employeesPaidCount += 1;
-          } else if (status === "pending" || status === "draft" || status === "unpaid") {
-            pendingDisbursements += net;
-          }
-        });
-      }
-    } catch (dbErr) {
-      console.warn("DB query error in getAdminPayrollSummary:", dbErr.message);
-    }
-
-    return res.status(200).json({
-      success: true,
-      totalPayroll: parseFloat(totalPayroll.toFixed(2)),
-      totalPayrollDisbursed: parseFloat(totalPayrollDisbursed.toFixed(2)),
-      monthlyPayrollTotal: parseFloat(totalPayrollDisbursed.toFixed(2)),
-      pendingDisbursements: parseFloat(pendingDisbursements.toFixed(2)),
-      employeesPaidCount,
-      totalEmployeesPaid: employeesPaidCount,
-      totalEmployees,
-    });
-  } catch (error) {
-    console.error("Error in getAdminPayrollSummary:", error);
-    return res.status(500).json({
-      success: false,
-      totalPayroll: 0,
-      totalPayrollDisbursed: 0,
-      monthlyPayrollTotal: 0,
-      pendingDisbursements: 0,
-      employeesPaidCount: 0,
-      totalEmployeesPaid: 0,
-      message: error.message || "Failed to fetch payroll summary.",
-    });
-  }
+  return payrollAdminSummary(req, res);
 };
 
 

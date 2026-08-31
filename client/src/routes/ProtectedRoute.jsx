@@ -1,14 +1,16 @@
 import { Navigate, Outlet, useLocation } from "react-router-dom";
 import { useAdminAuth } from "../hooks/useAdminAuth";
+import { useAuth } from "../context/AuthContext";
 import Loading from "../ui/Loading";
 
 const ProtectedRoute = ({ allowRole }) => {
   const location = useLocation();
-  const { isLoading, adminExists, isAuthorized } = useAdminAuth();
+  const { isLoading: isAdminLoading, adminExists, isAuthorized } = useAdminAuth();
+  const { user, token, role: authRole } = useAuth();
 
   // If protecting an Admin route, use the comprehensive useAdminAuth hook
   if (allowRole === "admin") {
-    if (isLoading) {
+    if (isAdminLoading) {
       return <Loading />;
     }
 
@@ -29,14 +31,15 @@ const ProtectedRoute = ({ allowRole }) => {
     typeof window !== "undefined" ? localStorage.getItem("userRole") : null;
   const hasEmpToken =
     typeof window !== "undefined" &&
-    (localStorage.getItem("employeeToken") || localStorage.getItem("token"));
+    (localStorage.getItem("employeeToken") || localStorage.getItem("token") || token);
 
   const role =
+    authRole ||
     stateRole ||
     storedRole ||
     (location.pathname.startsWith("/employee") ? "employee" : "admin");
 
-  if (role !== "employee" && !hasEmpToken) {
+  if (role !== "employee" && !hasEmpToken && !user) {
     return <Navigate to="/employee/login" replace state={{ from: location }} />;
   }
 
@@ -44,3 +47,4 @@ const ProtectedRoute = ({ allowRole }) => {
 };
 
 export default ProtectedRoute;
+

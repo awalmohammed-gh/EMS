@@ -31,6 +31,18 @@ const adminSchema = new mongoose.Schema(
       type: String,
       default: "",
     },
+    avatarUrl: {
+      type: String,
+      default: "",
+    },
+    profilePicture: {
+      type: String,
+      default: "",
+    },
+    profile_picture: {
+      type: String,
+      default: "",
+    },
     phone: {
       type: String,
       default: "",

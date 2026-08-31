@@ -2,6 +2,7 @@ import express from "express";
 import {
   employeeDashboardOverview,
   getDashboardOverview,
+  getRecentActivityFeed,
 } from "../controllers/dashboardController.js";
 import {
   getNotifications,
@@ -15,6 +16,8 @@ import { employeeAuth } from "../middleware/employeeAuth.js";
 const dashboardRouter = express.Router();
 
 dashboardRouter.get("/admin-dashboard", verifyAdmin, getDashboardOverview);
+dashboardRouter.get("/admin-dashboard/recent-activity", verifyAdmin, getRecentActivityFeed);
+dashboardRouter.get("/recent-activity", verifyAdmin, getRecentActivityFeed);
 dashboardRouter.get("/employee-dashboard", employeeAuth, employeeDashboardOverview);
 dashboardRouter.get("/notifications", employeeAuth, getNotifications);
 dashboardRouter.patch("/notifications/read-all", employeeAuth, markAllNotificationsAsRead);

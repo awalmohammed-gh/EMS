@@ -6,7 +6,6 @@ import {
   FileText,
   Eye,
   Download,
-  Building2,
   Lock,
   RefreshCw,
   CheckCircle2,
@@ -155,9 +154,10 @@ const EmployeePayslips = () => {
             <button
               type="button"
               onClick={fetchEmployeePayslips}
-              className="inline-flex items-center gap-1.5 px-3 py-2 text-xs font-semibold text-[#002185] bg-white border border-[#E2E8F0] rounded-xl hover:bg-slate-50 transition shadow-xs cursor-pointer"
+              disabled={isLoading}
+              className="inline-flex items-center gap-1.5 px-3 py-2 text-xs font-semibold text-[#002185] bg-white border border-[#E2E8F0] rounded-xl hover:bg-slate-50 transition shadow-xs cursor-pointer disabled:opacity-60"
             >
-              <RefreshCw className="w-3.5 h-3.5" />
+              <RefreshCw className={`w-3.5 h-3.5 ${isLoading ? "animate-spin text-blue-600" : ""}`} />
               <span>Refresh</span>
             </button>
             <div className="text-xs text-[#64748B] bg-white px-3.5 py-2 rounded-xl border border-[#E2E8F0] shadow-xs font-semibold">
@@ -215,10 +215,12 @@ const EmployeePayslips = () => {
               );
 
               const cardNetSalary = Number(
-                payslip.breakdown?.netSalary !== undefined
-                  ? payslip.breakdown.netSalary
-                  : payslip.netSalary !== undefined
+                payslip.netSalary !== undefined && payslip.netSalary !== null
                   ? payslip.netSalary
+                  : payslip.netPay !== undefined && payslip.netPay !== null
+                  ? payslip.netPay
+                  : payslip.breakdown?.netSalary !== undefined
+                  ? payslip.breakdown.netSalary
                   : (cardBaseSalary + cardAllowances - cardTotalDeductions)
               );
 
@@ -230,22 +232,17 @@ const EmployeePayslips = () => {
                   {/* Top Section */}
                   <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
                     <div className="flex items-center gap-3">
-                      {/* Avatar */}
-                      <div className="w-10 h-10 rounded-full bg-[#002185] flex items-center justify-center shrink-0">
-                        <span className="text-sm font-bold text-white">
-                          {payslip.employeeName?.charAt(0).toUpperCase() || "E"}
-                        </span>
+                      <div className="w-10 h-10 rounded-xl bg-[#002185]/10 flex items-center justify-center shrink-0 text-[#002185]">
+                        <FileText className="w-5 h-5" />
                       </div>
 
                       <div>
                         <h3 className="font-bold text-[#002185] text-base">
-                          {payslip.employeeName || "Employee"}
+                          {payslip.month || payslip.payMonth || "Monthly Payslip"}
                         </h3>
                         <p className="text-xs text-[#64748B] flex items-center gap-1.5 mt-0.5">
-                          <Building2 className="w-3.5 h-3.5 text-[#002185]" />
-                          <span>{payslip.department || "Operations"}</span>
-                          <span>•</span>
-                          <span>{payslip.position || "Staff Member"}</span>
+                          <Calendar className="w-3.5 h-3.5 text-[#002185]" />
+                          <span>Disbursement: {formatDate(payslip.paymentDate)}</span>
                         </p>
                       </div>
                     </div>

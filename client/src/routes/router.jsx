@@ -13,9 +13,8 @@ import Settings from "../pages/Admin/Settings";
 import AdminLayout from "../layout/AdminLayout";
 import ProtectedRoute from "./ProtectedRoute";
 import WelcomePage from "../pages/WelcomePage";
-import AdminLogin from "../pages/Auth/AdminLogin";
+import Login from "../pages/Auth/Login";
 import AdminRegister from "../pages/Auth/AdminRegister";
-import EmployeeLogin from "../pages/Auth/EmployeeLogin";
 import EmployeesLayout from "../layout/EmployeesLayout";
 import EmployeesAttendance from "../pages/Employees/EmployeesAttendance";
 import EmployeeLeave from "../pages/Employees/EmployeeLeave";
@@ -33,16 +32,14 @@ export const router = createHashRouter(
       <Route path="/" element={<Navigate to="/welcome" replace />} />
       <Route path="/welcome" element={<WelcomePage />} />
 
-      {/* Admin Authentication Routes */}
-      <Route path="/admin/login" element={<AdminLogin />} />
-      <Route path="/login/admin" element={<AdminLogin />} />
+      {/* Authentication Routes */}
+      <Route path="/login" element={<Login />} />
+      <Route path="/admin/login" element={<Login initialRole="admin" />} />
+      <Route path="/login/admin" element={<Login initialRole="admin" />} />
+      <Route path="/employee/login" element={<Login initialRole="employee" />} />
+      <Route path="/login/employee" element={<Login initialRole="employee" />} />
       <Route path="/admin/register" element={<AdminRegister />} />
       <Route path="/register/admin" element={<AdminRegister />} />
-
-      {/* Employee Authentication Routes (Login Only - No Self Registration) */}
-      <Route path="/employee/login" element={<EmployeeLogin />} />
-      <Route path="/login/employee" element={<EmployeeLogin />} />
-      <Route path="/login" element={<EmployeeLogin />} />
 
       {/* Admin Protected Routes */}
       <Route element={<ProtectedRoute allowRole="admin" />}>

@@ -2,6 +2,8 @@ import express from "express";
 import {
   getNotifications,
   markNotificationAsRead,
+  markNotificationAsUnread,
+  toggleNotificationRead,
   markAllNotificationsAsRead,
   deleteNotification,
   deleteAllNotifications,
@@ -17,6 +19,10 @@ notificationRouter.patch("/read-all", employeeAuth, markAllNotificationsAsRead);
 notificationRouter.patch("/mark-all-read", employeeAuth, markAllNotificationsAsRead);
 notificationRouter.patch("/:id/read", employeeAuth, markNotificationAsRead);
 notificationRouter.put("/:id/read", employeeAuth, markNotificationAsRead);
+notificationRouter.patch("/:id/unread", employeeAuth, markNotificationAsUnread);
+notificationRouter.put("/:id/unread", employeeAuth, markNotificationAsUnread);
+notificationRouter.patch("/:id/toggle", employeeAuth, toggleNotificationRead);
+notificationRouter.patch("/:id/dismiss", employeeAuth, deleteNotification);
 notificationRouter.delete("/clear-all", employeeAuth, deleteAllNotifications);
 notificationRouter.delete("/delete-all", employeeAuth, deleteAllNotifications);
 notificationRouter.delete("/:id", employeeAuth, deleteNotification);

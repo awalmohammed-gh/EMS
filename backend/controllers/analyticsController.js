@@ -4,18 +4,19 @@ import { Attendance } from "../models/attendanceModel.js";
 import { Employee } from "../models/employeeModel.js";
 import { CompanySettings } from "../models/CompanySettings.js";
 import { evaluateLatenessPenalty } from "./payrollController.js";
+import { logErrorToFile } from "../utils/logger.js";
 
 /**
  * Controller for Attendance Penalties & Payroll Cost Impact Analytics
- * Aggregates live data across the last 6 rolling months from MongoDB.
+ * Aggregates live data across the last 6 rolling months directly from MongoDB.
+ * Optimized with defensive aggregation pipelines and null-safety for zero-state empty databases.
  */
 export const getPenaltyImpactAnalytics = async (req, res) => {
   try {
-    // 1. Establish the 6 rolling months timeline
+    // 1. Establish the exact 6 rolling months timeline (starting 5 months prior up to current month)
     const now = new Date();
-    // Default reference date (or current date)
     const refDate = new Date(now.getFullYear(), now.getMonth(), 1);
-    
+
     const monthNamesShort = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
     const monthNamesFull = [
       "January", "February", "March", "April", "May", "June",
@@ -37,6 +38,8 @@ export const getPenaltyImpactAnalytics = async (req, res) => {
         short: mShort,
         full: mFull,
         key: yyyyMm,
+        startDate: new Date(yr, mIdx, 1, 0, 0, 0, 0),
+        endDate: new Date(yr, mIdx + 1, 0, 23, 59, 59, 999),
       });
     }
 
@@ -57,170 +60,236 @@ export const getPenaltyImpactAnalytics = async (req, res) => {
         companySettings = { ...companySettings, ...settingsDoc };
       }
     } catch (err) {
-      console.warn("Could not fetch company settings for analytics:", err.message);
+      console.warn("Could not fetch company settings for analytics:", err?.message || err);
     }
 
-    // 3. Fetch all active employees for base salary calculation if payroll not yet run
+    const dailyAbsenceRate = Number(companySettings.absenceDeductionRate || 10);
+
+    // 3. Fetch active employees headcount & baseline salary
     let activeEmployees = [];
+    let totalActiveBaseSalary = 0;
     try {
-      activeEmployees = await Employee.find({ isActive: { $ne: false } }).lean();
+      activeEmployees = await Employee.find({
+        $or: [{ status: "active" }, { status: { $exists: false }, isActive: { $ne: false } }],
+      }).lean() || [];
+
+      totalActiveBaseSalary = activeEmployees.reduce((sum, e) => {
+        const sal = Number(e?.salary !== undefined ? e.salary : (e?.basicSalary !== undefined ? e.basicSalary : (e?.baseSalary || 0)));
+        return sum + (isNaN(sal) ? 0 : sal);
+      }, 0);
     } catch (err) {
-      console.warn("Could not fetch employees for analytics:", err.message);
+      console.warn("Could not fetch employees for analytics:", err?.message || err);
     }
 
-    // 4. Fetch all payroll records from DB
-    let payrollRecords = [];
-    try {
-      payrollRecords = await Payroll.find({})
-        .populate("employee", "fullName employeeId department position salary basicSalary baseSalary")
-        .lean();
-    } catch (err) {
-      console.warn("Could not query payroll collection:", err.message);
-    }
-
-    // 5. Fetch attendance records covering the 6 months period
+    // 4. Perform efficient MongoDB aggregation on Payroll records grouped by month
     const startPeriodKey = months[0].key;
+    const endPeriodKey = months[months.length - 1].key;
+
+    let payrollAggregations = [];
+    try {
+      payrollAggregations = await Payroll.aggregate([
+        {
+          $project: {
+            payMonth: { $ifNull: ["$payMonth", ""] },
+            paymentDate: "$paymentDate",
+            baseSalary: { $ifNull: ["$baseSalary", { $ifNull: ["$basicSalary", 0] }] },
+            allowances: { $ifNull: ["$allowances", 0] },
+            absentDaysDeduction: {
+              $ifNull: [
+                "$absentDaysDeduction",
+                { $ifNull: ["$absenceDeductions", { $ifNull: ["$absenceDeductionDetails.totalAmount", 0] }] }
+              ]
+            },
+            latenessDeduction: {
+              $ifNull: [
+                "$latenessDeduction",
+                { $ifNull: ["$latenessPenalties", { $ifNull: ["$latenessDeductionDetails.totalAmount", 0] }] }
+              ]
+            },
+            waivedTotal: {
+              $ifNull: [
+                "$penaltyOverride.totalWaived",
+                {
+                  $add: [
+                    { $ifNull: ["$penaltyOverride.waivedAbsenceDeduction", 0] },
+                    { $ifNull: ["$penaltyOverride.waivedLatenessDeduction", 0] }
+                  ]
+                }
+              ]
+            }
+          }
+        },
+        {
+          $group: {
+            _id: "$payMonth",
+            headcount: { $sum: 1 },
+            totalGross: { $sum: { $add: ["$baseSalary", "$allowances"] } },
+            totalAbsence: { $sum: "$absentDaysDeduction" },
+            totalLateness: { $sum: "$latenessDeduction" },
+            totalWaived: { $sum: "$waivedTotal" },
+            paymentDates: { $push: "$paymentDate" }
+          }
+        }
+      ]) || [];
+    } catch (err) {
+      console.warn("Payroll aggregation query failed, will fallback gracefully:", err?.message || err);
+      payrollAggregations = [];
+    }
+
+    // 5. Query attendance logs for 6-month window
     let attendanceRecords = [];
     try {
       attendanceRecords = await Attendance.find({
-        date: { $gte: `${startPeriodKey}-01` }
+        date: { $gte: `${startPeriodKey}-01`, $lte: `${endPeriodKey}-31` },
       })
-      .populate("employee", "fullName employeeId department salary basicSalary baseSalary")
-      .lean();
+      .select("employee date status isExcused latePenalty clockIn")
+      .lean() || [];
     } catch (err) {
-      console.warn("Could not query attendance collection:", err.message);
+      console.warn("Could not query attendance collection:", err?.message || err);
+      attendanceRecords = [];
+    }
+
+    // Group attendance records by month key (YYYY-MM) in memory for O(1) monthly lookup
+    const attendanceByMonth = new Map();
+    for (const att of attendanceRecords) {
+      if (!att || !att.date) continue;
+      const monthPrefix = String(att.date).substring(0, 7);
+      if (!attendanceByMonth.has(monthPrefix)) {
+        attendanceByMonth.set(monthPrefix, []);
+      }
+      attendanceByMonth.get(monthPrefix).push(att);
     }
 
     // 6. Aggregate metrics dynamically for each of the 6 rolling months
     const monthlySeries = months.map((m) => {
-      // Find matching payroll records for this month
-      const matchingPayrolls = payrollRecords.filter((p) => {
-        const pMonth = (p.payMonth || "").toLowerCase().trim();
+      // Check for aggregated payroll entry matching month name or key
+      const matchingPayrollAgg = payrollAggregations.find((p) => {
+        if (!p || !p._id) return false;
+        const pMonth = String(p._id).toLowerCase().trim();
         const matchesName = pMonth.includes(m.short.toLowerCase()) || pMonth.includes(monthNamesFull[m.monthIndex].toLowerCase());
         const matchesYear = pMonth.includes(String(m.year));
-        if (matchesName && (matchesYear || payrollRecords.length <= 20)) return true;
+        if (matchesName && matchesYear) return true;
 
-        if (p.paymentDate) {
-          const pd = new Date(p.paymentDate);
-          if (pd.getFullYear() === m.year && pd.getMonth() === m.monthIndex) return true;
+        if (p.paymentDates && Array.isArray(p.paymentDates)) {
+          const matchedDate = p.paymentDates.some((pd) => {
+            if (!pd) return false;
+            const parsed = new Date(pd);
+            return parsed.getFullYear() === m.year && parsed.getMonth() === m.monthIndex;
+          });
+          if (matchedDate) return true;
         }
-        return false;
+
+        return matchesName;
       });
 
-      // Find matching attendance records for this month (date format YYYY-MM-DD)
-      const matchingAttendance = attendanceRecords.filter((a) => {
-        return a.date && a.date.startsWith(m.key);
-      });
+      const matchingAttendance = attendanceByMonth.get(m.key) || [];
 
       let absenceDeductions = 0;
       let latenessPenalties = 0;
       let penaltiesWaived = 0;
-      let grossPayroll = 0;
+      let totalGrossPayroll = 0;
       let headcount = 0;
 
-      if (matchingPayrolls.length > 0) {
-        // Compute from payroll records generated for that month
-        headcount = matchingPayrolls.length;
-        matchingPayrolls.forEach((rec) => {
-          const bSal = Number(rec.baseSalary !== undefined ? rec.baseSalary : (rec.basicSalary || rec.employee?.salary || 0));
-          const allw = Number(rec.allowances || 0);
-          const absD = Number(rec.absentDaysDeduction || 0);
-          const lateD = Number(rec.latenessDeduction || 0);
-          const waived = Number(
-            rec.penaltyOverride?.totalWaived ||
-            (Number(rec.penaltyOverride?.waivedAbsenceDeduction || 0) + Number(rec.penaltyOverride?.waivedLatenessDeduction || 0)) ||
-            0
-          );
-
-          grossPayroll += (bSal + allw);
-          absenceDeductions += absD;
-          latenessPenalties += lateD;
-          penaltiesWaived += waived;
-        });
+      if (matchingPayrollAgg && matchingPayrollAgg.headcount > 0) {
+        headcount = matchingPayrollAgg.headcount || 0;
+        totalGrossPayroll = Number(matchingPayrollAgg.totalGross || 0);
+        absenceDeductions = Number(matchingPayrollAgg.totalAbsence || 0);
+        latenessPenalties = Number(matchingPayrollAgg.totalLateness || 0);
+        penaltiesWaived = Number(matchingPayrollAgg.totalWaived || 0);
       } else if (matchingAttendance.length > 0) {
-        // Fallback to real attendance records if payroll has not been disbursed for this month yet
         const uniqueEmpMap = new Map();
 
-        matchingAttendance.forEach((att) => {
+        for (const att of matchingAttendance) {
+          if (!att) continue;
           const empId = String(att.employee?._id || att.employee || "");
           if (empId) uniqueEmpMap.set(empId, true);
 
-          const status = (att.status || "").toLowerCase();
-          if (status === "absent") {
-            absenceDeductions += Number(companySettings.absenceDeductionRate || 10);
-          } else if (status === "late" || att.clockIn) {
-            const evalRes = evaluateLatenessPenalty(
-              att.clockIn,
-              companySettings.workStartTime || "08:00",
-              companySettings
-            );
-            if (evalRes.penalty > 0) {
-              latenessPenalties += evalRes.penalty;
+          const status = String(att.status || "").toLowerCase();
+          const isExcused = Boolean(att.isExcused);
+
+          if (isExcused) {
+            const excusedAmount = Number(att.latePenalty || 0) || (status === "absent" ? dailyAbsenceRate : 0);
+            penaltiesWaived += (isNaN(excusedAmount) ? 0 : excusedAmount);
+          } else {
+            if (status === "absent") {
+              absenceDeductions += dailyAbsenceRate;
+            } else if (att.latePenalty && Number(att.latePenalty) > 0) {
+              latenessPenalties += Number(att.latePenalty);
+            } else if (att.clockIn) {
+              const evalRes = evaluateLatenessPenalty(
+                att.clockIn,
+                companySettings.workStartTime || "08:00",
+                companySettings
+              );
+              if (evalRes && evalRes.penalty > 0) {
+                latenessPenalties += Number(evalRes.penalty);
+              }
             }
           }
-        });
+        }
 
-        headcount = uniqueEmpMap.size || activeEmployees.length;
-        const totalBase = activeEmployees.reduce((sum, e) => sum + (Number(e.salary || e.basicSalary || e.baseSalary || 0)), 0);
-        grossPayroll = totalBase > 0 ? totalBase : 0;
-      } else {
-        // Zero-state: Strictly 0 values when no records exist
-        absenceDeductions = 0;
-        latenessPenalties = 0;
-        penaltiesWaived = 0;
-        grossPayroll = 0;
-        headcount = 0;
+        headcount = uniqueEmpMap.size || activeEmployees.length || 0;
+        totalGrossPayroll = totalActiveBaseSalary > 0 ? totalActiveBaseSalary : 0;
       }
 
-      // Calculate Net Penalties and Net Payroll
+      // Safe bounds math
+      absenceDeductions = Math.max(0, isNaN(absenceDeductions) ? 0 : absenceDeductions);
+      latenessPenalties = Math.max(0, isNaN(latenessPenalties) ? 0 : latenessPenalties);
+      penaltiesWaived = Math.max(0, isNaN(penaltiesWaived) ? 0 : penaltiesWaived);
+      totalGrossPayroll = Math.max(0, isNaN(totalGrossPayroll) ? 0 : totalGrossPayroll);
+
       const grossPenalties = absenceDeductions + latenessPenalties;
-      const totalNetPenalties = Math.max(0, grossPenalties - penaltiesWaived);
-      const netPayroll = Math.max(0, grossPayroll - totalNetPenalties);
-      const penaltyImpactPercentage = grossPayroll > 0 
-        ? parseFloat(((totalNetPenalties / grossPayroll) * 100).toFixed(2)) 
+      const netPenalties = Math.max(0, grossPenalties - penaltiesWaived);
+      const netPayroll = Math.max(0, totalGrossPayroll - netPenalties);
+      const penaltyImpactPercentage = totalGrossPayroll > 0
+        ? parseFloat(((netPenalties / totalGrossPayroll) * 100).toFixed(2))
         : 0;
 
       return {
         month: m.short,
         monthFull: m.full,
-        absenceDeductions: Math.round(absenceDeductions),
-        latenessPenalties: Math.round(latenessPenalties),
-        penaltiesWaived: Math.round(penaltiesWaived),
-        totalNetPenalties: Math.round(totalNetPenalties),
-        // Aliases for component backwards-compatibility
-        absencePenalties: Math.round(absenceDeductions),
-        totalPenalties: Math.round(totalNetPenalties),
-        grossPayroll: Math.round(grossPayroll),
-        netPayroll: Math.round(netPayroll),
-        penaltyImpactPercentage,
+        absenceDeductions: parseFloat(absenceDeductions.toFixed(2)),
+        latenessPenalties: parseFloat(latenessPenalties.toFixed(2)),
+        penaltiesWaived: parseFloat(penaltiesWaived.toFixed(2)),
+        netPenalties: parseFloat(netPenalties.toFixed(2)),
+        totalNetPenalties: parseFloat(netPenalties.toFixed(2)),
+        totalPenalties: parseFloat(netPenalties.toFixed(2)),
+        absencePenalties: parseFloat(absenceDeductions.toFixed(2)),
+        grossPayroll: parseFloat(totalGrossPayroll.toFixed(2)),
+        totalGrossPayroll: parseFloat(totalGrossPayroll.toFixed(2)),
+        netPayroll: parseFloat(netPayroll.toFixed(2)),
+        penaltyImpactPercentage: isNaN(penaltyImpactPercentage) ? 0 : penaltyImpactPercentage,
         headcount,
       };
     });
 
-    // 7. Aggregate KPI Card Totals across 6 months
-    const totalAbsenceDeductions = monthlySeries.reduce((sum, m) => sum + m.absenceDeductions, 0);
-    const totalLatenessPenalties = monthlySeries.reduce((sum, m) => sum + m.latenessPenalties, 0);
-    const totalPenaltiesWaived = monthlySeries.reduce((sum, m) => sum + m.penaltiesWaived, 0);
-    const totalNetPenalties = monthlySeries.reduce((sum, m) => sum + m.totalNetPenalties, 0);
-    const totalGrossPayroll = monthlySeries.reduce((sum, m) => sum + m.grossPayroll, 0);
+    // 7. Aggregate Top 5 Metric Cards Mathematical Formulas across the full 6 months
+    const total6MoPenalties = monthlySeries.reduce((sum, m) => sum + (m.netPenalties || 0), 0);
+    const totalAbsenceDeductions = monthlySeries.reduce((sum, m) => sum + (m.absenceDeductions || 0), 0);
+    const totalLatenessPenalties = monthlySeries.reduce((sum, m) => sum + (m.latenessPenalties || 0), 0);
+    const totalPenaltiesWaived = monthlySeries.reduce((sum, m) => sum + (m.penaltiesWaived || 0), 0);
+    const total6MoGrossPayroll = monthlySeries.reduce((sum, m) => sum + (m.totalGrossPayroll || 0), 0);
 
-    const avgPenaltyImpactRate = totalGrossPayroll > 0
-      ? parseFloat(((totalNetPenalties / totalGrossPayroll) * 100).toFixed(2))
+    const avgImpactRate = total6MoGrossPayroll > 0
+      ? parseFloat(((total6MoPenalties / total6MoGrossPayroll) * 100).toFixed(2))
       : 0;
 
     const summary = {
-      totalPenalties6Mo: totalNetPenalties,
-      totalNetPenalties6Mo: totalNetPenalties,
-      totalAbsencePenalties6Mo: totalAbsenceDeductions,
-      totalAbsenceDeductions: totalAbsenceDeductions,
-      totalLatenessPenalties6Mo: totalLatenessPenalties,
-      totalLatenessPenalties: totalLatenessPenalties,
-      totalWaived6Mo: totalPenaltiesWaived,
-      totalPenaltiesWaived: totalPenaltiesWaived,
-      totalGross6Mo: totalGrossPayroll,
-      totalGrossPayroll: totalGrossPayroll,
-      avgPenaltyImpactRate,
-      hasLiveRecords: totalGrossPayroll > 0 || totalNetPenalties > 0,
+      total6MoPenalties: parseFloat(total6MoPenalties.toFixed(2)),
+      totalNetPenalties6Mo: parseFloat(total6MoPenalties.toFixed(2)),
+      totalPenalties6Mo: parseFloat(total6MoPenalties.toFixed(2)),
+      totalAbsenceDeductions: parseFloat(totalAbsenceDeductions.toFixed(2)),
+      totalAbsencePenalties6Mo: parseFloat(totalAbsenceDeductions.toFixed(2)),
+      totalLatenessPenalties: parseFloat(totalLatenessPenalties.toFixed(2)),
+      totalLatenessPenalties6Mo: parseFloat(totalLatenessPenalties.toFixed(2)),
+      totalPenaltiesWaived: parseFloat(totalPenaltiesWaived.toFixed(2)),
+      totalWaived6Mo: parseFloat(totalPenaltiesWaived.toFixed(2)),
+      total6MoGrossPayroll: parseFloat(total6MoGrossPayroll.toFixed(2)),
+      totalGross6Mo: parseFloat(total6MoGrossPayroll.toFixed(2)),
+      totalGrossPayroll: parseFloat(total6MoGrossPayroll.toFixed(2)),
+      avgImpactRate: isNaN(avgImpactRate) ? 0 : avgImpactRate,
+      avgPenaltyImpactRate: isNaN(avgImpactRate) ? 0 : avgImpactRate,
+      hasLiveRecords: total6MoGrossPayroll > 0 || total6MoPenalties > 0,
     };
 
     return res.status(200).json({
@@ -230,9 +299,16 @@ export const getPenaltyImpactAnalytics = async (req, res) => {
     });
   } catch (error) {
     console.error("Error in getPenaltyImpactAnalytics controller:", error);
+    logErrorToFile({
+      route: "/api/admin/analytics/penalties-impact",
+      statusCode: 500,
+      error,
+      req,
+      details: "Failure in MongoDB aggregation pipeline or processing in getPenaltyImpactAnalytics",
+    });
     return res.status(500).json({
       success: false,
-      message: error.message || "Failed to calculate live penalty impact analytics.",
+      message: error?.message || "Failed to calculate live penalty impact analytics.",
     });
   }
 };

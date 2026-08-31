@@ -3,6 +3,7 @@ import bcrypt from "bcryptjs";
 import mongoose from "mongoose";
 import { Admin } from "../models/Admin.js";
 import { Employee } from "../models/employeeModel.js";
+import { User } from "../models/userModel.js";
 
 const getJwtSecret = () => process.env.JWT_SECRET || "default_jwt_secret_key_12345";
 
@@ -264,6 +265,9 @@ export const employeeLogin = async (req, res) => {
       const user = await User.findOne({ email: cleanEmail }).select("+password");
       if (user) {
         employee = await Employee.findOne({ email: cleanEmail }).select("+password");
+        if (!employee) {
+          employee = user;
+        }
       }
     }
 
@@ -406,6 +410,7 @@ export const getAuthMe = async (req, res) => {
       if (mongoose.Types.ObjectId.isValid(decoded.id)) {
         const dbAdmin = await Admin.findById(decoded.id).select("-password_hash").lean();
         if (dbAdmin) {
+          const adminAvatar = dbAdmin.avatarUrl || dbAdmin.profile_image_url || dbAdmin.avatar || dbAdmin.profilePicture || "";
           return res.status(200).json({
             success: true,
             role: "admin",
@@ -418,8 +423,12 @@ export const getAuthMe = async (req, res) => {
               role: dbAdmin.role || "admin",
               department: "Executive Management",
               position: dbAdmin.role === "super_admin" ? "Super Admin" : "Administrator",
-              avatar: dbAdmin.profile_image_url || "",
-              profile_image_url: dbAdmin.profile_image_url || "",
+              avatar: adminAvatar,
+              avatarUrl: adminAvatar,
+              avatar_url: adminAvatar,
+              profilePicture: adminAvatar,
+              profile_picture: adminAvatar,
+              profile_image_url: adminAvatar,
             },
           });
         }
@@ -449,11 +458,21 @@ export const getAuthMe = async (req, res) => {
       }
 
       if (dbEmp) {
+        const empAvatar = dbEmp.avatarUrl || dbEmp.profilePicture || dbEmp.avatar || dbEmp.profile_picture || dbEmp.profile_image_url || "";
+        const safeEmp = {
+          ...dbEmp,
+          avatar: empAvatar,
+          avatarUrl: empAvatar,
+          avatar_url: empAvatar,
+          profilePicture: empAvatar,
+          profile_picture: empAvatar,
+          profile_image_url: empAvatar,
+        };
         return res.status(200).json({
           success: true,
           role: "employee",
-          user: dbEmp,
-          employee: dbEmp,
+          user: safeEmp,
+          employee: safeEmp,
         });
       }
 

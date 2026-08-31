@@ -17,19 +17,18 @@ import {
   Clock,
   UserX,
   ShieldCheck,
-  RefreshCw,
   Info,
 } from "lucide-react";
 import { getPenaltyImpactAnalytics } from "../apis/fontApis";
 
-// Custom Tooltip with clean currency formatting
+// Custom Tooltip with 2-decimal currency formatting
 const CustomPenaltyTooltip = ({ active, payload, label }) => {
   if (!active || !payload || !payload.length) return null;
 
   const formatCurrency = (val) => {
     return `GH₵${Number(val || 0).toLocaleString("en-GH", {
-      minimumFractionDigits: 0,
-      maximumFractionDigits: 0,
+      minimumFractionDigits: 2,
+      maximumFractionDigits: 2,
     })}`;
   };
 
@@ -89,11 +88,9 @@ const CustomPenaltyTooltip = ({ active, payload, label }) => {
 export const PenaltyPayrollImpactChart = ({ className = "" }) => {
   const [data, setData] = useState([]);
   const [summary, setSummary] = useState(null);
-  const [isLoading, setIsLoading] = useState(true);
   const [viewMode, setViewMode] = useState("penalties_breakdown"); // "penalties_breakdown" | "gross_vs_net" | "impact_ratio"
 
   const fetchImpactData = useCallback(async () => {
-    setIsLoading(true);
     try {
       const res = await getPenaltyImpactAnalytics();
       if (res?.data?.success && Array.isArray(res.data.data)) {
@@ -105,10 +102,12 @@ export const PenaltyPayrollImpactChart = ({ className = "" }) => {
           month: m,
           monthFull: `${m} 2026`,
           grossPayroll: 0,
+          totalGrossPayroll: 0,
           absenceDeductions: 0,
           absencePenalties: 0,
           latenessPenalties: 0,
           penaltiesWaived: 0,
+          netPenalties: 0,
           totalNetPenalties: 0,
           totalPenalties: 0,
           netPayroll: 0,
@@ -117,29 +116,34 @@ export const PenaltyPayrollImpactChart = ({ className = "" }) => {
         }));
         setData(defaultZeroMonths);
         setSummary({
-          totalPenalties6Mo: 0,
+          total6MoPenalties: 0,
           totalNetPenalties6Mo: 0,
-          totalAbsencePenalties6Mo: 0,
+          totalPenalties6Mo: 0,
           totalAbsenceDeductions: 0,
-          totalLatenessPenalties6Mo: 0,
+          totalAbsencePenalties6Mo: 0,
           totalLatenessPenalties: 0,
-          totalWaived6Mo: 0,
+          totalLatenessPenalties6Mo: 0,
           totalPenaltiesWaived: 0,
+          totalWaived6Mo: 0,
+          total6MoGrossPayroll: 0,
           totalGross6Mo: 0,
+          totalGrossPayroll: 0,
+          avgImpactRate: 0,
           avgPenaltyImpactRate: 0,
         });
       }
     } catch (err) {
-      console.warn("Failed to fetch dynamic penalty impact analytics:", err);
-      // Clean zero fallback
+      console.warn("Failed to fetch penalty impact analytics:", err);
       const defaultZeroMonths = ["Mar", "Apr", "May", "Jun", "Jul", "Aug"].map((m) => ({
         month: m,
         monthFull: `${m} 2026`,
         grossPayroll: 0,
+        totalGrossPayroll: 0,
         absenceDeductions: 0,
         absencePenalties: 0,
         latenessPenalties: 0,
         penaltiesWaived: 0,
+        netPenalties: 0,
         totalNetPenalties: 0,
         totalPenalties: 0,
         netPayroll: 0,
@@ -148,19 +152,21 @@ export const PenaltyPayrollImpactChart = ({ className = "" }) => {
       }));
       setData(defaultZeroMonths);
       setSummary({
-        totalPenalties6Mo: 0,
+        total6MoPenalties: 0,
         totalNetPenalties6Mo: 0,
-        totalAbsencePenalties6Mo: 0,
+        totalPenalties6Mo: 0,
         totalAbsenceDeductions: 0,
-        totalLatenessPenalties6Mo: 0,
+        totalAbsencePenalties6Mo: 0,
         totalLatenessPenalties: 0,
-        totalWaived6Mo: 0,
+        totalLatenessPenalties6Mo: 0,
         totalPenaltiesWaived: 0,
+        totalWaived6Mo: 0,
+        total6MoGrossPayroll: 0,
         totalGross6Mo: 0,
+        totalGrossPayroll: 0,
+        avgImpactRate: 0,
         avgPenaltyImpactRate: 0,
       });
-    } finally {
-      setIsLoading(false);
     }
   }, []);
 
@@ -171,48 +177,48 @@ export const PenaltyPayrollImpactChart = ({ className = "" }) => {
   const formatGHS = (val) => {
     const num = Number(val || 0);
     return `GH₵${num.toLocaleString("en-GH", {
-      minimumFractionDigits: 0,
-      maximumFractionDigits: 0,
+      minimumFractionDigits: 2,
+      maximumFractionDigits: 2,
     })}`;
   };
 
-  // Dynamic values directly from live DB aggregation
-  const totalPenalties = summary?.totalNetPenalties6Mo ?? summary?.totalPenalties6Mo ?? 0;
-  const totalAbsence = summary?.totalAbsenceDeductions ?? summary?.totalAbsencePenalties6Mo ?? 0;
-  const totalLateness = summary?.totalLatenessPenalties ?? summary?.totalLatenessPenalties6Mo ?? 0;
-  const totalWaived = summary?.totalPenaltiesWaived ?? summary?.totalWaived6Mo ?? 0;
-  const avgImpactRate = summary?.avgPenaltyImpactRate ?? 0;
+  // 5 Top Metric Cards aggregated across the 6 months directly from backend
+  const total6MoPenalties = summary?.total6MoPenalties ?? summary?.totalNetPenalties6Mo ?? summary?.totalPenalties6Mo ?? 0;
+  const totalAbsenceDeductions = summary?.totalAbsenceDeductions ?? summary?.totalAbsencePenalties6Mo ?? 0;
+  const totalLatenessPenalties = summary?.totalLatenessPenalties ?? summary?.totalLatenessPenalties6Mo ?? 0;
+  const totalPenaltiesWaived = summary?.totalPenaltiesWaived ?? summary?.totalWaived6Mo ?? 0;
+  const avgImpactRate = summary?.avgImpactRate ?? summary?.avgPenaltyImpactRate ?? 0;
 
   return (
     <div
       id="attendance-penalty-impact-container"
-      className={`bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl p-5 shadow-xs space-y-5 ${className}`}
+      className={`bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl p-4 sm:p-5 shadow-xs space-y-5 overflow-hidden w-full ${className}`}
     >
       {/* Header & Controls */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-b border-slate-100 dark:border-slate-800 pb-4">
         <div>
           <div className="flex items-center gap-2">
-            <div className="p-2 rounded-xl bg-amber-50 dark:bg-amber-950/40 text-amber-600 dark:text-amber-400">
+            <div className="p-2 rounded-xl bg-amber-50 dark:bg-amber-950/40 text-amber-600 dark:text-amber-400 shrink-0">
               <AlertTriangle className="w-5 h-5" />
             </div>
-            <div>
-              <h3 className="font-bold text-slate-900 dark:text-white text-base">
+            <div className="min-w-0">
+              <h3 className="font-bold text-slate-900 dark:text-white text-sm sm:text-base truncate">
                 Attendance Penalties & Payroll Cost Impact
               </h3>
-              <p className="text-xs text-slate-500 dark:text-slate-400">
-                Live database aggregation of absence & lateness deductions across 6 rolling months
+              <p className="text-[11px] sm:text-xs text-slate-500 dark:text-slate-400">
+                6-rolling-month historical breakdown of attendance penalties and payroll deductions
               </p>
             </div>
           </div>
         </div>
 
         {/* View Mode Controls */}
-        <div className="flex items-center gap-2 self-start sm:self-auto flex-wrap">
-          <div className="flex items-center bg-slate-100 dark:bg-slate-800 p-1 rounded-xl text-xs font-semibold">
+        <div className="flex items-center gap-2 self-start sm:self-auto flex-wrap max-w-full overflow-x-auto pb-1 sm:pb-0">
+          <div className="flex items-center bg-slate-100 dark:bg-slate-800 p-1 rounded-xl text-xs font-semibold shrink-0">
             <button
               id="btn-view-penalties-breakdown"
               onClick={() => setViewMode("penalties_breakdown")}
-              className={`px-3 py-1.5 rounded-lg transition-all ${
+              className={`px-2.5 sm:px-3 py-1.5 rounded-lg transition-all cursor-pointer whitespace-nowrap ${
                 viewMode === "penalties_breakdown"
                   ? "bg-white dark:bg-slate-700 text-[#002185] dark:text-blue-400 shadow-xs"
                   : "text-slate-600 dark:text-slate-400 hover:text-slate-900"
@@ -223,7 +229,7 @@ export const PenaltyPayrollImpactChart = ({ className = "" }) => {
             <button
               id="btn-view-gross-vs-net"
               onClick={() => setViewMode("gross_vs_net")}
-              className={`px-3 py-1.5 rounded-lg transition-all ${
+              className={`px-2.5 sm:px-3 py-1.5 rounded-lg transition-all cursor-pointer whitespace-nowrap ${
                 viewMode === "gross_vs_net"
                   ? "bg-white dark:bg-slate-700 text-[#002185] dark:text-blue-400 shadow-xs"
                   : "text-slate-600 dark:text-slate-400 hover:text-slate-900"
@@ -234,7 +240,7 @@ export const PenaltyPayrollImpactChart = ({ className = "" }) => {
             <button
               id="btn-view-impact-ratio"
               onClick={() => setViewMode("impact_ratio")}
-              className={`px-3 py-1.5 rounded-lg transition-all ${
+              className={`px-2.5 sm:px-3 py-1.5 rounded-lg transition-all cursor-pointer whitespace-nowrap ${
                 viewMode === "impact_ratio"
                   ? "bg-white dark:bg-slate-700 text-[#002185] dark:text-blue-400 shadow-xs"
                   : "text-slate-600 dark:text-slate-400 hover:text-slate-900"
@@ -243,108 +249,99 @@ export const PenaltyPayrollImpactChart = ({ className = "" }) => {
               Impact Ratio (%)
             </button>
           </div>
-
-          <button
-            id="btn-refresh-penalty-chart"
-            onClick={fetchImpactData}
-            title="Refresh live metrics"
-            className="p-2 rounded-xl border border-slate-200 dark:border-slate-800 text-slate-600 dark:text-slate-400 hover:bg-slate-50 dark:hover:bg-slate-800 transition-colors"
-          >
-            <RefreshCw className={`w-4 h-4 ${isLoading ? "animate-spin" : ""}`} />
-          </button>
         </div>
       </div>
 
-      {/* 5 Dynamic KPI Metric Cards (Strictly Live Data) */}
-      <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-3">
-        {/* Card 1: 6-Mo Total Penalties */}
-        <div id="kpi-card-total-penalties" className="bg-rose-50/70 dark:bg-rose-950/20 border border-rose-100 dark:border-rose-900/30 rounded-xl p-3.5">
+      {/* 5 Dynamic KPI Metric Cards */}
+      <div className="grid grid-cols-1 xs:grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-2.5 sm:gap-3 overflow-hidden">
+        {/* Card 1: 6-MO TOTAL PENALTIES */}
+        <div id="kpi-card-total-penalties" className="bg-rose-50/70 dark:bg-rose-950/20 border border-rose-100 dark:border-rose-900/30 rounded-xl p-3 sm:p-3.5 overflow-hidden">
           <div className="flex items-center justify-between mb-1">
-            <span className="text-[11px] font-semibold text-rose-700 dark:text-rose-400 uppercase tracking-wider">
+            <span className="text-[10px] sm:text-[11px] font-semibold text-rose-700 dark:text-rose-400 uppercase tracking-wider truncate">
               6-Mo Total Penalties
             </span>
-            <AlertTriangle className="w-3.5 h-3.5 text-rose-500" />
+            <AlertTriangle className="w-3.5 h-3.5 text-rose-500 shrink-0 ml-1" />
           </div>
-          <div className="text-lg font-bold text-slate-900 dark:text-white">
-            {formatGHS(totalPenalties)}
+          <div className="text-base sm:text-lg font-bold text-slate-900 dark:text-white truncate">
+            {formatGHS(total6MoPenalties)}
           </div>
-          <div className="text-[10px] text-slate-500 dark:text-slate-400 mt-0.5">
+          <div className="text-[10px] text-slate-500 dark:text-slate-400 mt-0.5 truncate">
             Net absence & lateness deductions
           </div>
         </div>
 
-        {/* Card 2: Unexcused Absences */}
-        <div id="kpi-card-unexcused-absences" className="bg-amber-50/70 dark:bg-amber-950/20 border border-amber-100 dark:border-amber-900/30 rounded-xl p-3.5">
+        {/* Card 2: UNEXCUSED ABSENCES */}
+        <div id="kpi-card-unexcused-absences" className="bg-amber-50/70 dark:bg-amber-950/20 border border-amber-100 dark:border-amber-900/30 rounded-xl p-3 sm:p-3.5 overflow-hidden">
           <div className="flex items-center justify-between mb-1">
-            <span className="text-[11px] font-semibold text-amber-700 dark:text-amber-400 uppercase tracking-wider">
+            <span className="text-[10px] sm:text-[11px] font-semibold text-amber-700 dark:text-amber-400 uppercase tracking-wider truncate">
               Unexcused Absences
             </span>
-            <UserX className="w-3.5 h-3.5 text-amber-500" />
+            <UserX className="w-3.5 h-3.5 text-amber-500 shrink-0 ml-1" />
           </div>
-          <div className="text-lg font-bold text-slate-900 dark:text-white">
-            {formatGHS(totalAbsence)}
+          <div className="text-base sm:text-lg font-bold text-slate-900 dark:text-white truncate">
+            {formatGHS(totalAbsenceDeductions)}
           </div>
-          <div className="text-[10px] text-slate-500 dark:text-slate-400 mt-0.5">
+          <div className="text-[10px] text-slate-500 dark:text-slate-400 mt-0.5 truncate">
             Deductions from absent days
           </div>
         </div>
 
-        {/* Card 3: Lateness Tiers */}
-        <div id="kpi-card-lateness-tiers" className="bg-blue-50/70 dark:bg-blue-950/20 border border-blue-100 dark:border-blue-900/30 rounded-xl p-3.5">
+        {/* Card 3: LATENESS TIERS */}
+        <div id="kpi-card-lateness-tiers" className="bg-blue-50/70 dark:bg-blue-950/20 border border-blue-100 dark:border-blue-900/30 rounded-xl p-3 sm:p-3.5 overflow-hidden">
           <div className="flex items-center justify-between mb-1">
-            <span className="text-[11px] font-semibold text-blue-700 dark:text-blue-400 uppercase tracking-wider">
+            <span className="text-[10px] sm:text-[11px] font-semibold text-blue-700 dark:text-blue-400 uppercase tracking-wider truncate">
               Lateness Tiers
             </span>
-            <Clock className="w-3.5 h-3.5 text-blue-500" />
+            <Clock className="w-3.5 h-3.5 text-blue-500 shrink-0 ml-1" />
           </div>
-          <div className="text-lg font-bold text-slate-900 dark:text-white">
-            {formatGHS(totalLateness)}
+          <div className="text-base sm:text-lg font-bold text-slate-900 dark:text-white truncate">
+            {formatGHS(totalLatenessPenalties)}
           </div>
-          <div className="text-[10px] text-slate-500 dark:text-slate-400 mt-0.5">
+          <div className="text-[10px] text-slate-500 dark:text-slate-400 mt-0.5 truncate">
             Shift delay tier fines
           </div>
         </div>
 
-        {/* Card 4: Penalties Waived */}
-        <div id="kpi-card-penalties-waived" className="bg-emerald-50/70 dark:bg-emerald-950/20 border border-emerald-100 dark:border-emerald-900/30 rounded-xl p-3.5">
+        {/* Card 4: PENALTIES WAIVED */}
+        <div id="kpi-card-penalties-waived" className="bg-emerald-50/70 dark:bg-emerald-950/20 border border-emerald-100 dark:border-emerald-900/30 rounded-xl p-3 sm:p-3.5 overflow-hidden">
           <div className="flex items-center justify-between mb-1">
-            <span className="text-[11px] font-semibold text-emerald-700 dark:text-emerald-400 uppercase tracking-wider">
+            <span className="text-[10px] sm:text-[11px] font-semibold text-emerald-700 dark:text-emerald-400 uppercase tracking-wider truncate">
               Penalties Waived
             </span>
-            <ShieldCheck className="w-3.5 h-3.5 text-emerald-500" />
+            <ShieldCheck className="w-3.5 h-3.5 text-emerald-500 shrink-0 ml-1" />
           </div>
-          <div className="text-lg font-bold text-emerald-700 dark:text-emerald-400">
-            {formatGHS(totalWaived)}
+          <div className="text-base sm:text-lg font-bold text-emerald-700 dark:text-emerald-400 truncate">
+            {formatGHS(totalPenaltiesWaived)}
           </div>
-          <div className="text-[10px] text-slate-500 dark:text-slate-400 mt-0.5">
+          <div className="text-[10px] text-slate-500 dark:text-slate-400 mt-0.5 truncate">
             Manual admin exemptions
           </div>
         </div>
 
-        {/* Card 5: Avg Impact Rate */}
-        <div id="kpi-card-avg-impact-rate" className="col-span-2 sm:col-span-1 bg-slate-50 dark:bg-slate-800/40 border border-slate-200 dark:border-slate-800 rounded-xl p-3.5">
+        {/* Card 5: AVG IMPACT RATE % */}
+        <div id="kpi-card-avg-impact-rate" className="col-span-1 xs:col-span-2 sm:col-span-1 bg-slate-50 dark:bg-slate-800/40 border border-slate-200 dark:border-slate-800 rounded-xl p-3 sm:p-3.5 overflow-hidden">
           <div className="flex items-center justify-between mb-1">
-            <span className="text-[11px] font-semibold text-slate-700 dark:text-slate-300 uppercase tracking-wider">
+            <span className="text-[10px] sm:text-[11px] font-semibold text-slate-700 dark:text-slate-300 uppercase tracking-wider truncate">
               Avg Impact Rate
             </span>
-            <Percent className="w-3.5 h-3.5 text-indigo-500" />
+            <Percent className="w-3.5 h-3.5 text-indigo-500 shrink-0 ml-1" />
           </div>
-          <div className="text-lg font-bold text-indigo-600 dark:text-indigo-400">
+          <div className="text-base sm:text-lg font-bold text-indigo-600 dark:text-indigo-400 truncate">
             {Number(avgImpactRate).toFixed(2)}%
           </div>
-          <div className="text-[10px] text-slate-500 dark:text-slate-400 mt-0.5">
+          <div className="text-[10px] text-slate-500 dark:text-slate-400 mt-0.5 truncate">
             Of total gross payroll
           </div>
         </div>
       </div>
 
       {/* Chart Canvas */}
-      <div className="h-72 w-full pt-2">
+      <div className="h-72 w-full pt-2 overflow-hidden">
         <ResponsiveContainer width="100%" height="100%">
           {viewMode === "penalties_breakdown" ? (
             <ComposedChart
               data={data}
-              margin={{ top: 10, right: 10, left: -10, bottom: 0 }}
+              margin={{ top: 10, right: 10, left: 10, bottom: 0 }}
             >
               <CartesianGrid strokeDasharray="3 3" stroke="#94A3B8" opacity={0.2} />
               <XAxis
@@ -402,7 +399,7 @@ export const PenaltyPayrollImpactChart = ({ className = "" }) => {
           ) : viewMode === "gross_vs_net" ? (
             <ComposedChart
               data={data}
-              margin={{ top: 10, right: 10, left: -10, bottom: 0 }}
+              margin={{ top: 10, right: 10, left: 10, bottom: 0 }}
             >
               <CartesianGrid strokeDasharray="3 3" stroke="#94A3B8" opacity={0.2} />
               <XAxis
@@ -450,7 +447,7 @@ export const PenaltyPayrollImpactChart = ({ className = "" }) => {
           ) : (
             <ComposedChart
               data={data}
-              margin={{ top: 10, right: 10, left: -10, bottom: 0 }}
+              margin={{ top: 10, right: 10, left: 10, bottom: 0 }}
             >
               <CartesianGrid strokeDasharray="3 3" stroke="#94A3B8" opacity={0.2} />
               <XAxis
@@ -490,7 +487,7 @@ export const PenaltyPayrollImpactChart = ({ className = "" }) => {
         <div className="flex items-center gap-1.5">
           <Info className="w-3.5 h-3.5 text-slate-400 shrink-0" />
           <span>
-            Penalties are automatically aggregated from live attendance logs and payslip deductions.
+            Monthly attendance penalties, delay deductions, and admin exemptions.
           </span>
         </div>
         <div className="flex items-center gap-3 shrink-0 font-medium">
@@ -512,4 +509,5 @@ export const PenaltyPayrollImpactChart = ({ className = "" }) => {
   );
 };
 
+export const AttendancePenaltiesChart = PenaltyPayrollImpactChart;
 export default PenaltyPayrollImpactChart;

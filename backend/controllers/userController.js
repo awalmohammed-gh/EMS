@@ -127,9 +127,12 @@ export const uploadProfilePicture = async (req, res) => {
 
       if (dbAdmin) {
         targetModel = "Admin";
-        oldAvatarUrl = dbAdmin.profile_image_url || dbAdmin.avatar;
+        oldAvatarUrl = dbAdmin.profile_image_url || dbAdmin.avatar || dbAdmin.avatarUrl;
         dbAdmin.profile_image_url = newAvatarUrl;
         dbAdmin.avatar = newAvatarUrl;
+        dbAdmin.avatarUrl = newAvatarUrl;
+        dbAdmin.profilePicture = newAvatarUrl;
+        dbAdmin.profile_picture = newAvatarUrl;
         await dbAdmin.save();
 
         console.log(`[Avatar Update] ✅ MongoDB Admin document updated: ID=${dbAdmin._id}, Name=${dbAdmin.full_name}`);
@@ -145,6 +148,7 @@ export const uploadProfilePicture = async (req, res) => {
           profile_picture: newAvatarUrl,
           profile_image_url: newAvatarUrl,
           avatar: newAvatarUrl,
+          avatarUrl: newAvatarUrl,
           avatar_url: newAvatarUrl,
         };
       }
@@ -171,10 +175,11 @@ export const uploadProfilePicture = async (req, res) => {
 
       if (dbEmp) {
         targetModel = "Employee";
-        oldAvatarUrl = dbEmp.profilePicture || dbEmp.profile_picture || dbEmp.avatar;
+        oldAvatarUrl = dbEmp.profilePicture || dbEmp.profile_picture || dbEmp.avatar || dbEmp.avatarUrl;
         dbEmp.profilePicture = newAvatarUrl;
         dbEmp.profile_picture = newAvatarUrl;
         dbEmp.avatar = newAvatarUrl;
+        dbEmp.avatarUrl = newAvatarUrl;
         dbEmp.profile_image_url = newAvatarUrl;
         dbEmp.avatar_url = newAvatarUrl;
         await dbEmp.save();
@@ -194,6 +199,7 @@ export const uploadProfilePicture = async (req, res) => {
           profilePicture: newAvatarUrl,
           profile_picture: newAvatarUrl,
           avatar: newAvatarUrl,
+          avatarUrl: newAvatarUrl,
           profile_image_url: newAvatarUrl,
           avatar_url: newAvatarUrl,
         };
@@ -207,6 +213,9 @@ export const uploadProfilePicture = async (req, res) => {
         if (dbUser) {
           dbUser.profile_image_url = newAvatarUrl;
           dbUser.avatar = newAvatarUrl;
+          dbUser.avatarUrl = newAvatarUrl;
+          dbUser.profilePicture = newAvatarUrl;
+          dbUser.profile_picture = newAvatarUrl;
           await dbUser.save();
           console.log(`[Avatar Update] ✅ Synchronized User collection for ID: ${userId}`);
         }

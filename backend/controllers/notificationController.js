@@ -1,5 +1,7 @@
 import mongoose from "mongoose";
 import { Notification } from "../models/notificationModel.js";
+import { Payroll } from "../models/payrollModel.js";
+import { Employee } from "../models/employeeModel.js";
 
 /**
  * Helper to persist a new notification document into MongoDB
@@ -87,11 +89,24 @@ export const getNotifications = async (req, res) => {
         ],
       };
     } else {
+      const possibleIds = [
+        "all_employees",
+        "all",
+        ...(userId ? [userId] : []),
+        ...(req.employee?.employeeId ? [String(req.employee.employeeId)] : []),
+        ...(req.employee?._id ? [String(req.employee._id)] : []),
+        ...(req.employee?.email ? [String(req.employee.email)] : []),
+        ...(req.user?.employeeId ? [String(req.user.employeeId)] : []),
+        ...(req.user?._id ? [String(req.user._id)] : []),
+        ...(req.user?.email ? [String(req.user.email)] : []),
+      ];
+
       query = {
         $or: [
-          ...(userId ? [{ recipient_id: userId }] : []),
+          { recipient_id: { $in: possibleIds } },
+          { recipient_role: "employee", recipient_id: { $in: possibleIds } },
           { recipient_id: "all_employees" },
-          { recipient_role: "employee" },
+          { recipient_id: "all" },
         ],
       };
     }
@@ -101,12 +116,86 @@ export const getNotifications = async (req, res) => {
       .sort({ created_at: -1 })
       .lean();
 
-    // Deduplicate by _id or announcementId for recipient
+    // For employees, ensure any published payslips have an active notification alert
+    if (!isAdmin && userId) {
+      try {
+        let empObjectIds = [];
+        if (mongoose.Types.ObjectId.isValid(userId)) {
+          empObjectIds.push(new mongoose.Types.ObjectId(userId));
+        }
+        if (req.employee?._id && mongoose.Types.ObjectId.isValid(req.employee._id)) {
+          empObjectIds.push(new mongoose.Types.ObjectId(req.employee._id));
+        }
+        if (empObjectIds.length === 0 && userId) {
+          const empDoc = await Employee.findOne({
+            $or: [{ employeeId: userId }, { email: userId }],
+          }).lean();
+          if (empDoc?._id) {
+            empObjectIds.push(empDoc._id);
+          }
+        }
+
+        let empQuery = {};
+        if (empObjectIds.length > 0) {
+          empQuery = { employee: { $in: empObjectIds } };
+        }
+
+        const publishedPayslips = await Payroll.find({
+          ...empQuery,
+          status: { $in: ["Published", "published", "Paid", "paid"] },
+        }).lean();
+
+        for (const ps of publishedPayslips) {
+          const psNumber = ps.payslipNumber || String(ps._id);
+          const alreadyNotified = documents.some(
+            (d) =>
+              d.metadata?.payslipNumber === psNumber ||
+              d.metadata?.payslipId === String(ps._id) ||
+              d.title?.includes(ps.payMonth)
+          );
+
+          if (!alreadyNotified) {
+            const netAmount = Number(ps.netSalary || ps.netPay || 0);
+            const isPaid = (ps.status || "").toLowerCase() === "paid";
+            const newNotif = await createNotificationRecord({
+              recipient_id: userId,
+              recipient_role: "employee",
+              sender_id: "admin",
+              sender_role: "admin",
+              sender_name: "Management",
+              title: isPaid ? "💰 Monthly Payslip Paid & Released" : "📄 New Monthly Payslip Published",
+              message: isPaid
+                ? `Your salary for ${ps.payMonth} (GH₵${netAmount.toFixed(2)}) has been disbursed and marked as Paid.`
+                : `Your official payslip for ${ps.payMonth} has been published by Management. Net Take-Home: GH₵${netAmount.toFixed(2)}.`,
+              type: "payroll_alert",
+              category: "payroll",
+              priority: "high",
+              action_url: "/employee/dashboard/payslips",
+              action_label: "View Payslip",
+              metadata: {
+                payMonth: ps.payMonth,
+                payslipNumber: psNumber,
+                payslipId: String(ps._id),
+                netPay: netAmount,
+                status: ps.status,
+              },
+            });
+
+            if (newNotif) {
+              documents.unshift(newNotif);
+            }
+          }
+        }
+      } catch (syncErr) {
+        console.warn("Could not auto-sync published payslip notifications:", syncErr.message);
+      }
+    }
+
+    // Deduplicate by _id
     const seenMap = new Map();
     const uniqueDocs = [];
     for (const doc of documents) {
       const docId = String(doc._id);
-      // Key deduplication on unique doc id
       if (!seenMap.has(docId)) {
         seenMap.set(docId, true);
         uniqueDocs.push(doc);
@@ -124,10 +213,20 @@ export const getNotifications = async (req, res) => {
     // Derive live summary metrics from real database documents
     const unreadCount = notifications.filter((n) => !n.is_read).length;
     const leaveCount = notifications.filter((n) => n.category === "leave").length;
-    const payrollCount = notifications.filter((n) => n.category === "payroll").length;
-    const systemCount = notifications.filter((n) => n.category === "system").length;
+    const payrollCount = notifications.filter(
+      (n) => n.category === "payroll" || n.type === "payroll_alert" || n.category === "payslip"
+    ).length;
+    const systemCount = notifications.filter(
+      (n) =>
+        (n.category === "system" ||
+        n.category === "attendance" ||
+        !n.category) &&
+        n.category !== "payroll" &&
+        n.type !== "payroll_alert" &&
+        n.category !== "payslip"
+    ).length;
     const announcementCount = notifications.filter(
-      (n) => n.category === "announcement"
+      (n) => n.category === "announcement" || n.type === "announcement"
     ).length;
 
     return res.status(200).json({
@@ -155,10 +254,45 @@ export const getNotifications = async (req, res) => {
 };
 
 /**
- * PATCH /api/notifications/:id/read
- * Marks a specific notification document as read
+ * PATCH /api/notifications/:id/read & /api/notifications/:id/unread & /api/notifications/:id/toggle
+ * Marks a specific notification document as read/unread
  */
 export const markNotificationAsRead = async (req, res) => {
+  try {
+    const { id } = req.params;
+    if (!id) {
+      return res.status(400).json({
+        success: false,
+        message: "Notification ID is required.",
+      });
+    }
+
+    const isRead = req.body?.is_read !== undefined ? Boolean(req.body.is_read) : true;
+    let updatedDoc = null;
+    if (mongoose.Types.ObjectId.isValid(id)) {
+      updatedDoc = await Notification.findByIdAndUpdate(
+        id,
+        { $set: { is_read: isRead } },
+        { new: true }
+      );
+    }
+
+    return res.status(200).json({
+      success: true,
+      message: `Notification marked as ${isRead ? "read" : "unread"} in database.`,
+      id,
+      notification: updatedDoc,
+    });
+  } catch (error) {
+    console.error("Error in markNotificationAsRead:", error);
+    return res.status(500).json({
+      success: false,
+      message: error.message || "Failed to update notification read status.",
+    });
+  }
+};
+
+export const markNotificationAsUnread = async (req, res) => {
   try {
     const { id } = req.params;
     if (!id) {
@@ -172,22 +306,57 @@ export const markNotificationAsRead = async (req, res) => {
     if (mongoose.Types.ObjectId.isValid(id)) {
       updatedDoc = await Notification.findByIdAndUpdate(
         id,
-        { $set: { is_read: true } },
+        { $set: { is_read: false } },
         { new: true }
       );
     }
 
     return res.status(200).json({
       success: true,
-      message: "Notification marked as read in database.",
+      message: "Notification marked as unread in database.",
       id,
       notification: updatedDoc,
     });
   } catch (error) {
-    console.error("Error in markNotificationAsRead:", error);
+    console.error("Error in markNotificationAsUnread:", error);
     return res.status(500).json({
       success: false,
-      message: error.message || "Failed to mark notification as read.",
+      message: error.message || "Failed to mark notification as unread.",
+    });
+  }
+};
+
+export const toggleNotificationRead = async (req, res) => {
+  try {
+    const { id } = req.params;
+    if (!id) {
+      return res.status(400).json({
+        success: false,
+        message: "Notification ID is required.",
+      });
+    }
+
+    let updatedDoc = null;
+    if (mongoose.Types.ObjectId.isValid(id)) {
+      const existing = await Notification.findById(id);
+      if (existing) {
+        existing.is_read = !existing.is_read;
+        await existing.save();
+        updatedDoc = existing;
+      }
+    }
+
+    return res.status(200).json({
+      success: true,
+      message: "Notification status toggled.",
+      id,
+      notification: updatedDoc,
+    });
+  } catch (error) {
+    console.error("Error in toggleNotificationRead:", error);
+    return res.status(500).json({
+      success: false,
+      message: error.message || "Failed to toggle notification status.",
     });
   }
 };

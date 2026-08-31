@@ -206,8 +206,8 @@ const ClockInOutCard = ({
       id="user-friendly-clock-in-out-card"
       className="bg-white dark:bg-slate-900 border border-slate-200/80 dark:border-slate-800/80 rounded-2xl sm:rounded-3xl p-5 sm:p-6 shadow-sm dark:shadow-black/20 transition-all duration-200"
     >
-      {/* Top Bar: Title, Status Badge & Live Digital Clock */}
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pb-5 border-b border-slate-100 dark:border-slate-800/80">
+      {/* Top Bar: Title, Status Badge, Action Buttons & Live Digital Clock */}
+      <div className="flex flex-col xl:flex-row xl:items-center justify-between gap-5 pb-5 border-b border-slate-100 dark:border-slate-800/80">
         <div className="flex items-center gap-3.5">
           <div className="w-11 h-11 rounded-xl bg-[#002185] dark:bg-blue-600 flex items-center justify-center text-white shrink-0 shadow-sm">
             <Clock className="w-5 h-5" />
@@ -259,17 +259,97 @@ const ClockInOutCard = ({
           </div>
         </div>
 
-        {/* Live Digital Clock Widget */}
-        <div className="flex items-center gap-3.5 bg-slate-50 dark:bg-slate-800/80 border border-slate-200/80 dark:border-slate-700/80 rounded-xl px-4 py-2.5 self-start sm:self-auto shadow-2xs">
-          <div className="text-right">
-            <span className="text-[10px] uppercase font-bold tracking-wider text-slate-400 dark:text-slate-500 block">
-              Official Live Time
-            </span>
-            <span className="text-base sm:text-lg font-mono font-extrabold text-slate-900 dark:text-white tracking-tight">
-              {formattedDigitalTime}
-            </span>
+        {/* Top Right: Clock In / Clock Out Buttons + Live Clock */}
+        <div className="flex flex-wrap items-center gap-3 self-start xl:self-auto">
+          <div className="flex items-center gap-2.5">
+            {/* 1. CLOCK IN BUTTON */}
+            <button
+              type="button"
+              id="btn-shift-clock-in"
+              onClick={onClockIn}
+              disabled={hasClockedIn || isLoading}
+              className={`flex items-center justify-center gap-2 px-4 sm:px-5 py-2.5 rounded-xl text-xs sm:text-sm font-semibold transition-all duration-200 shadow-xs cursor-pointer ${
+                hasClockedIn
+                  ? "bg-slate-100 dark:bg-slate-800 text-slate-500 dark:text-slate-400 border border-slate-200 dark:border-slate-700 cursor-not-allowed"
+                  : isLoading
+                  ? "bg-blue-400 text-white cursor-not-allowed"
+                  : "bg-[#002185] hover:bg-[#001760] dark:bg-blue-600 dark:hover:bg-blue-700 text-white active:scale-[0.98]"
+              }`}
+              title={
+                hasClockedIn
+                  ? `Clocked In (${formatTime(attendanceData.clockIn)})`
+                  : "Click to clock in and begin your shift"
+              }
+            >
+              {hasClockedIn ? (
+                <>
+                  <CheckCircle className="w-4 h-4 text-emerald-600 dark:text-emerald-400" />
+                  <span>Clocked In ({formatTime(attendanceData.clockIn)})</span>
+                </>
+              ) : (
+                <>
+                  <LogIn className="w-4 h-4" />
+                  <span>{isLoading ? "Recording..." : "Clock In"}</span>
+                </>
+              )}
+            </button>
+
+            {/* 2. CLOCK OUT BUTTON */}
+            <button
+              type="button"
+              id="btn-shift-clock-out"
+              onClick={onClockOut}
+              disabled={!hasClockedIn || hasClockedOut || !isClockOutUnlocked || isLoading}
+              className={`flex items-center justify-center gap-2 px-4 sm:px-5 py-2.5 rounded-xl text-xs sm:text-sm font-semibold transition-all duration-200 shadow-xs cursor-pointer ${
+                hasClockedOut
+                  ? "bg-slate-100 dark:bg-slate-800 text-slate-500 dark:text-slate-400 border border-slate-200 dark:border-slate-700 cursor-not-allowed"
+                  : !hasClockedIn
+                  ? "bg-slate-100 dark:bg-slate-800 text-slate-400 dark:text-slate-500 border border-slate-200 dark:border-slate-700 cursor-not-allowed"
+                  : !isClockOutUnlocked
+                  ? "bg-slate-100 dark:bg-slate-800 text-slate-400 dark:text-slate-500 border border-slate-200 dark:border-slate-700 cursor-not-allowed"
+                  : "bg-amber-600 hover:bg-amber-700 text-white active:scale-[0.98]"
+              }`}
+              title={
+                hasClockedOut
+                  ? `Shift Completed (${formatTime(attendanceData.clockOut)})`
+                  : !hasClockedIn
+                  ? `Clock out unlocks at scheduled closing time (${shiftEvaluation.formattedEndTime})`
+                  : !isClockOutUnlocked
+                  ? `Clock out unlocks at scheduled closing time (${shiftEvaluation.formattedEndTime})`
+                  : "Click to clock out and finalize your shift"
+              }
+            >
+              {hasClockedOut ? (
+                <>
+                  <CheckCircle className="w-4 h-4 text-emerald-600 dark:text-emerald-400" />
+                  <span>Shift Completed ({formatTime(attendanceData.clockOut)})</span>
+                </>
+              ) : !isClockOutUnlocked && hasClockedIn ? (
+                <>
+                  <Lock className="w-4 h-4 text-slate-400" />
+                  <span>Locked until {shiftEvaluation.formattedEndTime}</span>
+                </>
+              ) : (
+                <>
+                  <LogOut className="w-4 h-4" />
+                  <span>{isLoading ? "Recording..." : "Clock Out"}</span>
+                </>
+              )}
+            </button>
           </div>
-          <span className="w-2.5 h-2.5 rounded-full bg-emerald-500 animate-ping shrink-0" />
+
+          {/* Live Digital Clock Widget */}
+          <div className="flex items-center gap-3.5 bg-slate-50 dark:bg-slate-800/80 border border-slate-200/80 dark:border-slate-700/80 rounded-xl px-4 py-2 self-start sm:self-auto shadow-2xs">
+            <div className="text-right">
+              <span className="text-[10px] uppercase font-bold tracking-wider text-slate-400 dark:text-slate-500 block">
+                Official Live Time
+              </span>
+              <span className="text-base sm:text-lg font-mono font-extrabold text-slate-900 dark:text-white tracking-tight">
+                {formattedDigitalTime}
+              </span>
+            </div>
+            <span className="w-2.5 h-2.5 rounded-full bg-emerald-500 animate-ping shrink-0" />
+          </div>
         </div>
       </div>
 
@@ -429,14 +509,14 @@ const ClockInOutCard = ({
           <CheckCircle className="w-4 h-4 text-emerald-600 dark:text-emerald-400 shrink-0" />
           <div>
             <span className="font-bold">Shift Completed for Today:</span> Total approved work hours:{" "}
-            <span className="font-mono font-bold">{attendanceData.workHours || 0} hrs</span>. Records are synced with payroll.
+            <span className="font-mono font-bold">{attendanceData.workHours || 0} hrs</span>.
           </div>
         </div>
       )}
 
-      {/* Bottom Action Controls: Precise 4-State Button Logic */}
-      <div className="pt-5 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-        <div className="text-xs text-slate-500 dark:text-slate-400">
+      {/* Bottom Informational Strip */}
+      <div className="pt-4 flex flex-col sm:flex-row sm:items-center justify-between gap-3 text-xs text-slate-500 dark:text-slate-400">
+        <div>
           {currentStep === 1 && (
             <span>Please clock in to begin your shift and timestamp your attendance.</span>
           )}
@@ -451,85 +531,12 @@ const ClockInOutCard = ({
             </span>
           )}
           {currentStep === 4 && (
-            <span>Both buttons disabled for the remainder of today. Have a great evening!</span>
+            <span>Shift finalized for today. Both action buttons are complete and locked.</span>
           )}
         </div>
 
-        <div className="flex items-center gap-3">
-          {/* 1. CLOCK IN BUTTON */}
-          <button
-            type="button"
-            id="btn-shift-clock-in"
-            onClick={onClockIn}
-            disabled={hasClockedIn || isLoading}
-            className={`flex items-center justify-center gap-2 px-5 py-2.5 rounded-xl text-xs sm:text-sm font-semibold transition-all duration-200 shadow-sm cursor-pointer ${
-              hasClockedIn
-                ? "bg-slate-100 dark:bg-slate-800 text-slate-400 dark:text-slate-500 border border-slate-200 dark:border-slate-700 cursor-not-allowed opacity-80"
-                : isLoading
-                ? "bg-blue-400 text-white cursor-not-allowed"
-                : "bg-[#002185] hover:bg-[#001760] dark:bg-blue-600 dark:hover:bg-blue-700 text-white active:scale-[0.98]"
-            }`}
-            title={
-              hasClockedIn
-                ? `Clocked In (${formatTime(attendanceData.clockIn)})`
-                : "Click to clock in and begin your shift"
-            }
-          >
-            {hasClockedIn ? (
-              <>
-                <CheckCircle className="w-4 h-4 text-emerald-600 dark:text-emerald-400" />
-                <span>Clocked In ({formatTime(attendanceData.clockIn)})</span>
-              </>
-            ) : (
-              <>
-                <LogIn className="w-4 h-4" />
-                <span>{isLoading ? "Recording Check-in…" : "Clock In"}</span>
-              </>
-            )}
-          </button>
-
-          {/* 2. CLOCK OUT BUTTON */}
-          <button
-            type="button"
-            id="btn-shift-clock-out"
-            onClick={onClockOut}
-            disabled={!hasClockedIn || hasClockedOut || !isClockOutUnlocked || isLoading}
-            className={`flex items-center justify-center gap-2 px-5 py-2.5 rounded-xl text-xs sm:text-sm font-semibold transition-all duration-200 shadow-sm cursor-pointer ${
-              hasClockedOut
-                ? "bg-slate-100 dark:bg-slate-800 text-slate-400 dark:text-slate-500 border border-slate-200 dark:border-slate-700 cursor-not-allowed opacity-80"
-                : !hasClockedIn
-                ? "bg-slate-100 dark:bg-slate-800 text-slate-400 dark:text-slate-500 border border-slate-200 dark:border-slate-700 cursor-not-allowed"
-                : !isClockOutUnlocked
-                ? "bg-slate-100 dark:bg-slate-800 text-slate-400 dark:text-slate-500 border border-slate-200 dark:border-slate-700 cursor-not-allowed"
-                : "bg-amber-600 hover:bg-amber-700 text-white active:scale-[0.98]"
-            }`}
-            title={
-              hasClockedOut
-                ? "Shift Completed for Today"
-                : !hasClockedIn
-                ? `Clock out unlocks at scheduled closing time (${shiftEvaluation.formattedEndTime})`
-                : !isClockOutUnlocked
-                ? `Clock out unlocks at scheduled closing time (${shiftEvaluation.formattedEndTime})`
-                : "Click to clock out and finalize your shift"
-            }
-          >
-            {hasClockedOut ? (
-              <>
-                <CheckCircle className="w-4 h-4 text-emerald-600 dark:text-emerald-400" />
-                <span>Shift Completed</span>
-              </>
-            ) : !isClockOutUnlocked && hasClockedIn ? (
-              <>
-                <Lock className="w-4 h-4 text-slate-400" />
-                <span>Locked until {shiftEvaluation.formattedEndTime}</span>
-              </>
-            ) : (
-              <>
-                <LogOut className="w-4 h-4" />
-                <span>{isLoading ? "Recording Check-out…" : "Clock Out & End Shift"}</span>
-              </>
-            )}
-          </button>
+        <div className="text-[11px] font-medium text-slate-400 dark:text-slate-500">
+          <span>Standard Target: 8.0 hrs</span>
         </div>
       </div>
 

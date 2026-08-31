@@ -194,6 +194,8 @@ const STATUS_COLORS = {
  */
 export const Avatar = ({
   src,
+  avatarUrl,
+  avatar_url,
   profilePicture,
   profile_picture,
   profile_image_url,
@@ -218,12 +220,12 @@ export const Avatar = ({
 
   // Normalize image source from various common field names
   const resolvedSrc = useMemo(() => {
-    const raw = src || profilePicture || profile_picture || profile_image_url || avatar || image;
+    const raw = src || avatarUrl || avatar_url || profilePicture || profile_picture || profile_image_url || avatar || image;
     if (typeof raw === "string" && raw.trim() !== "") {
       return raw.trim();
     }
     return null;
-  }, [src, profilePicture, profile_picture, profile_image_url, avatar, image]);
+  }, [src, avatarUrl, avatar_url, profilePicture, profile_picture, profile_image_url, avatar, image]);
 
   // Reset error state if image src changes
   React.useEffect(() => {

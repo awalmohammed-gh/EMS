@@ -5,8 +5,9 @@ import cors from "cors";
 import cookieParser from "cookie-parser";
 import path from "path";
 import fs from "fs";
+import mongoose from "mongoose";
 import { fileURLToPath } from "url";
-import { connectMongodb } from "./config/mongodb.js";
+import { connectMongodb, closeMongodb } from "./config/mongodb.js";
 import { initSocket } from "./utils/socket.js";
 import adminRouter from "./routes/adminRoutes.js";
 import employeeRouter from "./routes/employeeRoutes.js";
@@ -19,6 +20,7 @@ import notificationRouter from "./routes/notificationRoutes.js";
 import authRouter from "./routes/authRoutes.js";
 import announcementRouter from "./routes/announcementRoutes.js";
 import userRouter from "./routes/userRoutes.js";
+import { logErrorToFile } from "./utils/logger.js";
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -29,7 +31,7 @@ const server = http.createServer(app);
 const io = initSocket(server);
 app.set("io", io);
 
-const port = process.env.PORT || 3000;
+const port = 3000;
 
 // middleware
 app.use(
@@ -62,12 +64,20 @@ if (!fs.existsSync(avatarsStaticDir)) {
 }
 
 // Serve uploaded profile images and avatars
-app.use("/uploads", express.static(uploadsStaticDir));
+app.use("/uploads", express.static(uploadsStaticDir, { maxAge: "1d", fallthrough: true }));
+app.use("/uploads", (req, res) => {
+  res.status(404).send("File not found");
+});
 
 // database connection (with graceful offline fallback)
-await connectMongodb();
+connectMongodb().catch((err) => {
+  console.warn("MongoDB Connection Error:", err?.message || err);
+});
 
 // api endpoints
+app.get("/api/health", (req, res) => {
+  res.status(200).json({ status: "healthy", timestamp: new Date().toISOString() });
+});
 app.use("/api/auth", authRouter);
 app.use("/api/users", userRouter);
 app.use("/api/user", userRouter);
@@ -101,6 +111,13 @@ app.use("/api", (err, req, res, next) => {
     return res.status(503).json({ error: "Service temporarily unavailable (database offline)" });
   }
   console.error("API error:", err);
+  logErrorToFile({
+    route: req.originalUrl || req.url || "/api",
+    statusCode: 500,
+    error: err,
+    req,
+    details: "Server-side Express API exception",
+  });
   return res.status(500).json({ success: false, message: err.message || "Internal server error" });
 });
 
@@ -110,8 +127,12 @@ app.use(express.static(clientDistPath));
 
 // SPA fallback for all client routes
 app.use((req, res, next) => {
-  if (req.method === "GET" && !req.path.startsWith("/api")) {
-    return res.sendFile(path.join(clientDistPath, "index.html"));
+  if (req.method === "GET" && !req.path.startsWith("/api") && !req.path.startsWith("/uploads")) {
+    const indexPath = path.join(clientDistPath, "index.html");
+    if (fs.existsSync(indexPath)) {
+      return res.sendFile(indexPath);
+    }
+    return res.status(200).send(`<!DOCTYPE html><html><head><meta http-equiv="refresh" content="2"><title>Loading...</title></head><body style="font-family:sans-serif;padding:40px;text-align:center;"><h2>Loading Application...</h2><p>Please wait a moment while the frontend builds.</p></body></html>`);
   }
   next();
 });
@@ -119,3 +140,44 @@ app.use((req, res, next) => {
 server.listen(port, "0.0.0.0", () => {
   console.log(`Server listening on http://0.0.0.0:${port}`);
 });
+
+// Graceful Shutdown & Process Signal Handling to prevent hanging socket connections
+let isShuttingDown = false;
+const gracefulShutdown = (signal) => {
+  if (isShuttingDown) return;
+  isShuttingDown = true;
+  console.log(`\n[Backend] Received ${signal}. Initiating graceful shutdown...`);
+
+  // Close socket.io connections
+  if (io) {
+    try {
+      io.close(() => {
+        console.log("[Backend] Socket.IO connections closed.");
+      });
+    } catch (e) {
+      console.warn("[Backend] Error closing Socket.IO:", e.message);
+    }
+  }
+
+  // Stop receiving new connections
+  server.close(async () => {
+    console.log("[Backend] HTTP server closed.");
+    try {
+      await closeMongodb();
+    } catch (err) {
+      console.warn("[Backend] Error closing MongoDB connection:", err.message);
+    }
+    process.exit(0);
+  });
+
+  // Force shutdown if connections do not close within 5 seconds
+  setTimeout(() => {
+    console.error("[Backend] Forced termination after timeout.");
+    process.exit(1);
+  }, 5000).unref();
+};
+
+process.on("SIGTERM", () => gracefulShutdown("SIGTERM"));
+process.on("SIGINT", () => gracefulShutdown("SIGINT"));
+
+

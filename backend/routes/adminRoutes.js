@@ -16,6 +16,7 @@ import { getSettings, getPenaltySettings, updatePenaltySettings, getAuditLogs } 
 import { createEmployeeAccount } from "../controllers/employeeAuthentication.js";
 import { bulkUploadBiometricAttendance } from "../controllers/employeeAttendance.js";
 import { getPenaltyImpactAnalytics } from "../controllers/analyticsController.js";
+import { getRecentActivityFeed } from "../controllers/dashboardController.js";
 import {
   getAnnouncements,
   getAnnouncementById,
@@ -74,7 +75,9 @@ adminRouter.get("/payroll/records", verifyAdmin, allPayslips);
 adminRouter.get("/payroll/payslips", verifyAdmin, allPayslips);
 adminRouter.get("/payroll/cycles", verifyAdmin, getPayrollCycles);
 adminRouter.post("/payroll/generate", verifyAdmin, generatePayroll);
+adminRouter.post("/payroll/publish", verifyAdmin, generatePayroll);
 adminRouter.post("/payroll-generate", verifyAdmin, generatePayroll);
+adminRouter.post("/payroll-publish", verifyAdmin, generatePayroll);
 adminRouter.get("/dashboard-stats", verifyAdmin, getDashboardStats);
 adminRouter.get("/payroll/summary", verifyAdmin, getAdminPayrollSummary);
 adminRouter.get("/payroll-summary", verifyAdmin, getAdminPayrollSummary);
@@ -89,6 +92,10 @@ adminRouter.get("/employees", verifyAdmin, employeeDetails);
 // 6-Month Attendance Penalties & Payroll Cost Impact Analytics
 adminRouter.get("/analytics/penalty-impact", verifyAdmin, getPenaltyImpactAnalytics);
 adminRouter.get("/analytics/penalties-impact", verifyAdmin, getPenaltyImpactAnalytics);
+
+// Real-time Recent Activity Feed (Attendance & Payroll)
+adminRouter.get("/dashboard/recent-activity", verifyAdmin, getRecentActivityFeed);
+adminRouter.get("/recent-activity", verifyAdmin, getRecentActivityFeed);
 
 // Biometric Attendance Bulk Upload
 adminRouter.post("/attendance/bulk-upload", verifyAdmin, bulkUploadBiometricAttendance);

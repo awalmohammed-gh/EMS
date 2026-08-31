@@ -10,7 +10,6 @@ import {
   AlertTriangle,
   Settings as SettingsIcon,
   RefreshCw,
-  Sparkles,
   History,
 } from "lucide-react";
 import { useManagement } from "../../context/ManagementContextProvider";
@@ -133,10 +132,6 @@ const SettingsContent = () => {
                 <h1 className="text-xl sm:text-2xl font-bold tracking-tight text-slate-900 dark:text-white">
                   System & Admin Settings
                 </h1>
-                <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[10px] font-semibold bg-blue-500/10 text-blue-600 dark:text-blue-400 border border-blue-500/20">
-                  <Sparkles className="w-2.5 h-2.5" />
-                  Live Sync
-                </span>
               </div>
               <p className="text-xs sm:text-sm text-slate-500 dark:text-slate-400 mt-0.5">
                 Manage organization preferences, administrator credentials, security, and automated workflows
@@ -153,7 +148,7 @@ const SettingsContent = () => {
               title="Reload settings from database"
             >
               <RefreshCw className={`w-3.5 h-3.5 ${isRefreshing ? "animate-spin text-blue-600" : ""}`} />
-              <span>{isRefreshing ? "Syncing..." : "Sync DB"}</span>
+              <span>{isRefreshing ? "Refreshing..." : "Refresh"}</span>
             </button>
           </div>
         </div>

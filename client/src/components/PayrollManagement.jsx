@@ -21,11 +21,13 @@ import {
   getAllPayslips,
   namesList,
   updatePayrollStatus,
+  getAdminPayrollSummary,
 } from "../apis/fontApis";
 import { useManagement } from "../context/ManagementContextProvider";
 import PayslipsModal from "./modal/PayslipsModal";
 import PayrollDetailsModal from "./modal/PayrollDetailsModal";
 import { downloadPayslipPDF } from "../utils/payslipPdfGenerator";
+import Avatar from "./Avatar";
 
 export const PayrollManagement = () => {
   const navigate = useNavigate();
@@ -37,6 +39,14 @@ export const PayrollManagement = () => {
   const [isLoading, setIsLoading] = useState(true);
   const [isRefreshing, setIsRefreshing] = useState(false);
   const [error, setError] = useState(null);
+
+  // Dynamic Aggregation KPI Summary State
+  const [summary, setSummary] = useState({
+    totalEmployees: 0,
+    totalPaidOut: 0,
+    pendingApprovals: 0,
+    taxesAndDeductions: 0,
+  });
 
   // Filter & Search States
   const [searchQuery, setSearchQuery] = useState("");
@@ -50,7 +60,28 @@ export const PayrollManagement = () => {
   const [selectedPayroll, setSelectedPayroll] = useState(null);
   const [showDetailsModal, setShowDetailsModal] = useState(false);
 
-  // Load both active employees and payslips from backend
+  // Fetch KPI Summary from backend aggregation pipeline
+  const fetchPayrollSummary = useCallback(async (monthToQuery = selectedMonth) => {
+    try {
+      const params = {};
+      if (monthToQuery && monthToQuery !== "all" && monthToQuery !== "All" && monthToQuery !== "All Months") {
+        params.month = monthToQuery;
+      }
+      const res = await getAdminPayrollSummary(params);
+      if (res.data?.success || res.data?.totalPaidOut !== undefined) {
+        setSummary({
+          totalEmployees: Number(res.data.totalEmployees || 0),
+          totalPaidOut: Number(res.data.totalPaidOut !== undefined ? res.data.totalPaidOut : (res.data.totalPayrollDisbursed || 0)),
+          pendingApprovals: Number(res.data.pendingApprovals !== undefined ? res.data.pendingApprovals : (res.data.pendingDisbursements || 0)),
+          taxesAndDeductions: Number(res.data.taxesAndDeductions !== undefined ? res.data.taxesAndDeductions : 0),
+        });
+      }
+    } catch (err) {
+      console.warn("Could not fetch payroll summary:", err);
+    }
+  }, [selectedMonth]);
+
+  // Load both active employees, payslips, and summary from backend
   const fetchData = useCallback(async (isSilent = false) => {
     try {
       if (!isSilent) setIsLoading(true);
@@ -89,6 +120,8 @@ export const PayrollManagement = () => {
             "Failed to load payroll data from server."
         );
       }
+
+      await fetchPayrollSummary(selectedMonth);
     } catch (err) {
       console.error("Fatal error fetching payroll management data:", err);
       setError(err.response?.data?.message || err.message || "Failed to load data.");
@@ -96,11 +129,15 @@ export const PayrollManagement = () => {
       setIsLoading(false);
       setIsRefreshing(false);
     }
-  }, []);
+  }, [fetchPayrollSummary, selectedMonth]);
 
   useEffect(() => {
     fetchData();
   }, [fetchData]);
+
+  useEffect(() => {
+    fetchPayrollSummary(selectedMonth);
+  }, [selectedMonth, fetchPayrollSummary]);
 
   // Currency Formatter
   const formatCurrency = (val) => {
@@ -375,10 +412,11 @@ export const PayrollManagement = () => {
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 sm:gap-5">
         <div className="bg-white dark:bg-slate-900 border border-slate-200/80 dark:border-slate-800/80 rounded-2xl sm:rounded-3xl p-5 shadow-sm dark:shadow-black/20 flex items-center justify-between">
           <div>
-            <p className="text-xs font-semibold uppercase tracking-wider text-slate-400">Active Staff</p>
+            <p className="text-xs font-semibold uppercase tracking-wider text-slate-400">Total Employees</p>
             <p className="text-2xl font-bold text-slate-900 dark:text-white mt-1">
-              {employees.length}
+              {summary.totalEmployees}
             </p>
+            <span className="text-xs text-slate-500 dark:text-slate-400 block mt-0.5">Active Staff on Record</span>
           </div>
           <div className="w-11 h-11 rounded-xl bg-blue-500/10 text-blue-600 dark:text-blue-400 border border-blue-500/20 flex items-center justify-center shrink-0">
             <Users className="w-5 h-5" />
@@ -387,39 +425,40 @@ export const PayrollManagement = () => {
 
         <div className="bg-white dark:bg-slate-900 border border-slate-200/80 dark:border-slate-800/80 rounded-2xl sm:rounded-3xl p-5 shadow-sm dark:shadow-black/20 flex items-center justify-between">
           <div>
-            <p className="text-xs font-semibold uppercase tracking-wider text-slate-400">Total Payslips</p>
-            <p className="text-2xl font-bold text-slate-900 dark:text-white mt-1">
-              {payslips.length}
+            <p className="text-xs font-semibold uppercase tracking-wider text-slate-400">Total Paid Out</p>
+            <p className="text-2xl font-bold text-emerald-600 dark:text-emerald-400 mt-1">
+              GH₵{Number(summary.totalPaidOut || 0).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
             </p>
+            <span className="text-xs text-slate-500 dark:text-slate-400 block mt-0.5">Disbursed to Staff</span>
           </div>
           <div className="w-11 h-11 rounded-xl bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border border-emerald-500/20 flex items-center justify-center shrink-0">
-            <FileText className="w-5 h-5" />
-          </div>
-        </div>
-
-        <div className="bg-white dark:bg-slate-900 border border-slate-200/80 dark:border-slate-800/80 rounded-2xl sm:rounded-3xl p-5 shadow-sm dark:shadow-black/20 flex items-center justify-between">
-          <div>
-            <p className="text-xs font-semibold uppercase tracking-wider text-slate-400">Net Disbursements</p>
-            <p className="text-2xl font-bold text-slate-900 dark:text-white mt-1">
-              {formatCurrency(mappedRecords.reduce((acc, r) => acc + (r.netPay || 0), 0))}
-            </p>
-          </div>
-          <div className="w-11 h-11 rounded-xl bg-purple-500/10 text-purple-600 dark:text-purple-400 border border-purple-500/20 flex items-center justify-center shrink-0">
             <DollarSign className="w-5 h-5" />
           </div>
         </div>
 
         <div className="bg-white dark:bg-slate-900 border border-slate-200/80 dark:border-slate-800/80 rounded-2xl sm:rounded-3xl p-5 shadow-sm dark:shadow-black/20 flex items-center justify-between">
           <div>
-            <p className="text-xs font-semibold uppercase tracking-wider text-slate-400">Attendance Penalties</p>
-            <p className="text-2xl font-bold text-rose-600 dark:text-rose-400 mt-1">
-              {formatCurrency(
-                mappedRecords.reduce((acc, r) => acc + (r.totalAttendanceDeductions || 0), 0)
-              )}
+            <p className="text-xs font-semibold uppercase tracking-wider text-slate-400">Pending Approvals</p>
+            <p className="text-2xl font-bold text-amber-600 dark:text-amber-400 mt-1">
+              GH₵{Number(summary.pendingApprovals || 0).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
             </p>
+            <span className="text-xs text-slate-500 dark:text-slate-400 block mt-0.5">Awaiting Transfer</span>
+          </div>
+          <div className="w-11 h-11 rounded-xl bg-amber-500/10 text-amber-600 dark:text-amber-400 border border-amber-500/20 flex items-center justify-center shrink-0">
+            <Clock className="w-5 h-5" />
+          </div>
+        </div>
+
+        <div className="bg-white dark:bg-slate-900 border border-slate-200/80 dark:border-slate-800/80 rounded-2xl sm:rounded-3xl p-5 shadow-sm dark:shadow-black/20 flex items-center justify-between">
+          <div>
+            <p className="text-xs font-semibold uppercase tracking-wider text-slate-400">Taxes & Deductions</p>
+            <p className="text-2xl font-bold text-rose-600 dark:text-rose-400 mt-1">
+              GH₵{Number(summary.taxesAndDeductions || 0).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+            </p>
+            <span className="text-xs text-slate-500 dark:text-slate-400 block mt-0.5">Absence, Lateness & Deductions</span>
           </div>
           <div className="w-11 h-11 rounded-xl bg-rose-500/10 text-rose-600 dark:text-rose-400 border border-rose-500/20 flex items-center justify-center shrink-0">
-            <AlertCircle className="w-5 h-5" />
+            <FileText className="w-5 h-5" />
           </div>
         </div>
       </div>
@@ -582,17 +621,14 @@ export const PayrollManagement = () => {
                       {/* Employee Column */}
                       <td className="py-3.5 px-5">
                         <div className="flex items-center gap-3">
-                          {record.avatar ? (
-                            <img
-                              src={record.avatar}
-                              alt={record.fullName}
-                              className="w-9 h-9 rounded-xl object-cover border border-slate-200 dark:border-slate-700"
-                            />
-                          ) : (
-                            <div className="w-9 h-9 rounded-xl bg-blue-600 text-white font-bold flex items-center justify-center text-xs shadow-2xs">
-                              {initial}
-                            </div>
-                          )}
+                          <Avatar
+                            src={record.avatar}
+                            fullName={record.fullName}
+                            size="sm"
+                            shape="rounded"
+                            className="w-9 h-9 rounded-xl shrink-0"
+                            fallbackInitials={initial}
+                          />
                           <div className="min-w-0">
                             <p className="font-bold text-slate-900 dark:text-white truncate">
                               {record.fullName}

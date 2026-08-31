@@ -137,12 +137,15 @@ export const PayslipsModal = ({ onClose, onSuccess }) => {
 
       const res = await calculatePayrollSummary(params);
       if (res.data && res.data.success) {
-        const summary = res.data.summary || res.data;
+        const resData = res.data;
+        const summary = resData.summary || resData;
         const calc = summary?.salaryCalculation || summary;
-        const metrics = summary?.workingDaysMetric || res.data.workingDaysMetric || null;
+        const metrics = summary?.workingDaysMetric || resData.workingDaysMetric || null;
 
-        const earnedBase = calc?.baseSalary ?? calc?.basicSalary ?? calc?.earnedBaseSalary ?? targetBase;
+        const earnedBase = resData.baseSalary ?? resData.basicSalary ?? calc?.baseSalary ?? calc?.basicSalary ?? calc?.earnedBaseSalary ?? targetBase;
         const absDeduct = Number(
+          resData.absenceDeductions ??
+          resData.absentDaysDeduction ??
           calc?.absenceDeductions ??
           calc?.absentDaysDeduction ??
           calc?.deductions?.absenceDeductions ??
@@ -152,6 +155,8 @@ export const PayslipsModal = ({ onClose, onSuccess }) => {
           0
         );
         const lateDeduct = Number(
+          resData.latenessPenalties ??
+          resData.latenessDeductions ??
           calc?.latenessPenalties ??
           calc?.latenessDeductions ??
           calc?.latenessPenalty ??
@@ -164,6 +169,8 @@ export const PayslipsModal = ({ onClose, onSuccess }) => {
 
         setAttendanceMetrics(metrics);
 
+        const remarksText = resData.remarks || `Calculated from ${metrics?.presentDays ?? metrics?.attendedDays ?? 0} attended days, ${metrics?.approvedPaidLeaveDays || 0} approved leaves, ${resData.absentDays ?? metrics?.absentDays ?? 0} absent days, and ${resData.lateDays ?? metrics?.lateDays ?? 0} late check-in(s) for ${summary?.month || targetMonth}.`;
+
         setPayslipForm((prev) => ({
           ...prev,
           basicSalary: earnedBase,
@@ -171,7 +178,7 @@ export const PayslipsModal = ({ onClose, onSuccess }) => {
           latenessDeduction: lateDeduct,
           originalAbsenceDeduction: absDeduct,
           originalLatenessDeduction: lateDeduct,
-          remarks: `Calculated from ${metrics?.presentDays || 0} attended days, ${metrics?.approvedPaidLeaveDays || 0} approved leaves, ${metrics?.absentDays || 0} absent days, and ${metrics?.lateDays || 0} late check-in(s) for ${summary?.month || targetMonth}.`,
+          remarks: remarksText,
         }));
       }
     } catch (err) {

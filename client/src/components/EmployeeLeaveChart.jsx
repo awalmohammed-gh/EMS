@@ -282,7 +282,7 @@ export const EmployeeLeaveChart = ({
         {isLoading && !stats ? (
           <div className="w-full h-64 flex flex-col items-center justify-center text-slate-400 space-y-2">
             <RefreshCw className="w-6 h-6 animate-spin text-[#002185] dark:text-blue-400" />
-            <span className="text-xs font-medium">Syncing leave records from database...</span>
+            <span className="text-xs font-medium">Loading leave statistics...</span>
           </div>
         ) : error && !hasRequests ? (
           <div className="w-full py-8 text-center bg-rose-50/50 dark:bg-rose-950/20 rounded-xl border border-rose-100 dark:border-rose-900/30 p-4">

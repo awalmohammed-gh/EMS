@@ -1,5 +1,6 @@
 import { useState, useEffect, useRef, useMemo, useCallback } from "react";
 import { useNavigate } from "react-router-dom";
+import { motion, AnimatePresence } from "framer-motion";
 import {
   Bell,
   CheckCheck,
@@ -15,6 +16,9 @@ import {
   Megaphone,
   Trash2,
   AlertCircle,
+  Eye,
+  EyeOff,
+  CheckCircle2,
 } from "lucide-react";
 import { useNotificationManager } from "../services/notificationService";
 import { AnnouncementModal } from "./modal/AnnouncementModal";
@@ -25,6 +29,7 @@ export const NotificationBell = ({ role = "admin", className = "", userId }) => 
   const [activeTab, setActiveTab] = useState("all");
   const [readerModalItem, setReaderModalItem] = useState(null);
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
+  const [actionFeedback, setActionFeedback] = useState(null);
   const dropdownRef = useRef(null);
 
   // Hook into the frontend notification service for dynamic role-based synchronization
@@ -35,16 +40,26 @@ export const NotificationBell = ({ role = "admin", className = "", userId }) => 
     isLoading,
     refresh,
     markAsRead,
+    toggleReadStatus,
+    dismissNotification,
     markAllAsRead,
-    deleteNotification,
     deleteAllNotifications,
   } = useNotificationManager(role, { userId, autoPoll: true, pollInterval: 15000 });
+
+  // Auto-clear transient feedback toast
+  useEffect(() => {
+    if (actionFeedback) {
+      const timer = setTimeout(() => setActionFeedback(null), 2500);
+      return () => clearTimeout(timer);
+    }
+  }, [actionFeedback]);
 
   // Click outside listener to dismiss the notifications popover
   useEffect(() => {
     const handleClickOutside = (e) => {
       if (dropdownRef.current && !dropdownRef.current.contains(e.target)) {
         setIsOpen(false);
+        setShowDeleteConfirm(false);
       }
     };
     if (isOpen) {
@@ -66,15 +81,19 @@ export const NotificationBell = ({ role = "admin", className = "", userId }) => 
       return notifications.filter((n) => n.category === "leave");
     }
     if (activeTab === "payroll") {
-      return notifications.filter((n) => n.category === "payroll");
+      return notifications.filter(
+        (n) => n.category === "payroll" || n.type === "payroll_alert" || n.category === "payslip"
+      );
     }
     if (activeTab === "system") {
       return notifications.filter(
         (n) =>
-          n.category === "system" ||
-          n.category === "announcement" ||
+          (n.category === "system" ||
           n.category === "attendance" ||
-          !n.category
+          !n.category) &&
+          n.category !== "payroll" &&
+          n.type !== "payroll_alert" &&
+          n.category !== "payslip"
       );
     }
     if (activeTab === "unread") {
@@ -114,6 +133,7 @@ export const NotificationBell = ({ role = "admin", className = "", userId }) => 
       case "leave":
         return <CalendarCheck className="w-4 h-4 text-[#ff5500]" />;
       case "payroll":
+      case "payslip":
         return <DollarSign className="w-4 h-4 text-[#16A34A]" />;
       case "attendance":
         return <Clock className="w-4 h-4 text-[#002185] dark:text-blue-400" />;
@@ -132,6 +152,7 @@ export const NotificationBell = ({ role = "admin", className = "", userId }) => 
       case "leave":
         return "bg-[#ff5500]/10 border-[#ff5500]/20";
       case "payroll":
+      case "payslip":
         return "bg-[#16A34A]/10 border-[#16A34A]/20";
       case "attendance":
         return "bg-[#002185]/10 border-[#002185]/20 dark:bg-blue-500/20 dark:border-blue-500/30";
@@ -147,7 +168,11 @@ export const NotificationBell = ({ role = "admin", className = "", userId }) => 
     async (item) => {
       const itemId = item._id || item.id;
       const isItemRead = Boolean(item.is_read || item.unread === false);
-      const actionTargetUrl = item.action_url || item.actionUrl;
+      const isPayroll = item.category === "payroll" || item.type === "payroll_alert" || item.category === "payslip";
+      const actionTargetUrl =
+        item.action_url ||
+        item.actionUrl ||
+        (isPayroll ? (role === "admin" ? "/admin/dashboard/payslips" : "/employee/dashboard/payslips") : "");
 
       if (!isItemRead) {
         await markAsRead(itemId);
@@ -181,16 +206,36 @@ export const NotificationBell = ({ role = "admin", className = "", userId }) => 
         navigate(actionTargetUrl);
       }
     },
-    [markAsRead, navigate]
+    [markAsRead, navigate, role]
   );
+
+  // Handle explicit toggle read/unread status
+  const handleToggleRead = async (e, item) => {
+    e.stopPropagation();
+    const itemId = item._id || item.id;
+    const isCurrentlyRead = Boolean(item.is_read || item.unread === false);
+    await toggleReadStatus(itemId);
+    setActionFeedback(isCurrentlyRead ? "Marked as unread" : "Marked as read");
+  };
+
+  // Handle explicit dismissal of notification
+  const handleDismiss = async (e, item) => {
+    e.stopPropagation();
+    const itemId = item._id || item.id;
+    const isPayroll = item.category === "payroll" || item.type === "payroll_alert" || item.category === "payslip";
+    await dismissNotification(itemId);
+    setActionFeedback(isPayroll ? "Payslip alert dismissed" : "Notification dismissed");
+  };
 
   return (
     <>
       <div className={`relative inline-block ${className}`} ref={dropdownRef}>
-        {/* Bell Trigger Button */}
-        <button
+        {/* Bell Trigger Button with Framer Motion hover & tap interactions */}
+        <motion.button
           id="dashboard-notification-bell-btn"
           type="button"
+          whileHover={{ scale: 1.05 }}
+          whileTap={{ scale: 0.94 }}
           onClick={() => {
             setIsOpen(!isOpen);
             if (!isOpen) {
@@ -198,311 +243,421 @@ export const NotificationBell = ({ role = "admin", className = "", userId }) => 
             }
           }}
           aria-label="View system notifications and real-time alerts"
-          className="relative p-2 sm:p-2.5 rounded-xl border border-[#E2E8F0] dark:border-slate-700 bg-white dark:bg-slate-850 hover:bg-[#F8FAFC] dark:hover:bg-slate-800 text-[#002185] dark:text-blue-400 hover:border-[#002185] dark:hover:border-blue-500 transition-all cursor-pointer shadow-xs focus:outline-none focus:ring-2 focus:ring-[#002185]/20"
+          className="relative p-2 sm:p-2.5 rounded-xl border border-[#E2E8F0] dark:border-slate-700 bg-white dark:bg-slate-850 hover:bg-[#F8FAFC] dark:hover:bg-slate-800 text-[#002185] dark:text-blue-400 hover:border-[#002185] dark:hover:border-blue-500 transition-colors cursor-pointer shadow-xs focus:outline-none focus:ring-2 focus:ring-[#002185]/20"
         >
-          <Bell className="w-4 h-4 sm:w-5 sm:h-5 transition-transform group-hover:rotate-12" />
+          <Bell className="w-4 h-4 sm:w-5 sm:h-5 transition-transform" />
 
-          {/* Live Dynamic Unread Indicator Badge */}
-          {unreadCount > 0 && (
-            <span
-              id="notification-unread-badge"
-              className="absolute -top-1.5 -right-1.5 min-w-[18px] h-4.5 sm:min-w-[20px] sm:h-5 px-1 rounded-full bg-[#ff5500] text-white text-[10px] sm:text-[11px] font-bold flex items-center justify-center shadow-md animate-pulse"
+          {/* Live Dynamic Unread Indicator Badge with Framer Motion spring animation */}
+          <AnimatePresence>
+            {unreadCount > 0 && (
+              <motion.span
+                id="notification-unread-badge"
+                key="unread-badge"
+                initial={{ scale: 0, opacity: 0 }}
+                animate={{ scale: 1, opacity: 1 }}
+                exit={{ scale: 0, opacity: 0 }}
+                transition={{ type: "spring", stiffness: 500, damping: 25 }}
+                className="absolute -top-1.5 -right-1.5 min-w-[18px] h-4.5 sm:min-w-[20px] sm:h-5 px-1 rounded-full bg-[#ff5500] text-white text-[10px] sm:text-[11px] font-bold flex items-center justify-center shadow-md animate-pulse"
+              >
+                {unreadCount > 9 ? "9+" : unreadCount}
+              </motion.span>
+            )}
+          </AnimatePresence>
+        </motion.button>
+
+        {/* Popover Dropdown Panel with Framer Motion Entrance Animation */}
+        <AnimatePresence>
+          {isOpen && (
+            <motion.div
+              id="dashboard-notifications-dropdown"
+              key="notifications-drawer-popover"
+              initial={{ opacity: 0, scale: 0.95, y: -10 }}
+              animate={{ opacity: 1, scale: 1, y: 0 }}
+              exit={{ opacity: 0, scale: 0.95, y: -10 }}
+              transition={{ duration: 0.2, ease: [0.16, 1, 0.3, 1] }}
+              style={{ transformOrigin: "top right" }}
+              className="absolute right-0 mt-3 w-[360px] sm:w-[440px] max-w-[calc(100vw-28px)] bg-white dark:bg-slate-900 rounded-2xl border border-[#E2E8F0] dark:border-slate-800 shadow-2xl z-50 overflow-hidden"
             >
-              {unreadCount > 9 ? "9+" : unreadCount}
-            </span>
-          )}
-        </button>
-
-        {/* Popover Dropdown Panel */}
-        {isOpen && (
-          <div
-            id="dashboard-notifications-dropdown"
-            className="absolute right-0 mt-3 w-[340px] sm:w-[420px] max-w-[calc(100vw-32px)] bg-white dark:bg-slate-900 rounded-2xl border border-[#E2E8F0] dark:border-slate-800 shadow-2xl z-50 overflow-hidden animate-in fade-in slide-in-from-top-2 duration-200"
-          >
-            {/* Header */}
-            <div className="p-4 px-5 border-b border-[#E2E8F0] dark:border-slate-800 bg-white dark:bg-slate-900 flex items-center justify-between">
-              <div className="flex items-center gap-2.5">
-                <div className="w-8 h-8 rounded-lg bg-[#002185]/10 dark:bg-blue-500/20 flex items-center justify-center">
-                  <Bell className="w-4 h-4 text-[#002185] dark:text-blue-400" />
+              {/* Header */}
+              <div className="p-4 px-5 border-b border-[#E2E8F0] dark:border-slate-800 bg-white dark:bg-slate-900 flex items-center justify-between">
+                <div className="flex items-center gap-2.5">
+                  <div className="w-8 h-8 rounded-lg bg-[#002185]/10 dark:bg-blue-500/20 flex items-center justify-center">
+                    <Bell className="w-4 h-4 text-[#002185] dark:text-blue-400" />
+                  </div>
+                  <div>
+                    <h3 className="text-sm font-bold text-[#002185] dark:text-blue-400">Notifications</h3>
+                    <p className="text-[11px] text-[#64748B] dark:text-slate-400">
+                      {unreadCount > 0
+                        ? `${unreadCount} unread realtime alert${unreadCount > 1 ? "s" : ""}`
+                        : notifications.length > 0
+                        ? `${notifications.length} total notification${notifications.length > 1 ? "s" : ""}`
+                        : "All notifications caught up"}
+                    </p>
+                  </div>
                 </div>
-                <div>
-                  <h3 className="text-sm font-bold text-[#002185] dark:text-blue-400">Notifications</h3>
-                  <p className="text-[11px] text-[#64748B] dark:text-slate-400">
-                    {unreadCount > 0
-                      ? `${unreadCount} unread realtime alert${unreadCount > 1 ? "s" : ""}`
-                      : notifications.length > 0
-                      ? `${notifications.length} total notification${notifications.length > 1 ? "s" : ""}`
-                      : "All notifications caught up"}
-                  </p>
+
+                <div className="flex items-center gap-1.5">
+                  <button
+                    type="button"
+                    onClick={() => refresh(true)}
+                    disabled={isLoading}
+                    title="Refresh notifications"
+                    className="p-1.5 rounded-lg text-[#64748B] dark:text-slate-400 hover:text-[#002185] dark:hover:text-blue-400 hover:bg-[#F8FAFC] dark:hover:bg-slate-800 transition-all cursor-pointer disabled:opacity-50"
+                  >
+                    <RefreshCw className={`w-3.5 h-3.5 ${isLoading ? "animate-spin text-[#002185] dark:text-blue-400" : ""}`} />
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setIsOpen(false)}
+                    className="p-1.5 rounded-lg text-[#64748B] dark:text-slate-400 hover:text-slate-800 dark:hover:text-white hover:bg-[#F8FAFC] dark:hover:bg-slate-800 transition-all cursor-pointer"
+                    title="Close drawer"
+                  >
+                    <X className="w-4 h-4" />
+                  </button>
                 </div>
               </div>
 
-              <div className="flex items-center gap-1.5">
+              {/* Feedback Alert Toast */}
+              <AnimatePresence>
+                {actionFeedback && (
+                  <motion.div
+                    initial={{ opacity: 0, height: 0 }}
+                    animate={{ opacity: 1, height: "auto" }}
+                    exit={{ opacity: 0, height: 0 }}
+                    className="px-4 py-1.5 bg-emerald-500 text-white text-[11px] font-semibold text-center flex items-center justify-center gap-1.5 shadow-inner"
+                  >
+                    <CheckCircle2 className="w-3.5 h-3.5" />
+                    <span>{actionFeedback}</span>
+                  </motion.div>
+                )}
+              </AnimatePresence>
+
+              {/* Quick Bulk Action Bar: Mark all as read & Delete all */}
+              <div className="px-4 py-2 bg-[#F8FAFC]/80 dark:bg-slate-950/80 border-b border-[#E2E8F0] dark:border-slate-800 flex items-center justify-between gap-2 text-xs">
                 <button
+                  id="notification-mark-all-read-btn"
                   type="button"
-                  onClick={() => refresh(true)}
-                  disabled={isLoading}
-                  title="Refresh notifications"
-                  className="p-1.5 rounded-lg text-[#64748B] dark:text-slate-400 hover:text-[#002185] dark:hover:text-blue-400 hover:bg-[#F8FAFC] dark:hover:bg-slate-800 transition-all cursor-pointer disabled:opacity-50"
+                  onClick={async () => {
+                    if (unreadCount > 0) {
+                      await markAllAsRead();
+                      setActionFeedback("All marked as read");
+                    }
+                  }}
+                  disabled={unreadCount === 0}
+                  className="flex items-center gap-1.5 px-2.5 py-1 rounded-lg font-semibold text-[#002185] dark:text-blue-400 hover:bg-[#002185]/10 dark:hover:bg-blue-500/20 disabled:opacity-40 disabled:hover:bg-transparent disabled:cursor-not-allowed transition-all cursor-pointer"
+                  title={unreadCount > 0 ? "Mark all notifications as read" : "All notifications are already marked read"}
                 >
-                  <RefreshCw className={`w-3.5 h-3.5 ${isLoading ? "animate-spin text-[#002185] dark:text-blue-400" : ""}`} />
+                  <CheckCheck className="w-3.5 h-3.5" />
+                  <span>Mark all read</span>
+                </button>
+
+                <button
+                  id="notification-delete-all-btn"
+                  type="button"
+                  onClick={() => {
+                    if (notifications.length > 0) {
+                      setShowDeleteConfirm(true);
+                    }
+                  }}
+                  disabled={notifications.length === 0}
+                  className="flex items-center gap-1.5 px-2.5 py-1 rounded-lg font-semibold text-rose-600 dark:text-rose-400 hover:bg-rose-50 dark:hover:bg-rose-950/40 disabled:opacity-40 disabled:hover:bg-transparent disabled:cursor-not-allowed transition-all cursor-pointer"
+                  title={notifications.length > 0 ? "Dismiss / delete all notifications" : "No notifications to clear"}
+                >
+                  <Trash2 className="w-3.5 h-3.5" />
+                  <span>Clear all</span>
                 </button>
               </div>
-            </div>
 
-            {/* Quick Bulk Action Bar: Mark all as read & Delete all */}
-            <div className="px-4 py-2 bg-[#F8FAFC]/80 dark:bg-slate-950/80 border-b border-[#E2E8F0] dark:border-slate-800 flex items-center justify-between gap-2 text-xs">
-              <button
-                id="notification-mark-all-read-btn"
-                type="button"
-                onClick={() => {
-                  if (unreadCount > 0) {
-                    markAllAsRead();
-                  }
-                }}
-                disabled={unreadCount === 0}
-                className="flex items-center gap-1.5 px-2.5 py-1 rounded-lg font-semibold text-[#002185] dark:text-blue-400 hover:bg-[#002185]/10 dark:hover:bg-blue-500/20 disabled:opacity-40 disabled:hover:bg-transparent disabled:cursor-not-allowed transition-all cursor-pointer"
-                title={unreadCount > 0 ? "Mark all notifications as read" : "All notifications are already marked read"}
-              >
-                <CheckCheck className="w-3.5 h-3.5" />
-                <span>Mark all as read</span>
-              </button>
-
-              <button
-                id="notification-delete-all-btn"
-                type="button"
-                onClick={() => {
-                  if (notifications.length > 0) {
-                    setShowDeleteConfirm(true);
-                  }
-                }}
-                disabled={notifications.length === 0}
-                className="flex items-center gap-1.5 px-2.5 py-1 rounded-lg font-semibold text-rose-600 dark:text-rose-400 hover:bg-rose-50 dark:hover:bg-rose-950/40 disabled:opacity-40 disabled:hover:bg-transparent disabled:cursor-not-allowed transition-all cursor-pointer"
-                title={notifications.length > 0 ? "Delete all notifications" : "No notifications to delete"}
-              >
-                <Trash2 className="w-3.5 h-3.5" />
-                <span>Delete all</span>
-              </button>
-            </div>
-
-            {/* Delete All Confirmation Banner */}
-            {showDeleteConfirm && (
-              <div className="p-3 px-4 bg-rose-50 dark:bg-rose-950/70 border-b border-rose-200 dark:border-rose-900 text-xs flex flex-col gap-2 animate-in fade-in slide-in-from-top-1 duration-150">
-                <div className="flex items-center gap-1.5 text-rose-800 dark:text-rose-200 font-semibold">
-                  <AlertCircle className="w-4 h-4 text-rose-600 shrink-0" />
-                  <span>Clear all {notifications.length} notifications permanently?</span>
-                </div>
-                <div className="flex items-center justify-end gap-2">
-                  <button
-                    type="button"
-                    onClick={() => setShowDeleteConfirm(false)}
-                    className="px-2.5 py-1 rounded-lg border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-900 text-slate-700 dark:text-slate-300 font-medium hover:bg-slate-50 dark:hover:bg-slate-800 transition-colors"
+              {/* Delete All Confirmation Banner with Framer Motion */}
+              <AnimatePresence>
+                {showDeleteConfirm && (
+                  <motion.div
+                    initial={{ opacity: 0, height: 0 }}
+                    animate={{ opacity: 1, height: "auto" }}
+                    exit={{ opacity: 0, height: 0 }}
+                    transition={{ duration: 0.18 }}
+                    className="p-3 px-4 bg-rose-50 dark:bg-rose-950/70 border-b border-rose-200 dark:border-rose-900 text-xs flex flex-col gap-2"
                   >
-                    Cancel
-                  </button>
-                  <button
-                    id="notification-confirm-delete-all-btn"
-                    type="button"
-                    onClick={async () => {
-                      await deleteAllNotifications();
-                      setShowDeleteConfirm(false);
-                    }}
-                    className="px-3 py-1 rounded-lg bg-rose-600 hover:bg-rose-700 text-white font-bold transition-colors shadow-2xs flex items-center gap-1"
-                  >
-                    <Trash2 className="w-3 h-3" />
-                    <span>Yes, Delete All</span>
-                  </button>
-                </div>
-              </div>
-            )}
+                    <div className="flex items-center gap-1.5 text-rose-800 dark:text-rose-200 font-semibold">
+                      <AlertCircle className="w-4 h-4 text-rose-600 shrink-0" />
+                      <span>Clear all {notifications.length} notifications permanently?</span>
+                    </div>
+                    <div className="flex items-center justify-end gap-2">
+                      <button
+                        type="button"
+                        onClick={() => setShowDeleteConfirm(false)}
+                        className="px-2.5 py-1 rounded-lg border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-900 text-slate-700 dark:text-slate-300 font-medium hover:bg-slate-50 dark:hover:bg-slate-800 transition-colors cursor-pointer"
+                      >
+                        Cancel
+                      </button>
+                      <button
+                        id="notification-confirm-delete-all-btn"
+                        type="button"
+                        onClick={async () => {
+                          await deleteAllNotifications();
+                          setShowDeleteConfirm(false);
+                          setActionFeedback("All notifications cleared");
+                        }}
+                        className="px-3 py-1 rounded-lg bg-rose-600 hover:bg-rose-700 text-white font-bold transition-colors shadow-2xs flex items-center gap-1 cursor-pointer"
+                      >
+                        <Trash2 className="w-3 h-3" />
+                        <span>Yes, Clear All</span>
+                      </button>
+                    </div>
+                  </motion.div>
+                )}
+              </AnimatePresence>
 
-            {/* Filter Tabs */}
-            <div className="flex items-center gap-1 p-2 bg-[#F8FAFC] dark:bg-slate-950 border-b border-[#E2E8F0] dark:border-slate-800 overflow-x-auto text-xs font-medium">
-              <button
-                type="button"
-                onClick={() => setActiveTab("all")}
-                className={`px-3 py-1.5 rounded-lg transition-all cursor-pointer whitespace-nowrap ${
-                  activeTab === "all"
-                    ? "bg-[#002185] dark:bg-blue-600 text-white shadow-xs font-bold"
-                    : "text-[#64748B] dark:text-slate-400 hover:text-[#002185] dark:hover:text-blue-400 hover:bg-white dark:hover:bg-slate-850"
-                }`}
-              >
-                All ({metrics.all})
-              </button>
-              <button
-                type="button"
-                onClick={() => setActiveTab("leave")}
-                className={`px-3 py-1.5 rounded-lg transition-all cursor-pointer whitespace-nowrap ${
-                  activeTab === "leave"
-                    ? "bg-[#002185] dark:bg-blue-600 text-white shadow-xs font-bold"
-                    : "text-[#64748B] dark:text-slate-400 hover:text-[#002185] dark:hover:text-blue-400 hover:bg-white dark:hover:bg-slate-850"
-                }`}
-              >
-                Leaves ({metrics.leave})
-              </button>
-              {metrics.payroll > 0 && (
+              {/* Filter Tabs */}
+              <div className="flex items-center gap-1 p-2 bg-[#F8FAFC] dark:bg-slate-950 border-b border-[#E2E8F0] dark:border-slate-800 overflow-x-auto text-xs font-medium">
                 <button
                   type="button"
-                  onClick={() => setActiveTab("payroll")}
+                  onClick={() => setActiveTab("all")}
                   className={`px-3 py-1.5 rounded-lg transition-all cursor-pointer whitespace-nowrap ${
-                    activeTab === "payroll"
+                    activeTab === "all"
                       ? "bg-[#002185] dark:bg-blue-600 text-white shadow-xs font-bold"
                       : "text-[#64748B] dark:text-slate-400 hover:text-[#002185] dark:hover:text-blue-400 hover:bg-white dark:hover:bg-slate-850"
                   }`}
                 >
-                  Payroll ({metrics.payroll})
+                  All ({metrics.all})
                 </button>
-              )}
-              <button
-                type="button"
-                onClick={() => setActiveTab("system")}
-                className={`px-3 py-1.5 rounded-lg transition-all cursor-pointer whitespace-nowrap ${
-                  activeTab === "system"
-                    ? "bg-[#002185] dark:bg-blue-600 text-white shadow-xs font-bold"
-                    : "text-[#64748B] dark:text-slate-400 hover:text-[#002185] dark:hover:text-blue-400 hover:bg-white dark:hover:bg-slate-850"
-                }`}
-              >
-                Updates ({metrics.system})
-              </button>
-              {metrics.unread > 0 && (
                 <button
                   type="button"
-                  onClick={() => setActiveTab("unread")}
+                  onClick={() => setActiveTab("leave")}
                   className={`px-3 py-1.5 rounded-lg transition-all cursor-pointer whitespace-nowrap ${
-                    activeTab === "unread"
-                      ? "bg-[#ff5500] text-white shadow-xs font-bold"
-                      : "text-[#ff5500] hover:bg-[#ff5500]/10 font-bold"
+                    activeTab === "leave"
+                      ? "bg-[#002185] dark:bg-blue-600 text-white shadow-xs font-bold"
+                      : "text-[#64748B] dark:text-slate-400 hover:text-[#002185] dark:hover:text-blue-400 hover:bg-white dark:hover:bg-slate-850"
                   }`}
                 >
-                  Unread ({metrics.unread})
+                  Leaves ({metrics.leave})
                 </button>
-              )}
-            </div>
+                {(metrics.payroll > 0 || role === "employee") && (
+                  <button
+                    type="button"
+                    onClick={() => setActiveTab("payroll")}
+                    className={`px-3 py-1.5 rounded-lg transition-all cursor-pointer whitespace-nowrap ${
+                      activeTab === "payroll"
+                        ? "bg-[#002185] dark:bg-blue-600 text-white shadow-xs font-bold"
+                        : "text-[#64748B] dark:text-slate-400 hover:text-[#002185] dark:hover:text-blue-400 hover:bg-white dark:hover:bg-slate-850"
+                    }`}
+                  >
+                    Payslips ({metrics.payroll})
+                  </button>
+                )}
+                <button
+                  type="button"
+                  onClick={() => setActiveTab("system")}
+                  className={`px-3 py-1.5 rounded-lg transition-all cursor-pointer whitespace-nowrap ${
+                    activeTab === "system"
+                      ? "bg-[#002185] dark:bg-blue-600 text-white shadow-xs font-bold"
+                      : "text-[#64748B] dark:text-slate-400 hover:text-[#002185] dark:hover:text-blue-400 hover:bg-white dark:hover:bg-slate-850"
+                  }`}
+                >
+                  Updates ({metrics.system})
+                </button>
+                {metrics.unread > 0 && (
+                  <button
+                    type="button"
+                    onClick={() => setActiveTab("unread")}
+                    className={`px-3 py-1.5 rounded-lg transition-all cursor-pointer whitespace-nowrap ${
+                      activeTab === "unread"
+                        ? "bg-[#ff5500] text-white shadow-xs font-bold"
+                        : "text-[#ff5500] hover:bg-[#ff5500]/10 font-bold"
+                    }`}
+                  >
+                    Unread ({metrics.unread})
+                  </button>
+                )}
+              </div>
 
-            {/* Notification List Body */}
-            <div className="max-h-[380px] overflow-y-auto divide-y divide-[#F1F5F9] dark:divide-slate-800">
-              {filteredList.length === 0 ? (
-                <div className="py-12 px-6 text-center">
-                  <div className="w-12 h-12 rounded-2xl bg-[#F8FAFC] dark:bg-slate-800 border border-[#E2E8F0] dark:border-slate-700 flex items-center justify-center mx-auto mb-3 text-[#94A3B8]">
-                    <Check className="w-6 h-6 text-[#16A34A]" />
+              {/* Notification List Body */}
+              <div className="max-h-[380px] overflow-y-auto divide-y divide-[#F1F5F9] dark:divide-slate-800">
+                {filteredList.length === 0 ? (
+                  <div className="py-12 px-6 text-center">
+                    <div className="w-12 h-12 rounded-2xl bg-[#F8FAFC] dark:bg-slate-800 border border-[#E2E8F0] dark:border-slate-700 flex items-center justify-center mx-auto mb-3 text-[#94A3B8]">
+                      <Check className="w-6 h-6 text-[#16A34A]" />
+                    </div>
+                    <p className="text-sm font-bold text-[#0F172A] dark:text-slate-100">You&apos;re all caught up!</p>
+                    <p className="text-xs text-[#64748B] dark:text-slate-400 mt-1">
+                      {activeTab === "unread"
+                        ? "No unread notifications to review."
+                        : "No real-time notifications matching this filter."}
+                    </p>
                   </div>
-                  <p className="text-sm font-bold text-[#0F172A] dark:text-slate-100">You&apos;re all caught up!</p>
-                  <p className="text-xs text-[#64748B] dark:text-slate-400 mt-1">
-                    {activeTab === "unread"
-                      ? "No unread notifications to review."
-                      : "No real-time notifications matching this filter."}
-                  </p>
-                </div>
-              ) : (
-                filteredList.map((item) => {
-                  const itemId = item._id || item.id;
-                  const isItemRead = Boolean(item.is_read || item.unread === false);
-                  const actionTargetUrl = item.action_url || item.actionUrl;
-                  const actionBtnLabel = item.action_label || item.actionLabel || "View Details";
+                ) : (
+                  <AnimatePresence mode="popLayout">
+                    {filteredList.map((item) => {
+                      const itemId = item._id || item.id;
+                      const isItemRead = Boolean(item.is_read || item.unread === false);
+                      const isPayroll =
+                        item.category === "payroll" || item.type === "payroll_alert" || item.category === "payslip";
+                      const actionTargetUrl =
+                        item.action_url ||
+                        item.actionUrl ||
+                        (isPayroll ? (role === "admin" ? "/admin/dashboard/payslips" : "/employee/dashboard/payslips") : "");
+                      const actionBtnLabel = item.action_label || item.actionLabel || (isPayroll ? "View Payslip" : "View Details");
 
-                  return (
-                    <div
-                      key={itemId}
-                      onClick={() => handleItemClick(item)}
-                      className={`p-4 transition-all cursor-pointer flex gap-3 group relative hover:bg-[#F8FAFC] dark:hover:bg-slate-800/60 ${
-                        isItemRead ? "bg-white dark:bg-slate-900 opacity-85" : "bg-[#F8FAFC]/60 dark:bg-slate-850/60"
-                      }`}
-                    >
-                      {/* Category Icon */}
-                      <div
-                        className={`w-9 h-9 rounded-xl border flex items-center justify-center shrink-0 mt-0.5 ${getIconBg(
-                          item
-                        )}`}
-                      >
-                        {getNotificationIcon(item)}
-                      </div>
-
-                      {/* Content */}
-                      <div className="flex-1 min-w-0 pr-6">
-                        <div className="flex items-center gap-2 mb-1">
-                          <h4
-                            className={`text-xs truncate ${
-                              isItemRead
-                                ? "font-semibold text-[#0F172A] dark:text-slate-200"
-                                : "font-bold text-[#002185] dark:text-blue-400"
-                            }`}
+                      return (
+                        <motion.div
+                          layout
+                          key={itemId}
+                          initial={{ opacity: 0, y: 6 }}
+                          animate={{ opacity: 1, y: 0 }}
+                          exit={{ opacity: 0, scale: 0.95, height: 0, marginBottom: 0, padding: 0 }}
+                          transition={{ duration: 0.18, ease: "easeOut" }}
+                          onClick={() => handleItemClick(item)}
+                          className={`p-4 transition-colors cursor-pointer flex gap-3 group relative ${
+                            isPayroll
+                              ? !isItemRead
+                                ? "bg-emerald-50/50 dark:bg-emerald-950/25 border-l-3 border-emerald-500 hover:bg-emerald-50/80 dark:hover:bg-emerald-950/40"
+                                : "bg-white dark:bg-slate-900 opacity-90 hover:bg-[#F8FAFC] dark:hover:bg-slate-800/60"
+                              : !isItemRead
+                              ? "bg-[#002185]/[0.03] dark:bg-blue-500/[0.06] border-l-3 border-[#002185] dark:border-blue-500 hover:bg-[#002185]/[0.06]"
+                              : "bg-white dark:bg-slate-900 opacity-80 hover:opacity-100 hover:bg-[#F8FAFC] dark:hover:bg-slate-800/60"
+                          }`}
+                        >
+                          {/* Category Icon */}
+                          <div
+                            className={`w-9 h-9 rounded-xl border flex items-center justify-center shrink-0 mt-0.5 ${getIconBg(
+                              item
+                            )}`}
                           >
-                            {item.title}
-                          </h4>
-                          {!isItemRead && (
-                            <span className="w-2 h-2 rounded-full bg-[#ff5500] shrink-0" title="Unread" />
-                          )}
-                        </div>
+                            {getNotificationIcon(item)}
+                          </div>
 
-                        <p className="text-xs text-[#64748B] dark:text-slate-400 leading-relaxed line-clamp-2">
-                          {item.message}
-                        </p>
+                          {/* Content */}
+                          <div className="flex-1 min-w-0 pr-8">
+                            <div className="flex items-center gap-1.5 mb-1 flex-wrap">
+                              <h4
+                                className={`text-xs truncate ${
+                                  !isItemRead
+                                    ? "font-bold text-[#002185] dark:text-blue-400"
+                                    : "font-semibold text-[#0F172A] dark:text-slate-200"
+                                }`}
+                              >
+                                {item.title}
+                              </h4>
 
-                        <div className="flex items-center justify-between gap-2 mt-2">
-                          <span className="text-[10px] text-[#94A3B8] dark:text-slate-500 font-medium">
-                            {getRelativeTime(item.created_at || item.createdAt || item.timestamp)}
-                          </span>
+                              {/* Category Badges */}
+                              {isPayroll && (
+                                <span className="inline-flex items-center px-1.5 py-0.2 rounded text-[10px] font-bold bg-emerald-100 dark:bg-emerald-950/80 text-emerald-800 dark:text-emerald-300 border border-emerald-200 dark:border-emerald-800">
+                                  Payslip
+                                </span>
+                              )}
 
-                          {(actionTargetUrl || item.type === "announcement" || item.category === "announcement") && (
+                              {/* Read/Unread Status Tag */}
+                              {!isItemRead ? (
+                                <span className="inline-flex items-center gap-1 px-1.5 py-0.2 rounded text-[10px] font-bold bg-[#ff5500]/10 text-[#ff5500] border border-[#ff5500]/20">
+                                  <span className="w-1.5 h-1.5 rounded-full bg-[#ff5500] animate-pulse" />
+                                  Unread
+                                </span>
+                              ) : (
+                                <span className="inline-flex items-center gap-0.5 px-1.5 py-0.2 rounded text-[10px] font-medium bg-slate-100 dark:bg-slate-800 text-slate-500 dark:text-slate-400">
+                                  <Check className="w-2.5 h-2.5" />
+                                  Read
+                                </span>
+                              )}
+                            </div>
+
+                            <p className="text-xs text-[#64748B] dark:text-slate-400 leading-relaxed line-clamp-2">
+                              {item.message}
+                            </p>
+
+                            {/* Action Row */}
+                            <div className="flex items-center justify-between gap-2 mt-2 pt-1 border-t border-slate-100 dark:border-slate-800/60">
+                              <span className="text-[10px] text-[#94A3B8] dark:text-slate-500 font-medium">
+                                {getRelativeTime(item.created_at || item.createdAt || item.timestamp)}
+                              </span>
+
+                              <div className="flex items-center gap-2">
+                                {/* Explicit Mark Read / Unread Status Toggle Button */}
+                                <button
+                                  type="button"
+                                  onClick={(e) => handleToggleRead(e, item)}
+                                  className="inline-flex items-center gap-1 px-2 py-0.5 rounded text-[10px] font-semibold text-slate-600 dark:text-slate-300 bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 dark:hover:bg-slate-700 transition-colors cursor-pointer"
+                                  title={isItemRead ? "Mark as unread" : "Mark as read"}
+                                >
+                                  {isItemRead ? (
+                                    <>
+                                      <EyeOff className="w-3 h-3 text-slate-400" />
+                                      <span>Mark unread</span>
+                                    </>
+                                  ) : (
+                                    <>
+                                      <Eye className="w-3 h-3 text-emerald-600 dark:text-emerald-400" />
+                                      <span>Mark read</span>
+                                    </>
+                                  )}
+                                </button>
+
+                                {/* Primary Action Target (View Payslip / Announcement) */}
+                                {(actionTargetUrl || item.type === "announcement" || item.category === "announcement" || isPayroll) && (
+                                  <button
+                                    type="button"
+                                    onClick={(e) => {
+                                      e.stopPropagation();
+                                      handleItemClick(item);
+                                    }}
+                                    className={`inline-flex items-center gap-1 text-[11px] font-bold transition-colors ${
+                                      isPayroll
+                                        ? "text-emerald-600 dark:text-emerald-400 hover:text-emerald-700 dark:hover:text-emerald-300"
+                                        : "text-[#002185] dark:text-blue-400 hover:text-[#ff5500] dark:hover:text-[#ff5500]"
+                                    }`}
+                                  >
+                                    <span>{actionBtnLabel}</span>
+                                    <ArrowRight className="w-3 h-3" />
+                                  </button>
+                                )}
+                              </div>
+                            </div>
+                          </div>
+
+                          {/* Quick Dismiss / Close Button (Top Right) */}
+                          <div className="absolute top-2.5 right-2.5 flex items-center gap-1">
                             <button
                               type="button"
-                              onClick={(e) => {
-                                e.stopPropagation();
-                                handleItemClick(item);
-                              }}
-                              className="inline-flex items-center gap-1 text-[11px] font-bold text-[#002185] dark:text-blue-400 hover:text-[#ff5500] dark:hover:text-[#ff5500] transition-colors"
+                              onClick={(e) => handleDismiss(e, item)}
+                              title={isPayroll ? "Dismiss payslip alert" : "Dismiss notification"}
+                              className="p-1 rounded-lg text-[#94A3B8] dark:text-slate-500 hover:text-[#DC2626] dark:hover:text-red-400 hover:bg-[#FEF2F2] dark:hover:bg-red-950/30 transition-colors opacity-70 group-hover:opacity-100 cursor-pointer"
                             >
-                              <span>{actionBtnLabel}</span>
-                              <ArrowRight className="w-3 h-3" />
+                              <X className="w-3.5 h-3.5" />
                             </button>
-                          )}
-                        </div>
-                      </div>
+                          </div>
+                        </motion.div>
+                      );
+                    })}
+                  </AnimatePresence>
+                )}
+              </div>
 
-                      {/* Quick Dismiss Button */}
-                      <button
-                        type="button"
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          deleteNotification(itemId);
-                        }}
-                        title="Dismiss notification"
-                        className="absolute top-3 right-3 p-1 rounded-lg text-[#94A3B8] dark:text-slate-500 hover:text-[#DC2626] dark:hover:text-red-400 hover:bg-[#FEF2F2] dark:hover:bg-red-950/30 transition-colors opacity-0 group-hover:opacity-100 cursor-pointer"
-                      >
-                        <X className="w-3.5 h-3.5" />
-                      </button>
-                    </div>
-                  );
-                })
-              )}
-            </div>
+              {/* Footer Controls */}
+              <div className="p-3 px-4 bg-[#F8FAFC] dark:bg-slate-950 border-t border-[#E2E8F0] dark:border-slate-800 flex items-center justify-between text-xs">
+                <button
+                  type="button"
+                  onClick={() => {
+                    setIsOpen(false);
+                    if (role === "admin") {
+                      navigate("/admin/dashboard/announcements");
+                    } else {
+                      navigate("/employee/dashboard");
+                    }
+                  }}
+                  className="text-[#002185] dark:text-blue-400 hover:text-[#ff5500] dark:hover:text-[#ff5500] font-semibold transition-colors flex items-center gap-1 cursor-pointer"
+                >
+                  <span>{role === "admin" ? "Announcement Board" : "View Dashboard"}</span>
+                  <ArrowRight className="w-3 h-3" />
+                </button>
 
-            {/* Footer Controls */}
-            <div className="p-3 px-4 bg-[#F8FAFC] dark:bg-slate-950 border-t border-[#E2E8F0] dark:border-slate-800 flex items-center justify-between text-xs">
-              <button
-                type="button"
-                onClick={() => {
-                  setIsOpen(false);
-                  if (role === "admin") {
-                    navigate("/admin/dashboard/announcements");
-                  } else {
-                    navigate("/employee/dashboard");
-                  }
-                }}
-                className="text-[#002185] dark:text-blue-400 hover:text-[#ff5500] dark:hover:text-[#ff5500] font-semibold transition-colors flex items-center gap-1 cursor-pointer"
-              >
-                <span>{role === "admin" ? "Announcement Board" : "View Dashboard"}</span>
-                <ArrowRight className="w-3 h-3" />
-              </button>
-
-              {notifications.length > 0 && (
-                <span className="text-[11px] text-[#94A3B8] dark:text-slate-500">
-                  Realtime Broadcast Active
-                </span>
-              )}
-            </div>
-          </div>
-        )}
+                {notifications.length > 0 && (
+                  <span className="text-[11px] text-[#94A3B8] dark:text-slate-500">
+                    Realtime Broadcast Active
+                  </span>
+                )}
+              </div>
+            </motion.div>
+          )}
+        </AnimatePresence>
       </div>
 
       {/* Announcement Detail Reader Modal */}

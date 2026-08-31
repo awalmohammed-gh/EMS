@@ -8,20 +8,20 @@ import {
 import {
   UserCheck,
   CalendarDays,
-  Banknote,
   CalendarCheck,
-  Mail,
-  Building2,
-  Briefcase,
   LogIn,
   LogOut,
-  TrendingDown,
-  Eye,
-  Download,
   Clock,
   Zap,
   X,
   RefreshCw,
+  Lock,
+  CheckCircle2,
+  Megaphone,
+  Eye,
+  Download,
+  ShieldCheck,
+  Banknote,
 } from "lucide-react";
 import Loading from "../../ui/Loading";
 import ErrorMessage from "../../ui/ErrorMessage";
@@ -32,6 +32,8 @@ import AnnouncementBoard from "../../components/AnnouncementBoard";
 import ApplyLeaveModal from "../../components/modal/ApplyLeaveModal";
 import EmployeePayslipsModal from "../../components/modal/EmployeePayslipsModal";
 import ClockInOutCard from "../../components/ClockInOutCard";
+import WeeklyAttendanceChart from "../../components/WeeklyAttendanceChart";
+import { downloadPayslipPDF } from "../../utils/payslipPdfGenerator";
 
 const EmployeeDashboard = () => {
   const [dashboardData, setDashboardData] = useState(null);
@@ -59,7 +61,6 @@ const EmployeeDashboard = () => {
       setIsLoading(true);
       setIsError(null);
       const { data } = await employeeDashboardOverview();
-      console.log("Employee Dashboard Live Data:", data);
 
       if (data && data.success) {
         setDashboardData(data);
@@ -156,7 +157,6 @@ const EmployeeDashboard = () => {
       setIsLoading(true);
       setIsError(null);
       const { data } = await attendanceClockIn();
-      console.log("Clock In API response:", data);
 
       if (data.success) {
         let clockInData = null;
@@ -227,7 +227,6 @@ const EmployeeDashboard = () => {
       setIsLoading(true);
       setIsError(null);
       const { data } = await attendanceClockOut();
-      console.log("Clock Out API response:", data);
 
       if (data.success) {
         let clockOutData = null;
@@ -314,18 +313,6 @@ const EmployeeDashboard = () => {
     };
   }, []);
 
-  // Format currency
-  const formatCurrency = (amount) => {
-    return (
-      amount?.toLocaleString("en-GH", {
-        style: "currency",
-        currency: "GHS",
-        minimumFractionDigits: 2,
-        maximumFractionDigits: 2,
-      }) || "GHS 0.00"
-    );
-  };
-
   // Format date
   const formatDate = (dateString) => {
     if (!dateString) return "N/A";
@@ -343,14 +330,17 @@ const EmployeeDashboard = () => {
 
   // Format month
   const formatMonth = (monthString) => {
-    if (!monthString) return "N/A";
+    if (!monthString) return "Current Month";
     try {
-      const [year, month] = monthString.split("-");
-      const date = new Date(parseInt(year), parseInt(month) - 1);
-      return date.toLocaleDateString("en-GH", {
-        year: "numeric",
-        month: "long",
-      });
+      if (monthString.includes("-")) {
+        const [year, month] = monthString.split("-");
+        const date = new Date(parseInt(year), parseInt(month) - 1);
+        return date.toLocaleDateString("en-GH", {
+          year: "numeric",
+          month: "long",
+        });
+      }
+      return monthString;
     } catch {
       return monthString;
     }
@@ -361,11 +351,13 @@ const EmployeeDashboard = () => {
     switch (s) {
       case "approved":
       case "paid":
+      case "published":
       case "present":
       case "on time":
       case "ontime":
         return "bg-[#ECFDF5] text-[#0F7A47] border border-[#A7E8C7]";
       case "pending":
+      case "pending management review":
         return "bg-[#FFF7E6] text-[#A5620A] border border-[#F5D398]";
       case "rejected":
       case "absent":
@@ -376,7 +368,6 @@ const EmployeeDashboard = () => {
         return "bg-[#F1F3F6] text-[#51606F] border border-[#DCE2E8]";
     }
   };
-
 
   if (isLoading && !dashboardData) {
     return <Loading />;
@@ -405,8 +396,12 @@ const EmployeeDashboard = () => {
   const overview = dashboardData.overview || {};
   const recentLeaves = dashboardData.recentLeaves || [];
 
-  // Get latest payslip from overview
+  // Get latest payslip and privacy state from overview
   const latestPayslip = overview.latestPayslip || {};
+  const isPayslipReleased = Boolean(
+    latestPayslip.isReleased ||
+    (latestPayslip.status && ["paid", "published"].includes(String(latestPayslip.status).toLowerCase()))
+  );
 
   // Database-bound account status ('active', 'inactive', 'suspended')
   const currentStatus = (
@@ -451,39 +446,71 @@ const EmployeeDashboard = () => {
   const hasClockedIn = Boolean(attendanceData.clockIn);
   const hasClockedOut = Boolean(attendanceData.clockOut);
 
-  // Stats cards data
+  // Shift status label & description
+  const getShiftStatusInfo = () => {
+    if (hasClockedOut) {
+      return {
+        label: "Clocked Out",
+        desc: `Logged ${Number(attendanceData.workHours || 0).toFixed(1)} hrs today`,
+        accent: "#002185",
+        statusBadge: "bg-[#F1F3F6] text-[#51606F]",
+      };
+    }
+    if (hasClockedIn) {
+      const isLate =
+        attendanceData.status === "Late" || attendanceData.status === "late";
+      const timeStr = new Date(attendanceData.clockIn).toLocaleTimeString([], {
+        hour: "2-digit",
+        minute: "2-digit",
+      });
+      return {
+        label: isLate ? "Late Shift" : "Active Shift",
+        desc: `In: ${timeStr} · ${isLate ? "Delay recorded" : "On schedule"}`,
+        accent: isLate ? "#C24A0A" : "#0F7A47",
+        statusBadge: isLate
+          ? "bg-[#FFF0E6] text-[#C24A0A]"
+          : "bg-[#ECFDF5] text-[#0F7A47]",
+      };
+    }
+    return {
+      label: "Not Clocked In",
+      desc: "Awaiting today's shift clock-in",
+      accent: "#51606F",
+      statusBadge: "bg-[#F1F3F6] text-[#51606F]",
+    };
+  };
+
+  const shiftInfo = getShiftStatusInfo();
+
+  // 4 Standard Daily Metric Cards (Strictly Privacy Protected - Zero Salary Projections)
   const statsCards = [
     {
-      title: "Present Days",
-      value: overview.presentDays !== undefined ? overview.presentDays : 0,
+      title: "Shift Status",
+      value: shiftInfo.label,
+      icon: Clock,
+      description: shiftInfo.desc,
+      accent: shiftInfo.accent,
+    },
+    {
+      title: "Hours Logged",
+      value: `${Number(attendanceData.workHours || 0).toFixed(1)} hrs`,
       icon: UserCheck,
-      description: `Late ${overview.lateDays || 0} · On time ${overview.onTimeDays || 0}`,
-      accent: "#0F7A47",
+      description: `${overview.presentDays || 0} shifts recorded this cycle`,
+      accent: "#002185",
     },
     {
       title: "Leave Balance",
       value: `${overview.remainingLeaveDays !== undefined ? overview.remainingLeaveDays : overview.leaveBalance || 0} days`,
       icon: CalendarDays,
-      description: `Used ${overview.usedLeaveDays || 0} · Pending ${overview.pendingLeaveDays || 0}`,
-      accent: "#002185",
+      description: `${overview.usedLeaveDays || 0} used of ${overview.totalLeaveDays || 15} days`,
+      accent: "#0F7A47",
     },
     {
-      title: "Late Days",
-      value: overview.lateDays !== undefined ? overview.lateDays : 0,
-      icon: TrendingDown,
-      description: overview.totalLateMinutes
-        ? `${overview.totalLateMinutes} mins total delay`
-        : `Deduction GH₵${(overview.totalLatenessDeduction || 0).toFixed(2)}`,
+      title: "Announcements",
+      value: "Active",
+      icon: Megaphone,
+      description: "Company bulletins & notices",
       accent: "#C24A0A",
-    },
-    {
-      title: "Net Salary",
-      value: formatCurrency(overview.netSalary || 0),
-      icon: Banknote,
-      description: latestPayslip.month
-        ? formatMonth(latestPayslip.month)
-        : "Projected net take-home",
-      accent: "#002185",
     },
   ];
 
@@ -502,81 +529,42 @@ const EmployeeDashboard = () => {
     remaining: overview.remainingLeaveDays !== undefined ? overview.remainingLeaveDays : overview.leaveBalance || 15,
   };
 
+  const currentPayMonth = latestPayslip.month || `${new Date().toLocaleDateString("en-US", { month: "long" })} ${new Date().getFullYear()}`;
+
   return (
     <div className="w-full max-w-7xl mx-auto p-4 sm:p-6 lg:p-8 space-y-6 overflow-x-hidden">
-      {/* Header with Profile */}
-      <div className="bg-white border border-[#E5E9EE] rounded-xl p-6">
-        <div className="flex flex-col md:flex-row items-start md:items-center justify-between gap-5">
-          <div className="flex items-center gap-4">
-            <div className="relative w-14 h-14 rounded-lg overflow-hidden bg-[#002185] flex items-center justify-center shrink-0">
-              {employee.avatar || employee.profile_picture || employee.avatar_url ? (
-                <img
-                  src={employee.avatar || employee.profile_picture || employee.avatar_url}
-                  alt={employee.fullName || "Employee"}
-                  className="w-full h-full object-cover"
-                />
-              ) : (
-                <div className="w-full h-full bg-[#002185] text-white flex items-center justify-center font-semibold text-base select-none">
-                  {employee.fullName
-                    ? employee.fullName
-                        .trim()
-                        .split(/\s+/)
-                        .map((n) => n[0])
-                        .join("")
-                        .toUpperCase()
-                        .slice(0, 2)
-                    : "MA"}
-                </div>
-              )}
-              <span className={`absolute -bottom-0.5 -right-0.5 w-3 h-3 rounded-full border-2 border-white ${accountBadge.dotColor}`} />
-            </div>
-            <div>
-              <h1 className="text-xl font-semibold text-[#0F1B33] tracking-tight">
-                Welcome back, {employee.fullName || user?.fullName || "Mohammed Awal"}
-              </h1>
-              <div className="flex flex-wrap items-center gap-x-4 gap-y-1.5 mt-2 text-sm text-[#5B6B7C]">
-                <span className="flex items-center gap-1.5">
-                  <Briefcase className="w-3.5 h-3.5 text-[#8B98A6]" />
-                  {employee.position || user?.position || "Frontend Developer"}
-                </span>
-                <span className="flex items-center gap-1.5">
-                  <Building2 className="w-3.5 h-3.5 text-[#8B98A6]" />
-                  {employee.department || user?.department || "Engineering"}
-                </span>
-                <span className="flex items-center gap-1.5">
-                  <Mail className="w-3.5 h-3.5 text-[#8B98A6]" />
-                  {employee.email || user?.email || "awalm8043@gmail.com"}
-                </span>
-              </div>
-            </div>
-          </div>
-          <div className="flex flex-wrap items-center gap-2.5">
-            <button
-              id="btn-sync-attendance"
-              type="button"
-              onClick={handleSyncAttendance}
-              disabled={isSyncingAttendance}
-              className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold text-[#002185] bg-[#F0F4FE] hover:bg-[#E1EAFE] border border-[#C7D7FE] transition-colors cursor-pointer disabled:opacity-60"
-              title="Re-evaluate lateness delay and tiered penalty calculations for current pay period"
-            >
-              <RefreshCw
-                className={`w-3.5 h-3.5 ${
-                  isSyncingAttendance ? "animate-spin text-[#002185]" : "text-[#002185]"
-                }`}
-              />
-              <span>{isSyncingAttendance ? "Syncing..." : "Sync Attendance"}</span>
-            </button>
-            <span
-              className={`px-2.5 py-1 rounded-md text-xs font-medium ${accountBadge.className}`}
-            >
-              {accountBadge.label}
-            </span>
-            {(employee.employeeId || employee._id) && (
-              <span className="text-xs text-[#5B6B7C] bg-[#F7F8FA] px-2.5 py-1 rounded-md border border-[#E5E9EE] font-mono">
-                ID {employee.employeeId || employee._id?.slice(-6)}
-              </span>
-            )}
-          </div>
+      {/* Top Header Row with Actions */}
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+        <div>
+          <h1 className="text-2xl font-bold text-slate-900 dark:text-slate-100 tracking-tight">
+            Employee Dashboard
+          </h1>
+          <p className="text-sm text-slate-500 dark:text-slate-400 mt-1">
+            Real-time shift clocking, attendance telemetry, and monthly balance metrics
+          </p>
+        </div>
+
+        <div className="flex items-center gap-3">
+          <button
+            id="btn-sync-attendance"
+            type="button"
+            onClick={handleSyncAttendance}
+            disabled={isSyncingAttendance}
+            className="flex items-center gap-1.5 px-3.5 py-2 rounded-xl text-xs font-semibold text-[#002185] bg-[#F0F4FE] hover:bg-[#E1EAFE] border border-[#C7D7FE] transition-colors cursor-pointer disabled:opacity-60 shadow-xs"
+            title="Re-evaluate lateness delay and tiered penalty calculations for current pay period"
+          >
+            <RefreshCw
+              className={`w-3.5 h-3.5 ${
+                isSyncingAttendance ? "animate-spin text-[#002185]" : "text-[#002185]"
+              }`}
+            />
+            <span>{isSyncingAttendance ? "Updating..." : "Refresh Attendance"}</span>
+          </button>
+          <span
+            className={`px-3 py-1.5 rounded-xl text-xs font-medium ${accountBadge.className}`}
+          >
+            {accountBadge.label}
+          </span>
         </div>
       </div>
 
@@ -593,262 +581,307 @@ const EmployeeDashboard = () => {
           userRole={user?.role}
         />
 
-        {/* Stats Cards */}
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-            {statsCards.map((stat, index) => {
-              const IconComponent = stat.icon;
-              return (
-                <div
-                  key={index}
-                  className="bg-white border border-[#E5E9EE] rounded-xl p-5"
-                >
-                  <div className="flex items-center gap-1.5 text-[#8B98A6]">
-                    <IconComponent className="w-3.5 h-3.5" />
-                    <p className="text-xs font-medium">{stat.title}</p>
-                  </div>
-                  <p className="text-2xl font-semibold text-[#0F1B33] mt-2 tracking-tight truncate">
-                    {stat.value}
-                  </p>
-                  <p className="text-xs text-[#8B98A6] mt-1.5">
-                    {stat.description}
-                  </p>
+        {/* 4 Standard Daily Metric Cards */}
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+          {statsCards.map((stat, index) => {
+            const IconComponent = stat.icon;
+            return (
+              <div
+                key={index}
+                className="bg-white border border-[#E5E9EE] rounded-xl p-5"
+              >
+                <div className="flex items-center gap-1.5 text-[#8B98A6]">
+                  <IconComponent className="w-3.5 h-3.5" />
+                  <p className="text-xs font-medium">{stat.title}</p>
                 </div>
-              );
-            })}
-          </div>
-
-          {/* Company Announcement Board */}
-          <AnnouncementBoard role="employee" />
-
-          {/* Attendance Summary & Leave Balance */}
-          <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
-            {/* Attendance Summary */}
-            <div className="bg-white border border-[#E5E9EE] rounded-xl p-6">
-              <h3 className="text-sm font-semibold text-[#0F1B33] mb-4 flex items-center gap-2">
-                <UserCheck className="w-4 h-4 text-[#8B98A6]" />
-                Attendance Summary
-              </h3>
-              <div className="space-y-0">
-                <div className="flex justify-between items-center py-2.5 border-b border-[#EEF1F4]">
-                  <span className="text-sm text-[#5B6B7C]">Total Days</span>
-                  <span className="text-sm font-semibold text-[#0F1B33]">
-                    {attendanceSummary.totalDays}
-                  </span>
-                </div>
-                <div className="flex justify-between items-center py-2.5 border-b border-[#EEF1F4]">
-                  <span className="text-sm text-[#5B6B7C]">Present</span>
-                  <span className="text-sm font-semibold text-[#0F7A47]">
-                    {attendanceSummary.present}
-                  </span>
-                </div>
-                <div className="flex justify-between items-center py-2.5 border-b border-[#EEF1F4]">
-                  <span className="text-sm text-[#5B6B7C]">Late</span>
-                  <span className="text-sm font-semibold text-[#C24A0A]">
-                    {attendanceSummary.late}
-                  </span>
-                </div>
-                <div className="flex justify-between items-center py-2.5">
-                  <span className="text-sm text-[#5B6B7C]">Absent</span>
-                  <span className="text-sm font-semibold text-[#B32020]">
-                    {attendanceSummary.absent}
-                  </span>
-                </div>
+                <p className="text-2xl font-semibold text-[#0F1B33] mt-2 tracking-tight truncate">
+                  {stat.value}
+                </p>
+                <p className="text-xs text-[#8B98A6] mt-1.5">
+                  {stat.description}
+                </p>
               </div>
-            </div>
+            );
+          })}
+        </div>
 
-            {/* Leave Balance */}
-            <div className="bg-white border border-[#E5E9EE] rounded-xl p-6">
-              <h3 className="text-sm font-semibold text-[#0F1B33] mb-4 flex items-center gap-2">
-                <CalendarDays className="w-4 h-4 text-[#8B98A6]" />
-                Leave Balance
-              </h3>
-              <div className="space-y-0">
-                <div className="flex justify-between items-center py-2.5 border-b border-[#EEF1F4]">
-                  <span className="text-sm text-[#5B6B7C]">Total Leave</span>
-                  <span className="text-sm font-semibold text-[#0F1B33]">
-                    {leaveBalance.total} days
-                  </span>
-                </div>
-                <div className="flex justify-between items-center py-2.5 border-b border-[#EEF1F4]">
-                  <span className="text-sm text-[#5B6B7C]">Used</span>
-                  <span className="text-sm font-semibold text-[#C24A0A]">
-                    {leaveBalance.used} days
-                  </span>
-                </div>
-                <div className="flex justify-between items-center py-2.5">
-                  <span className="text-sm text-[#5B6B7C]">Remaining</span>
-                  <span className="text-sm font-semibold text-[#0F7A47]">
-                    {leaveBalance.remaining} days
-                  </span>
-                </div>
+        {/* Company Announcement Board */}
+        <AnnouncementBoard role="employee" />
+
+        {/* Interactive Weekly Attendance & Shift Performance Chart (Recharts) */}
+        <WeeklyAttendanceChart
+          attendanceLogs={dashboardData?.attendanceRecords || dashboardData?.attendanceLogs || []}
+          title="Weekly Attendance & Shift Performance"
+          subtitle="Monitor weekly attendance patterns and total hours worked against shift requirements"
+        />
+
+        {/* Attendance Summary & Leave Balance */}
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+          {/* Attendance Summary */}
+          <div className="bg-white border border-[#E5E9EE] rounded-xl p-6">
+            <h3 className="text-sm font-semibold text-[#0F1B33] mb-4 flex items-center gap-2">
+              <UserCheck className="w-4 h-4 text-[#8B98A6]" />
+              Attendance Summary
+            </h3>
+            <div className="space-y-0">
+              <div className="flex justify-between items-center py-2.5 border-b border-[#EEF1F4]">
+                <span className="text-sm text-[#5B6B7C]">Total Days</span>
+                <span className="text-sm font-semibold text-[#0F1B33]">
+                  {attendanceSummary.totalDays}
+                </span>
+              </div>
+              <div className="flex justify-between items-center py-2.5 border-b border-[#EEF1F4]">
+                <span className="text-sm text-[#5B6B7C]">Present</span>
+                <span className="text-sm font-semibold text-[#0F7A47]">
+                  {attendanceSummary.present}
+                </span>
+              </div>
+              <div className="flex justify-between items-center py-2.5 border-b border-[#EEF1F4]">
+                <span className="text-sm text-[#5B6B7C]">Late</span>
+                <span className="text-sm font-semibold text-[#C24A0A]">
+                  {attendanceSummary.late}
+                </span>
+              </div>
+              <div className="flex justify-between items-center py-2.5">
+                <span className="text-sm text-[#5B6B7C]">Absent</span>
+                <span className="text-sm font-semibold text-[#B32020]">
+                  {attendanceSummary.absent}
+                </span>
               </div>
             </div>
           </div>
 
-          {/* Requests by Leave Type Chart (Live Database Records) & Recent Leave Requests */}
-          <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
-            {/* Dynamic Leave Type Distribution Chart */}
-            <EmployeeLeaveChart
-              onApplyLeave={() => {
-                navigate("/employee/dashboard/leave");
-                window.scrollTo({ top: 0, behavior: "smooth" });
-              }}
-            />
-
-            {/* Recent Leave Requests */}
-            <div className="bg-white border border-[#E5E9EE] rounded-xl p-6 flex flex-col justify-between">
-              <div>
-                <div className="flex items-center justify-between mb-4">
-                  <h3 className="text-sm font-semibold text-[#0F1B33] flex items-center gap-2">
-                    <CalendarCheck className="w-4 h-4 text-[#8B98A6]" />
-                    Recent Leave Requests
-                  </h3>
-                  <button
-                    onClick={() => {
-                      navigate("/employee/dashboard/leave");
-                      scrollTo({ top: 0, behavior: "smooth" });
-                    }}
-                    className="text-xs text-[#002185] hover:underline font-medium"
-                  >
-                    View all
-                  </button>
-                </div>
-                <div className="space-y-0">
-                  {recentLeaves && recentLeaves.length > 0 ? (
-                    recentLeaves.slice(0, 4).map((request, index) => (
-                      <div
-                        key={index}
-                        className="flex items-center justify-between py-2.5 border-b border-[#EEF1F4] last:border-0"
-                      >
-                        <div>
-                          <p className="text-sm font-medium text-[#0F1B33]">
-                            {request.leaveType || "Leave Request"}
-                          </p>
-                          <p className="text-xs text-[#8B98A6] mt-0.5">
-                            {formatDate(request.startDate)} –{" "}
-                            {formatDate(request.endDate)} ({request.days || 0} days)
-                          </p>
-                        </div>
-                        <span
-                          className={`px-2 py-0.5 rounded-md text-[11px] font-medium ${getStatusColor(
-                            request.status,
-                          )}`}
-                        >
-                          {request.status || "Pending"}
-                        </span>
-                      </div>
-                    ))
-                  ) : (
-                    <div className="text-center py-8">
-                      <CalendarCheck className="w-8 h-8 mx-auto mb-3 text-[#C6CDD5]" />
-                      <p className="text-sm font-medium text-[#0F1B33]">
-                        No leave requests found
-                      </p>
-                      <p className="text-xs text-[#8B98A6] mt-0.5">
-                        You have not submitted any time-off requests yet.
-                      </p>
-                      <button
-                        onClick={() => {
-                          navigate("/employee/dashboard/leave");
-                          scrollTo({ top: 0, behavior: "smooth" });
-                        }}
-                        className="mt-3 inline-flex items-center gap-1.5 px-3 py-1.5 bg-[#002185] text-white rounded-lg text-xs font-medium hover:bg-[#001a6b] transition-colors"
-                      >
-                        Apply for Leave
-                      </button>
-                    </div>
-                  )}
-                </div>
+          {/* Leave Balance */}
+          <div className="bg-white border border-[#E5E9EE] rounded-xl p-6">
+            <h3 className="text-sm font-semibold text-[#0F1B33] mb-4 flex items-center gap-2">
+              <CalendarDays className="w-4 h-4 text-[#8B98A6]" />
+              Leave Balance
+            </h3>
+            <div className="space-y-0">
+              <div className="flex justify-between items-center py-2.5 border-b border-[#EEF1F4]">
+                <span className="text-sm text-[#5B6B7C]">Total Leave</span>
+                <span className="text-sm font-semibold text-[#0F1B33]">
+                  {leaveBalance.total} days
+                </span>
+              </div>
+              <div className="flex justify-between items-center py-2.5 border-b border-[#EEF1F4]">
+                <span className="text-sm text-[#5B6B7C]">Used</span>
+                <span className="text-sm font-semibold text-[#C24A0A]">
+                  {leaveBalance.used} days
+                </span>
+              </div>
+              <div className="flex justify-between items-center py-2.5">
+                <span className="text-sm text-[#5B6B7C]">Remaining</span>
+                <span className="text-sm font-semibold text-[#0F7A47]">
+                  {leaveBalance.remaining} days
+                </span>
               </div>
             </div>
           </div>
+        </div>
 
-          {/* Latest Payslip */}
-          <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
-            <div className="bg-white border border-[#E5E9EE] rounded-xl p-6">
+        {/* Requests by Leave Type Chart & Recent Leave Requests */}
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+          {/* Dynamic Leave Type Distribution Chart */}
+          <EmployeeLeaveChart
+            onApplyLeave={() => {
+              navigate("/employee/dashboard/leave");
+              window.scrollTo({ top: 0, behavior: "smooth" });
+            }}
+          />
+
+          {/* Recent Leave Requests */}
+          <div className="bg-white border border-[#E5E9EE] rounded-xl p-6 flex flex-col justify-between">
+            <div>
               <div className="flex items-center justify-between mb-4">
                 <h3 className="text-sm font-semibold text-[#0F1B33] flex items-center gap-2">
-                  <Banknote className="w-4 h-4 text-[#8B98A6]" />
-                  Latest Payslip
+                  <CalendarCheck className="w-4 h-4 text-[#8B98A6]" />
+                  Recent Leave Requests
                 </h3>
                 <button
                   onClick={() => {
-                    navigate("/employee/dashboard/payslips");
-                    scrollTo({ top: 0, behavior: "smooth" });
+                    navigate("/employee/dashboard/leave");
+                    window.scrollTo({ top: 0, behavior: "smooth" });
                   }}
                   className="text-xs text-[#002185] hover:underline font-medium"
                 >
                   View all
                 </button>
               </div>
-              {latestPayslip && latestPayslip.amount ? (
-                <div className="space-y-0">
-                  <div className="flex justify-between items-center py-2.5 border-b border-[#EEF1F4]">
-                    <span className="text-sm text-[#5B6B7C]">Month</span>
-                    <span className="text-sm font-semibold text-[#0F1B33]">
-                      {formatMonth(latestPayslip.month)}
-                    </span>
-                  </div>
-                  <div className="flex justify-between items-center py-2.5 border-b border-[#EEF1F4]">
-                    <span className="text-sm text-[#5B6B7C]">Gross Salary</span>
-                    <span className="text-sm font-semibold text-[#0F1B33]">
-                      {formatCurrency(latestPayslip.amount)}
-                    </span>
-                  </div>
-                  <div className="flex justify-between items-center py-2.5 border-b border-[#EEF1F4]">
-                    <span className="text-sm text-[#5B6B7C]">Status</span>
-                    <span
-                      className={`px-2 py-0.5 rounded-md text-[11px] font-medium ${getStatusColor(
-                        "Paid",
-                      )}`}
+              <div className="space-y-0">
+                {recentLeaves && recentLeaves.length > 0 ? (
+                  recentLeaves.slice(0, 4).map((request, index) => (
+                    <div
+                      key={index}
+                      className="flex items-center justify-between py-2.5 border-b border-[#EEF1F4] last:border-0"
                     >
-                      Paid
-                    </span>
-                  </div>
-                  <div className="flex justify-between items-center pt-3">
-                    <span className="text-sm font-semibold text-[#0F1B33]">
-                      Net Salary
-                    </span>
-                    <span className="text-lg font-semibold text-[#0F1B33] tracking-tight">
-                      {formatCurrency(
-                        overview.netSalary || latestPayslip.amount || 0,
-                      )}
-                    </span>
-                  </div>
-                  <div className="flex gap-2 mt-4 pt-4 border-t border-[#EEF1F4]">
+                      <div>
+                        <p className="text-sm font-medium text-[#0F1B33]">
+                          {request.leaveType || "Leave Request"}
+                        </p>
+                        <p className="text-xs text-[#8B98A6] mt-0.5">
+                          {formatDate(request.startDate)} –{" "}
+                          {formatDate(request.endDate)} ({request.days || 0} days)
+                        </p>
+                      </div>
+                      <span
+                        className={`px-2 py-0.5 rounded-md text-[11px] font-medium ${getStatusColor(
+                          request.status,
+                        )}`}
+                      >
+                        {request.status || "Pending"}
+                      </span>
+                    </div>
+                  ))
+                ) : (
+                  <div className="text-center py-8">
+                    <CalendarCheck className="w-8 h-8 mx-auto mb-3 text-[#C6CDD5]" />
+                    <p className="text-sm font-medium text-[#0F1B33]">
+                      No leave requests found
+                    </p>
+                    <p className="text-xs text-[#8B98A6] mt-0.5">
+                      You have not submitted any time-off requests yet.
+                    </p>
                     <button
-                      type="button"
                       onClick={() => {
-                        navigate("/employee/dashboard/payslips");
-                        scrollTo({ top: 0, behavior: "smooth" });
+                        navigate("/employee/dashboard/leave");
+                        window.scrollTo({ top: 0, behavior: "smooth" });
                       }}
-                      className="flex-1 flex items-center justify-center gap-2 px-4 py-2 bg-[#002185] text-white rounded-lg hover:bg-[#001a6b] transition-colors text-sm font-medium cursor-pointer"
+                      className="mt-3 inline-flex items-center gap-1.5 px-3 py-1.5 bg-[#002185] text-white rounded-lg text-xs font-medium hover:bg-[#001a6b] transition-colors cursor-pointer"
                     >
-                      <Eye className="w-4 h-4" />
-                      View
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => {
-                        navigate("/employee/dashboard/payslips");
-                        scrollTo({ top: 0, behavior: "smooth" });
-                      }}
-                      className="flex-1 flex items-center justify-center gap-2 px-4 py-2 border border-[#E5E9EE] text-[#5B6B7C] rounded-lg hover:border-[#002185] hover:text-[#002185] transition-colors text-sm font-medium cursor-pointer"
-                    >
-                      <Download className="w-4 h-4" />
-                      Download
+                      Apply for Leave
                     </button>
                   </div>
-                </div>
-              ) : (
-                <div className="text-center py-8">
-                  <Banknote className="w-8 h-8 mx-auto mb-3 text-[#C6CDD5]" />
-                  <p className="text-sm text-[#8B98A6]">No payslip available</p>
-                </div>
-              )}
+                )}
+              </div>
             </div>
           </div>
         </div>
+
+        {/* Payslip Status Widget: Enforcing strict privacy before official manager release */}
+        <div className="bg-white border border-[#E5E9EE] rounded-xl p-6">
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pb-4 border-b border-[#EEF1F4]">
+            <div className="flex items-center gap-3">
+              <div className="w-10 h-10 rounded-xl bg-[#F0F4FE] flex items-center justify-center text-[#002185]">
+                {isPayslipReleased ? (
+                  <CheckCircle2 className="w-5 h-5 text-[#0F7A47]" />
+                ) : (
+                  <Lock className="w-5 h-5 text-[#A5620A]" />
+                )}
+              </div>
+              <div>
+                <h3 className="text-base font-semibold text-[#0F1B33]">
+                  Monthly Payslip Status
+                </h3>
+                <p className="text-xs text-[#8B98A6] mt-0.5">
+                  Official financial breakdown and disbursement release tracking
+                </p>
+              </div>
+            </div>
+
+            <div className="flex items-center gap-2">
+              {isPayslipReleased ? (
+                <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-semibold bg-[#ECFDF5] text-[#0F7A47] border border-[#A7E8C7]">
+                  <CheckCircle2 className="w-3.5 h-3.5" />
+                  {currentPayMonth} Payslip: Paid &amp; Available
+                </span>
+              ) : (
+                <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-medium bg-[#FFF7E6] text-[#A5620A] border border-[#F5D398]">
+                  <Lock className="w-3.5 h-3.5" />
+                  {currentPayMonth} Payslip: Pending Management Review
+                </span>
+              )}
+            </div>
+          </div>
+
+          {/* Body depending on release state */}
+          {isPayslipReleased ? (
+            <div className="pt-5 space-y-4">
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+                <div className="p-4 bg-[#F8FAFC] border border-[#E2E8F0] rounded-xl">
+                  <p className="text-xs font-medium text-[#64748B]">Pay Month</p>
+                  <p className="text-base font-semibold text-[#0F1B33] mt-1">
+                    {formatMonth(latestPayslip.month || latestPayslip.payMonth)}
+                  </p>
+                </div>
+                <div className="p-4 bg-[#F8FAFC] border border-[#E2E8F0] rounded-xl">
+                  <p className="text-xs font-medium text-[#64748B]">Payment Status</p>
+                  <p className="text-base font-semibold text-[#0F7A47] mt-1 flex items-center gap-1">
+                    <CheckCircle2 className="w-4 h-4" />
+                    Paid &amp; Released
+                  </p>
+                </div>
+                <div className="p-4 bg-[#F0FDF4] border border-[#BBF7D0] rounded-xl">
+                  <p className="text-xs font-medium text-[#166534]">Official Payslip Status</p>
+                  <p className="text-base font-bold text-[#166534] mt-1 flex items-center gap-1.5">
+                    <ShieldCheck className="w-4 h-4" />
+                    Available on Payslips
+                  </p>
+                </div>
+              </div>
+
+              <div className="flex flex-col sm:flex-row items-center justify-between gap-3 pt-3">
+                <p className="text-xs text-[#64748B]">
+                  Payslip #{latestPayslip.payslipNumber || latestPayslip.id || "OFFICIAL"} · Disbursed via {latestPayslip.paymentMethod || "Bank Transfer"}
+                </p>
+                <div className="flex items-center gap-2.5 w-full sm:w-auto">
+                  <button
+                    type="button"
+                    onClick={() => navigate("/employee/dashboard/payslips")}
+                    className="flex-1 sm:flex-initial inline-flex items-center justify-center gap-1.5 px-4 py-2 bg-[#002185] text-white rounded-xl text-xs font-semibold hover:bg-[#001a6b] transition-colors cursor-pointer shadow-xs"
+                  >
+                    <Eye className="w-3.5 h-3.5" />
+                    View Itemized Payslip on Payslips Page
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      downloadPayslipPDF(latestPayslip);
+                      setShowToast({
+                        show: true,
+                        message: "Official payslip PDF downloaded.",
+                        type: "success",
+                      });
+                    }}
+                    className="flex-1 sm:flex-initial inline-flex items-center justify-center gap-1.5 px-4 py-2 border border-[#E5E9EE] text-[#0F1B33] rounded-xl text-xs font-semibold hover:bg-[#F8FAFC] transition-colors cursor-pointer"
+                  >
+                    <Download className="w-3.5 h-3.5" />
+                    Download PDF
+                  </button>
+                </div>
+              </div>
+            </div>
+          ) : (
+            <div className="pt-5 space-y-4">
+              <div className="p-4 bg-[#FFFDF5] border border-[#FDE68A] rounded-xl flex items-start gap-3.5">
+                <ShieldCheck className="w-5 h-5 text-[#D97706] shrink-0 mt-0.5" />
+                <div className="space-y-1">
+                  <p className="text-xs font-semibold text-[#92400E]">
+                    Strict Salary Privacy Policy Enforced
+                  </p>
+                  <p className="text-xs text-[#78350F] leading-relaxed">
+                    Salary amounts, itemized allowances, attendance penalties, and final net earnings are kept strictly confidential until management officially reviews, approves, and marks the billing cycle as <strong>Paid &amp; Published</strong>.
+                  </p>
+                </div>
+              </div>
+
+              <div className="flex flex-col sm:flex-row items-center justify-between gap-3 pt-1">
+                <p className="text-xs text-[#8B98A6]">
+                  Cycle: {currentPayMonth} · Status: Locked pending administrator payment authorization
+                </p>
+                <button
+                  type="button"
+                  onClick={() => navigate("/employee/dashboard/payslips")}
+                  className="w-full sm:w-auto inline-flex items-center justify-center gap-1.5 px-4 py-2 bg-[#F1F3F6] text-[#51606F] hover:bg-[#E2E8F0] rounded-xl text-xs font-semibold transition-colors cursor-pointer"
+                >
+                  <Eye className="w-3.5 h-3.5" />
+                  View Historical Released Payslips
+                </button>
+              </div>
+            </div>
+          )}
+        </div>
+      </div>
 
       {/* Quick Actions Floating Action Menu (Mobile & Desktop Accessible) */}
       <div className="fixed bottom-6 right-6 z-40 sm:bottom-8 sm:right-8">
@@ -868,7 +901,7 @@ const EmployeeDashboard = () => {
               : "opacity-0 translate-y-3 pointer-events-none"
           }`}
         >
-          {/* Action 0: Sync Attendance */}
+          {/* Action 0: Refresh Attendance */}
           <button
             id="quick-action-sync-attendance"
             type="button"
@@ -880,7 +913,7 @@ const EmployeeDashboard = () => {
             className="group flex items-center gap-3 pl-4 pr-3 py-2 rounded-lg bg-[#0F1B33] shadow-lg hover:bg-[#1A2947] transition-colors duration-150 cursor-pointer disabled:opacity-60"
           >
             <span className="text-xs font-medium text-white whitespace-nowrap">
-              {isSyncingAttendance ? "Syncing Logs..." : "Sync Attendance"}
+              {isSyncingAttendance ? "Updating..." : "Refresh Attendance"}
             </span>
             <div className="w-6 h-6 rounded-md flex items-center justify-center text-white bg-white/10">
               <RefreshCw
@@ -949,7 +982,7 @@ const EmployeeDashboard = () => {
             type="button"
             onClick={() => {
               setQuickActionsOpen(false);
-              if (latestPayslip && (latestPayslip.amount || latestPayslip.payslipNumber)) {
+              if (isPayslipReleased) {
                 setShowPayslipModal(true);
               } else {
                 navigate("/employee/dashboard/payslips");
@@ -958,10 +991,14 @@ const EmployeeDashboard = () => {
             className="group flex items-center gap-3 pl-4 pr-3 py-2 rounded-lg bg-[#0F1B33] shadow-lg hover:bg-[#1A2947] transition-colors duration-150 cursor-pointer"
           >
             <span className="text-xs font-medium text-white whitespace-nowrap">
-              View Payslip
+              {isPayslipReleased ? "View Current Payslip" : "Payslip Status"}
             </span>
             <div className="w-6 h-6 rounded-md flex items-center justify-center text-white bg-white/10">
-              <Banknote className="w-3.5 h-3.5" />
+              {isPayslipReleased ? (
+                <Banknote className="w-3.5 h-3.5" />
+              ) : (
+                <Lock className="w-3.5 h-3.5" />
+              )}
             </div>
           </button>
         </div>
@@ -1005,10 +1042,10 @@ const EmployeeDashboard = () => {
         />
       )}
 
-      {showPayslipModal && (latestPayslip || dashboardData?.payslips?.[0]) && (
+      {showPayslipModal && latestPayslip && (
         <EmployeePayslipsModal
-          payslip={latestPayslip || dashboardData?.payslips?.[0]}
-          allPayslips={dashboardData?.payslips || [latestPayslip]}
+          payslip={latestPayslip}
+          allPayslips={[latestPayslip]}
           onClose={() => setShowPayslipModal(false)}
         />
       )}

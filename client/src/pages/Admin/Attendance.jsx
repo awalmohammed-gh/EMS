@@ -19,9 +19,9 @@ import {
   X,
   Edit3,
   BarChart3,
-  Fingerprint,
   Trash2,
   Loader2,
+  RefreshCw,
   AlertTriangle,
   Zap,
   ShieldCheck,
@@ -43,10 +43,10 @@ import {
   allEmployees,
   allLeaves,
 } from "../../apis/fontApis";
+import Avatar from "../../components/Avatar";
 import WeeklyAttendanceChart from "../../components/WeeklyAttendanceChart";
 import AttendanceMonthlyCalendar from "../../components/AttendanceMonthlyCalendar";
 import AttendanceIntensityHeatmap from "../../components/AttendanceIntensityHeatmap";
-import BiometricBulkUploadModal from "../../components/BiometricBulkUploadModal";
 import AttendanceQuickActionsMenu from "../../components/AttendanceQuickActionsMenu";
 import ExcuseLatenessModal from "../../components/modal/ExcuseLatenessModal";
 import FlagAttendanceModal from "../../components/modal/FlagAttendanceModal";
@@ -73,7 +73,6 @@ const Attendance = () => {
   const [selectedAttendance, setSelectedAttendance] = useState(null);
   const [showDetailsModal, setShowDetailsModal] = useState(false);
   const [showAdjustmentModal, setShowAdjustmentModal] = useState(false);
-  const [showBiometricModal, setShowBiometricModal] = useState(false);
   const [excuseModalRecord, setExcuseModalRecord] = useState(null);
   const [flagModalRecord, setFlagModalRecord] = useState(null);
   const [isProcessingAction, setIsProcessingAction] = useState(false);
@@ -826,26 +825,16 @@ const Attendance = () => {
   return (
     <>
       <div className="w-full max-w-7xl mx-auto p-4 sm:p-6 lg:p-8 space-y-6 overflow-x-hidden">
-        {/* Page Header with Real-Time Database Indicator */}
+        {/* Page Header */}
         <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
           <div className="flex items-center gap-3">
             <div className="flex h-11 w-11 items-center justify-center rounded-xl bg-[#002185] shrink-0 shadow-sm">
               <CalendarDays className="h-5 w-5 text-white" />
             </div>
             <div>
-              <div className="flex items-center gap-2.5">
-                <h1 className="text-2xl font-bold text-[#002185] tracking-tight">
-                  Attendance Management
-                </h1>
-                {/* Live Database Sync Indicator */}
-                <span className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-xs font-semibold bg-[#F0FDF4] text-[#16A34A] border border-[#16A34A]/20">
-                  <span className="relative flex h-2 w-2">
-                    <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-[#16A34A] opacity-75"></span>
-                    <span className="relative inline-flex rounded-full h-2 w-2 bg-[#16A34A]"></span>
-                  </span>
-                  Live Database Sync
-                </span>
-              </div>
+              <h1 className="text-2xl font-bold text-[#002185] tracking-tight">
+                Attendance Management
+              </h1>
               <p className="text-sm text-[#64748B] mt-0.5">
                 Employee check-ins and check-outs are recorded immediately and updated in real-time.
               </p>
@@ -854,21 +843,22 @@ const Attendance = () => {
 
           <div className="flex items-center gap-2.5 flex-wrap">
             <button
-              id="btn-biometric-bulk-upload"
-              onClick={() => setShowBiometricModal(true)}
-              className="flex items-center gap-1.5 px-3.5 py-2 text-xs font-semibold text-white bg-[#002185] hover:bg-[#ff5500] rounded-xl transition-all shadow-xs"
-              title="Bulk Upload Daily Attendance Logs (CSV)"
+              id="btn-refresh-attendance-data"
+              onClick={() => fetchAttendance(false)}
+              disabled={isLoading}
+              className="flex items-center gap-1.5 px-3.5 py-2 text-xs font-semibold text-slate-700 bg-white border border-slate-200 hover:bg-slate-50 hover:text-[#002185] rounded-xl transition-all shadow-xs disabled:opacity-60 cursor-pointer"
+              title="Refresh Attendance Data"
             >
-              <Fingerprint className="w-3.5 h-3.5" />
-              <span>Biometric CSV Upload</span>
+              <RefreshCw className={`w-3.5 h-3.5 ${isLoading ? "animate-spin text-[#002185]" : "text-slate-600"}`} />
+              <span>Refresh Data</span>
             </button>
 
             <button
               onClick={handleOpenNewOverrideModal}
-              className="flex items-center gap-1.5 px-3.5 py-2 text-xs font-semibold text-[#002185] bg-[#F8FAFC] border border-[#E2E8F0] rounded-xl hover:bg-[#E2E8F0]/60 transition-colors shadow-xs"
+              className="flex items-center gap-1.5 px-3.5 py-2 text-xs font-semibold text-white bg-[#002185] hover:bg-[#ff5500] rounded-xl transition-colors shadow-xs cursor-pointer"
               title="Manual Override / Retroactive Admin Adjustment"
             >
-              <Edit3 className="w-3.5 h-3.5 text-[#ff5500]" />
+              <Edit3 className="w-3.5 h-3.5 text-white" />
               <span>Admin Override</span>
             </button>
 
@@ -1441,19 +1431,13 @@ const Attendance = () => {
                         {/* Employee Avatar & Name */}
                         <td className="px-5 py-3.5">
                           <div className="flex items-center gap-3">
-                            <div className="w-9 h-9 rounded-xl bg-[#002185] overflow-hidden flex items-center justify-center shrink-0 shadow-xs">
-                              {avatar ? (
-                                <img
-                                  src={avatar}
-                                  alt={empName}
-                                  className="w-full h-full object-cover"
-                                />
-                              ) : (
-                                <span className="text-xs font-bold text-white">
-                                  {empName.charAt(0).toUpperCase()}
-                                </span>
-                              )}
-                            </div>
+                            <Avatar
+                              src={avatar}
+                              fullName={empName}
+                              size="sm"
+                              shape="rounded"
+                              className="w-9 h-9 rounded-xl shrink-0"
+                            />
                             <div className="min-w-0">
                               <p className="font-semibold text-[#002185] truncate">
                                 {empName}
@@ -2061,21 +2045,6 @@ const Attendance = () => {
         record={flagModalRecord}
         onConfirm={handleConfirmFlag}
         isLoading={isProcessingAction}
-      />
-
-      {/* Biometric Bulk CSV Upload Modal */}
-      <BiometricBulkUploadModal
-        isOpen={showBiometricModal}
-        onClose={() => setShowBiometricModal(false)}
-        employeesList={employeesList}
-        onSuccess={(result) => {
-          fetchAttendance(false);
-          setShowToast({
-            show: true,
-            message: `Biometric attendance imported: ${result.stats?.createdCount || 0} created, ${result.stats?.updatedCount || 0} updated!`,
-            type: "success",
-          });
-        }}
       />
 
       {/* Delete Attendance Confirmation Modal */}

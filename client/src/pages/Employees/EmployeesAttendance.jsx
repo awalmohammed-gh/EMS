@@ -8,16 +8,9 @@ import {
   CheckCircle2,
   AlertTriangle,
   TrendingDown,
-  RefreshCw,
   Loader2,
   Search,
   ArrowRight,
-  ShieldAlert,
-  Timer,
-  Building2,
-  Briefcase,
-  User,
-  Sparkles,
   BarChart3,
   ListFilter,
   Check,
@@ -35,11 +28,89 @@ import {
   attendanceClockOut,
   getEmployeeAttendance,
   getNowAttendance,
-  syncAttendance,
   getSettings,
 } from "../../apis/fontApis";
 import WeeklyAttendanceChart from "../../components/WeeklyAttendanceChart";
 import AttendanceIntensityHeatmap from "../../components/AttendanceIntensityHeatmap";
+import AttendanceMonthlyCalendar from "../../components/AttendanceMonthlyCalendar";
+import {
+  ResponsiveContainer,
+  BarChart,
+  Bar,
+  XAxis,
+  YAxis,
+  CartesianGrid,
+  Tooltip as RechartsTooltip,
+  ReferenceLine,
+  Cell,
+} from "recharts";
+
+const CustomWeeklyHoursTooltip = ({ active, payload }) => {
+  if (active && payload && payload.length) {
+    const data = payload[0]?.payload || {};
+    const target = data.targetHours || 8;
+    const actual = Number(data.hours || 0);
+    const diff = Math.round((actual - target) * 10) / 10;
+    const isMet = actual >= target && target > 0;
+
+    return (
+      <div className="bg-slate-900 text-white p-3.5 rounded-xl shadow-2xl border border-slate-700 text-xs min-w-[210px] z-50">
+        <div className="flex items-center justify-between border-b border-slate-700 pb-2 mb-2">
+          <div>
+            <span className="font-bold text-white text-xs block">
+              {data.fullDay}
+            </span>
+            <span className="text-[10px] text-slate-400">
+              {data.dateFormatted}
+            </span>
+          </div>
+          <span
+            className={`px-2 py-0.5 rounded-full text-[10px] font-semibold border ${
+              isMet
+                ? "bg-emerald-950/80 text-emerald-300 border-emerald-700/60"
+                : actual > 0
+                ? "bg-amber-950/80 text-amber-300 border-amber-700/60"
+                : data.isWeekend
+                ? "bg-slate-800 text-slate-300 border-slate-700"
+                : "bg-rose-950/80 text-rose-300 border-rose-700/60"
+            }`}
+          >
+            {data.status || (isMet ? "Met Target" : "Shift Target")}
+          </span>
+        </div>
+
+        <div className="space-y-1.5">
+          <div className="flex items-center justify-between">
+            <span className="text-slate-400 flex items-center gap-1.5">
+              <Clock className="w-3.5 h-3.5 text-blue-400" />
+              Hours Logged:
+            </span>
+            <span className="font-bold text-white text-xs">{actual} hrs</span>
+          </div>
+
+          <div className="flex items-center justify-between">
+            <span className="text-slate-400">Shift Target:</span>
+            <span className="font-medium text-slate-300">{target} hrs</span>
+          </div>
+
+          {target > 0 && (
+            <div className="flex items-center justify-between pt-1.5 border-t border-slate-700/80 text-[11px]">
+              <span className="text-slate-400">Variance:</span>
+              <span
+                className={`font-semibold ${
+                  diff >= 0 ? "text-emerald-400" : "text-amber-400"
+                }`}
+              >
+                {diff >= 0 ? `+${diff}h (Met Goal)` : `${diff}h (Deficit)`}
+              </span>
+            </div>
+          )}
+        </div>
+      </div>
+    );
+  }
+  return null;
+};
 
 const EmployeesAttendance = () => {
   const { showToast, setShowToast, user } = useManagement();
@@ -58,7 +129,6 @@ const EmployeesAttendance = () => {
 
   const [isLoading, setIsLoading] = useState(false);
   const [isClocking, setIsClocking] = useState(false);
-  const [isSyncing, setIsSyncing] = useState(false);
   const [error, setError] = useState(null);
   const [employee, setEmployee] = useState(null);
   const [attendanceHistory, setAttendanceHistory] = useState([]);
@@ -434,36 +504,6 @@ const EmployeesAttendance = () => {
     }
   };
 
-  // Handle Manual Attendance Sync
-  const handleManualSync = async () => {
-    try {
-      setIsSyncing(true);
-      const res = await syncAttendance();
-      if (res?.data?.success) {
-        setShowToast({
-          show: true,
-          message: res.data.message || "Attendance logs synced and penalties re-evaluated.",
-          type: "success",
-        });
-        await Promise.all([fetchTodayAttendance(), fetchAttendanceHistory()]);
-      } else {
-        setShowToast({
-          show: true,
-          message: res?.data?.message || "Sync completed.",
-          type: "info",
-        });
-      }
-    } catch (err) {
-      setShowToast({
-        show: true,
-        message: err.response?.data?.message || "Attendance sync failed.",
-        type: "error",
-      });
-    } finally {
-      setIsSyncing(false);
-    }
-  };
-
   // Status badge styling helper
   const getStatusBadge = (status, lateMinutes = 0) => {
     const s = String(status || "").toLowerCase();
@@ -554,6 +594,79 @@ const EmployeesAttendance = () => {
       totalHours: Number(totalHours.toFixed(1)),
       totalPenaltyAmount: Number(totalPenaltyAmount.toFixed(2)),
       punctualityRate: attendedDays > 0 ? Math.round((onTimeDays / attendedDays) * 100) : 100,
+    };
+  }, [attendanceHistory, hasClockedIn, attendanceData]);
+
+  // Current Week Work Hours Data Calculation (Monday through Sunday)
+  const currentWeekWorkHours = useMemo(() => {
+    const today = new Date();
+    const currentDay = today.getDay(); // 0: Sun, 1: Mon, ..., 6: Sat
+    const distanceToMonday = currentDay === 0 ? -6 : 1 - currentDay;
+    const monday = new Date(today);
+    monday.setDate(today.getDate() + distanceToMonday);
+    monday.setHours(0, 0, 0, 0);
+
+    const days = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"];
+    const fullDays = ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"];
+
+    const weekList = days.map((dayShort, idx) => {
+      const d = new Date(monday);
+      d.setDate(monday.getDate() + idx);
+      const isoDate = d.toISOString().split("T")[0];
+      const isToday = isoDate === today.toISOString().split("T")[0];
+      const isFuture = d > today && !isToday;
+      const isWeekend = idx >= 5;
+      const targetHours = isWeekend ? 0 : 8;
+
+      let matchingLog = attendanceHistory.find((log) => {
+        if (!log?.date) return false;
+        const logIso = String(log.date).split("T")[0];
+        return logIso === isoDate;
+      });
+
+      let hours = 0;
+      let status = isWeekend ? "Weekend Off" : (isFuture ? "Upcoming Shift" : "Off");
+      let lateMinutes = 0;
+
+      if (isToday && hasClockedIn) {
+        hours = Number(attendanceData.workHours || 8);
+        status = attendanceData.status || (attendanceData.lateMinutes > 0 ? "Late" : "On Time");
+        lateMinutes = Number(attendanceData.lateMinutes || 0);
+      } else if (matchingLog) {
+        hours = Number(matchingLog.workHours || (matchingLog.status !== "Absent" ? 8 : 0));
+        status = matchingLog.status || "Present";
+        lateMinutes = Number(matchingLog.lateMinutes || matchingLog.delayMinutes || 0);
+      }
+
+      return {
+        day: dayShort,
+        fullDay: fullDays[idx],
+        date: isoDate,
+        dateFormatted: d.toLocaleDateString("en-US", { month: "short", day: "numeric" }),
+        dayLabel: `${dayShort} ${d.getDate()}`,
+        hours: Number(hours.toFixed(1)),
+        targetHours,
+        status,
+        lateMinutes,
+        isToday,
+        isFuture,
+        isWeekend,
+      };
+    });
+
+    const totalLoggedHours = weekList.reduce((acc, curr) => acc + curr.hours, 0);
+    const targetWeeklyHours = 40;
+    const completedDays = weekList.filter((d) => !d.isFuture && !d.isWeekend && d.hours > 0);
+    const dailyAverage = completedDays.length > 0 ? (totalLoggedHours / completedDays.length).toFixed(1) : "0.0";
+    const percentGoal = Math.min(150, Math.round((totalLoggedHours / targetWeeklyHours) * 100));
+
+    return {
+      days: weekList,
+      totalLoggedHours: Number(totalLoggedHours.toFixed(1)),
+      targetWeeklyHours,
+      dailyAverage,
+      percentGoal,
+      overtime: Number(Math.max(0, totalLoggedHours - targetWeeklyHours).toFixed(1)),
     };
   }, [attendanceHistory, hasClockedIn, attendanceData]);
 
@@ -706,62 +819,41 @@ const EmployeesAttendance = () => {
       {/* Top Header */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <div>
-          <div className="flex items-center gap-2">
-            <h1 className="text-2xl font-bold text-slate-900 dark:text-slate-100 tracking-tight">
-              Employee Attendance & Shifts
-            </h1>
-            <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-xs font-semibold bg-blue-50 dark:bg-blue-950/40 text-[#002185] dark:text-blue-300 border border-blue-200 dark:border-blue-800">
-              <Sparkles className="w-3 h-3 text-[#002185] dark:text-blue-400" />
-              Live Telemetry
-            </span>
-          </div>
+          <h1 className="text-2xl font-bold text-slate-900 dark:text-slate-100 tracking-tight">
+            Employee Attendance
+          </h1>
           <p className="text-sm text-slate-500 dark:text-slate-400 mt-1">
-            Real-time shift clocking, attendance tracking, and monthly compliance metrics
+            Track your daily shift hours, clock-in status, and work duration.
           </p>
         </div>
 
-        {/* Sync Attendance Action */}
-        <div className="flex items-center gap-3">
-          <button
-            id="btn-sync-attendance-top"
-            type="button"
-            disabled={isSyncing}
-            onClick={handleManualSync}
-            className="flex items-center gap-2 px-3.5 py-2 rounded-xl text-xs font-semibold bg-white dark:bg-slate-900 text-slate-700 dark:text-slate-300 border border-slate-200 dark:border-slate-800 hover:bg-slate-50 dark:hover:bg-slate-800 shadow-xs transition-colors cursor-pointer disabled:opacity-60"
-            title="Sync logs & recalculate penalties"
-          >
-            <RefreshCw
-              className={`w-3.5 h-3.5 ${isSyncing ? "animate-spin text-[#002185] dark:text-blue-400" : "text-slate-500"}`}
-            />
-            <span>{isSyncing ? "Syncing Logs..." : "Sync Attendance"}</span>
-          </button>
-
-          <div className="hidden sm:flex items-center gap-2 text-xs text-slate-600 dark:text-slate-400 bg-slate-50 dark:bg-slate-800/60 px-3 py-2 rounded-xl border border-slate-200 dark:border-slate-700 font-medium">
-            <CalendarDays className="w-4 h-4 text-[#002185] dark:text-blue-400" />
-            <span>{formattedDate}</span>
-          </div>
+        {/* Top Right: Date badge only */}
+        <div className="flex items-center gap-2 text-xs text-slate-600 dark:text-slate-400 bg-slate-50 dark:bg-slate-800/60 px-3.5 py-2 rounded-xl border border-slate-200 dark:border-slate-700 font-medium self-start sm:self-auto shadow-2xs">
+          <CalendarDays className="w-4 h-4 text-[#002185] dark:text-blue-400" />
+          <span>{formattedDate}</span>
         </div>
       </div>
 
-      {/* SECTION 1: TOP HERO PRIMARY CLOCK IN / CLOCK OUT ACTION CARD */}
+      {/* SECTION 1: MODERN HERO CARD & SHIFT CONTROL HEADER */}
       <div
         id="hero-attendance-clock-card"
-        className="w-full rounded-2xl sm:rounded-3xl bg-white dark:bg-slate-900 border border-slate-200/80 dark:border-slate-800/80 shadow-sm p-6 lg:p-7 relative overflow-hidden transition-all duration-200"
+        className="w-full bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-3xl p-6 shadow-sm space-y-6"
       >
-        {/* Top Status & Digital Clock Row */}
-        <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-6 pb-6 border-b border-slate-100 dark:border-slate-800/80">
+        {/* Top Row (Status & Live Time Integration) */}
+        <div className="flex flex-col xl:flex-row xl:items-center justify-between gap-5 pb-6 border-b border-slate-100 dark:border-slate-800/80">
+          {/* Left Side (Status Badges) */}
           <div className="space-y-2">
-            <div className="flex flex-wrap items-center gap-3">
-              {/* 4-State Live Attendance Status Badge */}
+            <div className="flex flex-wrap items-center gap-2.5">
+              {/* Shift status pill */}
               {currentStep === 1 && (
                 <div className="inline-flex items-center gap-2 px-3.5 py-1.5 rounded-full text-xs font-semibold bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-400 border border-slate-200 dark:border-slate-700">
-                  <span className="w-2.5 h-2.5 rounded-full bg-slate-400" />
+                  <span className="w-2 h-2 rounded-full bg-slate-400" />
                   <span>Not Clocked In Today</span>
                 </div>
               )}
               {currentStep === 2 && (
-                <div className="inline-flex items-center gap-2 px-3.5 py-1.5 rounded-full text-xs font-semibold bg-blue-500/10 dark:bg-blue-950/50 text-blue-700 dark:text-blue-300 border border-blue-200 dark:border-blue-800/80 shadow-xs">
-                  <span className="w-2.5 h-2.5 rounded-full bg-blue-500 animate-pulse" />
+                <div className="inline-flex items-center gap-2 px-3.5 py-1.5 rounded-full text-xs font-semibold bg-emerald-500/10 dark:bg-emerald-950/50 text-emerald-700 dark:text-emerald-300 border border-emerald-200 dark:border-emerald-800/80 shadow-xs">
+                  <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse" />
                   <span>
                     Currently Working · Clocked in at {formatTime(attendanceData.clockIn)}
                   </span>
@@ -769,7 +861,7 @@ const EmployeesAttendance = () => {
               )}
               {currentStep === 3 && (
                 <div className="inline-flex items-center gap-2 px-3.5 py-1.5 rounded-full text-xs font-semibold bg-emerald-500/10 dark:bg-emerald-950/50 text-emerald-700 dark:text-emerald-300 border border-emerald-200 dark:border-emerald-800/80 shadow-xs">
-                  <span className="w-2.5 h-2.5 rounded-full bg-emerald-500 animate-ping" />
+                  <span className="w-2 h-2 rounded-full bg-emerald-500 animate-ping" />
                   <span>
                     Shift Closing Time Reached · Ready to Clock Out
                   </span>
@@ -784,106 +876,171 @@ const EmployeesAttendance = () => {
                 </div>
               )}
 
-              {/* Shift Schedule Info Chip */}
-              <span className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-medium bg-slate-50 dark:bg-slate-800/60 text-slate-600 dark:text-slate-300 border border-slate-200 dark:border-slate-700">
+              {/* Scheduled Shift Pill */}
+              <span className="inline-flex items-center gap-1.5 px-3.5 py-1.5 rounded-full text-xs font-medium bg-slate-50 dark:bg-slate-800/60 text-slate-600 dark:text-slate-300 border border-slate-200 dark:border-slate-700">
                 <Clock className="w-3.5 h-3.5 text-[#002185] dark:text-blue-400" />
-                Scheduled Shift: {shiftEvaluation.formattedStartTime} – {shiftEvaluation.formattedEndTime}
+                Scheduled: {shiftEvaluation.formattedStartTime} – {shiftEvaluation.formattedEndTime}
               </span>
 
-              {/* Lateness or Punctuality Pill */}
+              {/* Late fine badge if applicable */}
               {hasClockedIn && attendanceData.lateMinutes > 0 && (
-                <span className="inline-flex items-center gap-1 px-3 py-1.5 rounded-full text-xs font-semibold bg-amber-50 dark:bg-amber-950/40 text-amber-700 dark:text-amber-300 border border-amber-200 dark:border-amber-800">
+                <span className="inline-flex items-center gap-1 px-3.5 py-1.5 rounded-full text-xs font-semibold bg-amber-50 dark:bg-amber-950/40 text-amber-700 dark:text-amber-300 border border-amber-200 dark:border-amber-800">
                   <AlertTriangle className="w-3.5 h-3.5 text-amber-500" />
                   {attendanceData.lateMinutes} min late
-                  {attendanceData.latePenalty > 0 && ` (GH₵ ${Number(attendanceData.latePenalty).toFixed(2)})`}
+                  {attendanceData.latePenalty > 0 && ` · GH₵ ${Number(attendanceData.latePenalty).toFixed(2)}`}
                 </span>
               )}
             </div>
-
-            <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-xs text-slate-500 dark:text-slate-400 pt-1">
-              <span className="flex items-center gap-1.5">
-                <User className="w-3.5 h-3.5 text-[#002185] dark:text-blue-400" />
-                {employee?.fullName || user?.fullName || "Employee"} (ID:{" "}
-                {employee?.employeeId || user?.employeeId || "Staff"})
-              </span>
-              <span>•</span>
-              <span className="flex items-center gap-1.5">
-                <Building2 className="w-3.5 h-3.5 text-[#002185] dark:text-blue-400" />
-                {employee?.department || user?.department || "General"}
-              </span>
-              <span>•</span>
-              <span className="flex items-center gap-1.5">
-                <Briefcase className="w-3.5 h-3.5 text-[#002185] dark:text-blue-400" />
-                {employee?.position || user?.position || "Staff"}
-              </span>
-            </div>
           </div>
 
-          {/* Prominent Live Digital Clock Widget */}
-          <div className="flex items-center gap-4 p-3.5 sm:px-5 sm:py-3.5 rounded-2xl bg-slate-50 dark:bg-slate-800/80 border border-slate-200 dark:border-slate-700/80 self-start lg:self-auto shadow-2xs">
-            <div className="text-right">
-              <span className="text-[10px] uppercase font-bold tracking-wider text-slate-400 dark:text-slate-500 block">
-                Live Official Time
-              </span>
-              <span className="text-xl sm:text-2xl font-mono font-extrabold text-slate-900 dark:text-slate-100 tracking-tight">
+          {/* Right Side (Live Time & Action Buttons) */}
+          <div className="flex flex-wrap items-center gap-3 self-start xl:self-auto">
+            {/* Compact Live Digital Clock Box */}
+            <div className="flex items-center gap-2.5 px-3.5 py-2 rounded-xl bg-slate-50 dark:bg-slate-800/80 border border-slate-200 dark:border-slate-700/80 shadow-2xs">
+              <Clock className="w-4 h-4 text-[#002185] dark:text-blue-400 shrink-0" />
+              <span className="text-sm sm:text-base font-mono font-bold text-slate-900 dark:text-slate-100 tracking-tight">
                 {formattedDigitalTime}
               </span>
-              <span className="text-[11px] font-medium text-slate-500 dark:text-slate-400 block sm:hidden">
-                {formattedDate}
-              </span>
             </div>
-            <div className="w-10 h-10 rounded-xl bg-[#002185] dark:bg-blue-600 text-white flex items-center justify-center shadow-xs">
-              <Clock className="w-5 h-5" />
+
+            {/* Action Buttons directly beside the clock */}
+            <div className="flex items-center gap-2.5">
+              {/* Button 1: Clock In */}
+              <button
+                id="btn-primary-clock-in"
+                type="button"
+                onClick={handleClockIn}
+                disabled={hasClockedIn || isClocking}
+                className={`flex items-center justify-center gap-2 px-4 sm:px-5 py-2.5 rounded-xl text-xs sm:text-sm font-bold transition-all duration-200 shadow-xs cursor-pointer ${
+                  hasClockedIn
+                    ? "bg-slate-100 dark:bg-slate-800 text-slate-500 dark:text-slate-400 border border-slate-200 dark:border-slate-700 cursor-not-allowed"
+                    : isClocking
+                    ? "bg-blue-400 text-white cursor-not-allowed"
+                    : "bg-[#002185] hover:bg-[#001760] dark:bg-blue-600 dark:hover:bg-blue-700 text-white active:scale-[0.98]"
+                }`}
+                title={
+                  hasClockedIn
+                    ? `Clocked In (${formatTime(attendanceData.clockIn)})`
+                    : "Click to clock in now"
+                }
+              >
+                {hasClockedIn ? (
+                  <>
+                    <CheckCircle2 className="w-4 h-4 text-emerald-600 dark:text-emerald-400" />
+                    <span>Clocked In ({formatTime(attendanceData.clockIn)})</span>
+                  </>
+                ) : isClocking ? (
+                  <>
+                    <Loader2 className="w-4 h-4 animate-spin" />
+                    <span>Recording...</span>
+                  </>
+                ) : (
+                  <>
+                    <LogIn className="w-4 h-4" />
+                    <span>Clock In</span>
+                  </>
+                )}
+              </button>
+
+              {/* Button 2: Clock Out */}
+              <button
+                id="btn-primary-clock-out"
+                type="button"
+                onClick={handleClockOut}
+                disabled={!hasClockedIn || hasClockedOut || !isClockOutUnlocked || isClocking}
+                className={`flex items-center justify-center gap-2 px-4 sm:px-5 py-2.5 rounded-xl text-xs sm:text-sm font-bold transition-all duration-200 shadow-xs cursor-pointer ${
+                  hasClockedOut
+                    ? "bg-slate-100 dark:bg-slate-800 text-slate-500 dark:text-slate-400 border border-slate-200 dark:border-slate-700 cursor-not-allowed"
+                    : !hasClockedIn
+                    ? "bg-slate-100 dark:bg-slate-800 text-slate-400 dark:text-slate-500 border border-slate-200 dark:border-slate-700 cursor-not-allowed"
+                    : !isClockOutUnlocked
+                    ? "bg-slate-100 dark:bg-slate-800 text-slate-400 dark:text-slate-500 border border-slate-200 dark:border-slate-700 cursor-not-allowed"
+                    : isClocking
+                    ? "bg-amber-400 text-white cursor-not-allowed"
+                    : "bg-amber-600 hover:bg-amber-700 text-white active:scale-[0.98]"
+                }`}
+                title={
+                  hasClockedOut
+                    ? `Shift Completed (${formatTime(attendanceData.clockOut)})`
+                    : !hasClockedIn
+                    ? `Locked until ${shiftEvaluation.formattedEndTime}`
+                    : !isClockOutUnlocked
+                    ? `Locked until ${shiftEvaluation.formattedEndTime}`
+                    : "Click to clock out and end your shift"
+                }
+              >
+                {hasClockedOut ? (
+                  <>
+                    <CheckCircle2 className="w-4 h-4 text-emerald-600 dark:text-emerald-400" />
+                    <span>Clocked Out ({formatTime(attendanceData.clockOut)})</span>
+                  </>
+                ) : !isClockOutUnlocked && hasClockedIn ? (
+                  <>
+                    <Lock className="w-4 h-4 text-slate-400" />
+                    <span>Locked until {shiftEvaluation.formattedEndTime}</span>
+                  </>
+                ) : isClocking ? (
+                  <>
+                    <Loader2 className="w-4 h-4 animate-spin" />
+                    <span>Recording...</span>
+                  </>
+                ) : (
+                  <>
+                    <LogOut className="w-4 h-4" />
+                    <span>Clock Out</span>
+                  </>
+                )}
+              </button>
             </div>
           </div>
         </div>
 
-        {/* Middle Telemetry & Live Timers */}
-        <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 py-6 border-b border-slate-100 dark:border-slate-800/80">
-          {/* Card A: Check-In Timestamp */}
+        {/* 3-Card Shift Metrics Grid */}
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-4 sm:gap-6">
+          {/* Card 1: Clock In Record */}
           <div
-            className={`p-4 rounded-xl border transition-all ${
+            className={`p-5 rounded-2xl border transition-all ${
               hasClockedIn
-                ? "bg-emerald-50/40 dark:bg-emerald-950/20 border-emerald-200 dark:border-emerald-800/60"
+                ? "bg-emerald-50/30 dark:bg-emerald-950/20 border-emerald-200 dark:border-emerald-800/60"
                 : "bg-slate-50/70 dark:bg-slate-800/40 border-slate-200 dark:border-slate-800"
             }`}
           >
-            <div className="flex items-center justify-between text-xs text-slate-500 dark:text-slate-400 mb-1.5">
+            <div className="flex items-center justify-between text-xs text-slate-500 dark:text-slate-400 mb-2">
               <span className="flex items-center gap-1.5 font-semibold text-slate-700 dark:text-slate-300">
                 <LogIn className={`w-4 h-4 ${hasClockedIn ? "text-emerald-600 dark:text-emerald-400" : "text-slate-400"}`} />
-                Clock In Record
+                Clock In
               </span>
               {hasClockedIn && (
-                <span className="text-[10px] font-bold uppercase px-1.5 py-0.5 rounded bg-emerald-100 dark:bg-emerald-900/60 text-emerald-800 dark:text-emerald-300">
+                <span className="text-[10px] font-bold uppercase px-2 py-0.5 rounded bg-emerald-100 dark:bg-emerald-900/60 text-emerald-800 dark:text-emerald-300">
                   Recorded
                 </span>
               )}
             </div>
-            <p className="text-xl font-bold font-mono text-slate-900 dark:text-slate-100">
+            <p className="text-2xl font-bold font-mono text-slate-900 dark:text-slate-100">
               {hasClockedIn ? formatTime(attendanceData.clockIn) : "--:--"}
             </p>
-            <p className="text-xs text-slate-500 dark:text-slate-400 mt-1 truncate">
+            <p className="text-xs text-slate-500 dark:text-slate-400 mt-1.5 truncate">
               {hasClockedIn
                 ? attendanceData.status === "Late" || attendanceData.lateMinutes > 0
                   ? `Recorded with ${attendanceData.lateMinutes || 0}m delay`
-                  : "Verified on schedule"
+                  : "Recorded on-time"
                 : `Ready to record today's check-in (Start: ${shiftEvaluation.formattedStartTime})`}
             </p>
           </div>
 
-          {/* Card B: Live Elapsed Shift Time */}
+          {/* Card 2: Shift Duration (Active Timer) */}
           <div
-            className={`p-4 rounded-xl border transition-all ${
+            className={`p-5 rounded-2xl border transition-all ${
               hasClockedIn && !hasClockedOut
-                ? "bg-blue-50/60 dark:bg-blue-950/30 border-blue-200 dark:border-blue-800"
+                ? "bg-blue-50/50 dark:bg-blue-950/30 border-blue-200 dark:border-blue-800"
                 : hasClockedOut
-                ? "bg-emerald-50/40 dark:bg-emerald-950/20 border-emerald-200 dark:border-emerald-800/60"
+                ? "bg-emerald-50/30 dark:bg-emerald-950/20 border-emerald-200 dark:border-emerald-800/60"
                 : "bg-slate-50/70 dark:bg-slate-800/40 border-slate-200 dark:border-slate-800"
             }`}
           >
-            <div className="flex items-center justify-between text-xs text-slate-500 dark:text-slate-400 mb-1.5">
+            <div className="flex items-center justify-between text-xs text-slate-500 dark:text-slate-400 mb-2">
               <span className="flex items-center gap-1.5 font-semibold text-slate-700 dark:text-slate-300">
-                <Timer
+                <Clock
                   className={`w-4 h-4 ${
                     hasClockedIn && !hasClockedOut
                       ? "text-[#002185] dark:text-blue-400"
@@ -896,64 +1053,64 @@ const EmployeesAttendance = () => {
               </span>
               {hasClockedIn && !hasClockedOut && (
                 <span className="text-[10px] font-bold uppercase px-2 py-0.5 rounded bg-blue-100 dark:bg-blue-900/60 text-[#002185] dark:text-blue-300 animate-pulse">
-                  Ticking Live
+                  Active
                 </span>
               )}
               {hasClockedOut && (
-                <span className="text-[10px] font-bold uppercase px-1.5 py-0.5 rounded bg-emerald-100 dark:bg-emerald-900/60 text-emerald-800 dark:text-emerald-300">
+                <span className="text-[10px] font-bold uppercase px-2 py-0.5 rounded bg-emerald-100 dark:bg-emerald-900/60 text-emerald-800 dark:text-emerald-300">
                   Total Logged
                 </span>
               )}
             </div>
-            <p className="text-xl font-bold font-mono text-slate-900 dark:text-slate-100">
+            <p className="text-2xl font-bold font-mono text-slate-900 dark:text-slate-100">
               {hasClockedIn && !hasClockedOut
                 ? liveElapsedDuration?.formatted || "0h 0m 0s"
                 : hasClockedOut
                 ? `${attendanceData.workHours || 0} hrs`
                 : "0h 0m 0s"}
             </p>
-            <p className="text-xs text-slate-500 dark:text-slate-400 mt-1 truncate">
+            <p className="text-xs text-slate-500 dark:text-slate-400 mt-1.5 truncate">
               {hasClockedIn && !hasClockedOut
-                ? "Active counter in progress"
+                ? "Active work counter"
                 : hasClockedOut
                 ? "Approved work hours for payroll"
                 : "Standard target: 8.0 hours"}
             </p>
           </div>
 
-          {/* Card C: Check-Out Timestamp */}
+          {/* Card 3: Clock Out Record */}
           <div
-            className={`p-4 rounded-xl border transition-all ${
+            className={`p-5 rounded-2xl border transition-all ${
               hasClockedOut
-                ? "bg-emerald-50/40 dark:bg-emerald-950/20 border-emerald-200 dark:border-emerald-800/60"
+                ? "bg-emerald-50/30 dark:bg-emerald-950/20 border-emerald-200 dark:border-emerald-800/60"
                 : "bg-slate-50/70 dark:bg-slate-800/40 border-slate-200 dark:border-slate-800"
             }`}
           >
-            <div className="flex items-center justify-between text-xs text-slate-500 dark:text-slate-400 mb-1.5">
+            <div className="flex items-center justify-between text-xs text-slate-500 dark:text-slate-400 mb-2">
               <span className="flex items-center gap-1.5 font-semibold text-slate-700 dark:text-slate-300">
                 <LogOut className={`w-4 h-4 ${hasClockedOut ? "text-emerald-600 dark:text-emerald-400" : "text-slate-400"}`} />
-                Clock Out Record
+                Clock Out
               </span>
               {hasClockedOut ? (
-                <span className="text-[10px] font-bold uppercase px-1.5 py-0.5 rounded bg-emerald-100 dark:bg-emerald-900/60 text-emerald-800 dark:text-emerald-300">
+                <span className="text-[10px] font-bold uppercase px-2 py-0.5 rounded bg-emerald-100 dark:bg-emerald-900/60 text-emerald-800 dark:text-emerald-300">
                   Completed
                 </span>
               ) : isClockOutUnlocked && hasClockedIn ? (
-                <span className="text-[10px] font-bold uppercase px-1.5 py-0.5 rounded bg-amber-100 dark:bg-amber-900/60 text-amber-800 dark:text-amber-300">
+                <span className="text-[10px] font-bold uppercase px-2 py-0.5 rounded bg-amber-100 dark:bg-amber-900/60 text-amber-800 dark:text-amber-300">
                   Unlocked
                 </span>
               ) : (
-                <span className="text-[10px] font-bold uppercase px-1.5 py-0.5 rounded bg-slate-100 dark:bg-slate-800 text-slate-500 dark:text-slate-400">
+                <span className="text-[10px] font-bold uppercase px-2 py-0.5 rounded bg-slate-100 dark:bg-slate-800 text-slate-500 dark:text-slate-400">
                   Locked
                 </span>
               )}
             </div>
-            <p className="text-xl font-bold font-mono text-slate-900 dark:text-slate-100">
+            <p className="text-2xl font-bold font-mono text-slate-900 dark:text-slate-100">
               {hasClockedOut ? formatTime(attendanceData.clockOut) : "--:--"}
             </p>
-            <p className="text-xs text-slate-500 dark:text-slate-400 mt-1 truncate">
+            <p className="text-xs text-slate-500 dark:text-slate-400 mt-1.5 truncate">
               {hasClockedOut
-                ? "Day closed and finalized"
+                ? "Day finalized"
                 : isClockOutUnlocked && hasClockedIn
                 ? "Ready to clock out now"
                 : `Unlocks at ${shiftEvaluation.formattedEndTime}`}
@@ -961,17 +1118,13 @@ const EmployeesAttendance = () => {
           </div>
         </div>
 
-        {/* State 2 Active Work Notice Banner */}
+        {/* Streamlined Status Banner */}
         {currentStep === 2 && (
-          <div className="my-4 p-3.5 rounded-xl bg-amber-500/10 dark:bg-amber-950/40 border border-amber-500/20 flex flex-col sm:flex-row sm:items-center justify-between gap-3 text-xs">
+          <div className="p-3.5 rounded-2xl bg-amber-500/10 dark:bg-amber-950/40 border border-amber-500/20 flex flex-col sm:flex-row sm:items-center justify-between gap-3 text-xs">
             <div className="flex items-center gap-2.5 text-amber-800 dark:text-amber-300">
               <Lock className="w-4 h-4 text-amber-600 dark:text-amber-400 shrink-0" />
               <div>
-                <span className="font-bold">Shift In Progress:</span> Clock out unlocks at scheduled closing time (
-                <span className="font-mono font-semibold">{shiftEvaluation.formattedEndTime}</span>).
-                <span className="ml-1 opacity-90">
-                  (Unlocks automatically in <span className="font-mono font-semibold">{shiftEvaluation.countdownText}</span>)
-                </span>
+                <span className="font-semibold">Shift In Progress:</span> Clock-out unlocks at scheduled closing time ({shiftEvaluation.formattedEndTime}).
               </div>
             </div>
 
@@ -988,122 +1141,15 @@ const EmployeesAttendance = () => {
           </div>
         )}
 
-        {/* State 4 Completed Banner */}
         {currentStep === 4 && (
-          <div className="my-4 p-3.5 rounded-xl bg-emerald-500/10 dark:bg-emerald-950/40 border border-emerald-500/20 flex items-center gap-2.5 text-xs text-emerald-800 dark:text-emerald-300">
+          <div className="p-3.5 rounded-2xl bg-emerald-500/10 dark:bg-emerald-950/40 border border-emerald-500/20 flex items-center gap-2.5 text-xs text-emerald-800 dark:text-emerald-300">
             <CheckCircle2 className="w-4 h-4 text-emerald-600 dark:text-emerald-400 shrink-0" />
             <div>
-              <span className="font-bold">Shift Completed for Today:</span> Total approved work hours:{" "}
-              <span className="font-mono font-bold">{attendanceData.workHours || 0} hrs</span>. Records are synced with payroll.
+              <span className="font-semibold">Shift Completed for Today:</span> Total approved work hours:{" "}
+              <span className="font-mono font-bold">{attendanceData.workHours || 0} hrs</span>. Day finalized.
             </div>
           </div>
         )}
-
-        {/* High-Contrast 4-State Action CTA Controls */}
-        <div className="pt-6 flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-4">
-          <div className="flex items-center gap-2 text-xs text-slate-600 dark:text-slate-400">
-            <ShieldAlert className="w-4 h-4 text-[#002185] dark:text-blue-400 shrink-0" />
-            <span>
-              {currentStep === 1 &&
-                "Punctual check-ins before scheduled start time ensure full compensation without late penalties."}
-              {currentStep === 2 &&
-                `Active work hours underway. Clock-out unlocks automatically at ${shiftEvaluation.formattedEndTime}.`}
-              {currentStep === 3 &&
-                "Shift closing time has been reached! You may now clock out to record your completed shift."}
-              {currentStep === 4 &&
-                "Your daily shift records have been saved and synced with the payroll engine."}
-            </span>
-          </div>
-
-          <div className="flex items-center gap-3">
-            {/* Button 1: Clock In */}
-            <button
-              id="btn-primary-clock-in"
-              type="button"
-              onClick={handleClockIn}
-              disabled={hasClockedIn || isClocking}
-              className={`flex items-center justify-center gap-2 px-5 py-2.5 rounded-xl text-xs sm:text-sm font-bold transition-all duration-200 shadow-sm cursor-pointer ${
-                hasClockedIn
-                  ? "bg-slate-100 dark:bg-slate-800 text-slate-400 dark:text-slate-500 border border-slate-200 dark:border-slate-700 cursor-not-allowed opacity-80"
-                  : isClocking
-                  ? "bg-blue-400 text-white cursor-not-allowed"
-                  : "bg-[#002185] hover:bg-[#001760] dark:bg-blue-600 dark:hover:bg-blue-700 text-white active:scale-[0.98]"
-              }`}
-              title={
-                hasClockedIn
-                  ? `Clocked In (${formatTime(attendanceData.clockIn)})`
-                  : "Click to clock in now"
-              }
-            >
-              {hasClockedIn ? (
-                <>
-                  <CheckCircle2 className="w-4 h-4 text-emerald-600 dark:text-emerald-400" />
-                  <span>Clocked In ({formatTime(attendanceData.clockIn)})</span>
-                </>
-              ) : isClocking ? (
-                <>
-                  <Loader2 className="w-4 h-4 animate-spin" />
-                  <span>Recording Check-In...</span>
-                </>
-              ) : (
-                <>
-                  <LogIn className="w-4 h-4" />
-                  <span>Clock In Now</span>
-                </>
-              )}
-            </button>
-
-            {/* Button 2: Clock Out */}
-            <button
-              id="btn-primary-clock-out"
-              type="button"
-              onClick={handleClockOut}
-              disabled={!hasClockedIn || hasClockedOut || !isClockOutUnlocked || isClocking}
-              className={`flex items-center justify-center gap-2 px-5 py-2.5 rounded-xl text-xs sm:text-sm font-bold transition-all duration-200 shadow-sm cursor-pointer ${
-                hasClockedOut
-                  ? "bg-slate-100 dark:bg-slate-800 text-slate-400 dark:text-slate-500 border border-slate-200 dark:border-slate-700 cursor-not-allowed opacity-80"
-                  : !hasClockedIn
-                  ? "bg-slate-100 dark:bg-slate-800 text-slate-400 dark:text-slate-500 border border-slate-200 dark:border-slate-700 cursor-not-allowed"
-                  : !isClockOutUnlocked
-                  ? "bg-slate-100 dark:bg-slate-800 text-slate-400 dark:text-slate-500 border border-slate-200 dark:border-slate-700 cursor-not-allowed"
-                  : isClocking
-                  ? "bg-amber-400 text-white cursor-not-allowed"
-                  : "bg-amber-600 hover:bg-amber-700 text-white active:scale-[0.98]"
-              }`}
-              title={
-                hasClockedOut
-                  ? "Shift Completed for Today"
-                  : !hasClockedIn
-                  ? `Clock out unlocks at scheduled closing time (${shiftEvaluation.formattedEndTime})`
-                  : !isClockOutUnlocked
-                  ? `Clock out unlocks at scheduled closing time (${shiftEvaluation.formattedEndTime})`
-                  : "Click to clock out and end your shift"
-              }
-            >
-              {hasClockedOut ? (
-                <>
-                  <CheckCircle2 className="w-4 h-4 text-emerald-600 dark:text-emerald-400" />
-                  <span>Shift Completed</span>
-                </>
-              ) : !isClockOutUnlocked && hasClockedIn ? (
-                <>
-                  <Lock className="w-4 h-4 text-slate-400" />
-                  <span>Locked until {shiftEvaluation.formattedEndTime}</span>
-                </>
-              ) : isClocking ? (
-                <>
-                  <Loader2 className="w-4 h-4 animate-spin" />
-                  <span>Recording Check-Out...</span>
-                </>
-              ) : (
-                <>
-                  <LogOut className="w-4 h-4" />
-                  <span>Clock Out & End Shift</span>
-                </>
-              )}
-            </button>
-          </div>
-        </div>
 
         {/* Early Clock-Out Override Modal */}
         {showOverrideModal && (
@@ -1246,6 +1292,156 @@ const EmployeesAttendance = () => {
         </div>
       </div>
 
+      {/* SECTION: WEEKLY WORK HOURS CHART (RECHARTS) */}
+      <div id="weekly-work-hours-section" className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl p-5 shadow-sm space-y-4">
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+          <div className="flex items-center gap-2.5">
+            <div className="w-9 h-9 rounded-xl bg-[#002185]/10 dark:bg-blue-900/30 text-[#002185] dark:text-blue-400 flex items-center justify-center">
+              <BarChart3 className="w-4 h-4" />
+            </div>
+            <div>
+              <h3 className="text-sm font-bold text-slate-900 dark:text-slate-100">
+                Weekly Work Hours (Current Week)
+              </h3>
+              <p className="text-xs text-slate-500 dark:text-slate-400">
+                Total hours logged across daily shifts vs. standard 8.0h shift target (Mon – Sun)
+              </p>
+            </div>
+          </div>
+
+          {/* Quick Metrics Badges */}
+          <div className="flex flex-wrap items-center gap-2">
+            <div className="px-3 py-1.5 rounded-xl bg-slate-50 dark:bg-slate-800/80 border border-slate-200 dark:border-slate-700 flex items-center gap-2">
+              <span className="text-[11px] font-medium text-slate-500 dark:text-slate-400">Week Total:</span>
+              <span className="text-xs font-bold text-slate-900 dark:text-slate-100">
+                {currentWeekWorkHours.totalLoggedHours} / {currentWeekWorkHours.targetWeeklyHours}h
+              </span>
+            </div>
+            <div className="px-3 py-1.5 rounded-xl bg-emerald-50 dark:bg-emerald-950/40 border border-emerald-200 dark:border-emerald-800 flex items-center gap-1.5">
+              <span className="w-1.5 h-1.5 rounded-full bg-emerald-500" />
+              <span className="text-xs font-semibold text-emerald-700 dark:text-emerald-300">
+                {currentWeekWorkHours.percentGoal}% of 40h Target
+              </span>
+            </div>
+            <div className="px-3 py-1.5 rounded-xl bg-blue-50 dark:bg-blue-950/40 border border-blue-200 dark:border-blue-800 flex items-center gap-1.5">
+              <span className="text-xs font-semibold text-blue-700 dark:text-blue-300">
+                Avg: {currentWeekWorkHours.dailyAverage}h / day
+              </span>
+            </div>
+          </div>
+        </div>
+
+        {/* Recharts Bar Chart Container */}
+        <div className="h-64 w-full pt-1">
+          <ResponsiveContainer width="100%" height="100%">
+            <BarChart
+              data={currentWeekWorkHours.days}
+              margin={{ top: 12, right: 12, left: -20, bottom: 4 }}
+            >
+              <CartesianGrid
+                strokeDasharray="3 3"
+                vertical={false}
+                stroke="#94a3b8"
+                strokeOpacity={0.15}
+              />
+              <XAxis
+                dataKey="dayLabel"
+                tickLine={false}
+                axisLine={{ stroke: "#94a3b8", opacity: 0.2 }}
+                tick={{ fontSize: 11, fill: "#64748b" }}
+              />
+              <YAxis
+                domain={[0, (dataMax) => Math.max(10, Math.ceil(dataMax + 1))]}
+                tickLine={false}
+                axisLine={{ stroke: "#94a3b8", opacity: 0.2 }}
+                tick={{ fontSize: 11, fill: "#64748b" }}
+                unit="h"
+              />
+              <RechartsTooltip
+                content={<CustomWeeklyHoursTooltip />}
+                cursor={{ fill: "rgba(148, 163, 184, 0.08)" }}
+              />
+              <ReferenceLine
+                y={8}
+                stroke="#002185"
+                strokeDasharray="4 4"
+                strokeWidth={1.5}
+                label={{
+                  value: "8.0h Shift Target",
+                  position: "insideTopRight",
+                  fill: "#002185",
+                  fontSize: 10,
+                  fontWeight: 600,
+                }}
+              />
+              <Bar dataKey="hours" name="Work Hours" radius={[6, 6, 0, 0]} maxBarSize={44}>
+                {currentWeekWorkHours.days.map((entry, index) => {
+                  const fillColor = entry.isToday
+                    ? "#002185"
+                    : entry.hours >= 8
+                    ? "#10b981"
+                    : entry.hours > 0
+                    ? "#f59e0b"
+                    : entry.isWeekend
+                    ? "#cbd5e1"
+                    : "#e2e8f0";
+                  return <Cell key={`cell-${index}`} fill={fillColor} />;
+                })}
+              </Bar>
+            </BarChart>
+          </ResponsiveContainer>
+        </div>
+
+        {/* Day-by-Day Quick Cards Breakdown */}
+        <div className="grid grid-cols-2 sm:grid-cols-4 md:grid-cols-7 gap-2 pt-2 border-t border-slate-100 dark:border-slate-800/80">
+          {currentWeekWorkHours.days.map((item) => (
+            <div
+              key={item.day}
+              className={`p-2.5 rounded-xl border transition-all ${
+                item.isToday
+                  ? "bg-blue-50/70 dark:bg-blue-950/40 border-blue-300 dark:border-blue-800 shadow-2xs"
+                  : "bg-slate-50/60 dark:bg-slate-800/40 border-slate-200/70 dark:border-slate-800"
+              }`}
+            >
+              <div className="flex items-center justify-between">
+                <span className="text-xs font-bold text-slate-700 dark:text-slate-300">
+                  {item.day}
+                </span>
+                {item.isToday && (
+                  <span className="text-[9px] font-bold uppercase tracking-wider text-[#002185] dark:text-blue-400 bg-blue-100 dark:bg-blue-900/60 px-1 py-0.5 rounded">
+                    Today
+                  </span>
+                )}
+              </div>
+              <div className="mt-1.5 flex items-baseline justify-between">
+                <span className="text-sm font-extrabold text-slate-900 dark:text-slate-100">
+                  {item.hours > 0 ? `${item.hours}h` : (item.isFuture ? "--" : (item.isWeekend ? "Off" : "0h"))}
+                </span>
+                <span
+                  className={`text-[10px] font-medium ${
+                    item.hours >= 8
+                      ? "text-emerald-600 dark:text-emerald-400"
+                      : item.hours > 0
+                      ? "text-amber-600 dark:text-amber-400"
+                      : "text-slate-400 dark:text-slate-500"
+                  }`}
+                >
+                  {item.hours >= 8
+                    ? "Met"
+                    : item.hours > 0
+                    ? "Partial"
+                    : item.isFuture
+                    ? "Upcoming"
+                    : item.isWeekend
+                    ? "Weekend"
+                    : "Absent"}
+                </span>
+              </div>
+            </div>
+          ))}
+        </div>
+      </div>
+
       {/* SECTION 3: MONTHLY ATTENDANCE LOGS TABLE / WEEKLY CHART */}
       <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl shadow-sm overflow-hidden">
         {/* Table & View Controls Header */}
@@ -1264,6 +1460,19 @@ const EmployeesAttendance = () => {
           <div className="flex flex-wrap items-center gap-2.5">
             {/* View Switcher */}
             <div className="inline-flex p-1 rounded-xl bg-slate-100 dark:bg-slate-800 border border-slate-200 dark:border-slate-700">
+              <button
+                type="button"
+                id="btn-view-calendar"
+                onClick={() => setActiveView("calendar")}
+                className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold transition-colors cursor-pointer ${
+                  activeView === "calendar"
+                    ? "bg-white dark:bg-slate-900 text-[#002185] dark:text-blue-400 shadow-xs font-bold"
+                    : "text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-slate-100"
+                }`}
+              >
+                <CalendarDays className="w-3.5 h-3.5" />
+                Monthly Calendar
+              </button>
               <button
                 type="button"
                 id="btn-view-heatmap"
@@ -1350,6 +1559,25 @@ const EmployeesAttendance = () => {
             )}
           </div>
         </div>
+
+        {/* View Mode: Monthly Calendar */}
+        {activeView === "calendar" && (
+          <div className="p-4 sm:p-6">
+            <AttendanceMonthlyCalendar
+              attendanceLogs={attendanceHistory}
+              employeesList={employee ? [employee] : user ? [user] : []}
+              onSelectDate={(dateKey) => {
+                setSearchTerm(dateKey);
+                setActiveView("table");
+                setShowToast({
+                  show: true,
+                  message: `Filtering logs for ${dateKey}`,
+                  type: "info",
+                });
+              }}
+            />
+          </div>
+        )}
 
         {/* View Mode: Intensity Heatmap */}
         {activeView === "heatmap" && (

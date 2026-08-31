@@ -1,5 +1,5 @@
 import { useState, useEffect } from "react";
-import { UserPlus, Download, Check } from "lucide-react";
+import { UserPlus, Download, Check, RefreshCw } from "lucide-react";
 import { allEmployees } from "../../apis/fontApis";
 import { EmployeeDirectory } from "../../components/EmployeeDirectory";
 import AddEmployee from "../../components/modal/AddEmployee";
@@ -93,6 +93,17 @@ const Employees = () => {
           </div>
 
           <div className="flex flex-wrap items-center gap-2.5 self-start sm:self-auto">
+            <button
+              type="button"
+              onClick={fetchEmployees}
+              disabled={isLoading}
+              title="Refresh staff records"
+              className="px-3.5 py-2 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-700 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-750 transition-all flex items-center gap-1.5 shadow-2xs text-xs font-semibold cursor-pointer disabled:opacity-60"
+            >
+              <RefreshCw className={`w-3.5 h-3.5 ${isLoading ? "animate-spin text-blue-600 dark:text-blue-400" : "text-slate-500 dark:text-slate-400"}`} />
+              <span>Refresh</span>
+            </button>
+
             <button
               type="button"
               onClick={handleDownloadAllCSV}

@@ -1,6 +1,8 @@
 import {
   getNotifications as apiGetNotifications,
   markNotificationAsRead as apiMarkNotificationAsRead,
+  markNotificationAsUnread as apiMarkNotificationAsUnread,
+  toggleNotificationRead as apiToggleNotificationRead,
   markAllNotificationsAsRead as apiMarkAllNotificationsAsRead,
   deleteNotification as apiDeleteNotification,
   deleteAllNotifications as apiDeleteAllNotifications,
@@ -55,13 +57,18 @@ const computeMetrics = (items) => {
 
   const unread = items.filter((n) => !n.is_read && n.unread !== false).length;
   const leave = items.filter((n) => n.category === "leave").length;
-  const payroll = items.filter((n) => n.category === "payroll").length;
+  const payroll = items.filter(
+    (n) => n.category === "payroll" || n.type === "payroll_alert" || n.category === "payslip"
+  ).length;
   const system = items.filter(
     (n) =>
-      n.category === "system" ||
+      (n.category === "system" ||
       n.category === "announcement" ||
       n.category === "attendance" ||
-      !n.category
+      !n.category) &&
+      n.category !== "payroll" &&
+      n.type !== "payroll_alert" &&
+      n.category !== "payslip"
   ).length;
 
   return {
@@ -191,6 +198,85 @@ export const notificationService = {
       this.getNotifications({ role, userId: options.userId });
       return { success: false, error: error.message };
     }
+  },
+
+  /**
+   * Mark a single notification as unread (optimistic update + backend sync)
+   */
+  async markAsUnread(id, options = {}) {
+    const role = options.role === "admin" ? "admin" : "employee";
+    const targetId = String(id);
+
+    // Optimistic local update
+    if (notificationCache[role]?.items) {
+      notificationCache[role].items = notificationCache[role].items.map((item) =>
+        String(item.id || item._id) === targetId
+          ? { ...item, is_read: false, unread: true }
+          : item
+      );
+      notificationCache[role].metrics = computeMetrics(notificationCache[role].items);
+      notificationCache[role].unreadCount = notificationCache[role].metrics.unread;
+      notifySubscribers(role);
+    }
+
+    try {
+      await apiMarkNotificationAsUnread(targetId);
+      return { success: true };
+    } catch (error) {
+      console.error("[NotificationService] Error marking notification unread:", error);
+      this.getNotifications({ role, userId: options.userId });
+      return { success: false, error: error.message };
+    }
+  },
+
+  /**
+   * Toggle read/unread state of a single notification
+   */
+  async toggleReadStatus(id, options = {}) {
+    const role = options.role === "admin" ? "admin" : "employee";
+    const targetId = String(id);
+    let targetIsRead = false;
+
+    if (notificationCache[role]?.items) {
+      const currentItem = notificationCache[role].items.find(
+        (item) => String(item.id || item._id) === targetId
+      );
+      targetIsRead = Boolean(currentItem?.is_read);
+
+      notificationCache[role].items = notificationCache[role].items.map((item) =>
+        String(item.id || item._id) === targetId
+          ? { ...item, is_read: !targetIsRead, unread: targetIsRead }
+          : item
+      );
+      notificationCache[role].metrics = computeMetrics(notificationCache[role].items);
+      notificationCache[role].unreadCount = notificationCache[role].metrics.unread;
+      notifySubscribers(role);
+    }
+
+    try {
+      if (targetIsRead) {
+        await apiMarkNotificationAsUnread(targetId);
+      } else {
+        await apiMarkNotificationAsRead(targetId);
+      }
+      return { success: true };
+    } catch {
+      try {
+        await apiToggleNotificationRead(targetId);
+        return { success: true };
+      } catch (error) {
+        console.error("[NotificationService] Error toggling notification read status:", error);
+        this.getNotifications({ role, userId: options.userId });
+        return { success: false, error: error.message };
+      }
+    }
+  },
+
+  /**
+   * Dismiss notification (alias for deleteNotification)
+   */
+  async dismissNotification(id, options = {}) {
+    return this.deleteNotification(id, options);
   },
 
   /**
@@ -378,8 +464,23 @@ export const useNotificationManager = (role = "admin", options = {}) => {
     [normalizedRole, userId]
   );
 
+  const markAsUnread = useCallback(
+    (id) => notificationService.markAsUnread(id, { role: normalizedRole, userId }),
+    [normalizedRole, userId]
+  );
+
+  const toggleReadStatus = useCallback(
+    (id) => notificationService.toggleReadStatus(id, { role: normalizedRole, userId }),
+    [normalizedRole, userId]
+  );
+
   const deleteNotification = useCallback(
     (id) => notificationService.deleteNotification(id, { role: normalizedRole, userId }),
+    [normalizedRole, userId]
+  );
+
+  const dismissNotification = useCallback(
+    (id) => notificationService.dismissNotification(id, { role: normalizedRole, userId }),
     [normalizedRole, userId]
   );
 
@@ -395,8 +496,11 @@ export const useNotificationManager = (role = "admin", options = {}) => {
     isLoading,
     refresh,
     markAsRead,
-    markAllAsRead,
+    markAsUnread,
+    toggleReadStatus,
     deleteNotification,
+    dismissNotification,
+    markAllAsRead,
     deleteAllNotifications,
     deleteAll: deleteAllNotifications,
   };

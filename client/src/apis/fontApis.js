@@ -307,8 +307,9 @@ export const getAdminDashboardStats = () => {
   return api.get("/admin/dashboard-stats");
 };
 
-export const getAdminPayrollSummary = () => {
-  return api.get("/admin/payroll/summary");
+export const getAdminPayrollSummary = (params) => {
+  const queryParams = typeof params === "string" ? { month: params } : params;
+  return api.get("/admin/payroll/summary", { params: queryParams });
 };
 
 export const employeeDashboardOverview = () =>{
@@ -325,6 +326,14 @@ export const getNotifications = (params) => {
 
 export const markNotificationAsRead = (id) => {
   return api.put(`/notifications/${id}/read`, {});
+};
+
+export const markNotificationAsUnread = (id) => {
+  return api.put(`/notifications/${id}/unread`, {});
+};
+
+export const toggleNotificationRead = (id) => {
+  return api.patch(`/notifications/${id}/toggle`, {});
 };
 
 export const markAllNotificationsAsRead = (params) => {
@@ -492,5 +501,17 @@ export const uploadProfilePicture = (formData) => {
 export const removeProfilePicture = () => {
   return api.delete("/users/profile-picture");
 };
+
+// Recent Activity Feed API (Last 5 logs from Attendance and Payroll collections)
+export const getRecentActivity = (params) => {
+  return api.get("/dashboard/admin-dashboard/recent-activity", { params }).catch(() => {
+    return api.get("/admin/dashboard/recent-activity", { params }).catch(() => {
+      return api.get("/dashboard/recent-activity", { params });
+    });
+  });
+};
+
+export const getRecentActivityFeed = getRecentActivity;
+
 
 

@@ -38,6 +38,7 @@ import DepartmentStatusVisualizer from "../../components/DepartmentStatusVisuali
 import AnnouncementBoard from "../../components/AnnouncementBoard";
 import DashboardMetricsSkeleton from "../../components/DashboardMetricsSkeleton";
 import PenaltyPayrollImpactChart from "../../components/PenaltyPayrollImpactChart";
+import RecentActivityFeed from "../../components/RecentActivityFeed";
 import DashboardSummaryMetrics from "../../components/DashboardSummaryMetrics";
 
 const AdminDashboard = () => {
@@ -864,6 +865,9 @@ const AdminDashboard = () => {
 
       {/* 6-Month Attendance Penalty Impact Visualizer */}
       <PenaltyPayrollImpactChart />
+
+      {/* Real-time Recent Activity Feed (Attendance & Payroll Logs) */}
+      <RecentActivityFeed />
 
       {/* Summary Cards: Payroll & Department Matrix */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">

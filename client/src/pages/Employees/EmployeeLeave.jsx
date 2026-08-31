@@ -268,7 +268,6 @@ const EmployeeLeave = () => {
   });
 
   // Calculate summary stats
-  const totalRequests = leaveRequests.length;
   const approvedRequests = leaveRequests.filter(
     (leave) => (leave.status || "").toLowerCase() === "approved",
   ).length;
@@ -308,12 +307,8 @@ const EmployeeLeave = () => {
               <CalendarDays className="w-6 h-6" />
             </div>
             <div>
-              <h1 className="text-2xl font-bold text-[#002185] tracking-tight flex items-center gap-2">
-                <span>My Leave Requests & Tracking</span>
-                <span className="px-2 py-0.5 rounded-full text-[11px] font-bold bg-[#F0FDF4] text-[#16A34A] border border-[#16A34A]/30 flex items-center gap-1">
-                  <span className="w-1.5 h-1.5 rounded-full bg-[#16A34A] animate-pulse" />
-                  Real-time Sync
-                </span>
+              <h1 className="text-2xl font-bold text-[#002185] tracking-tight">
+                My Leave Requests & Tracking
               </h1>
               <p className="text-xs text-[#64748B] mt-0.5">
                 Apply for leave, track approval decisions in real-time, and manage your annual balances

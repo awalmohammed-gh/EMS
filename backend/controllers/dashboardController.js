@@ -5,7 +5,8 @@ import { Leave } from "../models/leaveModel.js";
 import { Payroll } from "../models/payrollModel.js";
 import { User } from "../models/userModel.js";
 import CompanySettings from "../models/CompanySettings.js";
-import { evaluateLatenessPenalty } from "./payrollController.js";
+import { evaluateLatenessPenalty, livePayrollStore } from "./payrollController.js";
+import { computeNetSalary } from "../services/payrollEngine.js";
 import {
   getEmployeeLiveToday,
   liveAttendanceStore,
@@ -623,26 +624,52 @@ export const employeeDashboardOverview = async (req, res) => {
       Math.max(0, elapsedWorkdays - presentDays - approvedLeaveDaysThisMonth)
     );
 
-    // 7. Net Salary Calculation
-    const absenceRate = Number(companySettings.absenceDeductionRate || 10);
-    const totalAbsenceDeduction = absentDays * absenceRate;
-    const totalDeductions = parseFloat((totalAbsenceDeduction + totalLatenessDeduction).toFixed(2));
-    const calculatedNetSalary = parseFloat(Math.max(0, empBaseSalary - totalDeductions).toFixed(2));
+    // 7. Net Salary Calculation - Single Source of Truth from payrollEngine
+    const absenceRate = Number(
+      companySettings.absenceDeductionRate !== undefined
+        ? companySettings.absenceDeductionRate
+        : (companySettings.absenceRate !== undefined ? companySettings.absenceRate : 15.00)
+    );
+    const computedSalary = computeNetSalary({
+      baseSalary: empBaseSalary,
+      allowances: 0,
+      absentDays,
+      dailyAbsenceRate: absenceRate,
+      latenessFines: totalLatenessDeduction,
+      otherDeductions: 0,
+    });
+    const totalAbsenceDeduction = computedSalary.absenceDeductions;
+    const totalDeductions = computedSalary.totalDeductions;
+    const calculatedNetSalary = computedSalary.netSalary;
 
-    // Latest payslip from Payroll collection
+    // Latest published payslip from MongoDB Payroll collection or live in-memory store (Single Source of Truth)
     let latestPayslip = null;
     if (validObjectId) {
       try {
-        const dbPayslip = await Payroll.findOne({ employee: validObjectId })
+        const dbPayslip = await Payroll.findOne({
+          employee: validObjectId,
+          status: { $in: ["Published", "published", "Paid", "paid"] },
+        })
           .sort({ paymentDate: -1, createdAt: -1 })
           .lean();
         if (dbPayslip) {
+          const finalNet = dbPayslip.netSalary !== undefined ? dbPayslip.netSalary : dbPayslip.netPay;
           latestPayslip = {
+            _id: dbPayslip._id,
+            payslipNumber: dbPayslip.payslipNumber,
             month: dbPayslip.payMonth || dbPayslip.month,
-            amount: dbPayslip.netSalary !== undefined ? dbPayslip.netSalary : dbPayslip.netPay,
-            netSalary: dbPayslip.netSalary !== undefined ? dbPayslip.netSalary : dbPayslip.netPay,
+            amount: finalNet,
+            netSalary: finalNet,
             basicSalary: dbPayslip.basicSalary || dbPayslip.baseSalary,
+            baseSalary: dbPayslip.basicSalary || dbPayslip.baseSalary,
+            allowances: dbPayslip.allowances || 0,
+            absentDaysDeduction: dbPayslip.absentDaysDeduction || 0,
+            latenessDeduction: dbPayslip.latenessDeduction || 0,
+            totalAttendanceDeductions: dbPayslip.totalAttendanceDeductions !== undefined
+              ? dbPayslip.totalAttendanceDeductions
+              : ((dbPayslip.absentDaysDeduction || 0) + (dbPayslip.latenessDeduction || 0)),
             status: dbPayslip.status || "Paid",
+            breakdown: dbPayslip.breakdown || null,
           };
         }
       } catch (pErr) {
@@ -650,13 +677,65 @@ export const employeeDashboardOverview = async (req, res) => {
       }
     }
 
-    const netSalaryToReturn = latestPayslip?.netSalary !== undefined && latestPayslip?.netSalary > 0
-      ? latestPayslip.netSalary
-      : calculatedNetSalary;
+    if (!latestPayslip && (validObjectId || employee?.employeeId)) {
+      const match = livePayrollStore.find((p) => {
+        const pEmpId = String(p.employee?._id || p.employee || p.employeeId || "");
+        const status = String(p.status || "").toLowerCase();
+        const isPublished = status === "published" || status === "paid";
+        return isPublished && (pEmpId === String(validObjectId) || pEmpId === employee?.employeeId || p.employeeId === employee?.employeeId);
+      });
+      if (match) {
+        const finalNet = match.netSalary !== undefined ? match.netSalary : match.netPay;
+        latestPayslip = {
+          _id: match._id,
+          payslipNumber: match.payslipNumber,
+          month: match.payMonth || match.month,
+          amount: finalNet,
+          netSalary: finalNet,
+          basicSalary: match.basicSalary || match.baseSalary,
+          baseSalary: match.basicSalary || match.baseSalary,
+          allowances: match.allowances || 0,
+          absentDaysDeduction: match.absentDaysDeduction || 0,
+          latenessDeduction: match.latenessDeduction || 0,
+          totalAttendanceDeductions: match.totalAttendanceDeductions !== undefined
+            ? match.totalAttendanceDeductions
+            : ((match.absentDaysDeduction || 0) + (match.latenessDeduction || 0)),
+          status: match.status || "Paid",
+          breakdown: match.breakdown || null,
+        };
+      }
+    }
+
+    // When an official published payslip exists in MongoDB, its snapshot is IMMUTABLE
+    const hasPublished = Boolean(latestPayslip && latestPayslip.netSalary !== undefined);
+    
+    // Privacy Guard: Do not leak unreleased base salary or live unreleased net pay estimations on main dashboard
+    const payslipStatusObj = hasPublished
+      ? {
+          isReleased: true,
+          ...latestPayslip,
+        }
+      : {
+          isReleased: false,
+          status: "Pending Management Review",
+          month: `${now.toLocaleDateString("en-US", { month: "long" })} ${currentYear}`,
+          message: "Official monthly payslip pending management calculation and payment release.",
+        };
 
     return res.status(200).json({
       success: true,
-      employee,
+      employee: {
+        _id: employee._id,
+        employeeId: employee.employeeId,
+        fullName: employee.fullName,
+        email: employee.email,
+        phone: employee.phone,
+        department: employee.department,
+        position: employee.position,
+        role: employee.role || "employee",
+        status: employee.status || "active",
+        isActive: employee.isActive !== false,
+      },
       overview: {
         presentDays,
         lateDays,
@@ -667,15 +746,29 @@ export const employeeDashboardOverview = async (req, res) => {
         usedLeaveDays,
         remainingLeaveDays,
         pendingLeaveDays,
-        baseSalary: empBaseSalary,
-        totalDeductions,
-        totalAbsenceDeduction,
-        totalLatenessDeduction,
         totalLateMinutes,
-        netSalary: netSalaryToReturn,
-        latestPayslip,
+        // Privacy Protected: Only exposed when officially published/released
+        isPayslipReleased: hasPublished,
+        latestPayslip: payslipStatusObj,
+        ...(hasPublished
+          ? {
+              baseSalary: latestPayslip.basicSalary || latestPayslip.baseSalary,
+              netSalary: latestPayslip.netSalary,
+              totalDeductions: latestPayslip.totalAttendanceDeductions,
+              totalAbsenceDeduction: latestPayslip.absentDaysDeduction,
+              totalLatenessDeduction: latestPayslip.latenessDeduction,
+            }
+          : {
+              baseSalary: null,
+              netSalary: null,
+              totalDeductions: null,
+              totalAbsenceDeduction: null,
+              totalLatenessDeduction: null,
+            }),
       },
       todayAttendance: todayAttendanceFormatted,
+      attendanceRecords: allAttendanceRecords,
+      attendanceLogs: allAttendanceRecords,
       recentLeaves,
     });
   } catch (error) {
@@ -690,5 +783,114 @@ export const employeeDashboardOverview = async (req, res) => {
 // Dashboard Alerts & System Notifications (uses live DB/Reactive store - zero mock data)
 export const getDashboardNotifications = async (req, res) => {
   return getNotifications(req, res);
+};
+
+/**
+ * Controller to fetch the last 5 logs from Attendance and Payroll collections
+ * for the real-time 'Recent Activity' feed component.
+ */
+export const getRecentActivityFeed = async (req, res) => {
+  try {
+    const [recentAttendance, recentPayroll] = await Promise.all([
+      Attendance.find({})
+        .sort({ updatedAt: -1, createdAt: -1, date: -1 })
+        .limit(5)
+        .populate("employee", "fullName employeeId department position profilePicture avatar")
+        .lean(),
+      Payroll.find({})
+        .sort({ updatedAt: -1, createdAt: -1, paymentDate: -1 })
+        .limit(5)
+        .populate("employee", "fullName employeeId department position profilePicture avatar")
+        .lean(),
+    ]);
+
+    const attendanceActivity = (recentAttendance || []).map((att) => {
+      const emp = att.employee || {};
+      const empName = emp.fullName || "Employee";
+      const status = (att.status || "").toLowerCase();
+      let action = "Attendance Logged";
+
+      if (att.clockOut) {
+        action = `Clocked Out (${att.workHours ? Number(att.workHours).toFixed(1) + "h" : "Shift End"})`;
+      } else if (att.clockIn) {
+        action = status === "late"
+          ? `Clocked In Late (${att.lateMinutes || att.delayMinutes || 0}m)`
+          : "Clocked In (On-Time)";
+      } else if (status === "absent") {
+        action = att.isExcused ? "Excused Absence" : "Marked Absent";
+      }
+
+      return {
+        _id: String(att._id),
+        id: String(att._id),
+        category: "attendance",
+        action,
+        title: `${empName} - ${action}`,
+        employeeName: empName,
+        employeeId: emp.employeeId || att.employeeId || "N/A",
+        department: emp.department || "General",
+        avatar: emp.avatar || emp.profilePicture || null,
+        status: att.status || "Present",
+        date: att.date,
+        clockIn: att.clockIn || att.clockInTime,
+        clockOut: att.clockOut || att.clockOutTime,
+        workHours: att.workHours || 0,
+        penalty: Number(att.latePenalty || 0),
+        timestamp: att.updatedAt || att.clockOut || att.clockIn || att.createdAt || new Date(att.date),
+      };
+    });
+
+    const payrollActivity = (recentPayroll || []).map((pay) => {
+      const emp = pay.employee || {};
+      const empName = emp.fullName || "Employee";
+      const amount = Number(
+        pay.netSalary !== undefined
+          ? pay.netSalary
+          : (pay.netPay !== undefined ? pay.netPay : (pay.basicSalary || 0))
+      );
+      const st = pay.status || "Published";
+      const action = `Payslip ${st} (${pay.payMonth || "Current Period"})`;
+
+      return {
+        _id: String(pay._id),
+        id: String(pay._id),
+        category: "payroll",
+        action,
+        title: `${empName} - ${action}`,
+        employeeName: empName,
+        employeeId: emp.employeeId || "N/A",
+        department: emp.department || "General",
+        avatar: emp.avatar || emp.profilePicture || null,
+        status: st,
+        amount: parseFloat(amount.toFixed(2)),
+        payslipNumber: pay.payslipNumber || "N/A",
+        payMonth: pay.payMonth || "N/A",
+        paymentDate: pay.paymentDate,
+        timestamp: pay.updatedAt || pay.paymentDate || pay.createdAt,
+      };
+    });
+
+    const combinedActivities = [...attendanceActivity, ...payrollActivity].sort(
+      (a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime()
+    );
+
+    return res.status(200).json({
+      success: true,
+      data: {
+        attendance: attendanceActivity,
+        payroll: payrollActivity,
+        combined: combinedActivities,
+      },
+      attendanceLogs: attendanceActivity,
+      payrollLogs: payrollActivity,
+      recentActivities: combinedActivities,
+    });
+  } catch (error) {
+    console.error("Error in getRecentActivityFeed:", error);
+    return res.status(500).json({
+      success: false,
+      message: error.message || "Failed to fetch recent activity feed.",
+    });
+  }
 };
 

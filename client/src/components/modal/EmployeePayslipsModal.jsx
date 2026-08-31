@@ -170,12 +170,12 @@ const EmployeePayslipsModal = ({ payslip, allPayslips = [], onClose }) => {
   const totalAttendancePenalties = absenceTotal + latenessTotal;
   const totalAllDeductions = totalAttendancePenalties + totalCustomDeductions;
   const netSalary = Number(
-    payslip.breakdown?.netSalary !== undefined
-      ? payslip.breakdown.netSalary
-      : payslip.netSalary !== undefined
+    payslip.netSalary !== undefined && payslip.netSalary !== null
       ? payslip.netSalary
-      : payslip.netPay !== undefined
+      : payslip.netPay !== undefined && payslip.netPay !== null
       ? payslip.netPay
+      : payslip.breakdown?.netSalary !== undefined
+      ? payslip.breakdown.netSalary
       : Math.max(0, baseSalary + totalAllowances - totalAllDeductions)
   );
 
@@ -348,9 +348,6 @@ const EmployeePayslipsModal = ({ payslip, allPayslips = [], onClose }) => {
                 <h2 className="text-xl font-bold text-[#002185]">
                   Employee Payslip & Deduction Breakdown
                 </h2>
-                <span className="inline-flex items-center gap-1 text-[10px] font-semibold bg-[#F0FDF4] text-[#166534] border border-[#BBF7D0] px-2 py-0.5 rounded-full">
-                  <ShieldCheck className="w-3 h-3" /> Live DB Synced
-                </span>
               </div>
               <p className="text-xs text-[#64748B] mt-0.5">
                 Pay Period: <span className="font-semibold text-[#0F172A]">{payslip.month || payslip.payMonth}</span> • Ref: {payslip.payslipNumber || payslip.id || "N/A"}

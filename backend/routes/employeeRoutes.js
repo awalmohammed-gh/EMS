@@ -44,6 +44,7 @@ employeeRouter.get("/live-summary", employeeAuth, getEmployeeLivePayrollSummary)
 employeeRouter.get("/payroll-summary", employeeAuth, getEmployeeLivePayrollSummary);
 
 // Real-Time Dashboard Overview Endpoint for Employee
+employeeRouter.get("/dashboard-summary", employeeAuth, employeeDashboardOverview);
 employeeRouter.get("/dashboard-overview", employeeAuth, employeeDashboardOverview);
 employeeRouter.get("/dashboard", employeeAuth, employeeDashboardOverview);
 employeeRouter.get("/overview", employeeAuth, employeeDashboardOverview);

@@ -64,6 +64,11 @@ const employeeSchema = new mongoose.Schema(
       default: "",
     },
 
+    avatarUrl: {
+      type: String,
+      default: "",
+    },
+
     profilePicture: {
       type: String,
       default: "",

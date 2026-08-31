@@ -18,9 +18,15 @@ import {
   getEmployeeLivePayrollSummary,
   getMonthlyPayrollRun,
 } from "../controllers/payrollController.js";
+import { getAdminPayrollSummary } from "../controllers/payrollAdminController.js";
 import { employeeAuth } from "../middleware/employeeAuth.js";
 
 const payrollRouter = express.Router();
+
+// Dynamic KPI Summary Metrics Aggregation (Admin)
+payrollRouter.get("/summary", verifyAdmin, getAdminPayrollSummary);
+payrollRouter.get("/admin/summary", verifyAdmin, getAdminPayrollSummary);
+payrollRouter.get("/admin/payroll/summary", verifyAdmin, getAdminPayrollSummary);
 
 // Real-Time Monthly Calendar Absence & Lateness Calculation Engine (Employee Live Summary)
 payrollRouter.get("/live-summary", employeeAuth, getEmployeeLivePayrollSummary);

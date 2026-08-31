@@ -60,6 +60,14 @@ const Payslips = () => {
   // Active Employees count from DB
   const [activeEmployeesCount, setActiveEmployeesCount] = useState(0);
 
+  // Dynamic Aggregation KPI Summary State from Backend
+  const [payrollSummary, setPayrollSummary] = useState({
+    totalEmployees: 0,
+    totalPaidOut: 0,
+    pendingApprovals: 0,
+    taxesAndDeductions: 0,
+  });
+
   // Action Menu Dropdown State for rows
   const [activeMenuId, setActiveMenuId] = useState(null);
 
@@ -129,16 +137,30 @@ const Payslips = () => {
     }
   };
 
-  const fetchActiveStaffSummary = async () => {
+  const fetchActiveStaffSummary = async (monthToFilter = filterMonth) => {
     try {
-      const { data: summaryData } = await getAdminPayrollSummary();
-      if (summaryData?.success && summaryData?.totalEmployees !== undefined && Number(summaryData.totalEmployees) > 0) {
-        setActiveEmployeesCount(Number(summaryData.totalEmployees));
-        return;
+      const params = {};
+      if (monthToFilter && monthToFilter !== "All Months" && monthToFilter !== "All" && monthToFilter !== "all") {
+        params.month = monthToFilter;
       }
-      const { data: namesData } = await namesList();
-      if (namesData?.success && Array.isArray(namesData?.employees)) {
-        setActiveEmployeesCount(namesData.employees.length);
+      const { data: summaryData } = await getAdminPayrollSummary(params);
+      if (summaryData?.success || summaryData?.totalPaidOut !== undefined) {
+        setPayrollSummary({
+          totalEmployees: Number(summaryData.totalEmployees || 0),
+          totalPaidOut: Number(summaryData.totalPaidOut !== undefined ? summaryData.totalPaidOut : (summaryData.totalPayrollDisbursed || 0)),
+          pendingApprovals: Number(summaryData.pendingApprovals !== undefined ? summaryData.pendingApprovals : (summaryData.pendingDisbursements || 0)),
+          taxesAndDeductions: Number(summaryData.taxesAndDeductions !== undefined ? summaryData.taxesAndDeductions : 0),
+        });
+        if (summaryData.totalEmployees) {
+          setActiveEmployeesCount(Number(summaryData.totalEmployees));
+        }
+      }
+
+      if (!summaryData?.totalEmployees) {
+        const { data: namesData } = await namesList();
+        if (namesData?.success && Array.isArray(namesData?.employees)) {
+          setActiveEmployeesCount(namesData.employees.length);
+        }
       }
     } catch (err) {
       console.warn("Could not fetch active employees summary:", err);
@@ -147,8 +169,11 @@ const Payslips = () => {
 
   useEffect(() => {
     fetchPayslips();
-    fetchActiveStaffSummary();
   }, []);
+
+  useEffect(() => {
+    fetchActiveStaffSummary(filterMonth);
+  }, [filterMonth]);
 
   // Filter Data
   const filteredData = payslips.filter((pay) => {
@@ -606,7 +631,7 @@ const Payslips = () => {
                   Total Employees
                 </p>
                 <p className="text-2xl font-bold text-slate-900 dark:text-white mt-1">
-                  {activeEmployeesCount || totalEmployees || 0}
+                  {payrollSummary.totalEmployees || activeEmployeesCount || totalEmployees || 0}
                 </p>
                 <span className="text-xs text-slate-500 dark:text-slate-400 block mt-0.5">Active Staff on Record</span>
               </div>
@@ -621,7 +646,7 @@ const Payslips = () => {
                   Total Paid Out
                 </p>
                 <p className="text-2xl font-bold text-emerald-600 dark:text-emerald-400 mt-1">
-                  {formatCurrency(totalPaid)}
+                  GH₵{Number(payrollSummary.totalPaidOut !== undefined ? payrollSummary.totalPaidOut : totalPaid).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                 </p>
                 <span className="text-xs text-slate-500 dark:text-slate-400 block mt-0.5">Disbursed to Staff</span>
               </div>
@@ -636,7 +661,7 @@ const Payslips = () => {
                   Pending Approvals
                 </p>
                 <p className="text-2xl font-bold text-amber-600 dark:text-amber-400 mt-1">
-                  {formatCurrency(totalPending)}
+                  GH₵{Number(payrollSummary.pendingApprovals !== undefined ? payrollSummary.pendingApprovals : totalPending).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                 </p>
                 <span className="text-xs text-slate-500 dark:text-slate-400 block mt-0.5">Awaiting Transfer</span>
               </div>
@@ -651,9 +676,9 @@ const Payslips = () => {
                   Taxes & Deductions
                 </p>
                 <p className="text-2xl font-bold text-rose-600 dark:text-rose-400 mt-1">
-                  {formatCurrency(totalDeductions)}
+                  GH₵{Number(payrollSummary.taxesAndDeductions !== undefined ? payrollSummary.taxesAndDeductions : totalDeductions).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                 </p>
-                <span className="text-xs text-slate-500 dark:text-slate-400 block mt-0.5">SSNIT & PAYE Withheld</span>
+                <span className="text-xs text-slate-500 dark:text-slate-400 block mt-0.5">Absence, Lateness & Deductions</span>
               </div>
               <div className="w-11 h-11 rounded-xl bg-rose-500/10 text-rose-600 dark:text-rose-400 border border-rose-500/20 flex items-center justify-center shrink-0">
                 <FileText className="w-5 h-5" />
@@ -1098,7 +1123,10 @@ const Payslips = () => {
       {showPayslipsModal && (
         <PayslipsModal
           onClose={() => setShowPayslipsModal(false)}
-          onSuccess={fetchPayslips}
+          onSuccess={() => {
+            fetchPayslips();
+            fetchActiveStaffSummary(filterMonth);
+          }}
         />
       )}
 
