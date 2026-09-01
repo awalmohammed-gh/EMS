@@ -14,8 +14,8 @@ import { verifyAdmin } from "../middleware/authAdmin.js";
 
 const settingsRouter = express.Router();
 
-settingsRouter.get("/get-settings", getSettings);
-settingsRouter.get("/penalties", getPenaltySettings);
+settingsRouter.get("/get-settings", verifyAdmin, getSettings);
+settingsRouter.get("/penalties", verifyAdmin, getPenaltySettings);
 settingsRouter.put("/penalties", verifyAdmin, updatePenaltySettings);
 
 settingsRouter.put("/company", verifyAdmin, updateCompanySettings);

@@ -273,7 +273,7 @@ export const markNotificationAsRead = async (req, res) => {
       updatedDoc = await Notification.findByIdAndUpdate(
         id,
         { $set: { is_read: isRead } },
-        { new: true }
+        { returnDocument: "after" }
       );
     }
 
@@ -307,7 +307,7 @@ export const markNotificationAsUnread = async (req, res) => {
       updatedDoc = await Notification.findByIdAndUpdate(
         id,
         { $set: { is_read: false } },
-        { new: true }
+        { returnDocument: "after" }
       );
     }
 

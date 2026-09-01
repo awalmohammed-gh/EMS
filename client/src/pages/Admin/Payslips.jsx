@@ -28,6 +28,7 @@ import PayrollSummaryCalculator from "../../components/PayrollSummaryCalculator"
 import MonthlyPayrollRunTable from "../../components/MonthlyPayrollRunTable";
 import PayrollCycleHistory from "../../components/PayrollCycleHistory";
 import PenaltyPayrollImpactChart from "../../components/PenaltyPayrollImpactChart";
+import GlobalDateRangePicker from "../../components/GlobalDateRangePicker";
 import { getAllPayslips, updatePayrollStatus, deletePayroll, getAdminPayrollSummary, namesList } from "../../apis/fontApis";
 import { downloadPayslipPDF } from "../../utils/payslipPdfGenerator";
 import {
@@ -44,6 +45,9 @@ const Payslips = () => {
   const [search, setSearch] = useState("");
   const [filterStatus, setFilterStatus] = useState("All");
   const [filterMonth, setFilterMonth] = useState("All Months");
+  const [startDateFilter, setStartDateFilter] = useState("");
+  const [endDateFilter, setEndDateFilter] = useState("");
+  const [dateRangePreset, setDateRangePreset] = useState("all");
   const { showPayslipsModal, setShowPayslipsModal, setShowToast } = useManagement();
   const [payslips, setPayslips] = useState([]);
   const [isLoading, setIsLoading] = useState(false);
@@ -217,7 +221,29 @@ const Payslips = () => {
     const matchesMonth =
       filterMonth === "All Months" || (payMonth && payMonth.toLowerCase().includes(filterMonth.toLowerCase()));
 
-    return matchesSearch && matchesStatus && matchesMonth;
+    // Global Date Range Filtering
+    let matchesDateRange = true;
+    if (startDateFilter || endDateFilter) {
+      let recordDateStr = "";
+      if (pay?.paymentDate) {
+        recordDateStr = new Date(pay.paymentDate).toISOString().split("T")[0];
+      } else if (pay?.createdAt) {
+        recordDateStr = new Date(pay.createdAt).toISOString().split("T")[0];
+      } else if (pay?.date) {
+        recordDateStr = new Date(pay.date).toISOString().split("T")[0];
+      }
+
+      if (recordDateStr) {
+        if (startDateFilter && recordDateStr < startDateFilter) {
+          matchesDateRange = false;
+        }
+        if (endDateFilter && recordDateStr > endDateFilter) {
+          matchesDateRange = false;
+        }
+      }
+    }
+
+    return matchesSearch && matchesStatus && matchesMonth && matchesDateRange;
   });
 
   const getStatusColor = (status) => {
@@ -458,19 +484,14 @@ const Payslips = () => {
     <div className="w-full max-w-7xl mx-auto p-4 sm:p-6 lg:p-8 space-y-6 overflow-x-hidden">
       {/* Header Section */}
       <div className="bg-white dark:bg-slate-900 border border-slate-200/80 dark:border-slate-800/80 rounded-2xl sm:rounded-3xl p-5 sm:p-6 shadow-sm dark:shadow-black/20">
-        <div className="flex flex-col lg:flex-row items-start lg:items-center justify-between gap-4">
-          <div className="flex items-center gap-3.5">
-            <div className="p-2.5 rounded-xl bg-blue-500/10 text-blue-600 dark:text-blue-400 border border-blue-500/20 shrink-0">
-              <Banknote className="h-6 w-6" />
-            </div>
-            <div>
-              <h1 className="text-xl sm:text-2xl font-bold tracking-tight text-slate-900 dark:text-white">
-                Payroll Management
-              </h1>
-              <p className="text-xs sm:text-sm text-slate-500 dark:text-slate-400 mt-0.5">
-                Employee payroll table, payslip generation, and attendance-based salary calculations
-              </p>
-            </div>
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+          <div>
+            <h1 className="text-2xl sm:text-3xl font-extrabold tracking-tight text-[#0B1E48] dark:text-blue-100">
+              Payroll Management
+            </h1>
+            <p className="text-sm font-medium text-slate-500 dark:text-slate-400 mt-1">
+              Employee payroll table, payslip generation, and attendance-based salary calculations
+            </p>
           </div>
           <div className="flex items-center gap-2.5 flex-wrap">
             <button
@@ -501,6 +522,19 @@ const Payslips = () => {
           </div>
         </div>
       </div>
+
+      {/* Global Date-Range Picker for Payroll */}
+      <GlobalDateRangePicker
+        startDate={startDateFilter}
+        endDate={endDateFilter}
+        preset={dateRangePreset}
+        title="Payroll Cycle & Date Range Filter"
+        onRangeChange={({ startDate, endDate, preset }) => {
+          setStartDateFilter(startDate);
+          setEndDateFilter(endDate);
+          setDateRangePreset(preset);
+        }}
+      />
 
       {/* Primary View Switcher Tabs */}
       <div className="flex items-center p-1 bg-slate-100 dark:bg-slate-800/80 border border-slate-200/80 dark:border-slate-700/80 rounded-2xl self-start flex-wrap gap-1">
@@ -608,7 +642,10 @@ const Payslips = () => {
       {/* Penalty Impact Analytics Dashboard Chart */}
       {activeViewTab === "impact" && (
         <div className="animate-in fade-in duration-200">
-          <PenaltyPayrollImpactChart />
+          <PenaltyPayrollImpactChart
+            startDate={startDateFilter}
+            endDate={endDateFilter}
+          />
         </div>
       )}
 
@@ -631,9 +668,11 @@ const Payslips = () => {
                   Total Employees
                 </p>
                 <p className="text-2xl font-bold text-slate-900 dark:text-white mt-1">
-                  {payrollSummary.totalEmployees || activeEmployeesCount || totalEmployees || 0}
+                  {(startDateFilter || endDateFilter) ? totalEmployees : (payrollSummary.totalEmployees || activeEmployeesCount || totalEmployees || 0)}
                 </p>
-                <span className="text-xs text-slate-500 dark:text-slate-400 block mt-0.5">Active Staff on Record</span>
+                <span className="text-xs text-slate-500 dark:text-slate-400 block mt-0.5">
+                  {(startDateFilter || endDateFilter) ? "Filtered Staff Records" : "Active Staff on Record"}
+                </span>
               </div>
               <div className="w-11 h-11 rounded-xl bg-blue-500/10 text-blue-600 dark:text-blue-400 border border-blue-500/20 flex items-center justify-center shrink-0">
                 <User className="w-5 h-5" />
@@ -646,7 +685,7 @@ const Payslips = () => {
                   Total Paid Out
                 </p>
                 <p className="text-2xl font-bold text-emerald-600 dark:text-emerald-400 mt-1">
-                  GH₵{Number(payrollSummary.totalPaidOut !== undefined ? payrollSummary.totalPaidOut : totalPaid).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                  GH₵{Number((startDateFilter || endDateFilter) ? totalPaid : (payrollSummary.totalPaidOut !== undefined ? payrollSummary.totalPaidOut : totalPaid)).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                 </p>
                 <span className="text-xs text-slate-500 dark:text-slate-400 block mt-0.5">Disbursed to Staff</span>
               </div>
@@ -661,7 +700,7 @@ const Payslips = () => {
                   Pending Approvals
                 </p>
                 <p className="text-2xl font-bold text-amber-600 dark:text-amber-400 mt-1">
-                  GH₵{Number(payrollSummary.pendingApprovals !== undefined ? payrollSummary.pendingApprovals : totalPending).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                  GH₵{Number((startDateFilter || endDateFilter) ? totalPending : (payrollSummary.pendingApprovals !== undefined ? payrollSummary.pendingApprovals : totalPending)).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                 </p>
                 <span className="text-xs text-slate-500 dark:text-slate-400 block mt-0.5">Awaiting Transfer</span>
               </div>
@@ -676,7 +715,7 @@ const Payslips = () => {
                   Taxes & Deductions
                 </p>
                 <p className="text-2xl font-bold text-rose-600 dark:text-rose-400 mt-1">
-                  GH₵{Number(payrollSummary.taxesAndDeductions !== undefined ? payrollSummary.taxesAndDeductions : totalDeductions).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                  GH₵{Number((startDateFilter || endDateFilter) ? totalDeductions : (payrollSummary.taxesAndDeductions !== undefined ? payrollSummary.taxesAndDeductions : totalDeductions)).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                 </p>
                 <span className="text-xs text-slate-500 dark:text-slate-400 block mt-0.5">Absence, Lateness & Deductions</span>
               </div>

@@ -413,7 +413,7 @@ export const updateAdminSettings = async (req, res) => {
     const settings = await Settings.findOneAndUpdate(
       {},
       { $set: updatePayload },
-      { new: true, upsert: true }
+      { returnDocument: "after", upsert: true }
     );
 
     return res.status(200).json({
@@ -436,29 +436,29 @@ export const updateEmployeeStatus = async (req, res) => {
     const { id } = req.params;
     const { status } = req.body;
 
-    const validStatuses = ["active", "inactive", "suspended"];
+    const validStatuses = ["active", "inactive", "suspended", "on leave", "on-leave", "terminated"];
     if (!status || !validStatuses.includes(status.toLowerCase().trim())) {
       return res.status(400).json({
         success: false,
-        message: "Invalid status. Status must be one of: 'active', 'inactive', 'suspended'.",
+        message: "Invalid status. Status must be one of: 'active', 'on leave', 'inactive', 'suspended', 'terminated'.",
       });
     }
 
     const cleanStatus = status.toLowerCase().trim();
-    const isActive = cleanStatus === "active";
+    const isActive = cleanStatus === "active" || cleanStatus === "on leave" || cleanStatus === "on-leave";
 
     let employee = null;
     if (mongoose.Types.ObjectId.isValid(id)) {
       employee = await Employee.findByIdAndUpdate(
         id,
         { $set: { status: cleanStatus, isActive } },
-        { new: true }
+        { returnDocument: "after" }
       ).select("-password");
     } else {
       employee = await Employee.findOneAndUpdate(
         { $or: [{ employeeId: id }, { email: id }] },
         { $set: { status: cleanStatus, isActive } },
-        { new: true }
+        { returnDocument: "after" }
       ).select("-password");
     }
 
@@ -549,6 +549,64 @@ export const deleteEmployee = async (req, res) => {
   }
 };
 
+
+// Admin action: bulk update employees (department, status, etc.)
+export const bulkUpdateEmployees = async (req, res) => {
+  try {
+    const { employeeIds, updates } = req.body;
+
+    if (!Array.isArray(employeeIds) || employeeIds.length === 0) {
+      return res.status(400).json({
+        success: false,
+        message: "An array of employeeIds is required.",
+      });
+    }
+
+    if (!updates || typeof updates !== "object" || Object.keys(updates).length === 0) {
+      return res.status(400).json({
+        success: false,
+        message: "Updates object with valid fields (e.g. department, status) is required.",
+      });
+    }
+
+    const setFields = {};
+    if (updates.department) {
+      setFields.department = String(updates.department).trim();
+    }
+    if (updates.status) {
+      const cleanStatus = String(updates.status).toLowerCase().trim();
+      setFields.status = cleanStatus;
+      setFields.isActive = cleanStatus === "active" || cleanStatus === "on leave" || cleanStatus === "on-leave";
+    }
+
+    // Build filter supporting ObjectIds or employeeId strings
+    const idFilters = employeeIds.map((id) => {
+      if (mongoose.Types.ObjectId.isValid(id)) {
+        return { _id: id };
+      }
+      return { employeeId: id };
+    });
+
+    const result = await Employee.updateMany(
+      { $or: idFilters },
+      { $set: setFields }
+    );
+
+    return res.status(200).json({
+      success: true,
+      message: `Successfully updated ${result.modifiedCount || 0} employee record(s).`,
+      matchedCount: result.matchedCount,
+      modifiedCount: result.modifiedCount,
+      updates: setFields,
+    });
+  } catch (error) {
+    console.error("Error in bulkUpdateEmployees:", error);
+    return res.status(500).json({
+      success: false,
+      message: error.message || "Failed to bulk update employees.",
+    });
+  }
+};
 
 // Live Backend Aggregation Endpoint: GET /api/admin/dashboard-stats
 export const getDashboardStats = async (req, res) => {

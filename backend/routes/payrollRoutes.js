@@ -38,20 +38,20 @@ payrollRouter.get("/monthly-run", verifyAdmin, getMonthlyPayrollRun);
 payrollRouter.get("/admin/monthly-run", verifyAdmin, getMonthlyPayrollRun);
 payrollRouter.get("/admin/payroll/monthly-run", verifyAdmin, getMonthlyPayrollRun);
 
-// Dynamic monthly salary calculation based on attendance & approved leaves
-payrollRouter.get("/calculate-summary", calculateMonthlyPayrollSummary);
-payrollRouter.get("/calculate-employee", calculateMonthlyPayrollSummary);
+// Dynamic monthly salary calculation based on attendance & approved leaves (Admin Only)
+payrollRouter.get("/calculate-summary", verifyAdmin, calculateMonthlyPayrollSummary);
+payrollRouter.get("/calculate-employee", verifyAdmin, calculateMonthlyPayrollSummary);
 payrollRouter.get("/admin/calculate-summary", verifyAdmin, calculateMonthlyPayrollSummary);
 payrollRouter.get("/admin/calculate-employee", verifyAdmin, calculateMonthlyPayrollSummary);
 payrollRouter.get("/admin/payroll/calculate-employee", verifyAdmin, calculateMonthlyPayrollSummary);
 
 // Salary Projection Calculator for Employees (estimates end-of-month pay based on attendance & leaves)
-payrollRouter.get("/salary-projection/current", getSalaryProjection);
-payrollRouter.get("/salary-projection", getSalaryProjection);
-payrollRouter.post("/salary-projection", getSalaryProjection);
-payrollRouter.get("/projection/current", getSalaryProjection);
-payrollRouter.get("/projection", getSalaryProjection);
-payrollRouter.post("/projection", getSalaryProjection);
+payrollRouter.get("/salary-projection/current", employeeAuth, getSalaryProjection);
+payrollRouter.get("/salary-projection", employeeAuth, getSalaryProjection);
+payrollRouter.post("/salary-projection", employeeAuth, getSalaryProjection);
+payrollRouter.get("/projection/current", employeeAuth, getSalaryProjection);
+payrollRouter.get("/projection", employeeAuth, getSalaryProjection);
+payrollRouter.post("/projection", employeeAuth, getSalaryProjection);
 payrollRouter.get("/employee/salary-projection/current", employeeAuth, getSalaryProjection);
 payrollRouter.get("/employee/salary-projection", employeeAuth, getSalaryProjection);
 payrollRouter.post("/employee/salary-projection", employeeAuth, getSalaryProjection);

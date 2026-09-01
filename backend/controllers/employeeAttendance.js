@@ -4,6 +4,7 @@ import { Employee } from "../models/employeeModel.js";
 import { CompanySettings } from "../models/CompanySettings.js";
 import { createNotificationRecord } from "./notificationController.js";
 import { evaluateLatenessPenalty } from "./payrollController.js";
+import { calculateWorkHours, parseTimeToMinutes, safeDateTime } from "../utils/calculateWorkHours.js";
 
 const isValidObjectId = (id) =>
   id &&
@@ -37,7 +38,12 @@ const resolveEmployeeObjectId = async (idOrKey) => {
 // Clock in handler - Automatic real-time recording
 export const clockIn = async (req, res) => {
   try {
-    let employeeId = req.user?._id || req.user?.id || req.employee?.id || req.employee?._id || req.body?.employeeId;
+    // For standard employees, hardcode the employeeId strictly to the authenticated user ID
+    const isEmployeeRole = req.user?.role === "employee" || (!req.admin && req.employee);
+    let employeeId = isEmployeeRole
+      ? (req.user?._id || req.user?.id || req.employee?.id || req.employee?._id)
+      : (req.user?._id || req.user?.id || req.employee?.id || req.employee?._id || req.body?.employeeId);
+
     const resolvedId = await resolveEmployeeObjectId(employeeId);
     if (resolvedId) employeeId = resolvedId;
 
@@ -140,7 +146,7 @@ export const clockIn = async (req, res) => {
               notes: "",
             },
           },
-          { upsert: true, new: true, setDefaultsOnInsert: true }
+          { upsert: true, returnDocument: "after", setDefaultsOnInsert: true }
         ).populate("employee", "fullName employeeId department position email avatar");
 
         if (savedRecord && savedRecord.toObject) {
@@ -339,7 +345,7 @@ export const clockOut = async (req, res) => {
               workHours: hoursWorked,
             },
           },
-          { new: true }
+          { returnDocument: "after" }
         ).populate("employee", "fullName employeeId department position email avatar");
 
         if (updatedRecord && updatedRecord.toObject) {
@@ -617,11 +623,14 @@ export const updateAttendanceRecord = async (req, res) => {
     }
 
     const updateFields = {};
+    const safeClockIn = clockIn ? safeDateTime(null, clockIn) || new Date(clockIn) : null;
+    const safeClockOut = clockOut ? safeDateTime(null, clockOut) || new Date(clockOut) : null;
+
     if (clockIn !== undefined) {
-      updateFields.clockIn = clockIn ? new Date(clockIn) : null;
-      if (clockIn) {
+      updateFields.clockIn = safeClockIn && !isNaN(safeClockIn.getTime()) ? safeClockIn : null;
+      if (updateFields.clockIn) {
         const penaltyEval = evaluateLatenessPenalty(
-          new Date(clockIn),
+          updateFields.clockIn,
           settingsDoc?.workStartTime || "08:00",
           settingsDoc || {}
         );
@@ -641,21 +650,29 @@ export const updateAttendanceRecord = async (req, res) => {
     }
 
     // Explicit overrides
-    if (delayMinutes !== undefined) updateFields.delayMinutes = Number(delayMinutes);
-    if (lateMinutes !== undefined) updateFields.lateMinutes = Number(lateMinutes);
-    if (latePenalty !== undefined) updateFields.latePenalty = Number(latePenalty);
+    if (delayMinutes !== undefined) updateFields.delayMinutes = Number(delayMinutes) || 0;
+    if (lateMinutes !== undefined) updateFields.lateMinutes = Number(lateMinutes) || 0;
+    if (latePenalty !== undefined) updateFields.latePenalty = Number(latePenalty) || 0;
     if (penaltyTier !== undefined) updateFields.penaltyTier = penaltyTier;
     if (isExcused !== undefined) updateFields.isExcused = Boolean(isExcused);
     if (excuseReason !== undefined) updateFields.excuseReason = excuseReason;
     if (flaggedForReview !== undefined) updateFields.flaggedForReview = Boolean(flaggedForReview);
     if (flagReason !== undefined) updateFields.flagReason = flagReason;
 
-    if (clockOut !== undefined) updateFields.clockOut = clockOut ? new Date(clockOut) : null;
+    if (clockOut !== undefined) {
+      updateFields.clockOut = safeClockOut && !isNaN(safeClockOut.getTime()) ? safeClockOut : null;
+    }
     if (status !== undefined) updateFields.status = status;
     if (notes !== undefined) updateFields.notes = notes;
-    if (workHours !== undefined) updateFields.workHours = Number(workHours);
 
-    const updated = await Attendance.findByIdAndUpdate(id, { $set: updateFields }, { new: true })
+    if (workHours !== undefined) {
+      const parsedH = Number(workHours);
+      updateFields.workHours = !isNaN(parsedH) && Number.isFinite(parsedH) ? parsedH : 0;
+    } else if (clockIn && clockOut) {
+      updateFields.workHours = calculateWorkHours(clockIn, clockOut);
+    }
+
+    const updated = await Attendance.findByIdAndUpdate(id, { $set: updateFields }, { returnDocument: "after" })
       .populate("employee", "fullName department position employeeId email avatar")
       .lean();
 
@@ -760,7 +777,7 @@ export const excuseAttendanceRecord = async (req, res) => {
       notes: updatedNote,
     };
 
-    const updated = await Attendance.findByIdAndUpdate(id, { $set: updateFields }, { new: true })
+    const updated = await Attendance.findByIdAndUpdate(id, { $set: updateFields }, { returnDocument: "after" })
       .populate("employee", "fullName department position employeeId email avatar")
       .lean();
 
@@ -832,7 +849,7 @@ export const flagAttendanceRecord = async (req, res) => {
       notes: updatedNote,
     };
 
-    const updated = await Attendance.findByIdAndUpdate(id, { $set: updateFields }, { new: true })
+    const updated = await Attendance.findByIdAndUpdate(id, { $set: updateFields }, { returnDocument: "after" })
       .populate("employee", "fullName department position employeeId email avatar")
       .lean();
 
@@ -886,7 +903,7 @@ export const unflagAttendanceRecord = async (req, res) => {
     const updated = await Attendance.findByIdAndUpdate(
       id,
       { $set: { flaggedForReview: false, flagReason: "", flaggedBy: "", flaggedAt: null } },
-      { new: true }
+      { returnDocument: "after" }
     )
       .populate("employee", "fullName department position employeeId email avatar")
       .lean();
@@ -952,7 +969,7 @@ export const recalculateAttendanceRecord = async (req, res) => {
       updateFields.status = penaltyEval.minutesLate > 0 ? "Late" : "On Time";
     }
 
-    const updated = await Attendance.findByIdAndUpdate(id, { $set: updateFields }, { new: true })
+    const updated = await Attendance.findByIdAndUpdate(id, { $set: updateFields }, { returnDocument: "after" })
       .populate("employee", "fullName department position employeeId email avatar")
       .lean();
 
@@ -991,10 +1008,7 @@ export const createManualAttendance = async (req, res) => {
 
     let calculatedHours = 0;
     if (clockIn && clockOut) {
-      const inTime = new Date(clockIn);
-      const outTime = new Date(clockOut);
-      const diff = Math.max(0, outTime.getTime() - inTime.getTime());
-      calculatedHours = Number((diff / (1000 * 60 * 60)).toFixed(2));
+      calculatedHours = calculateWorkHours(clockIn, clockOut);
     }
 
     let settingsDoc = null;
@@ -1009,9 +1023,12 @@ export const createManualAttendance = async (req, res) => {
     let penaltyTier = "";
     let finalStatus = status || "Present";
 
-    if (clockIn) {
+    const safeClockInDate = clockIn ? safeDateTime(date, clockIn) : null;
+    const safeClockOutDate = clockOut ? safeDateTime(date, clockOut) : null;
+
+    if (safeClockInDate && !isNaN(safeClockInDate.getTime())) {
       const penaltyEval = evaluateLatenessPenalty(
-        new Date(clockIn),
+        safeClockInDate,
         settingsDoc?.workStartTime || "08:00",
         settingsDoc || {}
       );
@@ -1027,18 +1044,18 @@ export const createManualAttendance = async (req, res) => {
       { employee: resolvedEmpId, date },
       {
         $set: {
-          clockIn: clockIn ? new Date(clockIn) : null,
-          clockOut: clockOut ? new Date(clockOut) : null,
+          clockIn: safeClockInDate && !isNaN(safeClockInDate.getTime()) ? safeClockInDate : null,
+          clockOut: safeClockOutDate && !isNaN(safeClockOutDate.getTime()) ? safeClockOutDate : null,
           status: finalStatus,
           notes: notes || "Admin manual entry",
-          workHours: calculatedHours,
+          workHours: !isNaN(calculatedHours) && Number.isFinite(calculatedHours) ? calculatedHours : 0,
           delayMinutes,
           lateMinutes: delayMinutes,
           latePenalty,
           penaltyTier,
         },
       },
-      { upsert: true, new: true, setDefaultsOnInsert: true }
+      { upsert: true, returnDocument: "after", setDefaultsOnInsert: true }
     ).populate("employee", "fullName department position employeeId email avatar");
 
     // If status is Absent or Late, notify employee about upcoming deduction
@@ -1489,6 +1506,82 @@ export const deleteAttendanceRecord = async (req, res) => {
     return res.status(500).json({
       success: false,
       message: error.message || "Failed to delete attendance record.",
+    });
+  }
+};
+
+// GET /api/attendance/performance-metrics
+export const getPerformanceMetrics = async (req, res) => {
+  try {
+    const isEmployeeRole = req.user?.role === "employee" || (!req.admin && req.employee);
+    let employeeId = isEmployeeRole
+      ? (req.user?._id || req.user?.id || req.employee?.id || req.employee?._id)
+      : (req.query?.employeeId || req.user?._id || req.user?.id);
+
+    const { month, week, startDate, endDate } = req.query;
+    const query = {};
+    if (employeeId && isValidObjectId(employeeId)) {
+      query.employee = employeeId;
+    }
+    if (startDate && endDate) {
+      query.date = { $gte: startDate, $lte: endDate };
+    } else if (month) {
+      query.date = { $regex: `^${month}` };
+    }
+
+    let records = [];
+    try {
+      records = await Attendance.find(query).sort({ date: 1 }).lean();
+    } catch (dbErr) {
+      console.warn("Could not query attendance records for performance:", dbErr.message);
+    }
+
+    let hoursWorked = 0;
+    let onTimeCheckIns = 0;
+    let lateCheckIns = 0;
+    let absentDays = 0;
+    let activeDays = 0;
+
+    for (const r of records) {
+      const status = (r.status || "").toLowerCase();
+      const hrs = parseFloat(r.workHours) || (r.checkOut && r.checkIn ? 8 : (r.status === "Present" ? 8 : 0));
+      hoursWorked += hrs;
+
+      if (status.includes("late")) {
+        lateCheckIns++;
+        activeDays++;
+      } else if (status.includes("absent") || status.includes("leave")) {
+        absentDays++;
+      } else if (status.includes("present") || hrs > 0) {
+        onTimeCheckIns++;
+        activeDays++;
+      }
+    }
+
+    const isWeekRange = week && week !== "all";
+    const requiredHours = isWeekRange ? 40 : 160;
+    const shiftCompliance = requiredHours > 0 ? Math.min(100, Math.round((hoursWorked / requiredHours) * 100)) : 100;
+    const punctualityRate = activeDays > 0 ? Math.round((onTimeCheckIns / activeDays) * 100) : 100;
+
+    return res.status(200).json({
+      success: true,
+      data: {
+        records,
+        hoursWorked: Math.round(hoursWorked * 10) / 10,
+        requiredHours,
+        shiftCompliance,
+        punctualityRate,
+        activeDays,
+        onTimeCheckIns,
+        lateCheckIns,
+        absentDays,
+      },
+    });
+  } catch (error) {
+    console.error("Error fetching performance metrics:", error);
+    return res.status(500).json({
+      success: false,
+      message: error.message || "Failed to calculate performance metrics",
     });
   }
 };

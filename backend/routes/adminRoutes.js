@@ -9,6 +9,7 @@ import {
   createAdminAccount,
   updateEmployeeStatus,
   deleteEmployee,
+  bulkUpdateEmployees,
   getDashboardStats,
   getAdminPayrollSummary,
 } from "../controllers/adminController.js";
@@ -113,6 +114,11 @@ adminRouter.delete("/announcements/:id", verifyAdmin, deleteAnnouncement);
 adminRouter.delete("/payroll/:id", verifyAdmin, deletePayroll);
 adminRouter.delete("/payslip/:id", verifyAdmin, deletePayroll);
 adminRouter.delete("/payslips/:id", verifyAdmin, deletePayroll);
+
+// Admin-only bulk employee update (PATCH /api/admin/employees/bulk-update or POST)
+adminRouter.patch("/employees/bulk-update", verifyAdmin, bulkUpdateEmployees);
+adminRouter.post("/employees/bulk-update", verifyAdmin, bulkUpdateEmployees);
+adminRouter.put("/employees/bulk-update", verifyAdmin, bulkUpdateEmployees);
 
 // Admin-only employee status management (PUT /api/admin/employees/:id/status)
 adminRouter.put("/employees/:id/status", verifyAdmin, updateEmployeeStatus);

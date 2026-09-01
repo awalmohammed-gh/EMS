@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useState, useMemo } from "react";
 import {
   Calendar,
   BanknoteIcon,
@@ -9,6 +9,7 @@ import {
   Lock,
   RefreshCw,
   CheckCircle2,
+  Filter,
 } from "lucide-react";
 import EmployeePayslipsModal from "../../components/modal/EmployeePayslipsModal";
 import { useManagement } from "../../context/ManagementContextProvider";
@@ -22,6 +23,8 @@ const EmployeePayslips = () => {
   const [employeePayslips, setEmployeePayslips] = useState([]);
   const [isLoading, setIsLoading] = useState(false);
   const [isError, setIsError] = useState(null);
+  const [selectedYear, setSelectedYear] = useState("all");
+  const [selectedMonth, setSelectedMonth] = useState("all");
 
   const { setShowToast } = useManagement();
 
@@ -123,6 +126,60 @@ const EmployeePayslips = () => {
     printPayslipDocument(payslip);
   };
 
+  // Compute dynamic list of years present in payslips, default to recent years
+  const availableYears = useMemo(() => {
+    const yearsSet = new Set();
+    const currentYear = new Date().getFullYear().toString();
+    yearsSet.add(currentYear);
+    yearsSet.add((Number(currentYear) - 1).toString());
+
+    employeePayslips.forEach((slip) => {
+      const monthVal = slip.month || slip.payMonth || "";
+      if (monthVal) {
+        const yearPart = monthVal.split("-")[0];
+        if (yearPart && yearPart.length === 4) {
+          yearsSet.add(yearPart);
+        }
+      }
+      if (slip.paymentDate) {
+        try {
+          const y = new Date(slip.paymentDate).getFullYear().toString();
+          yearsSet.add(y);
+        } catch {
+          // ignore
+        }
+      }
+    });
+
+    return Array.from(yearsSet).sort().reverse();
+  }, [employeePayslips]);
+
+  const filteredPayslips = useMemo(() => {
+    return employeePayslips.filter((slip) => {
+      const monthStr = slip.month || slip.payMonth || "";
+      let slipYear = "";
+      let slipMonth = "";
+
+      if (monthStr && monthStr.includes("-")) {
+        const parts = monthStr.split("-");
+        slipYear = parts[0];
+        slipMonth = parts[1]?.padStart(2, "0");
+      } else if (slip.paymentDate) {
+        try {
+          const d = new Date(slip.paymentDate);
+          slipYear = d.getFullYear().toString();
+          slipMonth = String(d.getMonth() + 1).padStart(2, "0");
+        } catch {
+          // pass
+        }
+      }
+
+      const matchesYear = selectedYear === "all" || !slipYear || slipYear === selectedYear;
+      const matchesMonth = selectedMonth === "all" || !slipMonth || slipMonth === selectedMonth;
+      return matchesYear && matchesMonth;
+    });
+  }, [employeePayslips, selectedYear, selectedMonth]);
+
   if (isLoading) {
     return <Loading />;
   }
@@ -141,12 +198,12 @@ const EmployeePayslips = () => {
     <>
       <div className="w-full max-w-7xl mx-auto p-4 sm:p-6 lg:p-8 space-y-6 overflow-x-hidden">
         {/* Header */}
-        <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
           <div>
-            <h1 className="text-2xl font-bold text-[#002185] tracking-tight">
+            <h1 className="text-2xl sm:text-3xl font-extrabold tracking-tight text-[#0B1E48] dark:text-blue-100">
               My Payslips &amp; History
             </h1>
-            <p className="text-sm text-[#64748B] mt-1">
+            <p className="text-sm font-medium text-slate-500 dark:text-slate-400 mt-1">
               Official released payslips and monthly take-home history
             </p>
           </div>
@@ -161,15 +218,78 @@ const EmployeePayslips = () => {
               <span>Refresh</span>
             </button>
             <div className="text-xs text-[#64748B] bg-white px-3.5 py-2 rounded-xl border border-[#E2E8F0] shadow-xs font-semibold">
-              {employeePayslips.length} Released Payslip{employeePayslips.length !== 1 ? "s" : ""}
+              {filteredPayslips.length} Released Payslip{filteredPayslips.length !== 1 ? "s" : ""}
             </div>
           </div>
         </div>
 
+        {/* Clean, Streamlined Monthly Billing Cycle Filter */}
+        <div
+          id="payslip-monthly-filter-bar"
+          className="flex flex-wrap items-center justify-between gap-3 p-4 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl shadow-xs"
+        >
+          <div className="flex items-center gap-2 text-xs font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400">
+            <Filter className="w-4 h-4 text-[#002185] dark:text-blue-400" />
+            <span>Billing Cycle Filter</span>
+          </div>
+
+          <div className="flex flex-wrap items-center gap-3">
+            {/* Year Selector */}
+            <select
+              id="payslip-filter-year-select"
+              value={selectedYear}
+              onChange={(e) => setSelectedYear(e.target.value)}
+              className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 text-sm font-medium text-[#0B1E48] dark:text-blue-100 rounded-xl px-3.5 py-2.5 shadow-sm focus:outline-none focus:ring-2 focus:ring-blue-500 cursor-pointer"
+            >
+              <option value="all">All Years</option>
+              {availableYears.map((yr) => (
+                <option key={yr} value={yr}>
+                  {yr}
+                </option>
+              ))}
+            </select>
+
+            {/* Month Selector */}
+            <select
+              id="payslip-filter-month-select"
+              value={selectedMonth}
+              onChange={(e) => setSelectedMonth(e.target.value)}
+              className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 text-sm font-medium text-[#0B1E48] dark:text-blue-100 rounded-xl px-3.5 py-2.5 shadow-sm focus:outline-none focus:ring-2 focus:ring-blue-500 cursor-pointer"
+            >
+              <option value="all">All Months</option>
+              <option value="01">January</option>
+              <option value="02">February</option>
+              <option value="03">March</option>
+              <option value="04">April</option>
+              <option value="05">May</option>
+              <option value="06">June</option>
+              <option value="07">July</option>
+              <option value="08">August</option>
+              <option value="09">September</option>
+              <option value="10">October</option>
+              <option value="11">November</option>
+              <option value="12">December</option>
+            </select>
+
+            {(selectedYear !== "all" || selectedMonth !== "all") && (
+              <button
+                type="button"
+                onClick={() => {
+                  setSelectedYear("all");
+                  setSelectedMonth("all");
+                }}
+                className="text-xs font-semibold text-slate-500 hover:text-[#002185] dark:hover:text-blue-400 px-2.5 py-2 rounded-lg hover:bg-slate-100 dark:hover:bg-slate-800 transition cursor-pointer"
+              >
+                Reset Filter
+              </button>
+            )}
+          </div>
+        </div>
+
         {/* Payslip List or Locked State */}
-        {employeePayslips.length > 0 ? (
+        {filteredPayslips.length > 0 ? (
           <div className="space-y-4">
-            {employeePayslips.map((payslip) => {
+            {filteredPayslips.map((payslip) => {
               const cardBaseSalary = Number(
                 payslip.breakdown?.baseSalary !== undefined
                   ? payslip.breakdown.baseSalary

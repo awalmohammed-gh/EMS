@@ -8,7 +8,6 @@ import {
   Calendar,
   Users,
   AlertTriangle,
-  Settings as SettingsIcon,
   RefreshCw,
   History,
 } from "lucide-react";
@@ -123,20 +122,15 @@ const SettingsContent = () => {
       {/* Header Banner */}
       <div className="bg-white dark:bg-slate-900 border border-slate-200/80 dark:border-slate-800/80 rounded-2xl sm:rounded-3xl p-5 sm:p-6 shadow-sm dark:shadow-black/20">
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-          <div className="flex items-center gap-3.5">
-            <div className="p-2.5 rounded-xl bg-blue-500/10 text-blue-600 dark:text-blue-400 border border-blue-500/20 shrink-0">
-              <SettingsIcon className="h-6 w-6" />
+          <div>
+            <div className="flex items-center gap-2">
+              <h1 className="text-2xl sm:text-3xl font-extrabold tracking-tight text-[#0B1E48] dark:text-blue-100">
+                System & Admin Settings
+              </h1>
             </div>
-            <div>
-              <div className="flex items-center gap-2">
-                <h1 className="text-xl sm:text-2xl font-bold tracking-tight text-slate-900 dark:text-white">
-                  System & Admin Settings
-                </h1>
-              </div>
-              <p className="text-xs sm:text-sm text-slate-500 dark:text-slate-400 mt-0.5">
-                Manage organization preferences, administrator credentials, security, and automated workflows
-              </p>
-            </div>
+            <p className="text-sm font-medium text-slate-500 dark:text-slate-400 mt-1">
+              Manage organization preferences, administrator credentials, security, and automated workflows
+            </p>
           </div>
 
           <div className="flex items-center gap-2">

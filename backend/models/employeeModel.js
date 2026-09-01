@@ -110,7 +110,7 @@ const employeeSchema = new mongoose.Schema(
 
     status: {
       type: String,
-      enum: ["active", "inactive", "suspended"],
+      enum: ["active", "inactive", "suspended", "on leave", "on-leave", "terminated"],
       default: "active",
     },
 
@@ -141,6 +141,9 @@ employeeSchema.methods.comparePassword = async function (candidatePassword) {
   if (!candidatePassword || !this.password) return false;
   return bcrypt.compare(candidatePassword, this.password);
 };
+
+employeeSchema.index({ department: 1, status: 1 });
+employeeSchema.index({ status: 1, role: 1 });
 
 export const Employee = mongoose.models.Employee || mongoose.model("Employee", employeeSchema);
 

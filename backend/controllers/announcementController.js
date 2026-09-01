@@ -489,7 +489,7 @@ export const updateAnnouncement = async (req, res) => {
               updatedAt: new Date(),
             },
           },
-          { new: true }
+          { returnDocument: "after" }
         ).lean();
       }
     } catch (dbErr) {

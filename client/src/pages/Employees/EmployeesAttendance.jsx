@@ -33,6 +33,7 @@ import {
 import WeeklyAttendanceChart from "../../components/WeeklyAttendanceChart";
 import AttendanceIntensityHeatmap from "../../components/AttendanceIntensityHeatmap";
 import AttendanceMonthlyCalendar from "../../components/AttendanceMonthlyCalendar";
+import GlobalDateRangePicker from "../../components/GlobalDateRangePicker";
 import {
   ResponsiveContainer,
   BarChart,
@@ -145,6 +146,9 @@ const EmployeesAttendance = () => {
   const [searchTerm, setSearchTerm] = useState("");
   const [statusFilter, setStatusFilter] = useState("all");
   const [selectedMonth, setSelectedMonth] = useState("all");
+  const [startDateFilter, setStartDateFilter] = useState("");
+  const [endDateFilter, setEndDateFilter] = useState("");
+  const [dateRangePreset, setDateRangePreset] = useState("all");
   const [activeView, setActiveView] = useState("heatmap"); // 'heatmap' | 'table' | 'chart'
 
   // Live ticking digital clock
@@ -399,15 +403,21 @@ const EmployeesAttendance = () => {
       if (data?.success) {
         const att = data.attendance;
         const nowIso = new Date().toISOString();
+        const rawStatus = att?.status || data.status || "";
+        const computedDelayMinutes = Number(att?.lateMinutes ?? data.delayMinutes ?? att?.delayMinutes ?? data.lateMinutes ?? 0);
+        const computedLatePenalty = Number(att?.latePenalty ?? data.latePenalty ?? 0);
+        const isLateCheck = computedDelayMinutes > 0 || String(rawStatus).toLowerCase() === "late";
+        const normalizedStatus = isLateCheck ? "Late" : "On Time";
+
         setAttendanceData({
           date: att?.date || nowIso.split("T")[0],
           clockIn: att?.clockIn || att?.clockInTime || nowIso,
           clockOut: null,
-          status: att?.status || (data.status === "late" ? "Late" : "On Time"),
+          status: normalizedStatus,
           workHours: att?.workHours || 0,
-          lateMinutes: att?.lateMinutes ?? data.delayMinutes ?? 0,
-          latePenalty: att?.latePenalty ?? data.latePenalty ?? 0,
-          penaltyTier: att?.penaltyTier ?? data.penaltyTier ?? "",
+          lateMinutes: computedDelayMinutes,
+          latePenalty: computedLatePenalty,
+          penaltyTier: att?.penaltyTier ?? data.penaltyTier ?? (isLateCheck ? "Late" : "On Time"),
         });
         setHasClockedIn(true);
         setHasClockedOut(false);
@@ -710,9 +720,21 @@ const EmployeesAttendance = () => {
         }
       }
 
+      // Global Date Range Filter
+      if (startDateFilter || endDateFilter) {
+        let itemDateStr = "";
+        if (item.date) {
+          itemDateStr = new Date(item.date).toISOString().split("T")[0];
+        }
+        if (itemDateStr) {
+          if (startDateFilter && itemDateStr < startDateFilter) return false;
+          if (endDateFilter && itemDateStr > endDateFilter) return false;
+        }
+      }
+
       return true;
     });
-  }, [attendanceHistory, searchTerm, statusFilter, selectedMonth]);
+  }, [attendanceHistory, searchTerm, statusFilter, selectedMonth, startDateFilter, endDateFilter]);
 
   // Available unique months in history
   const availableMonths = useMemo(() => {
@@ -819,10 +841,10 @@ const EmployeesAttendance = () => {
       {/* Top Header */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <div>
-          <h1 className="text-2xl font-bold text-slate-900 dark:text-slate-100 tracking-tight">
+          <h1 className="text-2xl sm:text-3xl font-extrabold tracking-tight text-[#0B1E48] dark:text-blue-100">
             Employee Attendance
           </h1>
-          <p className="text-sm text-slate-500 dark:text-slate-400 mt-1">
+          <p className="text-sm font-medium text-slate-500 dark:text-slate-400 mt-1">
             Track your daily shift hours, clock-in status, and work duration.
           </p>
         </div>
@@ -876,20 +898,37 @@ const EmployeesAttendance = () => {
                 </div>
               )}
 
+              {/* Dynamic Instant Attendance Status Badge after Clock In */}
+              {hasClockedIn && (
+                attendanceData.lateMinutes > 0 || (attendanceData.status || "").toLowerCase() === "late" ? (
+                  <div
+                    id="attendance-status-badge-late"
+                    className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-semibold bg-amber-50 text-amber-800 dark:bg-amber-950/40 dark:text-amber-300 border border-amber-200 dark:border-amber-800 shadow-xs"
+                  >
+                    <AlertTriangle className="w-3.5 h-3.5 text-amber-600 dark:text-amber-400 shrink-0" />
+                    <span>Late Arrival ({attendanceData.lateMinutes} min late)</span>
+                    {attendanceData.latePenalty > 0 && (
+                      <span className="font-bold text-rose-700 dark:text-rose-400">
+                        · Fine: GH₵{Number(attendanceData.latePenalty).toFixed(2)}
+                      </span>
+                    )}
+                  </div>
+                ) : (
+                  <div
+                    id="attendance-status-badge-ontime"
+                    className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-semibold bg-emerald-50 text-emerald-700 dark:bg-emerald-950/40 dark:text-emerald-300 border border-emerald-200 dark:border-emerald-800 shadow-xs"
+                  >
+                    <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse" />
+                    <span>On Time Check-in</span>
+                  </div>
+                )
+              )}
+
               {/* Scheduled Shift Pill */}
               <span className="inline-flex items-center gap-1.5 px-3.5 py-1.5 rounded-full text-xs font-medium bg-slate-50 dark:bg-slate-800/60 text-slate-600 dark:text-slate-300 border border-slate-200 dark:border-slate-700">
                 <Clock className="w-3.5 h-3.5 text-[#002185] dark:text-blue-400" />
                 Scheduled: {shiftEvaluation.formattedStartTime} – {shiftEvaluation.formattedEndTime}
               </span>
-
-              {/* Late fine badge if applicable */}
-              {hasClockedIn && attendanceData.lateMinutes > 0 && (
-                <span className="inline-flex items-center gap-1 px-3.5 py-1.5 rounded-full text-xs font-semibold bg-amber-50 dark:bg-amber-950/40 text-amber-700 dark:text-amber-300 border border-amber-200 dark:border-amber-800">
-                  <AlertTriangle className="w-3.5 h-3.5 text-amber-500" />
-                  {attendanceData.lateMinutes} min late
-                  {attendanceData.latePenalty > 0 && ` · GH₵ ${Number(attendanceData.latePenalty).toFixed(2)}`}
-                </span>
-              )}
             </div>
           </div>
 
@@ -1442,6 +1481,22 @@ const EmployeesAttendance = () => {
         </div>
       </div>
 
+      {/* Global Date Range Picker */}
+      <GlobalDateRangePicker
+        startDate={startDateFilter}
+        endDate={endDateFilter}
+        preset={dateRangePreset}
+        title="Filter Attendance Period"
+        onRangeChange={({ startDate, endDate, preset }) => {
+          setStartDateFilter(startDate);
+          setEndDateFilter(endDate);
+          setDateRangePreset(preset);
+          if (startDate || endDate) {
+            setSelectedMonth("all");
+          }
+        }}
+      />
+
       {/* SECTION 3: MONTHLY ATTENDANCE LOGS TABLE / WEEKLY CHART */}
       <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl shadow-sm overflow-hidden">
         {/* Table & View Controls Header */}
@@ -1564,7 +1619,7 @@ const EmployeesAttendance = () => {
         {activeView === "calendar" && (
           <div className="p-4 sm:p-6">
             <AttendanceMonthlyCalendar
-              attendanceLogs={attendanceHistory}
+              attendanceLogs={(startDateFilter || endDateFilter) ? filteredHistory : attendanceHistory}
               employeesList={employee ? [employee] : user ? [user] : []}
               onSelectDate={(dateKey) => {
                 setSearchTerm(dateKey);
@@ -1583,7 +1638,7 @@ const EmployeesAttendance = () => {
         {activeView === "heatmap" && (
           <div className="p-4 sm:p-6">
             <AttendanceIntensityHeatmap
-              attendanceLogs={attendanceHistory}
+              attendanceLogs={(startDateFilter || endDateFilter) ? filteredHistory : attendanceHistory}
               title="Attendance Intensity Heatmap"
               subtitle="Daily check-in pattern matrix, worked hours density, and habit consistency throughout the month"
               onSelectDay={(dateKey) => {
@@ -1602,7 +1657,7 @@ const EmployeesAttendance = () => {
         {activeView === "chart" && (
           <div className="p-6">
             <WeeklyAttendanceChart
-              attendanceLogs={attendanceHistory}
+              attendanceLogs={(startDateFilter || endDateFilter) ? filteredHistory : attendanceHistory}
               title="My Punctuality & Shift Hours Trends"
               subtitle="Daily work duration and arrival punctuality overview"
             />

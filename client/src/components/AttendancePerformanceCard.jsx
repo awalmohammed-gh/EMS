@@ -1,5 +1,5 @@
 import WeeklyAttendancePerformance from "./WeeklyAttendancePerformance";
 
 export { WeeklyAttendancePerformance };
-export const WeeklyAttendanceChart = WeeklyAttendancePerformance;
+export const AttendancePerformanceCard = WeeklyAttendancePerformance;
 export default WeeklyAttendancePerformance;

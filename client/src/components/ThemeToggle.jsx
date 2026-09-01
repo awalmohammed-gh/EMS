@@ -72,21 +72,24 @@ export const ThemeToggle = ({ className = "" }) => {
         aria-haspopup="true"
         aria-label={`Current theme: ${theme}. Click to change theme.`}
         title={`Current theme: ${theme.charAt(0).toUpperCase() + theme.slice(1)} (Click to switch)`}
-        className={`p-2 rounded-xl border transition-all duration-200 cursor-pointer flex items-center justify-center shadow-2xs group focus:outline-none focus:ring-2 focus:ring-[#002185]/30 dark:focus:ring-blue-500/40 ${
+        className={`px-2.5 py-1.5 sm:px-3 sm:py-2 rounded-xl border transition-all duration-200 cursor-pointer flex items-center gap-2 shadow-2xs group focus:outline-none focus:ring-2 focus:ring-[#002185]/30 dark:focus:ring-blue-500/40 ${
           isOpen
-            ? "border-[#002185] dark:border-blue-500 bg-[#002185]/5 dark:bg-slate-800 text-[#002185] dark:text-blue-400"
-            : "border-slate-200 dark:border-slate-700 bg-white/90 dark:bg-slate-800/90 text-slate-700 dark:text-slate-200 hover:bg-slate-50 dark:hover:bg-slate-700/80 hover:border-slate-300 dark:hover:border-slate-600"
+            ? "border-[#002185] dark:border-blue-500 bg-[#002185]/10 dark:bg-slate-800 text-[#002185] dark:text-blue-400"
+            : "border-slate-200 dark:border-slate-700 bg-white/95 dark:bg-slate-800/95 text-slate-700 dark:text-slate-200 hover:bg-slate-50 dark:hover:bg-slate-700/80 hover:border-slate-300 dark:hover:border-slate-600"
         }`}
       >
         <CurrentIcon
-          className={`w-4 h-4 transition-transform duration-300 group-hover:scale-110 ${
+          className={`w-4 h-4 shrink-0 transition-transform duration-300 group-hover:scale-110 ${
             theme === "light"
               ? "text-amber-500"
               : theme === "dark"
-              ? "text-[#002185] dark:text-blue-400"
+              ? "text-blue-600 dark:text-blue-400"
               : "text-slate-600 dark:text-slate-300"
           }`}
         />
+        <span className="hidden sm:inline text-xs font-semibold capitalize text-slate-700 dark:text-slate-300 group-hover:text-[#002185] dark:group-hover:text-blue-400">
+          {theme}
+        </span>
       </button>
 
       {/* Dropdown Menu */}

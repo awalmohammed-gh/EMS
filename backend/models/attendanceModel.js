@@ -42,6 +42,7 @@ const attendanceSchema = new mongoose.Schema(
       type: Number,
       default: 0,
       min: 0,
+      set: (v) => (v === null || v === undefined || isNaN(v) ? 0 : Number(Number(v).toFixed(2))),
     },
 
     status: {
@@ -125,8 +126,12 @@ const attendanceSchema = new mongoose.Schema(
   },
 );
 
-// Prevent more than one attendance record per employee per day
+// Indexes for multi-user scaling, fast range queries, and unique check-ins
 attendanceSchema.index({ employee: 1, date: 1 }, { unique: true });
+attendanceSchema.index({ employeeId: 1, date: 1 });
+attendanceSchema.index({ date: 1, status: 1 });
+attendanceSchema.index({ employee: 1, status: 1 });
+attendanceSchema.index({ employee: 1, createdAt: -1 });
 
 export const Attendance = mongoose.models.Attendance || mongoose.model("Attendance", attendanceSchema);
 

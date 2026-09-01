@@ -249,7 +249,7 @@ export const LoginForm = ({ role = "admin", title, subtitle, initialMode = "logi
               )}
             </div>
 
-            <h1 className="text-2xl font-extrabold text-[#002185] tracking-tight">
+            <h1 className="text-2xl sm:text-3xl font-extrabold text-[#0B1E48] dark:text-blue-100 tracking-tight">
               {isAdmin
                 ? isRegisterMode
                   ? "Create Admin Account"
@@ -257,7 +257,7 @@ export const LoginForm = ({ role = "admin", title, subtitle, initialMode = "logi
                 : title || "Employee Sign In"}
             </h1>
 
-            <p className="text-sm text-[#64748B] mt-1">
+            <p className="text-sm font-medium text-slate-500 dark:text-slate-400 mt-1">
               {isAdmin
                 ? isRegisterMode
                   ? "Register a new administrator account with system privileges."

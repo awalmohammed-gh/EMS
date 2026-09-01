@@ -8,7 +8,18 @@ const ProtectedRoute = ({ allowRole }) => {
   const { isLoading: isAdminLoading, adminExists, isAuthorized } = useAdminAuth();
   const { user, token, role: authRole } = useAuth();
 
-  // If protecting an Admin route, use the comprehensive useAdminAuth hook
+  const storedRole =
+    typeof window !== "undefined" ? localStorage.getItem("userRole") : null;
+  const hasEmpToken =
+    typeof window !== "undefined" &&
+    Boolean(localStorage.getItem("employeeToken") || (storedRole === "employee" && localStorage.getItem("token")));
+  const hasAdminToken =
+    typeof window !== "undefined" &&
+    Boolean(localStorage.getItem("adminToken") || (storedRole === "admin" && localStorage.getItem("token")));
+
+  const effectiveRole = authRole || storedRole || (user?.role ? user.role : null);
+
+  // If protecting an Admin route
   if (allowRole === "admin") {
     if (isAdminLoading) {
       return <Loading />;
@@ -18,33 +29,34 @@ const ProtectedRoute = ({ allowRole }) => {
       return <Navigate to="/admin/register" replace state={{ from: location }} />;
     }
 
-    if (!isAuthorized) {
+    // Explicitly reject logged-in employees attempting to access admin routes
+    if ((effectiveRole === "employee" || hasEmpToken) && !isAuthorized && !hasAdminToken) {
+      return <Navigate to="/employee/dashboard" replace state={{ from: location }} />;
+    }
+
+    if (!isAuthorized && !hasAdminToken) {
       return <Navigate to="/admin/login" replace state={{ from: location }} />;
     }
 
     return <Outlet />;
   }
 
-  // Employee role validation
-  const stateRole = location.state?.role;
-  const storedRole =
-    typeof window !== "undefined" ? localStorage.getItem("userRole") : null;
-  const hasEmpToken =
-    typeof window !== "undefined" &&
-    (localStorage.getItem("employeeToken") || localStorage.getItem("token") || token);
+  // If protecting an Employee route
+  if (allowRole === "employee") {
+    const isEmployeeAuthenticated =
+      effectiveRole === "employee" ||
+      hasEmpToken ||
+      Boolean(user && (user.role === "employee" || user.employeeId)) ||
+      (effectiveRole === "admin" || isAuthorized); // Admins can preview/inspect employee portal
 
-  const role =
-    authRole ||
-    stateRole ||
-    storedRole ||
-    (location.pathname.startsWith("/employee") ? "employee" : "admin");
+    if (!isEmployeeAuthenticated && !token && !hasEmpToken) {
+      return <Navigate to="/employee/login" replace state={{ from: location }} />;
+    }
 
-  if (role !== "employee" && !hasEmpToken && !user) {
-    return <Navigate to="/employee/login" replace state={{ from: location }} />;
+    return <Outlet />;
   }
 
   return <Outlet />;
 };
 
 export default ProtectedRoute;
-

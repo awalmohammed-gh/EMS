@@ -198,7 +198,7 @@ export const updateCurrentEmployee = async (req, res) => {
       updates.profile_image_url = newAvatar;
     }
 
-    const updated = await Employee.findOneAndUpdate(filter, { $set: updates }, { new: true })
+    const updated = await Employee.findOneAndUpdate(filter, { $set: updates }, { returnDocument: "after" })
       .select("-password")
       .lean();
 

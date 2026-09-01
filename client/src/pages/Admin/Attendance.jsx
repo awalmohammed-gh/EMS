@@ -43,6 +43,7 @@ import {
   allEmployees,
   allLeaves,
 } from "../../apis/fontApis";
+import GlobalDateRangePicker from "../../components/GlobalDateRangePicker";
 import Avatar from "../../components/Avatar";
 import WeeklyAttendanceChart from "../../components/WeeklyAttendanceChart";
 import AttendanceMonthlyCalendar from "../../components/AttendanceMonthlyCalendar";
@@ -50,6 +51,7 @@ import AttendanceIntensityHeatmap from "../../components/AttendanceIntensityHeat
 import AttendanceQuickActionsMenu from "../../components/AttendanceQuickActionsMenu";
 import ExcuseLatenessModal from "../../components/modal/ExcuseLatenessModal";
 import FlagAttendanceModal from "../../components/modal/FlagAttendanceModal";
+import ManualOverrideModal from "../../components/modal/ManualOverrideModal";
 
 const Attendance = () => {
   const [attendance, setAttendance] = useState([]);
@@ -826,19 +828,14 @@ const Attendance = () => {
     <>
       <div className="w-full max-w-7xl mx-auto p-4 sm:p-6 lg:p-8 space-y-6 overflow-x-hidden">
         {/* Page Header */}
-        <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
-          <div className="flex items-center gap-3">
-            <div className="flex h-11 w-11 items-center justify-center rounded-xl bg-[#002185] shrink-0 shadow-sm">
-              <CalendarDays className="h-5 w-5 text-white" />
-            </div>
-            <div>
-              <h1 className="text-2xl font-bold text-[#002185] tracking-tight">
-                Attendance Management
-              </h1>
-              <p className="text-sm text-[#64748B] mt-0.5">
-                Employee check-ins and check-outs are recorded immediately and updated in real-time.
-              </p>
-            </div>
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+          <div>
+            <h1 className="text-2xl sm:text-3xl font-extrabold tracking-tight text-[#0B1E48] dark:text-blue-100">
+              Attendance Management
+            </h1>
+            <p className="text-sm font-medium text-slate-500 dark:text-slate-400 mt-1">
+              Employee check-ins and check-outs are recorded immediately and updated in real-time.
+            </p>
           </div>
 
           <div className="flex items-center gap-2.5 flex-wrap">
@@ -982,6 +979,23 @@ const Attendance = () => {
           </div>
         </div>
 
+        {/* Global Date-Range Picker Filter */}
+        <GlobalDateRangePicker
+          startDate={startDateFilter}
+          endDate={endDateFilter}
+          preset={dateRangePreset}
+          title="Attendance Period & Date Filter"
+          onRangeChange={({ startDate, endDate, preset }) => {
+            setStartDateFilter(startDate);
+            setEndDateFilter(endDate);
+            setDateRangePreset(preset);
+            if (startDate || endDate) {
+              setDateFilter("");
+            }
+            setCurrentPage(1);
+          }}
+        />
+
         {/* VISUALIZATION SECTION: Monthly Calendar & Weekly Analytics Switcher */}
         <div className="space-y-4">
           <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 bg-[#FFFFFF] border border-[#E2E8F0] p-3 sm:p-4 rounded-2xl shadow-xs">
@@ -1061,7 +1075,7 @@ const Attendance = () => {
           {/* Attendance Intensity Heatmap Component */}
           {(visualizationTab === "heatmap" || visualizationTab === "both") && (
             <AttendanceIntensityHeatmap
-              attendanceLogs={attendance}
+              attendanceLogs={filteredAttendance.length > 0 ? filteredAttendance : attendance}
               title="Organization Attendance Intensity"
               subtitle="Organization-wide daily check-in pattern matrix, worked hours density, and active streak patterns"
               onSelectDay={(date) => {
@@ -1079,7 +1093,7 @@ const Attendance = () => {
           {/* Monthly Attendance Calendar Component */}
           {(visualizationTab === "calendar" || visualizationTab === "both") && (
             <AttendanceMonthlyCalendar
-              attendanceLogs={attendance}
+              attendanceLogs={filteredAttendance.length > 0 ? filteredAttendance : attendance}
               employeesList={employeesList}
               leaveRequests={leaveRequests}
               onSelectDate={(date) => {
@@ -1098,7 +1112,7 @@ const Attendance = () => {
           {/* Real-time Recharts Attendance Analytics Chart */}
           {(visualizationTab === "trends" || visualizationTab === "both") && (
             <WeeklyAttendanceChart
-              attendanceLogs={attendance}
+              attendanceData={filteredAttendance.length > 0 ? filteredAttendance : attendance}
               title="Live Weekly Attendance Trends & Punctuality"
               subtitle="Real-time breakdown of employee check-in punctuality, tardiness, and logged hours"
             />
@@ -1862,172 +1876,15 @@ const Attendance = () => {
       )}
 
       {/* Manual Override / Retroactive Adjustment Modal */}
-      {showAdjustmentModal && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4 backdrop-blur-xs">
-          <div className="w-full max-w-md rounded-2xl bg-[#FFFFFF] shadow-2xl border border-[#E2E8F0] overflow-hidden animate-in fade-in zoom-in-95 duration-200">
-            <div className="flex items-center justify-between border-b border-[#E2E8F0] px-6 py-4 bg-[#F8FAFC]">
-              <div className="flex items-center gap-2.5">
-                <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-[#002185] text-white">
-                  <Edit3 className="h-4 w-4" />
-                </div>
-                <div>
-                  <h2 className="text-base font-bold text-[#002185]">
-                    {adjustmentFormData.id ? "Admin Adjustment" : "Manual Override Entry"}
-                  </h2>
-                  <p className="text-xs text-[#64748B]">
-                    {adjustmentFormData.id ? `Adjusting record for ${adjustmentFormData.employeeName}` : "Create retroactive attendance record"}
-                  </p>
-                </div>
-              </div>
-              <button
-                onClick={() => setShowAdjustmentModal(false)}
-                className="rounded-lg p-1.5 text-[#64748B] hover:bg-[#E2E8F0]/50 hover:text-[#002185] transition-colors"
-              >
-                <X className="h-4 w-4" />
-              </button>
-            </div>
-
-            <form onSubmit={handleSaveAdjustment} className="p-6 space-y-4">
-              {!adjustmentFormData.id && (
-                <div>
-                  <label className="block text-xs font-semibold uppercase tracking-wider text-[#64748B] mb-1">
-                    Employee
-                  </label>
-                  <select
-                    value={adjustmentFormData.employeeId}
-                    onChange={(e) =>
-                      setAdjustmentFormData({
-                        ...adjustmentFormData,
-                        employeeId: e.target.value,
-                      })
-                    }
-                    required
-                    className="w-full text-xs bg-[#F8FAFC] border border-[#E2E8F0] rounded-xl px-3 py-2 text-[#002185] focus:outline-none focus:border-[#002185]"
-                  >
-                    {employeesList.map((emp) => (
-                      <option key={emp._id || emp.employeeId} value={emp.employeeId || emp._id}>
-                        {emp.fullName} ({emp.employeeId || "EMP"}) - {emp.department}
-                      </option>
-                    ))}
-                  </select>
-                </div>
-              )}
-
-              <div className="grid grid-cols-2 gap-3">
-                <div>
-                  <label className="block text-xs font-semibold uppercase tracking-wider text-[#64748B] mb-1">
-                    Date
-                  </label>
-                  <input
-                    type="date"
-                    required
-                    value={adjustmentFormData.date}
-                    onChange={(e) =>
-                      setAdjustmentFormData({
-                        ...adjustmentFormData,
-                        date: e.target.value,
-                      })
-                    }
-                    className="w-full text-xs bg-[#F8FAFC] border border-[#E2E8F0] rounded-xl px-3 py-2 text-[#002185] focus:outline-none focus:border-[#002185]"
-                  />
-                </div>
-
-                <div>
-                  <label className="block text-xs font-semibold uppercase tracking-wider text-[#64748B] mb-1">
-                    Status
-                  </label>
-                  <select
-                    value={adjustmentFormData.status}
-                    onChange={(e) =>
-                      setAdjustmentFormData({
-                        ...adjustmentFormData,
-                        status: e.target.value,
-                      })
-                    }
-                    className="w-full text-xs bg-[#F8FAFC] border border-[#E2E8F0] rounded-xl px-3 py-2 text-[#002185] focus:outline-none focus:border-[#002185]"
-                  >
-                    <option value="On Time">On Time</option>
-                    <option value="Late">Late</option>
-                    <option value="Absent">Absent</option>
-                    <option value="On Leave">On Leave</option>
-                  </select>
-                </div>
-              </div>
-
-              <div className="grid grid-cols-2 gap-3">
-                <div>
-                  <label className="block text-xs font-semibold uppercase tracking-wider text-[#64748B] mb-1">
-                    Clock In Time
-                  </label>
-                  <input
-                    type="time"
-                    value={adjustmentFormData.clockIn}
-                    onChange={(e) =>
-                      setAdjustmentFormData({
-                        ...adjustmentFormData,
-                        clockIn: e.target.value,
-                      })
-                    }
-                    className="w-full text-xs bg-[#F8FAFC] border border-[#E2E8F0] rounded-xl px-3 py-2 text-[#002185] focus:outline-none focus:border-[#002185]"
-                  />
-                </div>
-
-                <div>
-                  <label className="block text-xs font-semibold uppercase tracking-wider text-[#64748B] mb-1">
-                    Clock Out Time
-                  </label>
-                  <input
-                    type="time"
-                    value={adjustmentFormData.clockOut}
-                    onChange={(e) =>
-                      setAdjustmentFormData({
-                        ...adjustmentFormData,
-                        clockOut: e.target.value,
-                      })
-                    }
-                    className="w-full text-xs bg-[#F8FAFC] border border-[#E2E8F0] rounded-xl px-3 py-2 text-[#002185] focus:outline-none focus:border-[#002185]"
-                  />
-                </div>
-              </div>
-
-              <div>
-                <label className="block text-xs font-semibold uppercase tracking-wider text-[#64748B] mb-1">
-                  Reason / Adjustment Note
-                </label>
-                <input
-                  type="text"
-                  placeholder="e.g. Approved manual correction by HR"
-                  value={adjustmentFormData.notes}
-                  onChange={(e) =>
-                    setAdjustmentFormData({
-                      ...adjustmentFormData,
-                      notes: e.target.value,
-                    })
-                  }
-                  className="w-full text-xs bg-[#F8FAFC] border border-[#E2E8F0] rounded-xl px-3 py-2 text-[#002185] focus:outline-none focus:border-[#002185]"
-                />
-              </div>
-
-              <div className="flex items-center justify-end gap-2.5 pt-3 border-t border-[#E2E8F0]">
-                <button
-                  type="button"
-                  onClick={() => setShowAdjustmentModal(false)}
-                  className="px-4 py-2 text-xs font-semibold text-[#64748B] hover:text-[#002185] rounded-xl hover:bg-[#F8FAFC]"
-                >
-                  Cancel
-                </button>
-                <button
-                  type="submit"
-                  disabled={isSavingAdjustment}
-                  className="px-4 py-2 text-xs font-semibold text-white bg-[#002185] hover:bg-[#ff5500] rounded-xl transition-colors disabled:opacity-50"
-                >
-                  {isSavingAdjustment ? "Saving..." : "Save Override"}
-                </button>
-              </div>
-            </form>
-          </div>
-        </div>
-      )}
+      <ManualOverrideModal
+        isOpen={showAdjustmentModal}
+        onClose={() => setShowAdjustmentModal(false)}
+        formData={adjustmentFormData}
+        setFormData={setAdjustmentFormData}
+        onSave={handleSaveAdjustment}
+        employeesList={employeesList}
+        isSaving={isSavingAdjustment}
+      />
 
       {/* Quick Actions: Excuse Lateness Modal */}
       <ExcuseLatenessModal

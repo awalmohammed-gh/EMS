@@ -976,7 +976,7 @@ export const generatePayroll = async (req, res) => {
             remarks: newRecord.remarks,
             status: finalStatus,
           },
-          { new: true, upsert: true, setDefaultsOnInsert: true }
+          { returnDocument: "after", upsert: true, setDefaultsOnInsert: true }
         ).populate("employee", "employeeId fullName email department position");
 
         newRecord._id = payroll._id;
@@ -1700,9 +1700,11 @@ export const getEmployeePayslipBreakdownById = async (req, res) => {
     }
 
     // Role-based authorization: Standard employees are strictly restricted to their own payslip
-    if (req.employee && (!req.admin || req.admin.role === "employee")) {
-      const authEmpId = String(req.employee.id || req.employee._id || "");
-      const authCode = String(req.employee.employeeId || "");
+    const authUser = req.user || req.employee || req.admin;
+    const isEmployeeRole = (authUser?.role === "employee" || (!req.admin && req.employee) || (req.user && req.user.role === "employee"));
+    if (isEmployeeRole && authUser) {
+      const authEmpId = String(authUser.id || authUser._id || "");
+      const authCode = String(authUser.employeeId || "");
       const recordEmpId = String(foundRecord.employee?._id || foundRecord.employee?.id || foundRecord.employee || "");
       const recordCode = String(foundRecord.employee?.employeeId || foundRecord.employeeId || "");
 
@@ -1760,7 +1762,7 @@ export const updatePayrollStatus = async (req, res) => {
         updated = await Payroll.findByIdAndUpdate(
           id,
           { status, ...(remarks && { remarks }) },
-          { new: true },
+          { returnDocument: "after" },
         ).populate("employee", "fullName employeeId department position");
       } catch (err) {
         console.warn("DB update status fallback:", err.message);

@@ -99,7 +99,7 @@ export const createEmployeeAccount = async (req, res) => {
           status: "active",
           isActive: true,
         },
-        { upsert: true, new: true, setDefaultsOnInsert: true }
+        { upsert: true, returnDocument: "after", setDefaultsOnInsert: true }
       );
     } catch (userSyncErr) {
       console.warn("User collection sync in createEmployeeAccount:", userSyncErr.message);

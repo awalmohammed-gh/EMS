@@ -197,10 +197,10 @@ export const AdminRegister = () => {
             <ShieldCheck className="w-4 h-4 text-[#002185]" />
             Administrator Registration
           </div>
-          <h1 className="text-2xl font-extrabold text-[#002185] tracking-tight">
+          <h1 className="text-2xl sm:text-3xl font-extrabold text-[#0B1E48] dark:text-blue-100 tracking-tight">
             Create Admin Account
           </h1>
-          <p className="text-sm text-[#64748B] mt-1">
+          <p className="text-sm font-medium text-slate-500 dark:text-slate-400 mt-1">
             Register a new administrator account to manage staff, payroll, and attendance.
           </p>
         </div>

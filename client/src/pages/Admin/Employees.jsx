@@ -73,23 +73,18 @@ const Employees = () => {
       {/* Page Header Banner */}
       <div className="bg-white dark:bg-slate-900 border border-slate-200/80 dark:border-slate-800/80 rounded-2xl sm:rounded-3xl p-5 sm:p-6 shadow-sm dark:shadow-black/20">
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-          <div className="flex items-center gap-3.5">
-            <div className="p-2.5 rounded-xl bg-blue-500/10 text-blue-600 dark:text-blue-400 border border-blue-500/20 shrink-0">
-              <UserPlus className="w-6 h-6" />
+          <div>
+            <div className="flex items-center gap-2.5">
+              <h1 className="text-2xl sm:text-3xl font-extrabold tracking-tight text-[#0B1E48] dark:text-blue-100">
+                Employee Directory
+              </h1>
+              <span className="px-2.5 py-0.5 rounded-full text-xs font-semibold bg-blue-500/10 dark:bg-blue-950/60 text-blue-600 dark:text-blue-400 border border-blue-500/20">
+                {employees.length} Staff Members
+              </span>
             </div>
-            <div>
-              <div className="flex items-center gap-2.5">
-                <h1 className="text-xl sm:text-2xl font-bold tracking-tight text-slate-900 dark:text-white">
-                  Employee Directory
-                </h1>
-                <span className="px-2.5 py-0.5 rounded-full text-xs font-semibold bg-blue-500/10 dark:bg-blue-950/60 text-blue-600 dark:text-blue-400 border border-blue-500/20">
-                  {employees.length} Staff Members
-                </span>
-              </div>
-              <p className="text-xs sm:text-sm text-slate-500 dark:text-slate-400 mt-0.5">
-                Searchable staff directory linked with database records, roles, contact info, and availability.
-              </p>
-            </div>
+            <p className="text-sm font-medium text-slate-500 dark:text-slate-400 mt-1">
+              Searchable staff directory linked with database records, roles, contact info, and availability.
+            </p>
           </div>
 
           <div className="flex flex-wrap items-center gap-2.5 self-start sm:self-auto">
@@ -129,12 +124,14 @@ const Employees = () => {
             </button>
 
             <button
+              id="btn-new-employee"
               type="button"
               onClick={() => setShowEmployeeModal(true)}
               className="px-4 py-2 rounded-xl bg-blue-600 hover:bg-blue-700 text-xs font-semibold text-white transition-all shadow-sm flex items-center gap-2 cursor-pointer"
+              title="Add a new employee to directory"
             >
               <UserPlus className="w-4 h-4" />
-              <span>Add Staff Member</span>
+              <span>New Employee</span>
             </button>
           </div>
         </div>

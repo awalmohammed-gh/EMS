@@ -10,7 +10,6 @@ import {
   Users,
   ArrowRight,
   SlidersHorizontal,
-  CalendarClock,
   LayoutGrid,
   List,
   Check,
@@ -291,26 +290,21 @@ export const Leave = () => {
     <div id="admin-leave-management" className="w-full max-w-7xl mx-auto p-4 sm:p-6 lg:p-8 space-y-6 overflow-x-hidden">
       {/* Header Banner */}
       <div className="bg-white dark:bg-slate-900 border border-slate-200/80 dark:border-slate-800/80 rounded-2xl sm:rounded-3xl p-5 sm:p-6 shadow-sm dark:shadow-black/20">
-        <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
-          <div className="flex items-center gap-3.5">
-            <div className="p-2.5 rounded-xl bg-blue-500/10 text-blue-600 dark:text-blue-400 border border-blue-500/20 shrink-0">
-              <CalendarClock className="h-6 w-6" />
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+          <div>
+            <div className="flex items-center gap-2.5">
+              <h1 className="text-2xl sm:text-3xl font-extrabold tracking-tight text-[#0B1E48] dark:text-blue-100">
+                Leave Requests Management
+              </h1>
+              {pendingRequests > 0 && (
+                <span className="px-2.5 py-0.5 rounded-full text-xs font-semibold bg-amber-500/10 text-amber-600 dark:text-amber-400 border border-amber-500/20">
+                  {pendingRequests} Action Required
+                </span>
+              )}
             </div>
-            <div>
-              <div className="flex items-center gap-2.5">
-                <h1 className="text-xl sm:text-2xl font-bold tracking-tight text-slate-900 dark:text-white">
-                  Leave Requests Management
-                </h1>
-                {pendingRequests > 0 && (
-                  <span className="px-2.5 py-0.5 rounded-full text-xs font-semibold bg-amber-500/10 text-amber-600 dark:text-amber-400 border border-amber-500/20">
-                    {pendingRequests} Action Required
-                  </span>
-                )}
-              </div>
-              <p className="text-xs sm:text-sm text-slate-500 dark:text-slate-400 mt-0.5">
-                Review and approve or reject employee leave requests with direct database sync and calendar tracking.
-              </p>
-            </div>
+            <p className="text-sm font-medium text-slate-500 dark:text-slate-400 mt-1">
+              Review and approve or reject employee leave requests with direct database sync and calendar tracking.
+            </p>
           </div>
 
           {/* View Switcher Tabs */}

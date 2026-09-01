@@ -83,16 +83,16 @@ employeeRouter.put("/profile", employeeAuth, updateCurrentEmployee);
 employeeRouter.put("/change-password", employeeAuth, changeEmployeePassword);
 employeeRouter.put("/password", employeeAuth, changeEmployeePassword);
 employeeRouter.post("/change-password", employeeAuth, changeEmployeePassword);
-employeeRouter.get("/all-employees", employeeDetails);
-employeeRouter.get("/all", employeeDetails);
-employeeRouter.get("/directory", employeeDetails);
-employeeRouter.get("/list", employeeDetails);
-employeeRouter.get("/", employeeDetails);
+employeeRouter.get("/all-employees", verifyAdmin, employeeDetails);
+employeeRouter.get("/all", verifyAdmin, employeeDetails);
+employeeRouter.get("/directory", verifyAdmin, employeeDetails);
+employeeRouter.get("/list", verifyAdmin, employeeDetails);
+employeeRouter.get("/", verifyAdmin, employeeDetails);
 
-employeeRouter.get("/list-employee-name", employeeNameList);
-employeeRouter.get("/names", employeeNameList);
-employeeRouter.get("/profile/:id", getEmployeeById);
-employeeRouter.get("/:id", getEmployeeById);
+employeeRouter.get("/list-employee-name", employeeAuth, employeeNameList);
+employeeRouter.get("/names", employeeAuth, employeeNameList);
+employeeRouter.get("/profile/:id", employeeAuth, getEmployeeById);
+employeeRouter.get("/:id", employeeAuth, getEmployeeById);
 
 // Admin-only status modification
 employeeRouter.put("/:id/status", verifyAdmin, updateEmployeeStatus);

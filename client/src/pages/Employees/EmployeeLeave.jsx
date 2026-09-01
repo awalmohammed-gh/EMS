@@ -301,19 +301,14 @@ const EmployeeLeave = () => {
     <>
       <div id="employee-leave-portal" className="w-full max-w-7xl mx-auto p-4 sm:p-6 lg:p-8 space-y-6 overflow-x-hidden">
         {/* Header */}
-        <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
-          <div className="flex items-center gap-3">
-            <div className="w-11 h-11 rounded-xl bg-[#002185] flex items-center justify-center text-white shadow-xs">
-              <CalendarDays className="w-6 h-6" />
-            </div>
-            <div>
-              <h1 className="text-2xl font-bold text-[#002185] tracking-tight">
-                My Leave Requests & Tracking
-              </h1>
-              <p className="text-xs text-[#64748B] mt-0.5">
-                Apply for leave, track approval decisions in real-time, and manage your annual balances
-              </p>
-            </div>
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+          <div>
+            <h1 className="text-2xl sm:text-3xl font-extrabold tracking-tight text-[#0B1E48] dark:text-blue-100">
+              My Leave Requests & Tracking
+            </h1>
+            <p className="text-sm font-medium text-slate-500 dark:text-slate-400 mt-1">
+              Apply for leave, track approval decisions in real-time, and manage your annual balances
+            </p>
           </div>
           <div className="flex items-center gap-2 self-stretch sm:self-auto">
             <button

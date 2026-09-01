@@ -209,10 +209,10 @@ export const Login = ({ initialRole = null }) => {
               className="h-10 w-auto object-contain"
             />
           </div>
-          <h1 className="text-2xl font-bold tracking-tight text-[#0F172A]">
+          <h1 className="text-2xl sm:text-3xl font-extrabold tracking-tight text-[#0B1E48] dark:text-blue-100">
             Employee Management Portal
           </h1>
-          <p className="text-xs text-[#64748B] mt-1">
+          <p className="text-sm font-medium text-slate-500 dark:text-slate-400 mt-1">
             Secure enterprise access for staff and administrators
           </p>
         </div>

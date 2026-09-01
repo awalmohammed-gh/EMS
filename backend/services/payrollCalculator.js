@@ -177,7 +177,7 @@ export const persistImmutablePayslipSnapshot = async (payslipPayload) => {
   const savedRecord = await Payroll.findOneAndUpdate(
     { employee: docData.employee, payMonth: docData.payMonth },
     docData,
-    { new: true, upsert: true, setDefaultsOnInsert: true }
+    { returnDocument: "after", upsert: true, setDefaultsOnInsert: true }
   ).populate("employee", "fullName employeeId department position email bankName accountNumber phone");
 
   return savedRecord;

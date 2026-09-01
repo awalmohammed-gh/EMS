@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, useMemo } from "react";
 import {
   ResponsiveContainer,
   ComposedChart,
@@ -85,7 +85,7 @@ const CustomPenaltyTooltip = ({ active, payload, label }) => {
   );
 };
 
-export const PenaltyPayrollImpactChart = ({ className = "" }) => {
+export const PenaltyPayrollImpactChart = ({ className = "", startDate = "", endDate = "", customData = null }) => {
   const [data, setData] = useState([]);
   const [summary, setSummary] = useState(null);
   const [viewMode, setViewMode] = useState("penalties_breakdown"); // "penalties_breakdown" | "gross_vs_net" | "impact_ratio"
@@ -182,7 +182,24 @@ export const PenaltyPayrollImpactChart = ({ className = "" }) => {
     })}`;
   };
 
-  // 5 Top Metric Cards aggregated across the 6 months directly from backend
+  // Filter data according to startDate and endDate if provided
+  const displayData = useMemo(() => {
+    if (customData && Array.isArray(customData)) return customData;
+    if (!startDate && !endDate) return data;
+
+    return data.filter((item) => {
+      // Month labels e.g. "Mar" or "Mar 2026" or date fields
+      if (item.date) {
+        const d = new Date(item.date).toISOString().split("T")[0];
+        if (startDate && d < startDate) return false;
+        if (endDate && d > endDate) return false;
+        return true;
+      }
+      return true;
+    });
+  }, [data, customData, startDate, endDate]);
+
+  // 5 Top Metric Cards aggregated across data directly from backend or filtered data
   const total6MoPenalties = summary?.total6MoPenalties ?? summary?.totalNetPenalties6Mo ?? summary?.totalPenalties6Mo ?? 0;
   const totalAbsenceDeductions = summary?.totalAbsenceDeductions ?? summary?.totalAbsencePenalties6Mo ?? 0;
   const totalLatenessPenalties = summary?.totalLatenessPenalties ?? summary?.totalLatenessPenalties6Mo ?? 0;
@@ -340,7 +357,7 @@ export const PenaltyPayrollImpactChart = ({ className = "" }) => {
         <ResponsiveContainer width="100%" height="100%">
           {viewMode === "penalties_breakdown" ? (
             <ComposedChart
-              data={data}
+              data={displayData}
               margin={{ top: 10, right: 10, left: 10, bottom: 0 }}
             >
               <CartesianGrid strokeDasharray="3 3" stroke="#94A3B8" opacity={0.2} />
@@ -398,7 +415,7 @@ export const PenaltyPayrollImpactChart = ({ className = "" }) => {
             </ComposedChart>
           ) : viewMode === "gross_vs_net" ? (
             <ComposedChart
-              data={data}
+              data={displayData}
               margin={{ top: 10, right: 10, left: 10, bottom: 0 }}
             >
               <CartesianGrid strokeDasharray="3 3" stroke="#94A3B8" opacity={0.2} />
@@ -446,7 +463,7 @@ export const PenaltyPayrollImpactChart = ({ className = "" }) => {
             </ComposedChart>
           ) : (
             <ComposedChart
-              data={data}
+              data={displayData}
               margin={{ top: 10, right: 10, left: 10, bottom: 0 }}
             >
               <CartesianGrid strokeDasharray="3 3" stroke="#94A3B8" opacity={0.2} />

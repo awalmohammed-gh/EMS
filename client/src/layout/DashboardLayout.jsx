@@ -4,6 +4,7 @@ import AdminSidebar from "../pages/Admin/AdminSidebar";
 import EmployeeSidebar from "../pages/Employees/EmployeeSidebar";
 import Navbar from "../components/Navbar";
 import MobileSidebar from "../components/MobileSidebar";
+import ErrorBoundary from "../components/ErrorBoundary";
 
 export const DashboardLayout = ({ role: propRole }) => {
   const location = useLocation();
@@ -52,7 +53,13 @@ export const DashboardLayout = ({ role: propRole }) => {
 
         {/* Scrollable Page Content Area */}
         <main className="flex-1 overflow-y-auto bg-[#F8FAFC] dark:bg-slate-900 transition-colors duration-200">
-          <Outlet />
+          <ErrorBoundary
+            key={location.pathname}
+            title="Failed to Load View"
+            message="A client-side error occurred while rendering this page. You can try reloading the section or returning to the dashboard."
+          >
+            <Outlet />
+          </ErrorBoundary>
         </main>
       </div>
     </div>
@@ -60,3 +67,4 @@ export const DashboardLayout = ({ role: propRole }) => {
 };
 
 export default DashboardLayout;
+

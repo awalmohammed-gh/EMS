@@ -17,11 +17,13 @@ import {
   bulkUploadBiometricAttendance,
   deleteAttendanceRecord,
   syncAttendancePenalties,
+  getPerformanceMetrics,
 } from "../controllers/employeeAttendance.js";
 import { verifyAdmin } from "../middleware/authAdmin.js";
 
 const attendanceRouter = express.Router();
 
+attendanceRouter.get("/performance-metrics", getPerformanceMetrics);
 attendanceRouter.post("/clock-in", employeeAuth, clockIn);
 attendanceRouter.post("/clock-out", employeeAuth, clockOut);
 attendanceRouter.get("/today", employeeAuth, getCurrentEmployee);

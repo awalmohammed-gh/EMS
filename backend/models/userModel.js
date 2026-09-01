@@ -30,7 +30,7 @@ const userSchema = new mongoose.Schema(
 
     status: {
       type: String,
-      enum: ["active", "inactive", "suspended"],
+      enum: ["active", "inactive", "suspended", "on leave", "on-leave", "terminated"],
       default: "active",
     },
 
@@ -86,6 +86,8 @@ userSchema.methods.comparePassword = async function (candidatePassword) {
   if (!candidatePassword || !this.password) return false;
   return bcrypt.compare(candidatePassword, this.password);
 };
+
+userSchema.index({ role: 1, status: 1 });
 
 export const User = mongoose.models.User || mongoose.model("User", userSchema);
 

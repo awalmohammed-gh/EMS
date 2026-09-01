@@ -116,7 +116,7 @@ export const updatePenaltySettings = async (req, res) => {
       updatedDoc = await CompanySettings.findOneAndUpdate(
         {},
         { $set: payload },
-        { new: true, upsert: true, setDefaultsOnInsert: true }
+        { returnDocument: "after", upsert: true, setDefaultsOnInsert: true }
       ).lean();
     } catch (dbErr) {
       console.warn("DB fallback for updatePenaltySettings:", dbErr.message);
@@ -298,7 +298,7 @@ export const updateCompanySettings = async (req, res) => {
     const settings = await Settings.findOneAndUpdate(
       {},
       { $set: { company: req.body } },
-      { new: true, upsert: true },
+      { returnDocument: "after", upsert: true },
     );
 
     const adminUser = req.admin || {};
@@ -345,7 +345,7 @@ export const updateEmployeeSettings = async (req, res) => {
     const settings = await Settings.findOneAndUpdate(
       {},
       { $set: { employee: req.body } },
-      { new: true, upsert: true },
+      { returnDocument: "after", upsert: true },
     );
 
     res.status(200).json({
@@ -367,7 +367,7 @@ export const updatePayrollSettings = async (req, res) => {
     const settings = await Settings.findOneAndUpdate(
       {},
       { $set: { payroll: req.body } },
-      { new: true, upsert: true },
+      { returnDocument: "after", upsert: true },
     );
 
     res.status(200).json({
@@ -389,7 +389,7 @@ export const updateLeaveSettings = async (req, res) => {
     const settings = await Settings.findOneAndUpdate(
       {},
       { $set: { leave: req.body } },
-      { new: true, upsert: true },
+      { returnDocument: "after", upsert: true },
     );
 
     res.status(200).json({
@@ -411,7 +411,7 @@ export const updateAttendanceSettings = async (req, res) => {
     const settings = await Settings.findOneAndUpdate(
       {},
       { $set: { attendance: req.body } },
-      { new: true, upsert: true },
+      { returnDocument: "after", upsert: true },
     );
 
     res.status(200).json({
@@ -433,7 +433,7 @@ export const updateSecuritySettings = async (req, res) => {
     const settings = await Settings.findOneAndUpdate(
       {},
       { $set: { security: req.body } },
-      { new: true, upsert: true },
+      { returnDocument: "after", upsert: true },
     );
 
     res.status(200).json({

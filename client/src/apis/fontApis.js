@@ -47,6 +47,10 @@ export const updateEmployeeStatus = (id, status) => {
   return api.put(`/admin/employees/${id}/status`, { status });
 };
 
+export const bulkUpdateEmployees = (employeeIds, updates) => {
+  return api.patch("/admin/employees/bulk-update", { employeeIds, updates });
+};
+
 export const deleteEmployee = (id) => {
   return api.delete(`/admin/employees/${id}`);
 };
