@@ -13,7 +13,6 @@ import {
   LogOut,
   Clock,
   Zap,
-  X,
   RefreshCw,
   Lock,
   CheckCircle2,
@@ -48,8 +47,7 @@ const EmployeeDashboard = () => {
     workHours: 0,
   });
 
-  // Quick Actions Floating Menu & Modals State
-  const [quickActionsOpen, setQuickActionsOpen] = useState(false);
+  // Quick Actions Modals State
   const [showApplyLeaveModal, setShowApplyLeaveModal] = useState(false);
   const [showPayslipModal, setShowPayslipModal] = useState(false);
 
@@ -570,6 +568,145 @@ const EmployeeDashboard = () => {
 
       {/* Main Dashboard Overview Body */}
       <div className="space-y-6">
+        {/* Top Quick Actions Section */}
+        <div className="bg-white dark:bg-slate-800 border border-[#E5E9EE] dark:border-slate-700/80 rounded-2xl p-4 sm:p-5 shadow-xs">
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 mb-3.5">
+            <div className="flex items-center gap-2">
+              <div className="w-7 h-7 rounded-lg bg-blue-50 dark:bg-blue-950/60 text-[#002185] dark:text-blue-400 flex items-center justify-center font-bold">
+                <Zap className="w-4 h-4" />
+              </div>
+              <h2 className="text-sm font-bold text-[#0F1B33] dark:text-slate-100">
+                Quick Actions
+              </h2>
+            </div>
+            <span className="text-xs text-slate-500 dark:text-slate-400">
+              One-tap employee self-service tools
+            </span>
+          </div>
+
+          <div className="grid grid-cols-2 sm:grid-cols-4 gap-2.5 sm:gap-3">
+            {/* Quick Action 1: Clock In / Clock Out */}
+            <button
+              type="button"
+              id="top-quick-action-clock"
+              onClick={async () => {
+                if (!attendanceData.clockIn) {
+                  await handleClockIn();
+                } else if (!attendanceData.clockOut) {
+                  await handleClockOut();
+                } else {
+                  navigate("/employee/dashboard/attendance");
+                }
+              }}
+              disabled={isLoading}
+              className={`flex flex-col sm:flex-row items-center sm:items-start gap-2.5 p-3 rounded-xl border text-left transition-all duration-150 cursor-pointer active:scale-98 ${
+                !attendanceData.clockIn
+                  ? "bg-blue-50/70 dark:bg-blue-950/40 border-blue-200 dark:border-blue-800/60 text-[#002185] dark:text-blue-300 hover:bg-blue-100/70"
+                  : !attendanceData.clockOut
+                  ? "bg-amber-50/70 dark:bg-amber-950/40 border-amber-200 dark:border-amber-800/60 text-amber-800 dark:text-amber-300 hover:bg-amber-100/70"
+                  : "bg-emerald-50/70 dark:bg-emerald-950/40 border-emerald-200 dark:border-emerald-800/60 text-emerald-800 dark:text-emerald-300 hover:bg-emerald-100/70"
+              }`}
+            >
+              <div className="w-8 h-8 rounded-lg bg-white dark:bg-slate-800 shadow-2xs flex items-center justify-center shrink-0">
+                {!attendanceData.clockIn ? (
+                  <LogIn className="w-4 h-4 text-blue-600 dark:text-blue-400" />
+                ) : !attendanceData.clockOut ? (
+                  <LogOut className="w-4 h-4 text-amber-600 dark:text-amber-400" />
+                ) : (
+                  <CheckCircle2 className="w-4 h-4 text-emerald-600 dark:text-emerald-400" />
+                )}
+              </div>
+              <div className="min-w-0 text-center sm:text-left">
+                <p className="text-xs font-bold leading-tight truncate">
+                  {!attendanceData.clockIn
+                    ? "Clock In"
+                    : !attendanceData.clockOut
+                    ? "Clock Out"
+                    : "Completed"}
+                </p>
+                <p className="text-[11px] opacity-75 leading-tight mt-0.5 truncate">
+                  {!attendanceData.clockIn
+                    ? "Start shift"
+                    : !attendanceData.clockOut
+                    ? "End shift"
+                    : "Shift recorded"}
+                </p>
+              </div>
+            </button>
+
+            {/* Quick Action 2: Request Leave */}
+            <button
+              type="button"
+              id="top-quick-action-leave"
+              onClick={() => setShowApplyLeaveModal(true)}
+              className="flex flex-col sm:flex-row items-center sm:items-start gap-2.5 p-3 rounded-xl border bg-sky-50/70 dark:bg-sky-950/40 border-sky-200 dark:border-sky-800/60 text-sky-800 dark:text-sky-300 hover:bg-sky-100/70 transition-all duration-150 cursor-pointer active:scale-98"
+            >
+              <div className="w-8 h-8 rounded-lg bg-white dark:bg-slate-800 shadow-2xs flex items-center justify-center shrink-0">
+                <CalendarCheck className="w-4 h-4 text-sky-600 dark:text-sky-400" />
+              </div>
+              <div className="min-w-0 text-center sm:text-left">
+                <p className="text-xs font-bold leading-tight truncate">Request Leave</p>
+                <p className="text-[11px] opacity-75 leading-tight mt-0.5 truncate">
+                  {leaveBalance.remaining} days left
+                </p>
+              </div>
+            </button>
+
+            {/* Quick Action 3: View Payslips */}
+            <button
+              type="button"
+              id="top-quick-action-payslip"
+              onClick={() => {
+                if (isPayslipReleased) {
+                  setShowPayslipModal(true);
+                } else {
+                  navigate("/employee/dashboard/payslips");
+                }
+              }}
+              className="flex flex-col sm:flex-row items-center sm:items-start gap-2.5 p-3 rounded-xl border bg-purple-50/70 dark:bg-purple-950/40 border-purple-200 dark:border-purple-800/60 text-purple-800 dark:text-purple-300 hover:bg-purple-100/70 transition-all duration-150 cursor-pointer active:scale-98"
+            >
+              <div className="w-8 h-8 rounded-lg bg-white dark:bg-slate-800 shadow-2xs flex items-center justify-center shrink-0">
+                {isPayslipReleased ? (
+                  <Banknote className="w-4 h-4 text-purple-600 dark:text-purple-400" />
+                ) : (
+                  <Lock className="w-4 h-4 text-purple-600 dark:text-purple-400" />
+                )}
+              </div>
+              <div className="min-w-0 text-center sm:text-left">
+                <p className="text-xs font-bold leading-tight truncate">
+                  {isPayslipReleased ? "View Payslip" : "Payslip Status"}
+                </p>
+                <p className="text-[11px] opacity-75 leading-tight mt-0.5 truncate">
+                  {isPayslipReleased ? "Paid & Released" : "Pending review"}
+                </p>
+              </div>
+            </button>
+
+            {/* Quick Action 4: Refresh Attendance */}
+            <button
+              type="button"
+              id="top-quick-action-sync"
+              disabled={isSyncingAttendance}
+              onClick={handleSyncAttendance}
+              className="flex flex-col sm:flex-row items-center sm:items-start gap-2.5 p-3 rounded-xl border bg-slate-50/80 dark:bg-slate-900/60 border-slate-200 dark:border-slate-700/80 text-slate-800 dark:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-800 transition-all duration-150 cursor-pointer active:scale-98 disabled:opacity-60"
+            >
+              <div className="w-8 h-8 rounded-lg bg-white dark:bg-slate-800 shadow-2xs flex items-center justify-center shrink-0">
+                <RefreshCw
+                  className={`w-4 h-4 text-slate-600 dark:text-slate-300 ${
+                    isSyncingAttendance ? "animate-spin text-[#002185]" : ""
+                  }`}
+                />
+              </div>
+              <div className="min-w-0 text-center sm:text-left">
+                <p className="text-xs font-bold leading-tight truncate">Sync Records</p>
+                <p className="text-[11px] opacity-75 leading-tight mt-0.5 truncate">
+                  {isSyncingAttendance ? "Updating..." : "Recalculate live"}
+                </p>
+              </div>
+            </button>
+          </div>
+        </div>
+
         {/* User-Friendly Clock In / Clock Out Card */}
         <ClockInOutCard
           attendanceData={attendanceData}
@@ -880,150 +1017,6 @@ const EmployeeDashboard = () => {
               </div>
             </div>
           )}
-        </div>
-      </div>
-
-      {/* Quick Actions Floating Action Menu (Mobile & Desktop Accessible) */}
-      <div className="fixed bottom-6 right-6 z-40 sm:bottom-8 sm:right-8">
-        {/* Backdrop overlay when open */}
-        {quickActionsOpen && (
-          <div
-            onClick={() => setQuickActionsOpen(false)}
-            className="fixed inset-0 bg-[#0F1B33]/20 z-30"
-          />
-        )}
-
-        {/* Floating Menu Action Items */}
-        <div
-          className={`relative z-40 flex flex-col items-end gap-2 transition-all duration-200 ${
-            quickActionsOpen
-              ? "opacity-100 translate-y-0 pointer-events-auto"
-              : "opacity-0 translate-y-3 pointer-events-none"
-          }`}
-        >
-          {/* Action 0: Refresh Attendance */}
-          <button
-            id="quick-action-sync-attendance"
-            type="button"
-            disabled={isSyncingAttendance}
-            onClick={async () => {
-              setQuickActionsOpen(false);
-              await handleSyncAttendance();
-            }}
-            className="group flex items-center gap-3 pl-4 pr-3 py-2 rounded-lg bg-[#0F1B33] shadow-lg hover:bg-[#1A2947] transition-colors duration-150 cursor-pointer disabled:opacity-60"
-          >
-            <span className="text-xs font-medium text-white whitespace-nowrap">
-              {isSyncingAttendance ? "Updating..." : "Refresh Attendance"}
-            </span>
-            <div className="w-6 h-6 rounded-md flex items-center justify-center text-white bg-white/10">
-              <RefreshCw
-                className={`w-3.5 h-3.5 ${
-                  isSyncingAttendance ? "animate-spin text-white" : "text-white"
-                }`}
-              />
-            </div>
-          </button>
-
-          {/* Action 1: Clock In / Clock Out */}
-          <button
-            id="quick-action-clock-in-out"
-            type="button"
-            onClick={async () => {
-              setQuickActionsOpen(false);
-              if (!attendanceData.clockIn) {
-                await handleClockIn();
-              } else if (!attendanceData.clockOut) {
-                await handleClockOut();
-              } else {
-                navigate("/employee/dashboard/attendance");
-              }
-            }}
-            className="group flex items-center gap-3 pl-4 pr-3 py-2 rounded-lg bg-[#0F1B33] shadow-lg hover:bg-[#1A2947] transition-colors duration-150 cursor-pointer"
-          >
-            <span className="text-xs font-medium text-white whitespace-nowrap">
-              {!attendanceData.clockIn
-                ? "Clock In Now"
-                : !attendanceData.clockOut
-                ? "Clock Out Now"
-                : "View Today's Attendance"}
-            </span>
-            <div className="w-6 h-6 rounded-md flex items-center justify-center text-white bg-white/10">
-              {!attendanceData.clockIn ? (
-                <LogIn className="w-3.5 h-3.5" />
-              ) : !attendanceData.clockOut ? (
-                <LogOut className="w-3.5 h-3.5" />
-              ) : (
-                <Clock className="w-3.5 h-3.5" />
-              )}
-            </div>
-          </button>
-
-          {/* Action 2: Request Leave */}
-          <button
-            id="quick-action-request-leave"
-            type="button"
-            onClick={() => {
-              setQuickActionsOpen(false);
-              setShowApplyLeaveModal(true);
-            }}
-            className="group flex items-center gap-3 pl-4 pr-3 py-2 rounded-lg bg-[#0F1B33] shadow-lg hover:bg-[#1A2947] transition-colors duration-150 cursor-pointer"
-          >
-            <span className="text-xs font-medium text-white whitespace-nowrap">
-              Request Leave
-            </span>
-            <div className="w-6 h-6 rounded-md flex items-center justify-center text-white bg-white/10">
-              <CalendarCheck className="w-3.5 h-3.5" />
-            </div>
-          </button>
-
-          {/* Action 3: View Payslip */}
-          <button
-            id="quick-action-view-payslip"
-            type="button"
-            onClick={() => {
-              setQuickActionsOpen(false);
-              if (isPayslipReleased) {
-                setShowPayslipModal(true);
-              } else {
-                navigate("/employee/dashboard/payslips");
-              }
-            }}
-            className="group flex items-center gap-3 pl-4 pr-3 py-2 rounded-lg bg-[#0F1B33] shadow-lg hover:bg-[#1A2947] transition-colors duration-150 cursor-pointer"
-          >
-            <span className="text-xs font-medium text-white whitespace-nowrap">
-              {isPayslipReleased ? "View Current Payslip" : "Payslip Status"}
-            </span>
-            <div className="w-6 h-6 rounded-md flex items-center justify-center text-white bg-white/10">
-              {isPayslipReleased ? (
-                <Banknote className="w-3.5 h-3.5" />
-              ) : (
-                <Lock className="w-3.5 h-3.5" />
-              )}
-            </div>
-          </button>
-        </div>
-
-        {/* Main Floating Trigger Button (FAB) */}
-        <div className="relative z-40 mt-3 flex items-center justify-end">
-          <button
-            id="btn-quick-actions-fab"
-            type="button"
-            aria-expanded={quickActionsOpen}
-            aria-label="Quick Actions Floating Menu"
-            onClick={() => setQuickActionsOpen((prev) => !prev)}
-            className={`flex items-center gap-2 h-11 px-4 rounded-lg text-white shadow-lg transition-colors duration-150 cursor-pointer ${
-              quickActionsOpen ? "bg-[#C24A0A]" : "bg-[#002185] hover:bg-[#001a6b]"
-            }`}
-          >
-            {quickActionsOpen ? (
-              <X className="w-4 h-4" />
-            ) : (
-              <Zap className="w-4 h-4" />
-            )}
-            <span className="text-xs font-semibold tracking-wide">
-              {quickActionsOpen ? "Close" : "Quick Actions"}
-            </span>
-          </button>
         </div>
       </div>
 

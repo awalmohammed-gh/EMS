@@ -1,7 +1,6 @@
 import { useState, useRef, useEffect } from "react";
 import { useLocation, useNavigate, Link } from "react-router-dom";
 import {
-  Menu,
   User,
   Settings,
   LogOut,
@@ -24,34 +23,12 @@ const getInitials = (name, fallback = "EM") => {
   return (parts[0][0] + parts[parts.length - 1][0]).toUpperCase();
 };
 
-export const Navbar = ({
-  role: propsRole,
-  onToggleMobileMenu,
-  toggleMobileSidebar,
-  onMenuClick,
-  onToggleMenu,
-}) => {
+export const Navbar = ({ role: propsRole }) => {
   const location = useLocation();
   const navigate = useNavigate();
   const { user, admin, role: contextRole, logout } = useManagement();
   const [isProfileMenuOpen, setIsProfileMenuOpen] = useState(false);
   const profileMenuRef = useRef(null);
-
-  // Unified toggle handler prioritizing onToggleMobileMenu
-  const handleToggle = (e) => {
-    if (e && typeof e.stopPropagation === "function") {
-      e.stopPropagation();
-    }
-    if (typeof onToggleMobileMenu === "function") {
-      onToggleMobileMenu();
-    } else if (typeof toggleMobileSidebar === "function") {
-      toggleMobileSidebar();
-    } else if (typeof onMenuClick === "function") {
-      onMenuClick();
-    } else if (typeof onToggleMenu === "function") {
-      onToggleMenu();
-    }
-  };
 
   // Derive active role: strictly differentiate Employee vs Admin
   const isEmployeeRoute = location.pathname.startsWith("/employee");
@@ -109,24 +86,10 @@ export const Navbar = ({
       id="unified-dashboard-navbar"
       className="sticky top-0 z-30 w-full bg-white/95 dark:bg-slate-900/95 backdrop-blur-md border-b border-[#E2E8F0] dark:border-slate-800 shadow-xs transition-colors duration-200"
     >
-      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-        <div className="flex items-center justify-between h-16">
-          {/* Left Section: Mobile Hamburger Toggle */}
-          <div className="flex items-center">
-            {/* Hamburger Button (lg:hidden) */}
-            <button
-              id="mobile-menu-toggle-button"
-              type="button"
-              onClick={handleToggle}
-              className="p-2 lg:hidden text-gray-700 dark:text-slate-200 hover:text-[#002185] dark:hover:text-blue-400 hover:bg-gray-100 dark:hover:bg-slate-800 rounded-xl transition-all cursor-pointer inline-flex items-center justify-center -ml-1 border border-transparent hover:border-gray-200 dark:hover:border-slate-700"
-              aria-label="Toggle mobile menu"
-            >
-              <Menu className="w-6 h-6" />
-            </button>
-          </div>
-
+      <div className="w-full max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+        <div className="flex items-center justify-end h-16 w-full">
           {/* Right Section: Theme Toggle + Notification Bell + User Profile Menu */}
-          <div className="flex items-center gap-2 sm:gap-3.5">
+          <div className="flex items-center justify-end ml-auto gap-2 sm:gap-3.5">
             {/* Theme Toggle Dropdown */}
             <ThemeToggle />
 

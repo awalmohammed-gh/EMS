@@ -137,34 +137,35 @@ export const MobileFeaturesDrawer = ({
             aria-hidden="true"
           />
 
-          {/* Slide-Up Sheet Container with Swipe-To-Dismiss Touch Gestures */}
+          {/* Slide-Up Sheet Container with Natural Swipe-To-Dismiss Touch Gestures */}
           <motion.div
             id="mobile-features-drawer-sheet"
             initial={{ y: "100%" }}
             animate={{ y: 0 }}
             exit={{ y: "100%" }}
-            transition={{ type: "spring", damping: 28, stiffness: 320 }}
+            transition={{ type: "spring", damping: 26, stiffness: 300, mass: 0.8 }}
             drag="y"
-            dragConstraints={{ top: 0 }}
-            dragElastic={{ top: 0, bottom: 0.6 }}
+            dragConstraints={{ top: 0, bottom: 0 }}
+            dragSnapToOrigin={true}
+            dragElastic={{ top: 0.05, bottom: 0.75 }}
             onDragEnd={(_event, info) => {
-              // Swipe down threshold: downward offset > 60px or rapid velocity > 200px/s
-              if (info.offset.y > 60 || info.velocity.y > 200) {
+              // Swipe down threshold: downward offset > 50px or rapid velocity > 150px/s
+              if (info.offset.y > 50 || info.velocity.y > 150) {
                 onClose();
               }
             }}
             onClick={(e) => e.stopPropagation()}
-            className="relative z-50 w-full rounded-t-[32px] bg-white dark:bg-slate-900 border-t border-slate-200 dark:border-slate-800 shadow-2xl max-h-[85vh] flex flex-col overflow-hidden touch-pan-y pt-2 pb-8 sm:pb-10 safe-bottom"
+            className="relative z-50 w-full rounded-t-[32px] bg-white dark:bg-slate-900 border-t border-slate-200 dark:border-slate-800 shadow-2xl max-h-[85vh] flex flex-col overflow-hidden touch-pan-y pt-2 pb-8 sm:pb-10 safe-bottom cursor-grab active:cursor-grabbing"
           >
-            {/* Centered Top Handle Drag Pill */}
+            {/* Centered Top Handle Drag Area */}
             <div
-              className="pt-1 pb-1 cursor-grab active:cursor-grabbing touch-none flex justify-center items-center"
+              className="pt-2 pb-1 cursor-grab active:cursor-grabbing touch-none flex justify-center items-center select-none"
               onClick={(e) => {
                 e.stopPropagation();
                 onClose();
               }}
             >
-              <div className="w-12 h-1.5 bg-slate-300 dark:bg-slate-700 rounded-full mx-auto my-3" />
+              <div className="w-12 h-1.5 bg-slate-300 dark:bg-slate-700 rounded-full mx-auto my-2 transition-colors hover:bg-slate-400 dark:hover:bg-slate-600" />
             </div>
 
             {/* Centered Icon Flexbox Grid Container with Comfortable Breathing Room */}
