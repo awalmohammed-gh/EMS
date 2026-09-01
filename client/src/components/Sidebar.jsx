@@ -35,7 +35,7 @@ export const Sidebar = ({
   return (
     <aside
       id="desktop-persistent-sidebar"
-      className="hidden lg:flex flex-col h-full w-64 bg-white dark:bg-slate-900 border-r border-[#E2E8F0] dark:border-slate-800 shadow-xs shrink-0 z-10 transition-colors duration-200"
+      className="hidden md:flex flex-col h-full w-64 bg-white dark:bg-slate-900 border-r border-[#E2E8F0] dark:border-slate-800 shadow-xs shrink-0 z-10 transition-colors duration-200"
     >
       <div className="flex flex-col h-full bg-white dark:bg-slate-900">
         {/* Brand Header */}

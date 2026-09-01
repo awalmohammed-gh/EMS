@@ -33,19 +33,21 @@ export const DashboardLayout = ({ role: propRole }) => {
   }, []);
 
   return (
-    <div className="flex h-screen bg-[#F8FAFC] dark:bg-slate-900 text-slate-900 dark:text-slate-100 transition-colors duration-200">
-      {/* Persistent Desktop Sidebar (lg:flex) */}
-      {role === "admin" ? <AdminSidebar /> : <EmployeeSidebar />}
+    <div className="flex h-screen bg-[#F8FAFC] dark:bg-slate-900 text-slate-900 dark:text-slate-100 transition-colors duration-200 overflow-hidden">
+      {/* Persistent Desktop Sidebar (hidden on mobile, visible from md up) */}
+      <div className="hidden md:flex shrink-0 h-full">
+        {role === "admin" ? <AdminSidebar /> : <EmployeeSidebar />}
+      </div>
 
-      {/* Standalone Fixed Mobile Sidebar Drawer Overlay (z-[999] lg:hidden) */}
+      {/* Standalone Fixed Mobile Sidebar Drawer Overlay */}
       <MobileSidebar
         isOpen={mobileMenuOpen}
         onClose={() => setMobileMenuOpen(false)}
         role={role}
       />
 
-      {/* Main Content Viewport */}
-      <div className="flex-1 flex flex-col min-w-0 h-screen overflow-hidden">
+      {/* Main Content Viewport: Expands full-width on mobile without desktop sidebar offsets */}
+      <div className="flex-1 w-full flex flex-col min-w-0 h-screen overflow-hidden">
         {/* Unified Top Navigation Bar with Mobile Toggle Prop */}
         <Navbar
           role={role}
@@ -53,7 +55,7 @@ export const DashboardLayout = ({ role: propRole }) => {
         />
 
         {/* Scrollable Page Content Area with Bottom Padding for Mobile Nav */}
-        <main className="flex-1 overflow-y-auto bg-[#F8FAFC] dark:bg-slate-900 transition-colors duration-200 pb-20 md:pb-6">
+        <main className="flex-1 w-full overflow-y-auto bg-[#F8FAFC] dark:bg-slate-900 transition-colors duration-200 pb-20 md:pb-6">
           <ErrorBoundary
             key={location.pathname}
             title="Failed to Load View"

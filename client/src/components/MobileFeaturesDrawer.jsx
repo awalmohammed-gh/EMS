@@ -154,7 +154,7 @@ export const MobileFeaturesDrawer = ({
               }
             }}
             onClick={(e) => e.stopPropagation()}
-            className="relative z-50 w-full rounded-t-[32px] bg-white dark:bg-slate-900 border-t border-slate-200 dark:border-slate-800 shadow-2xl max-h-[85vh] flex flex-col overflow-hidden touch-pan-y pb-6 pt-1"
+            className="relative z-50 w-full rounded-t-[32px] bg-white dark:bg-slate-900 border-t border-slate-200 dark:border-slate-800 shadow-2xl max-h-[85vh] flex flex-col overflow-hidden touch-pan-y pt-2 pb-8 sm:pb-10 safe-bottom"
           >
             {/* Centered Top Handle Drag Pill */}
             <div
@@ -167,8 +167,8 @@ export const MobileFeaturesDrawer = ({
               <div className="w-12 h-1.5 bg-slate-300 dark:bg-slate-700 rounded-full mx-auto my-3" />
             </div>
 
-            {/* Centered Icon Flexbox Grid Container */}
-            <div className="flex flex-col items-center justify-center p-4 sm:p-6 pb-2">
+            {/* Centered Icon Flexbox Grid Container with Comfortable Breathing Room */}
+            <div className="flex flex-col items-center justify-center px-6 pt-4 pb-8 sm:pb-10">
               <div
                 style={{ display: "flex", flexWrap: "wrap", justifyContent: "center" }}
                 className="gap-4 w-[280px] max-w-[280px] mx-auto items-center"
@@ -210,7 +210,7 @@ export const MobileFeaturesDrawer = ({
               </div>
 
               {/* Bottom Centered Standalone Close ("X") Button */}
-              <div className="flex justify-center items-center mt-6 pt-2">
+              <div className="flex justify-center items-center mt-6 pt-2 pb-2">
                 <button
                   type="button"
                   id="btn-drawer-bottom-close"
