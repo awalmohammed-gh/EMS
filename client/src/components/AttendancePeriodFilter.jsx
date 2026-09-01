@@ -283,12 +283,12 @@ export const AttendancePeriodFilter = ({
       {/* Main Filter Controls Row: 3-Mode Segmented Selector + Contextual Controls */}
       <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-3 sm:gap-4">
         {/* Segmented Mode Switcher (Day | Week | Month | All) */}
-        <div className="inline-flex items-center bg-slate-100 dark:bg-slate-800 p-1 rounded-xl shadow-2xs self-start">
+        <div className="grid grid-cols-4 sm:inline-flex items-center bg-slate-100 dark:bg-slate-800 p-1 rounded-xl shadow-2xs w-full sm:w-auto">
           <button
             type="button"
             id="tab-mode-day"
             onClick={() => handleModeChange("day")}
-            className={`px-4 py-2 text-xs font-bold rounded-lg transition-all cursor-pointer ${
+            className={`px-3 sm:px-4 py-2 text-xs font-bold rounded-lg transition-all cursor-pointer text-center ${
               viewMode === "day"
                 ? "bg-[#0B1E48] dark:bg-blue-600 text-white shadow-xs"
                 : "text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white"
@@ -300,7 +300,7 @@ export const AttendancePeriodFilter = ({
             type="button"
             id="tab-mode-week"
             onClick={() => handleModeChange("week")}
-            className={`px-4 py-2 text-xs font-bold rounded-lg transition-all cursor-pointer ${
+            className={`px-3 sm:px-4 py-2 text-xs font-bold rounded-lg transition-all cursor-pointer text-center ${
               viewMode === "week"
                 ? "bg-[#0B1E48] dark:bg-blue-600 text-white shadow-xs"
                 : "text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white"
@@ -312,7 +312,7 @@ export const AttendancePeriodFilter = ({
             type="button"
             id="tab-mode-month"
             onClick={() => handleModeChange("month")}
-            className={`px-4 py-2 text-xs font-bold rounded-lg transition-all cursor-pointer ${
+            className={`px-3 sm:px-4 py-2 text-xs font-bold rounded-lg transition-all cursor-pointer text-center ${
               viewMode === "month"
                 ? "bg-[#0B1E48] dark:bg-blue-600 text-white shadow-xs"
                 : "text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white"
@@ -324,26 +324,26 @@ export const AttendancePeriodFilter = ({
             type="button"
             id="tab-mode-all"
             onClick={() => handleModeChange("all")}
-            className={`px-3 py-2 text-xs font-medium rounded-lg transition-all cursor-pointer ${
+            className={`px-2 sm:px-3 py-2 text-xs font-medium rounded-lg transition-all cursor-pointer text-center truncate ${
               viewMode === "all"
                 ? "bg-[#0B1E48] dark:bg-blue-600 text-white shadow-xs"
                 : "text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white"
             }`}
           >
-            All Time
+            All
           </button>
         </div>
 
         {/* Dynamic Contextual Date Selectors based on Active Mode */}
-        <div className="flex flex-wrap items-center gap-2 sm:gap-3">
+        <div className="flex flex-wrap items-center gap-2 sm:gap-3 w-full lg:w-auto">
           {/* DAY MODE CONTROLS */}
           {viewMode === "day" && (
-            <div className="flex items-center gap-2 flex-wrap">
-              <div className="flex items-center bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl overflow-hidden focus-within:ring-2 focus-within:ring-blue-500">
+            <div className="flex items-center gap-2 flex-wrap w-full sm:w-auto">
+              <div className="flex items-center bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl overflow-hidden focus-within:ring-2 focus-within:ring-blue-500 flex-1 sm:flex-initial">
                 <button
                   type="button"
                   onClick={() => handleStepDay(-1)}
-                  className="px-2.5 py-2 text-slate-500 hover:text-slate-800 dark:hover:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-700 transition"
+                  className="px-2 py-2 text-slate-500 hover:text-slate-800 dark:hover:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-700 transition"
                   title="Previous Day"
                 >
                   <ChevronLeft className="w-4 h-4" />
@@ -353,12 +353,12 @@ export const AttendancePeriodFilter = ({
                   id="period-filter-day-input"
                   value={selectedDate}
                   onChange={(e) => handleDateChange(e.target.value)}
-                  className="bg-transparent text-xs font-semibold text-[#0B1E48] dark:text-blue-100 px-2 py-2 focus:outline-none cursor-pointer"
+                  className="bg-transparent text-xs font-semibold text-[#0B1E48] dark:text-blue-100 px-2 py-2 focus:outline-none cursor-pointer w-full"
                 />
                 <button
                   type="button"
                   onClick={() => handleStepDay(1)}
-                  className="px-2.5 py-2 text-slate-500 hover:text-slate-800 dark:hover:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-700 transition"
+                  className="px-2 py-2 text-slate-500 hover:text-slate-800 dark:hover:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-700 transition"
                   title="Next Day"
                 >
                   <ChevronRight className="w-4 h-4" />
@@ -377,13 +377,13 @@ export const AttendancePeriodFilter = ({
 
           {/* WEEK MODE CONTROLS */}
           {viewMode === "week" && (
-            <div className="flex items-center gap-2 flex-wrap">
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 w-full sm:w-auto">
               {/* Month Selector */}
               <select
                 id="period-filter-week-month-select"
                 value={selectedMonth}
                 onChange={(e) => handleMonthChange(e.target.value)}
-                className="bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-xs font-semibold text-[#0B1E48] dark:text-blue-100 rounded-xl px-3 py-2 focus:ring-2 focus:ring-blue-500 focus:outline-none cursor-pointer"
+                className="bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-xs font-semibold text-[#0B1E48] dark:text-blue-100 rounded-xl px-2.5 sm:px-3 py-2 focus:ring-2 focus:ring-blue-500 focus:outline-none cursor-pointer truncate w-full"
               >
                 {monthsList.map((m) => (
                   <option key={m.value} value={m.value}>
@@ -397,7 +397,7 @@ export const AttendancePeriodFilter = ({
                 id="period-filter-week-select"
                 value={selectedWeek}
                 onChange={(e) => handleWeekChange(e.target.value)}
-                className="bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-xs font-semibold text-[#0B1E48] dark:text-blue-100 rounded-xl px-3 py-2 focus:ring-2 focus:ring-blue-500 focus:outline-none cursor-pointer"
+                className="bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-xs font-semibold text-[#0B1E48] dark:text-blue-100 rounded-xl px-2.5 sm:px-3 py-2 focus:ring-2 focus:ring-blue-500 focus:outline-none cursor-pointer truncate w-full"
               >
                 <option value="all">Full Month (All Weeks)</option>
                 {weeksList.map((w, idx) => (
@@ -411,12 +411,12 @@ export const AttendancePeriodFilter = ({
 
           {/* MONTH MODE CONTROLS */}
           {viewMode === "month" && (
-            <div className="flex items-center gap-2">
+            <div className="flex items-center gap-2 w-full sm:w-auto">
               <select
                 id="period-filter-month-select"
                 value={selectedMonth}
                 onChange={(e) => handleMonthChange(e.target.value)}
-                className="bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-xs font-semibold text-[#0B1E48] dark:text-blue-100 rounded-xl px-3.5 py-2 focus:ring-2 focus:ring-blue-500 focus:outline-none cursor-pointer"
+                className="w-full sm:w-auto bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-xs font-semibold text-[#0B1E48] dark:text-blue-100 rounded-xl px-3 py-2 focus:ring-2 focus:ring-blue-500 focus:outline-none cursor-pointer"
               >
                 {monthsList.map((m) => (
                   <option key={m.value} value={m.value}>
@@ -425,7 +425,7 @@ export const AttendancePeriodFilter = ({
                 ))}
               </select>
 
-              <span className="text-xs text-slate-500 dark:text-slate-400 font-medium hidden sm:inline">
+              <span className="text-xs text-slate-500 dark:text-slate-400 font-medium hidden sm:inline whitespace-nowrap">
                 (Full 1st – End of Month)
               </span>
             </div>
@@ -433,9 +433,9 @@ export const AttendancePeriodFilter = ({
 
           {/* ALL TIME MODE */}
           {viewMode === "all" && (
-            <div className="text-xs font-medium text-slate-500 dark:text-slate-400 flex items-center gap-1.5 px-3 py-2 bg-slate-50 dark:bg-slate-800 rounded-xl border border-slate-200 dark:border-slate-700">
-              <Calendar className="w-3.5 h-3.5 text-blue-500" />
-              <span>Unfiltered historical attendance timeline</span>
+            <div className="text-xs font-medium text-slate-500 dark:text-slate-400 flex items-center gap-1.5 px-3 py-2 bg-slate-50 dark:bg-slate-800 rounded-xl border border-slate-200 dark:border-slate-700 w-full sm:w-auto">
+              <Calendar className="w-3.5 h-3.5 text-blue-500 shrink-0" />
+              <span className="truncate">Unfiltered historical attendance timeline</span>
             </div>
           )}
         </div>

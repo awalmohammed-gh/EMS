@@ -2,7 +2,7 @@ import { Link, useLocation } from "react-router-dom";
 import {
   LayoutDashboardIcon,
   CalendarIcon,
-  FileTextIcon,
+  Banknote,
   SettingsIcon,
 } from "lucide-react";
 import Sidebar from "../../components/Sidebar";
@@ -24,7 +24,7 @@ const EmployeeSidebar = () => {
     {
       name: "Payslips",
       path: "/employee/dashboard/payslips",
-      icon: FileTextIcon,
+      icon: Banknote,
     },
     { name: "Leave", path: "/employee/dashboard/leave", icon: CalendarIcon },
     {

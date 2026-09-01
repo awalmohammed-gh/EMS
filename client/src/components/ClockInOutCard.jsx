@@ -123,16 +123,6 @@ const ClockInOutCard = ({
     };
   }, [currentTime, settingsEndTime, settingsStartTime]);
 
-  // Format digital clock string (HH:MM:SS AM/PM)
-  const formattedDigitalTime = useMemo(() => {
-    return currentTime.toLocaleTimeString("en-US", {
-      hour: "2-digit",
-      minute: "2-digit",
-      second: "2-digit",
-      hour12: true,
-    });
-  }, [currentTime]);
-
   // Format today's full date
   const formattedDate = useMemo(() => {
     return currentTime.toLocaleDateString("en-GH", {
@@ -336,19 +326,6 @@ const ClockInOutCard = ({
                 </>
               )}
             </button>
-          </div>
-
-          {/* Live Digital Clock Widget */}
-          <div className="flex items-center gap-3.5 bg-slate-50 dark:bg-slate-800/80 border border-slate-200/80 dark:border-slate-700/80 rounded-xl px-4 py-2 self-start sm:self-auto shadow-2xs">
-            <div className="text-right">
-              <span className="text-[10px] uppercase font-bold tracking-wider text-slate-400 dark:text-slate-500 block">
-                Official Live Time
-              </span>
-              <span className="text-base sm:text-lg font-mono font-extrabold text-slate-900 dark:text-white tracking-tight">
-                {formattedDigitalTime}
-              </span>
-            </div>
-            <span className="w-2.5 h-2.5 rounded-full bg-emerald-500 animate-ping shrink-0" />
           </div>
         </div>
       </div>

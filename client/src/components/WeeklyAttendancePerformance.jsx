@@ -432,33 +432,33 @@ export const WeeklyAttendancePerformance = ({
   return (
     <div
       id="weekly-attendance-trends-chart-container"
-      className="bg-white dark:bg-slate-900 border border-slate-200/80 dark:border-slate-800/80 rounded-2xl p-5 sm:p-6 shadow-sm dark:shadow-black/20 space-y-6"
+      className="bg-white dark:bg-slate-900 border border-slate-200/80 dark:border-slate-800/80 rounded-2xl p-3.5 sm:p-5 md:p-6 shadow-sm dark:shadow-black/20 space-y-4 sm:space-y-6 max-w-full overflow-hidden"
     >
       {/* Header & Controls Bar */}
-      <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4 border-b border-slate-100 dark:border-slate-800 pb-5">
+      <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-3 sm:gap-4 border-b border-slate-100 dark:border-slate-800 pb-4 sm:pb-5">
         <div>
-          <div className="flex items-center gap-2.5 flex-wrap">
-            <h2 className="text-lg sm:text-xl font-bold text-[#0B1E48] dark:text-blue-100 tracking-tight">
+          <div className="flex items-center gap-2 flex-wrap">
+            <h2 className="text-base sm:text-xl font-bold text-[#0B1E48] dark:text-blue-100 tracking-tight">
               {title}
             </h2>
-            <span className="px-2.5 py-0.5 rounded-full text-xs font-semibold bg-blue-50 dark:bg-blue-950/50 text-[#002185] dark:text-blue-300 border border-blue-200 dark:border-blue-800/60">
+            <span className="px-2 py-0.5 rounded-full text-[11px] sm:text-xs font-semibold bg-blue-50 dark:bg-blue-950/50 text-[#002185] dark:text-blue-300 border border-blue-200 dark:border-blue-800/60">
               Shift Target: 8h/day (40h/wk)
             </span>
           </div>
-          <p className="text-xs sm:text-sm font-medium text-slate-500 dark:text-slate-400 mt-1">
+          <p className="text-xs sm:text-sm font-medium text-slate-500 dark:text-slate-400 mt-0.5 sm:mt-1">
             {subtitle}
           </p>
         </div>
 
         {/* Dynamic Selectors & View Switchers */}
-        <div className="flex flex-wrap items-center gap-2 sm:gap-3">
-          <div className="flex items-center gap-2">
+        <div className="flex flex-col sm:flex-row sm:items-center gap-2 sm:gap-3 w-full lg:w-auto">
+          <div className="grid grid-cols-2 sm:flex items-center gap-2 w-full sm:w-auto">
             {/* Month Selector */}
             <select
               id="attendance-performance-month-select"
               value={selectedMonth}
               onChange={(e) => handleMonthChange(e.target.value)}
-              className="bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-xs font-semibold text-[#0B1E48] dark:text-blue-100 rounded-xl px-3 py-2 focus:ring-2 focus:ring-blue-500 focus:outline-none cursor-pointer"
+              className="w-full sm:w-auto bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-xs font-semibold text-[#0B1E48] dark:text-blue-100 rounded-xl px-2.5 sm:px-3 py-2 focus:ring-2 focus:ring-blue-500 focus:outline-none cursor-pointer truncate"
             >
               {monthsList.map((m) => (
                 <option key={m.value} value={m.value}>
@@ -472,9 +472,9 @@ export const WeeklyAttendancePerformance = ({
               id="attendance-performance-week-select"
               value={selectedWeek}
               onChange={(e) => handleWeekChange(e.target.value)}
-              className="bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-xs font-semibold text-[#0B1E48] dark:text-blue-100 rounded-xl px-3 py-2 focus:ring-2 focus:ring-blue-500 focus:outline-none cursor-pointer"
+              className="w-full sm:w-auto bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-xs font-semibold text-[#0B1E48] dark:text-blue-100 rounded-xl px-2.5 sm:px-3 py-2 focus:ring-2 focus:ring-blue-500 focus:outline-none cursor-pointer truncate"
             >
-              <option value="all">Full Month (All Weeks)</option>
+              <option value="all">Full Month (All)</option>
               {weeksInMonth.map((w, index) => (
                 <option key={index} value={index + 1}>
                   Week {index + 1} ({w.startLabel} – {w.endLabel})
@@ -484,11 +484,11 @@ export const WeeklyAttendancePerformance = ({
           </div>
 
           {/* Metric Mode Switcher: Hours vs Attendance */}
-          <div className="inline-flex items-center bg-slate-100 dark:bg-slate-800 p-1 rounded-xl text-xs font-semibold">
+          <div className="inline-flex items-center bg-slate-100 dark:bg-slate-800 p-1 rounded-xl text-xs font-semibold w-full sm:w-auto">
             <button
               type="button"
               onClick={() => setMetricMode("hours")}
-              className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg transition-all cursor-pointer ${
+              className={`flex-1 sm:flex-initial flex items-center justify-center gap-1.5 px-3 py-1.5 rounded-lg transition-all cursor-pointer text-xs ${
                 metricMode === "hours"
                   ? "bg-[#0B1E48] dark:bg-blue-600 text-white shadow-xs"
                   : "text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white"
@@ -500,37 +500,37 @@ export const WeeklyAttendancePerformance = ({
             <button
               type="button"
               onClick={() => setMetricMode("attendance")}
-              className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg transition-all cursor-pointer ${
+              className={`flex-1 sm:flex-initial flex items-center justify-center gap-1.5 px-3 py-1.5 rounded-lg transition-all cursor-pointer text-xs ${
                 metricMode === "attendance"
                   ? "bg-[#0B1E48] dark:bg-blue-600 text-white shadow-xs"
                   : "text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white"
               }`}
             >
               <Calendar className="w-3.5 h-3.5" />
-              <span>Attendance Pattern</span>
+              <span>Pattern</span>
             </button>
           </div>
         </div>
       </div>
 
-      {/* KPI Performance Highlights Ribbon (4 Dynamic Cards) */}
+      {/* KPI Performance Highlights Ribbon (4 Dynamic Cards with Vertical Stacking on Mobile) */}
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4">
         {/* Card 1: Hours Worked */}
-        <div className="rounded-2xl border border-slate-200 dark:border-slate-800 bg-slate-50/60 dark:bg-slate-800/40 p-4 transition">
-          <div className="flex items-center justify-between">
+        <div className="rounded-2xl border border-slate-200 dark:border-slate-800 bg-slate-50/60 dark:bg-slate-800/40 p-3.5 sm:p-4 transition">
+          <div className="flex items-center justify-between gap-2">
             <span className="flex items-center gap-1.5 text-xs font-bold text-[#002185] dark:text-blue-400">
               <Clock className="w-3.5 h-3.5" />
               Hours Worked
             </span>
-            <span className="text-[11px] font-semibold px-2 py-0.5 rounded-full bg-white dark:bg-slate-700 text-slate-600 dark:text-slate-300 border border-slate-200 dark:border-slate-600 shadow-2xs">
+            <span className="text-[11px] font-semibold px-2 py-0.5 rounded-full bg-white dark:bg-slate-700 text-slate-600 dark:text-slate-300 border border-slate-200 dark:border-slate-600 shadow-2xs whitespace-nowrap">
               Req: {performanceCardMetrics.requiredHours}h
             </span>
           </div>
-          <p className="text-2xl font-black text-[#0B1E48] dark:text-blue-100 mt-2 tracking-tight">
+          <p className="text-xl sm:text-2xl font-black text-[#0B1E48] dark:text-blue-100 mt-2 tracking-tight">
             {performanceCardMetrics.hoursWorked}{" "}
-            <span className="text-sm font-medium text-slate-500 dark:text-slate-400">hrs</span>
+            <span className="text-xs sm:text-sm font-medium text-slate-500 dark:text-slate-400">hrs</span>
           </p>
-          <div className="w-full bg-slate-200 dark:bg-slate-700 rounded-full h-2 mt-2.5 overflow-hidden">
+          <div className="w-full bg-slate-200 dark:bg-slate-700 rounded-full h-2 mt-2 overflow-hidden">
             <div
               className="bg-[#0B1E48] dark:bg-blue-500 h-2 rounded-full transition-all duration-500"
               style={{
@@ -544,14 +544,14 @@ export const WeeklyAttendancePerformance = ({
         </div>
 
         {/* Card 2: Shift Compliance */}
-        <div className="rounded-2xl border border-slate-200 dark:border-slate-800 bg-slate-50/60 dark:bg-slate-800/40 p-4 transition">
-          <div className="flex items-center justify-between">
+        <div className="rounded-2xl border border-slate-200 dark:border-slate-800 bg-slate-50/60 dark:bg-slate-800/40 p-3.5 sm:p-4 transition">
+          <div className="flex items-center justify-between gap-2">
             <span className="flex items-center gap-1.5 text-xs font-bold text-emerald-700 dark:text-emerald-400">
               <Target className="w-3.5 h-3.5" />
               Shift Compliance
             </span>
             <span
-              className={`text-[11px] font-semibold px-2 py-0.5 rounded-full border shadow-2xs ${
+              className={`text-[11px] font-semibold px-2 py-0.5 rounded-full border shadow-2xs whitespace-nowrap ${
                 performanceCardMetrics.shiftCompliance >= 100
                   ? "bg-emerald-50 text-emerald-700 dark:bg-emerald-950/60 dark:text-emerald-300 border-emerald-200 dark:border-emerald-800"
                   : "bg-amber-50 text-amber-700 dark:bg-amber-950/60 dark:text-amber-300 border-amber-200 dark:border-amber-800"
@@ -560,75 +560,76 @@ export const WeeklyAttendancePerformance = ({
               {performanceCardMetrics.shiftCompliance >= 100 ? "Completed" : "In Progress"}
             </span>
           </div>
-          <p className="text-2xl font-black text-[#0B1E48] dark:text-blue-100 mt-2 tracking-tight">
+          <p className="text-xl sm:text-2xl font-black text-[#0B1E48] dark:text-blue-100 mt-2 tracking-tight">
             {performanceCardMetrics.shiftCompliance}%
           </p>
-          <span className="text-xs text-slate-500 dark:text-slate-400 mt-1 block font-medium">
+          <span className="text-[11px] sm:text-xs text-slate-500 dark:text-slate-400 mt-1 block font-medium">
             Against required schedule
           </span>
         </div>
 
         {/* Card 3: Punctuality Rate */}
-        <div className="rounded-2xl border border-slate-200 dark:border-slate-800 bg-slate-50/60 dark:bg-slate-800/40 p-4 transition">
-          <div className="flex items-center justify-between">
+        <div className="rounded-2xl border border-slate-200 dark:border-slate-800 bg-slate-50/60 dark:bg-slate-800/40 p-3.5 sm:p-4 transition">
+          <div className="flex items-center justify-between gap-2">
             <span className="flex items-center gap-1.5 text-xs font-bold text-emerald-700 dark:text-emerald-400">
               <CheckCircle2 className="w-3.5 h-3.5" />
               Punctuality Rate
             </span>
-            <span className="text-[11px] font-semibold px-2 py-0.5 rounded-full bg-white dark:bg-slate-700 text-slate-600 dark:text-slate-300 border border-slate-200 dark:border-slate-600 shadow-2xs">
+            <span className="text-[11px] font-semibold px-2 py-0.5 rounded-full bg-white dark:bg-slate-700 text-slate-600 dark:text-slate-300 border border-slate-200 dark:border-slate-600 shadow-2xs whitespace-nowrap">
               {performanceCardMetrics.lateCheckIns} Late
             </span>
           </div>
-          <p className="text-2xl font-black text-[#0B1E48] dark:text-blue-100 mt-2 tracking-tight">
+          <p className="text-xl sm:text-2xl font-black text-[#0B1E48] dark:text-blue-100 mt-2 tracking-tight">
             {performanceCardMetrics.punctualityRate}%
           </p>
-          <span className="text-xs text-slate-500 dark:text-slate-400 mt-1 block font-medium">
+          <span className="text-[11px] sm:text-xs text-slate-500 dark:text-slate-400 mt-1 block font-medium">
             On-time arrival rate
           </span>
         </div>
 
         {/* Card 4: Active Days */}
-        <div className="rounded-2xl border border-slate-200 dark:border-slate-800 bg-slate-50/60 dark:bg-slate-800/40 p-4 transition">
-          <div className="flex items-center justify-between">
+        <div className="rounded-2xl border border-slate-200 dark:border-slate-800 bg-slate-50/60 dark:bg-slate-800/40 p-3.5 sm:p-4 transition">
+          <div className="flex items-center justify-between gap-2">
             <span className="flex items-center gap-1.5 text-xs font-bold text-slate-600 dark:text-slate-300">
               <Award className="w-3.5 h-3.5 text-[#002185] dark:text-blue-400" />
               Active Days
             </span>
-            <span className="text-[11px] font-semibold px-2 py-0.5 rounded-full bg-white dark:bg-slate-700 text-slate-600 dark:text-slate-300 border border-slate-200 dark:border-slate-600 shadow-2xs">
+            <span className="text-[11px] font-semibold px-2 py-0.5 rounded-full bg-white dark:bg-slate-700 text-slate-600 dark:text-slate-300 border border-slate-200 dark:border-slate-600 shadow-2xs whitespace-nowrap">
               {performanceCardMetrics.absentDays} Absent
             </span>
           </div>
-          <p className="text-2xl font-black text-[#0B1E48] dark:text-blue-100 mt-2 tracking-tight">
+          <p className="text-xl sm:text-2xl font-black text-[#0B1E48] dark:text-blue-100 mt-2 tracking-tight">
             {performanceCardMetrics.activeDays}{" "}
-            <span className="text-sm font-medium text-slate-500 dark:text-slate-400">days</span>
+            <span className="text-xs sm:text-sm font-medium text-slate-500 dark:text-slate-400">days</span>
           </p>
-          <span className="text-xs text-slate-500 dark:text-slate-400 mt-1 block font-medium">
+          <span className="text-[11px] sm:text-xs text-slate-500 dark:text-slate-400 mt-1 block font-medium">
             Recorded check-ins this period
           </span>
         </div>
       </div>
 
-      {/* Interactive Recharts Visualization */}
-      <div className="h-72 w-full pt-2">
+      {/* Interactive Recharts Visualization with Zero-Overflow Responsive Margins */}
+      <div className="h-64 sm:h-72 w-full pt-1 overflow-hidden">
         <ResponsiveContainer width="100%" height="100%">
           {metricMode === "hours" ? (
             <BarChart
               data={chartData}
-              margin={{ top: 10, right: 15, left: -15, bottom: 0 }}
-              barCategoryGap="28%"
+              margin={{ top: 10, right: 6, left: -22, bottom: 0 }}
+              barCategoryGap="22%"
             >
               <CartesianGrid strokeDasharray="3 3" stroke="#e2e8f0" className="dark:stroke-slate-800" vertical={false} />
               <XAxis
                 dataKey="label"
                 tickLine={false}
                 axisLine={{ stroke: "#cbd5e1" }}
-                tick={{ fill: "#64748b", fontSize: 12, fontWeight: 500 }}
+                tick={{ fill: "#64748b", fontSize: 11, fontWeight: 500 }}
               />
               <YAxis
                 tickLine={false}
                 axisLine={{ stroke: "#cbd5e1" }}
-                tick={{ fill: "#64748b", fontSize: 12 }}
+                tick={{ fill: "#64748b", fontSize: 10 }}
                 unit="h"
+                width={28}
                 domain={[0, selectedWeek === "all" ? 50 : 12]}
               />
               <Tooltip content={<HoursTooltip />} cursor={{ fill: "#f1f5f9", opacity: 0.5 }} />
@@ -636,7 +637,7 @@ export const WeeklyAttendancePerformance = ({
                 verticalAlign="top"
                 align="right"
                 iconType="circle"
-                wrapperStyle={{ paddingBottom: 12, fontSize: "12px" }}
+                wrapperStyle={{ paddingBottom: 8, fontSize: "11px" }}
               />
               {/* Target Reference Line */}
               <ReferenceLine
@@ -645,17 +646,17 @@ export const WeeklyAttendancePerformance = ({
                 strokeDasharray="4 4"
                 strokeWidth={1.5}
                 label={{
-                  value: `Target (${targetReferenceHour}.0h)`,
+                  value: `Target (${targetReferenceHour}h)`,
                   position: "insideTopRight",
                   fill: "#002185",
-                  fontSize: 11,
+                  fontSize: 10,
                   fontWeight: 700,
                 }}
               />
               <Bar
                 dataKey="totalHours"
-                name="Total Hours Worked"
-                radius={[6, 6, 0, 0]}
+                name="Hours Worked"
+                radius={[5, 5, 0, 0]}
               >
                 {chartData.map((entry, index) => {
                   const target = entry.targetHours || targetReferenceHour;
@@ -672,20 +673,21 @@ export const WeeklyAttendancePerformance = ({
           ) : (
             <BarChart
               data={chartData}
-              margin={{ top: 10, right: 15, left: -15, bottom: 0 }}
-              barCategoryGap="30%"
+              margin={{ top: 10, right: 6, left: -22, bottom: 0 }}
+              barCategoryGap="24%"
             >
               <CartesianGrid strokeDasharray="3 3" stroke="#e2e8f0" className="dark:stroke-slate-800" vertical={false} />
               <XAxis
                 dataKey="label"
                 tickLine={false}
                 axisLine={{ stroke: "#cbd5e1" }}
-                tick={{ fill: "#64748b", fontSize: 12, fontWeight: 500 }}
+                tick={{ fill: "#64748b", fontSize: 11, fontWeight: 500 }}
               />
               <YAxis
                 tickLine={false}
                 axisLine={{ stroke: "#cbd5e1" }}
-                tick={{ fill: "#64748b", fontSize: 12 }}
+                tick={{ fill: "#64748b", fontSize: 10 }}
+                width={28}
                 allowDecimals={false}
               />
               <Tooltip content={<AttendanceTooltip />} cursor={{ fill: "#f1f5f9", opacity: 0.5 }} />
@@ -693,25 +695,25 @@ export const WeeklyAttendancePerformance = ({
                 verticalAlign="top"
                 align="right"
                 iconType="circle"
-                wrapperStyle={{ paddingBottom: 12, fontSize: "12px" }}
+                wrapperStyle={{ paddingBottom: 8, fontSize: "11px" }}
               />
               <Bar
                 dataKey="present"
-                name="On Time / Present"
+                name="On Time"
                 fill="#059669"
                 stackId="attendance"
                 radius={[0, 0, 0, 0]}
               />
               <Bar
                 dataKey="late"
-                name="Late Check-In"
+                name="Late"
                 fill="#d97706"
                 stackId="attendance"
                 radius={[0, 0, 0, 0]}
               />
               <Bar
                 dataKey="absent"
-                name="Absent / On Leave"
+                name="Absent"
                 fill="#dc2626"
                 stackId="attendance"
                 radius={[4, 4, 0, 0]}
@@ -722,16 +724,16 @@ export const WeeklyAttendancePerformance = ({
       </div>
 
       {/* Footer Benchmarks & Indicator Badges */}
-      <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 pt-3 border-t border-slate-100 dark:border-slate-800 text-xs font-medium text-slate-500 dark:text-slate-400">
-        <div className="flex items-center gap-2">
-          <TrendingUp className="w-4 h-4 text-emerald-600 dark:text-emerald-400" />
+      <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-2.5 sm:gap-3 pt-3 border-t border-slate-100 dark:border-slate-800 text-[11px] sm:text-xs font-medium text-slate-500 dark:text-slate-400">
+        <div className="flex items-center gap-1.5">
+          <TrendingUp className="w-3.5 h-3.5 text-emerald-600 dark:text-emerald-400 shrink-0" />
           <span>
             {metricMode === "hours"
-              ? `Dashed line shows official ${targetReferenceHour}h shift benchmark. Green bars signify shift target fulfilled.`
-              : "Attendance and punctuality trends calculated dynamically for the selected date window."}
+              ? `Dashed line shows ${targetReferenceHour}h shift benchmark. Green indicates target met.`
+              : "Calculated dynamically for selected date window."}
           </span>
         </div>
-        <div className="flex items-center gap-3">
+        <div className="flex items-center gap-2.5 sm:gap-3 flex-wrap">
           {metricMode === "hours" ? (
             <>
               <span className="flex items-center gap-1.5">

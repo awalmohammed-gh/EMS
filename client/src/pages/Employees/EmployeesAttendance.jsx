@@ -228,16 +228,6 @@ const EmployeesAttendance = () => {
     user?.role === "manager" ||
     user?.role === "superadmin";
 
-  // Format digital time (HH:MM:SS AM/PM)
-  const formattedDigitalTime = useMemo(() => {
-    return currentTime.toLocaleTimeString("en-US", {
-      hour: "2-digit",
-      minute: "2-digit",
-      second: "2-digit",
-      hour12: true,
-    });
-  }, [currentTime]);
-
   // Format today's date
   const formattedDate = useMemo(() => {
     return currentTime.toLocaleDateString("en-GH", {
@@ -932,17 +922,9 @@ const EmployeesAttendance = () => {
             </div>
           </div>
 
-          {/* Right Side (Live Time & Action Buttons) */}
+          {/* Right Side (Action Buttons) */}
           <div className="flex flex-wrap items-center gap-3 self-start xl:self-auto">
-            {/* Compact Live Digital Clock Box */}
-            <div className="flex items-center gap-2.5 px-3.5 py-2 rounded-xl bg-slate-50 dark:bg-slate-800/80 border border-slate-200 dark:border-slate-700/80 shadow-2xs">
-              <Clock className="w-4 h-4 text-[#002185] dark:text-blue-400 shrink-0" />
-              <span className="text-sm sm:text-base font-mono font-bold text-slate-900 dark:text-slate-100 tracking-tight">
-                {formattedDigitalTime}
-              </span>
-            </div>
-
-            {/* Action Buttons directly beside the clock */}
+            {/* Action Buttons */}
             <div className="flex items-center gap-2.5">
               {/* Button 1: Clock In */}
               <button

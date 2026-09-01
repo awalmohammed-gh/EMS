@@ -4,7 +4,7 @@ import {
   LayoutDashboard,
   Users,
   Calendar,
-  FileText,
+  Banknote,
   Settings,
   LogOut,
   X,
@@ -118,7 +118,7 @@ export const MobileSidebar = ({
     { name: "Dashboard", path: "/admin/dashboard", icon: LayoutDashboard },
     { name: "Employees", path: "/admin/dashboard/employees", icon: Users },
     { name: "Attendance", path: "/admin/dashboard/attendance", icon: Calendar },
-    { name: "Payroll", path: "/admin/dashboard/payroll", icon: FileText },
+    { name: "Payroll", path: "/admin/dashboard/payroll", icon: Banknote },
     { name: "Leave", path: "/admin/dashboard/leave", icon: Calendar },
     { name: "Announcements", path: "/admin/dashboard/announcements", icon: Megaphone },
     { name: "Settings", path: "/admin/dashboard/settings", icon: Settings },
@@ -127,7 +127,7 @@ export const MobileSidebar = ({
   const employeeNavItems = [
     { name: "Dashboard", path: "/employee/dashboard", icon: LayoutDashboard },
     { name: "Attendance", path: "/employee/dashboard/attendance", icon: Calendar },
-    { name: "Payslips", path: "/employee/dashboard/payslips", icon: FileText },
+    { name: "Payslips", path: "/employee/dashboard/payslips", icon: Banknote },
     { name: "Leave", path: "/employee/dashboard/leave", icon: Calendar },
     { name: "Settings", path: "/employee/dashboard/settings", icon: Settings },
   ];

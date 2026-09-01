@@ -4,6 +4,7 @@ import AdminSidebar from "../pages/Admin/AdminSidebar";
 import EmployeeSidebar from "../pages/Employees/EmployeeSidebar";
 import Navbar from "../components/Navbar";
 import MobileSidebar from "../components/MobileSidebar";
+import MobileBottomNav from "../components/MobileBottomNav";
 import ErrorBoundary from "../components/ErrorBoundary";
 
 export const DashboardLayout = ({ role: propRole }) => {
@@ -51,8 +52,8 @@ export const DashboardLayout = ({ role: propRole }) => {
           onToggleMobileMenu={() => setMobileMenuOpen((prev) => !prev)}
         />
 
-        {/* Scrollable Page Content Area */}
-        <main className="flex-1 overflow-y-auto bg-[#F8FAFC] dark:bg-slate-900 transition-colors duration-200">
+        {/* Scrollable Page Content Area with Bottom Padding for Mobile Nav */}
+        <main className="flex-1 overflow-y-auto bg-[#F8FAFC] dark:bg-slate-900 transition-colors duration-200 pb-20 md:pb-6">
           <ErrorBoundary
             key={location.pathname}
             title="Failed to Load View"
@@ -61,6 +62,9 @@ export const DashboardLayout = ({ role: propRole }) => {
             <Outlet />
           </ErrorBoundary>
         </main>
+
+        {/* Mobile-First Fixed Bottom Navigation Bar & Slide-Up Features Drawer */}
+        <MobileBottomNav userRole={role} />
       </div>
     </div>
   );

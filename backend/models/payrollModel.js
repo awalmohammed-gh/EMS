@@ -164,6 +164,5 @@ const payrollSchema = new mongoose.Schema(
 payrollSchema.index({ employee: 1, payMonth: 1 }, { unique: true });
 payrollSchema.index({ employee: 1, status: 1 });
 payrollSchema.index({ payMonth: 1, status: 1 });
-payrollSchema.index({ payslipNumber: 1 });
 
 export const Payroll = mongoose.models.Payroll || mongoose.model("Payroll", payrollSchema);
