@@ -57,13 +57,13 @@ const EmployeePayslipsModal = ({ payslip, allPayslips = [], onClose }) => {
   const getStatusColor = (status) => {
     switch (status) {
       case "Paid":
-        return "bg-[#F0FDF4] text-[#16A34A] border border-[#16A34A]/20";
+        return "bg-emerald-50 dark:bg-emerald-950/40 text-emerald-700 dark:text-emerald-300 border border-emerald-200 dark:border-emerald-800/60";
       case "Pending":
-        return "bg-[#FFFBEB] text-[#F59E0B] border border-[#F59E0B]/20";
+        return "bg-amber-50 dark:bg-amber-950/40 text-amber-700 dark:text-amber-300 border border-amber-200 dark:border-amber-800/60";
       case "Failed":
-        return "bg-[#FEF2F2] text-[#DC2626] border border-[#DC2626]/20";
+        return "bg-rose-50 dark:bg-rose-950/40 text-rose-700 dark:text-rose-300 border border-rose-200 dark:border-rose-800/60";
       default:
-        return "bg-[#F8FAFC] text-[#64748B] border border-[#E2E8F0]";
+        return "bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 border border-slate-200 dark:border-slate-700";
     }
   };
 
@@ -325,32 +325,29 @@ const EmployeePayslipsModal = ({ payslip, allPayslips = [], onClose }) => {
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
-      {/* Backdrop */}
-      <div
-        onClick={onClose}
-        className="absolute inset-0 bg-[#0F172A]/50 backdrop-blur-sm"
-      />
-
+    <div
+      onClick={onClose}
+      className="fixed inset-0 z-50 flex items-end sm:items-center justify-center p-0 sm:p-4 bg-slate-950/70 backdrop-blur-sm animate-fade-in"
+    >
       {/* Modal */}
       <div
         onClick={(e) => e.stopPropagation()}
-        className="relative z-10 max-h-[92vh] w-full max-w-3xl overflow-y-auto rounded-xl bg-[#FFFFFF] shadow-2xl border-2 border-[#002185] animate-fade-in"
+        className="relative z-10 max-h-[90vh] w-full max-w-3xl overflow-y-auto rounded-t-[28px] sm:rounded-3xl bg-white dark:bg-[#111927] shadow-2xl border border-slate-200 dark:border-slate-800/80 animate-fade-in"
       >
         {/* Header */}
-        <div className="sticky top-0 z-20 flex items-center justify-between border-b border-[#E2E8F0] px-6 py-4.5 bg-[#FFFFFF] rounded-t-xl">
-          <div className="flex items-center gap-3">
-            <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-[#002185]">
+        <div className="sticky top-0 z-20 flex items-center justify-between border-b border-slate-200 dark:border-slate-800/80 px-5 sm:px-6 py-4 bg-white dark:bg-[#111927] rounded-t-[28px] sm:rounded-t-3xl">
+          <div className="flex items-center gap-3 min-w-0">
+            <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-[#002185] dark:bg-blue-600 text-white">
               <FileText className="h-5 w-5 text-white" />
             </div>
-            <div>
+            <div className="min-w-0">
               <div className="flex items-center gap-2">
-                <h2 className="text-xl font-bold text-[#002185]">
-                  Employee Payslip & Deduction Breakdown
+                <h2 className="text-base sm:text-lg font-bold text-[#002185] dark:text-blue-400 truncate">
+                  Employee Payslip & Breakdown
                 </h2>
               </div>
-              <p className="text-xs text-[#64748B] mt-0.5">
-                Pay Period: <span className="font-semibold text-[#0F172A]">{payslip.month || payslip.payMonth}</span> • Ref: {payslip.payslipNumber || payslip.id || "N/A"}
+              <p className="text-[11px] sm:text-xs text-slate-500 dark:text-slate-400 truncate mt-0.5">
+                Pay Period: <span className="font-semibold text-slate-900 dark:text-white">{payslip.month || payslip.payMonth}</span> • Ref: {payslip.payslipNumber || payslip.id || "N/A"}
               </p>
             </div>
           </div>
@@ -358,7 +355,7 @@ const EmployeePayslipsModal = ({ payslip, allPayslips = [], onClose }) => {
           <button
             type="button"
             onClick={onClose}
-            className="rounded-lg p-2 text-[#64748B] transition hover:bg-[#F8FAFC] hover:text-[#ff5500]"
+            className="rounded-lg p-2 text-slate-400 hover:text-slate-700 dark:hover:text-slate-200 hover:bg-slate-100 dark:hover:bg-[#162033] transition cursor-pointer shrink-0"
           >
             <X className="h-5 w-5" />
           </button>
@@ -369,53 +366,53 @@ const EmployeePayslipsModal = ({ payslip, allPayslips = [], onClose }) => {
           {/* Employee & Payment Information Cards */}
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             {/* Employee Information */}
-            <div className="rounded-xl bg-[#F8FAFC] p-4 border border-[#E2E8F0]">
-              <h3 className="mb-3 text-xs font-bold uppercase tracking-wider text-[#002185] flex items-center gap-1.5">
+            <div className="rounded-xl bg-slate-50/70 dark:bg-[#162033] p-4 border border-slate-200 dark:border-slate-700/60">
+              <h3 className="mb-3 text-xs font-bold uppercase tracking-wider text-[#002185] dark:text-blue-400 flex items-center gap-1.5">
                 <Building2 className="w-3.5 h-3.5" /> Employee Details
               </h3>
               <div className="grid grid-cols-2 gap-3 text-xs">
                 <div>
-                  <span className="text-[#64748B] block text-[11px]">Employee Name</span>
-                  <span className="font-semibold text-[#0F172A]">{payslip.employeeName || payslip.employee?.fullName || "Staff Member"}</span>
+                  <span className="text-slate-500 dark:text-slate-400 block text-[11px]">Employee Name</span>
+                  <span className="font-semibold text-slate-900 dark:text-white">{payslip.employeeName || payslip.employee?.fullName || "Staff Member"}</span>
                 </div>
                 <div>
-                  <span className="text-[#64748B] block text-[11px]">Employee ID</span>
-                  <span className="font-mono font-semibold text-[#002185]">{payslip.employeeId || payslip.employee?.employeeId || "N/A"}</span>
+                  <span className="text-slate-500 dark:text-slate-400 block text-[11px]">Employee ID</span>
+                  <span className="font-mono font-semibold text-[#002185] dark:text-blue-300">{payslip.employeeId || payslip.employee?.employeeId || "N/A"}</span>
                 </div>
                 <div>
-                  <span className="text-[#64748B] block text-[11px]">Department</span>
-                  <span className="font-medium text-[#334155]">{payslip.department || payslip.employee?.department || "Operations"}</span>
+                  <span className="text-slate-500 dark:text-slate-400 block text-[11px]">Department</span>
+                  <span className="font-medium text-slate-700 dark:text-slate-300">{payslip.department || payslip.employee?.department || "Operations"}</span>
                 </div>
                 <div>
-                  <span className="text-[#64748B] block text-[11px]">Position</span>
-                  <span className="font-medium text-[#334155]">{payslip.position || payslip.employee?.position || "Staff"}</span>
+                  <span className="text-slate-500 dark:text-slate-400 block text-[11px]">Position</span>
+                  <span className="font-medium text-slate-700 dark:text-slate-300">{payslip.position || payslip.employee?.position || "Staff"}</span>
                 </div>
               </div>
             </div>
 
             {/* Payment Summary */}
-            <div className="rounded-xl bg-[#F8FAFC] p-4 border border-[#E2E8F0]">
-              <h3 className="mb-3 text-xs font-bold uppercase tracking-wider text-[#002185] flex items-center gap-1.5">
+            <div className="rounded-xl bg-slate-50/70 dark:bg-[#162033] p-4 border border-slate-200 dark:border-slate-700/60">
+              <h3 className="mb-3 text-xs font-bold uppercase tracking-wider text-[#002185] dark:text-blue-400 flex items-center gap-1.5">
                 <Calendar className="w-3.5 h-3.5" /> Disbursement Details
               </h3>
               <div className="grid grid-cols-2 gap-3 text-xs">
                 <div>
-                  <span className="text-[#64748B] block text-[11px]">Payment Date</span>
-                  <span className="font-semibold text-[#0F172A]">{formatDate(payslip.paymentDate)}</span>
+                  <span className="text-slate-500 dark:text-slate-400 block text-[11px]">Payment Date</span>
+                  <span className="font-semibold text-slate-900 dark:text-white">{formatDate(payslip.paymentDate)}</span>
                 </div>
                 <div>
-                  <span className="text-[#64748B] block text-[11px]">Payment Method</span>
-                  <span className="font-medium text-[#334155]">{payslip.paymentMethod || "Bank Transfer"}</span>
+                  <span className="text-slate-500 dark:text-slate-400 block text-[11px]">Payment Method</span>
+                  <span className="font-medium text-slate-700 dark:text-slate-300">{payslip.paymentMethod || "Bank Transfer"}</span>
                 </div>
                 <div>
-                  <span className="text-[#64748B] block text-[11px]">Status</span>
+                  <span className="text-slate-500 dark:text-slate-400 block text-[11px]">Status</span>
                   <span className={`inline-block rounded-full px-2.5 py-0.5 text-[11px] font-semibold ${getStatusColor(payslip.status || "Paid")}`}>
                     {payslip.status || "Paid"}
                   </span>
                 </div>
                 <div>
-                  <span className="text-[#64748B] block text-[11px]">Net Disbursed</span>
-                  <span className="font-bold text-[#002185] text-sm">{formatCurrency(netSalary)}</span>
+                  <span className="text-slate-500 dark:text-slate-400 block text-[11px]">Net Disbursed</span>
+                  <span className="font-bold text-[#002185] dark:text-blue-400 text-sm">{formatCurrency(netSalary)}</span>
                 </div>
               </div>
             </div>
@@ -423,19 +420,19 @@ const EmployeePayslipsModal = ({ payslip, allPayslips = [], onClose }) => {
 
           {/* Admin Waiver Alert (if penalty override is active) */}
           {penaltyOverride?.isWaived && (
-            <div className="rounded-xl bg-[#EFF6FF] border border-[#BFDBFE] p-4 flex items-start gap-3">
-              <ShieldCheck className="w-5 h-5 text-[#2563EB] shrink-0 mt-0.5" />
+            <div className="rounded-xl bg-blue-50 dark:bg-blue-950/40 border border-blue-200 dark:border-blue-800/60 p-4 flex items-start gap-3">
+              <ShieldCheck className="w-5 h-5 text-blue-600 dark:text-blue-400 shrink-0 mt-0.5" />
               <div className="text-xs">
                 <div className="flex items-center gap-2">
-                  <span className="font-bold text-[#1E40AF]">Attendance Penalty Waiver Approved</span>
-                  <span className="bg-[#DBEAFE] text-[#1E40AF] px-2 py-0.5 rounded font-semibold text-[10px]">
+                  <span className="font-bold text-blue-900 dark:text-blue-200">Attendance Penalty Waiver Approved</span>
+                  <span className="bg-blue-100 dark:bg-blue-900/60 text-blue-800 dark:text-blue-300 px-2 py-0.5 rounded font-semibold text-[10px]">
                     Total Waived: {formatCurrency(penaltyOverride.totalWaived)}
                   </span>
                 </div>
-                <p className="text-[#1E3A8A] mt-1">
+                <p className="text-blue-800 dark:text-blue-300 mt-1">
                   <span className="font-semibold">Reason:</span> {penaltyOverride.reason || "Administrative waiver approved."}
                 </p>
-                <p className="text-[#60A5FA] text-[10px] mt-0.5">
+                <p className="text-blue-500 dark:text-blue-400 text-[10px] mt-0.5">
                   Authorized by {penaltyOverride.waivedBy || "Administrator"} on {formatDate(penaltyOverride.waivedAt)}
                 </p>
               </div>
@@ -445,23 +442,23 @@ const EmployeePayslipsModal = ({ payslip, allPayslips = [], onClose }) => {
           {/* Transparent Itemized Breakdown Section */}
           <div className="space-y-5">
             {/* Breakdown Header & MoM Deduction Variance Toggle Switch */}
-            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-[#E2E8F0] pb-3">
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-slate-200 dark:border-slate-800/80 pb-3">
               <div>
-                <h3 className="text-sm font-bold uppercase tracking-wider text-[#002185] flex items-center gap-2">
+                <h3 className="text-sm font-bold uppercase tracking-wider text-[#002185] dark:text-blue-400 flex items-center gap-2">
                   <Calculator className="w-4 h-4 text-[#ff5500]" />
                   Itemized Salary & Deductions Breakdown
                 </h3>
-                <span className="text-xs text-[#64748B]">Currency: Ghana Cedis (GH₵) • Official Payroll Record</span>
+                <span className="text-xs text-slate-500 dark:text-slate-400">Currency: Ghana Cedis (GH₵) • Official Payroll Record</span>
               </div>
 
               {/* MoM Deduction Comparison Toggle Switch */}
-              <div className="flex items-center gap-3 bg-[#F8FAFC] border border-[#E2E8F0] px-3.5 py-2 rounded-xl shadow-xs">
+              <div className="flex items-center gap-3 bg-slate-50 dark:bg-[#162033] border border-slate-200 dark:border-slate-700/60 px-3.5 py-2 rounded-xl shadow-xs">
                 <div className="flex flex-col text-left sm:text-right">
-                  <span className="text-xs font-bold text-[#002185] flex items-center gap-1.5">
+                  <span className="text-xs font-bold text-[#002185] dark:text-blue-400 flex items-center gap-1.5">
                     <GitCompare className="w-3.5 h-3.5 text-[#ff5500]" />
                     Compare with Previous Month
                   </span>
-                  <span className="text-[10px] text-[#64748B]">
+                  <span className="text-[10px] text-slate-500 dark:text-slate-400">
                     {showVarianceComparison ? `Comparing vs ${prevPayMonth}` : "Highlight deduction variance"}
                   </span>
                 </div>
@@ -473,7 +470,7 @@ const EmployeePayslipsModal = ({ payslip, allPayslips = [], onClose }) => {
                   aria-checked={showVarianceComparison}
                   onClick={() => setShowVarianceComparison(!showVarianceComparison)}
                   className={`relative inline-flex h-6 w-11 shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-hidden ${
-                    showVarianceComparison ? "bg-[#002185]" : "bg-[#CBD5E1]"
+                    showVarianceComparison ? "bg-[#002185] dark:bg-blue-600" : "bg-slate-300 dark:bg-slate-700"
                   }`}
                   title="Toggle Previous Month Deduction Comparison"
                 >
@@ -490,23 +487,23 @@ const EmployeePayslipsModal = ({ payslip, allPayslips = [], onClose }) => {
 
             {/* DIRECT MONTH-OVER-MONTH DEDUCTION VARIANCE COMPARISON CARD */}
             {showVarianceComparison && (
-              <div className="rounded-xl border-2 border-[#002185]/30 bg-[#F8FAFC] p-4.5 space-y-4 animate-fade-in shadow-sm">
+              <div className="rounded-xl border-2 border-[#002185]/30 dark:border-blue-500/30 bg-slate-50/70 dark:bg-[#162033] p-4.5 space-y-4 animate-fade-in shadow-sm">
                 {/* Variance Header & Selector */}
-                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-[#E2E8F0] pb-3">
+                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-slate-200 dark:border-slate-700/60 pb-3">
                   <div className="flex items-center gap-2.5">
-                    <div className="w-8 h-8 rounded-lg bg-[#002185] text-white flex items-center justify-center shadow-xs">
+                    <div className="w-8 h-8 rounded-lg bg-[#002185] dark:bg-blue-600 text-white flex items-center justify-center shadow-xs">
                       <GitCompare className="w-4 h-4" />
                     </div>
                     <div>
                       <div className="flex items-center gap-2 flex-wrap">
-                        <h4 className="text-sm font-bold text-[#002185]">
+                        <h4 className="text-sm font-bold text-[#002185] dark:text-blue-400">
                           Month-over-Month Deduction Variance
                         </h4>
-                        <span className="text-[10px] font-semibold bg-[#E0E7FF] text-[#3730A3] px-2 py-0.5 rounded-full">
+                        <span className="text-[10px] font-semibold bg-blue-100 dark:bg-blue-950/60 text-blue-800 dark:text-blue-300 px-2 py-0.5 rounded-full border border-blue-200 dark:border-blue-800/60">
                           {currentPayMonth} vs {prevPayMonth}
                         </span>
                       </div>
-                      <p className="text-[11px] text-[#64748B]">
+                      <p className="text-[11px] text-slate-500 dark:text-slate-400">
                         Direct comparative variance across absenteeism penalties, lateness fines, and net take-home pay.
                       </p>
                     </div>
@@ -515,11 +512,11 @@ const EmployeePayslipsModal = ({ payslip, allPayslips = [], onClose }) => {
                   {/* Multiple Historical Months Selector (if more than 1 prior record available) */}
                   {priorPayslips.length > 1 && (
                     <div className="flex items-center gap-2">
-                      <span className="text-xs text-[#64748B] whitespace-nowrap">Compare with:</span>
+                      <span className="text-xs text-slate-500 dark:text-slate-400 whitespace-nowrap">Compare with:</span>
                       <select
                         value={selectedPreviousMonthId || String(previousPayslip?._id || previousPayslip?.id || previousPayslip?.payslipNumber || "")}
                         onChange={(e) => setSelectedPreviousMonthId(e.target.value)}
-                        className="text-xs bg-white border border-[#CBD5E1] rounded-lg px-2.5 py-1.5 text-[#0F172A] font-medium focus:ring-1 focus:ring-[#002185] cursor-pointer"
+                        className="text-xs bg-white dark:bg-[#111927] border border-slate-300 dark:border-slate-700 rounded-lg px-2.5 py-1.5 text-slate-900 dark:text-slate-100 font-medium focus:ring-1 focus:ring-[#002185] dark:focus:ring-blue-500 cursor-pointer"
                       >
                         {priorPayslips.map((p, idx) => (
                           <option
@@ -534,8 +531,8 @@ const EmployeePayslipsModal = ({ payslip, allPayslips = [], onClose }) => {
                   )}
 
                   {isBaselineComparison && (
-                    <span className="inline-flex items-center gap-1 text-[11px] bg-[#FEF3C7] text-[#92400E] border border-[#FDE68A] px-2.5 py-1 rounded-md font-medium">
-                      <Sparkles className="w-3.5 h-3.5 text-[#D97706]" />
+                    <span className="inline-flex items-center gap-1 text-[11px] bg-amber-50 dark:bg-amber-950/40 text-amber-800 dark:text-amber-300 border border-amber-200 dark:border-amber-800/60 px-2.5 py-1 rounded-md font-medium">
+                      <Sparkles className="w-3.5 h-3.5 text-amber-600 dark:text-amber-400" />
                       First Pay Period: Comparing against zero-penalty baseline
                     </span>
                   )}
@@ -546,64 +543,64 @@ const EmployeePayslipsModal = ({ payslip, allPayslips = [], onClose }) => {
                   {/* Total Deductions Variance Card */}
                   <div className={`p-3.5 rounded-xl border ${
                     isDeductionFavorable
-                      ? "bg-[#F0FDF4] border-[#BBF7D0]"
+                      ? "bg-emerald-50/70 dark:bg-emerald-950/30 border-emerald-200 dark:border-emerald-800/60"
                       : isDeductionUnfavorable
-                      ? "bg-[#FEF2F2] border-[#FECACA]"
-                      : "bg-white border-[#E2E8F0]"
+                      ? "bg-rose-50/70 dark:bg-rose-950/30 border-rose-200 dark:border-rose-800/60"
+                      : "bg-white dark:bg-[#111927] border-slate-200 dark:border-slate-800/80"
                   }`}>
                     <div className="flex items-center justify-between text-xs mb-1">
-                      <span className="font-semibold text-[#64748B]">Total Deductions Shift</span>
+                      <span className="font-semibold text-slate-500 dark:text-slate-400">Total Deductions Shift</span>
                       {isDeductionFavorable ? (
-                        <span className="inline-flex items-center gap-0.5 text-[11px] font-bold text-[#16A34A] bg-[#DCFCE7] px-1.5 py-0.5 rounded">
+                        <span className="inline-flex items-center gap-0.5 text-[11px] font-bold text-emerald-700 dark:text-emerald-300 bg-emerald-100 dark:bg-emerald-900/60 px-1.5 py-0.5 rounded">
                           <TrendingDown className="w-3.5 h-3.5" /> Favorable (-{Math.abs(deductionPercentChange)}%)
                         </span>
                       ) : isDeductionUnfavorable ? (
-                        <span className="inline-flex items-center gap-0.5 text-[11px] font-bold text-[#DC2626] bg-[#FEE2E2] px-1.5 py-0.5 rounded">
+                        <span className="inline-flex items-center gap-0.5 text-[11px] font-bold text-rose-700 dark:text-rose-300 bg-rose-100 dark:bg-rose-900/60 px-1.5 py-0.5 rounded">
                           <TrendingUp className="w-3.5 h-3.5" /> Higher (+{Math.abs(deductionPercentChange)}%)
                         </span>
                       ) : (
-                        <span className="inline-flex items-center gap-0.5 text-[11px] font-bold text-[#64748B] bg-[#F1F5F9] px-1.5 py-0.5 rounded">
+                        <span className="inline-flex items-center gap-0.5 text-[11px] font-bold text-slate-600 dark:text-slate-400 bg-slate-100 dark:bg-slate-800 px-1.5 py-0.5 rounded">
                           <Minus className="w-3.5 h-3.5" /> No Change
                         </span>
                       )}
                     </div>
                     <div className="flex items-baseline justify-between mt-1">
-                      <span className="text-lg font-bold text-[#0F172A] tabular-nums">
+                      <span className="text-lg font-bold text-slate-900 dark:text-white tabular-nums">
                         {formatCurrency(totalAllDeductions)}
                       </span>
                       <span className={`text-xs font-bold tabular-nums ${
                         isDeductionFavorable
-                          ? "text-[#16A34A]"
+                          ? "text-emerald-600 dark:text-emerald-400"
                           : isDeductionUnfavorable
-                          ? "text-[#DC2626]"
-                          : "text-[#64748B]"
+                          ? "text-rose-600 dark:text-rose-400"
+                          : "text-slate-500 dark:text-slate-400"
                       }`}>
                         {diffTotalDeductions > 0 ? `+${formatCurrency(diffTotalDeductions)}` : diffTotalDeductions < 0 ? `-${formatCurrency(Math.abs(diffTotalDeductions))}` : "GH₵0.00"}
                       </span>
                     </div>
-                    <p className="text-[10px] text-[#64748B] mt-1">
+                    <p className="text-[10px] text-slate-500 dark:text-slate-400 mt-1">
                       Prev: {formatCurrency(prevTotalAllDeductions)} in {prevPayMonth}
                     </p>
                   </div>
 
                   {/* Attendance Penalties (Absenteeism & Lateness) */}
-                  <div className="p-3.5 rounded-xl border bg-white border-[#E2E8F0]">
+                  <div className="p-3.5 rounded-xl border bg-white dark:bg-[#111927] border-slate-200 dark:border-slate-800/80">
                     <div className="flex items-center justify-between text-xs mb-1">
-                      <span className="font-semibold text-[#64748B]">Attendance Penalties</span>
-                      <span className="text-[11px] font-bold text-[#002185] bg-[#EEF2FF] px-1.5 py-0.5 rounded">
+                      <span className="font-semibold text-slate-500 dark:text-slate-400">Attendance Penalties</span>
+                      <span className="text-[11px] font-bold text-[#002185] dark:text-blue-400 bg-blue-50 dark:bg-blue-950/40 px-1.5 py-0.5 rounded">
                         Absence & Lateness
                       </span>
                     </div>
                     <div className="flex items-baseline justify-between mt-1">
-                      <span className="text-lg font-bold text-[#0F172A] tabular-nums">
+                      <span className="text-lg font-bold text-slate-900 dark:text-white tabular-nums">
                         {formatCurrency(totalAttendancePenalties)}
                       </span>
                       <span className={`text-xs font-bold tabular-nums ${
                         absenceTotal + latenessTotal < prevAttendancePenalties
-                          ? "text-[#16A34A]"
+                          ? "text-emerald-600 dark:text-emerald-400"
                           : absenceTotal + latenessTotal > prevAttendancePenalties
-                          ? "text-[#DC2626]"
-                          : "text-[#64748B]"
+                          ? "text-rose-600 dark:text-rose-400"
+                          : "text-slate-500 dark:text-slate-400"
                       }`}>
                         {totalAttendancePenalties - prevAttendancePenalties > 0
                           ? `+${formatCurrency(totalAttendancePenalties - prevAttendancePenalties)}`
@@ -612,7 +609,7 @@ const EmployeePayslipsModal = ({ payslip, allPayslips = [], onClose }) => {
                           : "GH₵0.00"}
                       </span>
                     </div>
-                    <p className="text-[10px] text-[#64748B] mt-1">
+                    <p className="text-[10px] text-slate-500 dark:text-slate-400 mt-1">
                       {diffAbsenceDays > 0 ? `+${diffAbsenceDays} absent days` : diffAbsenceDays < 0 ? `${diffAbsenceDays} absent days` : "Same absence days"} • {diffLateDays > 0 ? `+${diffLateDays} late days (${diffLateMinutes > 0 ? `+${diffLateMinutes}m` : `${diffLateMinutes}m`})` : diffLateDays < 0 ? `${diffLateDays} late days (${diffLateMinutes}m)` : diffLateMinutes !== 0 ? `${diffLateMinutes > 0 ? `+${diffLateMinutes}m` : `${diffLateMinutes}m`}` : "Same punctuality"}
                     </p>
                   </div>
@@ -620,47 +617,47 @@ const EmployeePayslipsModal = ({ payslip, allPayslips = [], onClose }) => {
                   {/* Net Take-Home Pay Variance */}
                   <div className={`p-3.5 rounded-xl border ${
                     diffNetSalary > 0
-                      ? "bg-[#F0FDF4] border-[#BBF7D0]"
+                      ? "bg-emerald-50/70 dark:bg-emerald-950/30 border-emerald-200 dark:border-emerald-800/60"
                       : diffNetSalary < 0
-                      ? "bg-[#FFFBEB] border-[#FDE68A]"
-                      : "bg-white border-[#E2E8F0]"
+                      ? "bg-amber-50/70 dark:bg-amber-950/30 border-amber-200 dark:border-amber-800/60"
+                      : "bg-white dark:bg-[#111927] border-slate-200 dark:border-slate-800/80"
                   }`}>
                     <div className="flex items-center justify-between text-xs mb-1">
-                      <span className="font-semibold text-[#64748B]">Net Pay Take-Home</span>
+                      <span className="font-semibold text-slate-500 dark:text-slate-400">Net Pay Take-Home</span>
                       <span className={`inline-flex items-center gap-0.5 text-[11px] font-bold px-1.5 py-0.5 rounded ${
                         diffNetSalary > 0
-                          ? "text-[#16A34A] bg-[#DCFCE7]"
+                          ? "text-emerald-700 dark:text-emerald-300 bg-emerald-100 dark:bg-emerald-900/60"
                           : diffNetSalary < 0
-                          ? "text-[#D97706] bg-[#FEF3C7]"
-                          : "text-[#64748B] bg-[#F1F5F9]"
+                          ? "text-amber-700 dark:text-amber-300 bg-amber-100 dark:bg-amber-900/60"
+                          : "text-slate-600 dark:text-slate-400 bg-slate-100 dark:bg-slate-800"
                       }`}>
                         {diffNetSalary > 0 ? <ArrowUpRight className="w-3.5 h-3.5" /> : diffNetSalary < 0 ? <ArrowDownRight className="w-3.5 h-3.5" /> : <Minus className="w-3.5 h-3.5" />}
                         {diffNetSalary > 0 ? "Take-Home Boost" : diffNetSalary < 0 ? "Reduced Take-Home" : "Identical"}
                       </span>
                     </div>
                     <div className="flex items-baseline justify-between mt-1">
-                      <span className="text-lg font-bold text-[#002185] tabular-nums">
+                      <span className="text-lg font-bold text-[#002185] dark:text-blue-400 tabular-nums">
                         {formatCurrency(netSalary)}
                       </span>
                       <span className={`text-xs font-bold tabular-nums ${
-                        diffNetSalary > 0 ? "text-[#16A34A]" : diffNetSalary < 0 ? "text-[#DC2626]" : "text-[#64748B]"
+                        diffNetSalary > 0 ? "text-emerald-600 dark:text-emerald-400" : diffNetSalary < 0 ? "text-rose-600 dark:text-rose-400" : "text-slate-500 dark:text-slate-400"
                       }`}>
                         {diffNetSalary > 0 ? `+${formatCurrency(diffNetSalary)}` : diffNetSalary < 0 ? `-${formatCurrency(Math.abs(diffNetSalary))}` : "GH₵0.00"}
                       </span>
                     </div>
-                    <p className="text-[10px] text-[#64748B] mt-1">
+                    <p className="text-[10px] text-slate-500 dark:text-slate-400 mt-1">
                       Prev: {formatCurrency(prevNetSalary)} in {prevPayMonth}
                     </p>
                   </div>
                 </div>
 
                 {/* Granular Line-by-Line Comparative Table */}
-                <div className="overflow-hidden rounded-xl border border-[#E2E8F0] bg-white shadow-xs">
-                  <div className="bg-[#002185] text-white px-4 py-2.5 flex items-center justify-between">
+                <div className="overflow-hidden rounded-xl border border-slate-200 dark:border-slate-800/80 bg-white dark:bg-[#111927] shadow-xs">
+                  <div className="bg-[#002185] dark:bg-blue-600 text-white px-4 py-2.5 flex items-center justify-between">
                     <span className="text-xs font-bold tracking-wider uppercase">
                       Line-by-Line Deduction & Pay Comparison
                     </span>
-                    <span className="text-[11px] text-[#BFDBFE]">
+                    <span className="text-[11px] text-blue-100">
                       Variance = Current ({currentPayMonth}) - Previous ({prevPayMonth})
                     </span>
                   </div>
@@ -668,7 +665,7 @@ const EmployeePayslipsModal = ({ payslip, allPayslips = [], onClose }) => {
                   <div className="overflow-x-auto">
                     <table className="w-full text-left text-xs border-collapse">
                       <thead>
-                        <tr className="border-b border-[#E2E8F0] bg-[#F8FAFC] text-[11px] text-[#64748B] font-semibold">
+                        <tr className="border-b border-slate-200 dark:border-slate-800/80 bg-slate-50 dark:bg-[#162033] text-[11px] text-slate-500 dark:text-slate-400 font-semibold">
                           <th className="py-2.5 px-3.5">Deduction / Pay Category</th>
                           <th className="py-2.5 px-3 text-right">Previous ({prevPayMonth})</th>
                           <th className="py-2.5 px-3 text-right">Current ({currentPayMonth})</th>
@@ -676,74 +673,74 @@ const EmployeePayslipsModal = ({ payslip, allPayslips = [], onClose }) => {
                           <th className="py-2.5 px-3.5 text-center">Variance Status</th>
                         </tr>
                       </thead>
-                      <tbody className="divide-y divide-[#E2E8F0]">
+                      <tbody className="divide-y divide-slate-200 dark:divide-slate-800/80">
                         {/* Row: Absenteeism Penalty */}
-                        <tr className="hover:bg-[#F8FAFC] transition-colors">
+                        <tr className="hover:bg-slate-50/50 dark:hover:bg-[#162033]/60 transition-colors">
                           <td className="py-2.5 px-3.5">
-                            <div className="font-semibold text-[#0F172A]">Absenteeism Deduction</div>
-                            <div className="text-[10px] text-[#64748B]">
+                            <div className="font-semibold text-slate-900 dark:text-white">Absenteeism Deduction</div>
+                            <div className="text-[10px] text-slate-500 dark:text-slate-400">
                               Current: {absenceDays}d @ {formatCurrency(absenceRate)} • Prev: {prevAbsenceDays}d
                             </div>
                           </td>
-                          <td className="py-2.5 px-3 text-right text-[#64748B] font-mono tabular-nums">
+                          <td className="py-2.5 px-3 text-right text-slate-500 dark:text-slate-400 font-mono tabular-nums">
                             {formatCurrency(prevAbsenceTotal)}
                           </td>
-                          <td className="py-2.5 px-3 text-right text-[#DC2626] font-mono font-semibold tabular-nums">
+                          <td className="py-2.5 px-3 text-right text-rose-600 dark:text-rose-400 font-mono font-semibold tabular-nums">
                             {formatCurrency(absenceTotal)}
                           </td>
                           <td className="py-2.5 px-3 text-right font-mono font-bold tabular-nums">
-                            <span className={diffAbsenceAmount < 0 ? "text-[#16A34A]" : diffAbsenceAmount > 0 ? "text-[#DC2626]" : "text-[#64748B]"}>
+                            <span className={diffAbsenceAmount < 0 ? "text-emerald-600 dark:text-emerald-400" : diffAbsenceAmount > 0 ? "text-rose-600 dark:text-rose-400" : "text-slate-500 dark:text-slate-400"}>
                               {diffAbsenceAmount > 0 ? `+${formatCurrency(diffAbsenceAmount)}` : diffAbsenceAmount < 0 ? `-${formatCurrency(Math.abs(diffAbsenceAmount))}` : "GH₵0.00"}
                             </span>
                           </td>
                           <td className="py-2.5 px-3.5 text-center">
                             {diffAbsenceAmount < 0 ? (
-                              <span className="inline-flex items-center gap-1 text-[10px] font-bold text-[#16A34A] bg-[#DCFCE7] px-2 py-0.5 rounded-full">
-                                <TrendingDown className="w-3 h-3" /> Improved ({Math.abs(diffAbsenceDays)} fewer days)
+                              <span className="inline-flex items-center gap-1 text-[10px] font-bold text-emerald-700 dark:text-emerald-300 bg-emerald-100 dark:bg-emerald-900/60 px-2 py-0.5 rounded-full">
+                                <TrendingDown className="w-3" /> Improved ({Math.abs(diffAbsenceDays)} fewer days)
                               </span>
                             ) : diffAbsenceAmount > 0 ? (
-                              <span className="inline-flex items-center gap-1 text-[10px] font-bold text-[#DC2626] bg-[#FEE2E2] px-2 py-0.5 rounded-full">
-                                <TrendingUp className="w-3 h-3" /> +{diffAbsenceDays} extra absent day{diffAbsenceDays !== 1 ? "s" : ""}
+                              <span className="inline-flex items-center gap-1 text-[10px] font-bold text-rose-700 dark:text-rose-300 bg-rose-100 dark:bg-rose-900/60 px-2 py-0.5 rounded-full">
+                                <TrendingUp className="w-3" /> +{diffAbsenceDays} extra absent day{diffAbsenceDays !== 1 ? "s" : ""}
                               </span>
                             ) : (
-                              <span className="inline-flex items-center gap-1 text-[10px] font-medium text-[#64748B] bg-[#F1F5F9] px-2 py-0.5 rounded-full">
-                                <Minus className="w-3 h-3" /> Unchanged
+                              <span className="inline-flex items-center gap-1 text-[10px] font-medium text-slate-600 dark:text-slate-400 bg-slate-100 dark:bg-slate-800 px-2 py-0.5 rounded-full">
+                                <Minus className="w-3" /> Unchanged
                               </span>
                             )}
                           </td>
                         </tr>
 
                         {/* Row: Lateness Penalties */}
-                        <tr className="hover:bg-[#F8FAFC] transition-colors">
+                        <tr className="hover:bg-slate-50/50 dark:hover:bg-[#162033]/60 transition-colors">
                           <td className="py-2.5 px-3.5">
-                            <div className="font-semibold text-[#0F172A]">Lateness Penalties</div>
-                            <div className="text-[10px] text-[#64748B]">
+                            <div className="font-semibold text-slate-900 dark:text-white">Lateness Penalties</div>
+                            <div className="text-[10px] text-slate-500 dark:text-slate-400">
                               Current: {lateDaysCount} late days ({totalLateMinutes}m) • Prev: {prevLateDaysCount} days ({prevTotalLateMinutes}m)
                             </div>
                           </td>
-                          <td className="py-2.5 px-3 text-right text-[#64748B] font-mono tabular-nums">
+                          <td className="py-2.5 px-3 text-right text-slate-500 dark:text-slate-400 font-mono tabular-nums">
                             {formatCurrency(prevLatenessTotal)}
                           </td>
-                          <td className="py-2.5 px-3 text-right text-[#DC2626] font-mono font-semibold tabular-nums">
+                          <td className="py-2.5 px-3 text-right text-rose-600 dark:text-rose-400 font-mono font-semibold tabular-nums">
                             {formatCurrency(latenessTotal)}
                           </td>
                           <td className="py-2.5 px-3 text-right font-mono font-bold tabular-nums">
-                            <span className={diffLatenessAmount < 0 ? "text-[#16A34A]" : diffLatenessAmount > 0 ? "text-[#DC2626]" : "text-[#64748B]"}>
+                            <span className={diffLatenessAmount < 0 ? "text-emerald-600 dark:text-emerald-400" : diffLatenessAmount > 0 ? "text-rose-600 dark:text-rose-400" : "text-slate-500 dark:text-slate-400"}>
                               {diffLatenessAmount > 0 ? `+${formatCurrency(diffLatenessAmount)}` : diffLatenessAmount < 0 ? `-${formatCurrency(Math.abs(diffLatenessAmount))}` : "GH₵0.00"}
                             </span>
                           </td>
                           <td className="py-2.5 px-3.5 text-center">
                             {diffLatenessAmount < 0 ? (
-                              <span className="inline-flex items-center gap-1 text-[10px] font-bold text-[#16A34A] bg-[#DCFCE7] px-2 py-0.5 rounded-full">
-                                <TrendingDown className="w-3 h-3" /> Better Punctuality ({Math.abs(diffLateMinutes)}m less)
+                              <span className="inline-flex items-center gap-1 text-[10px] font-bold text-emerald-700 dark:text-emerald-300 bg-emerald-100 dark:bg-emerald-900/60 px-2 py-0.5 rounded-full">
+                                <TrendingDown className="w-3" /> Better Punctuality ({Math.abs(diffLateMinutes)}m less)
                               </span>
                             ) : diffLatenessAmount > 0 ? (
-                              <span className="inline-flex items-center gap-1 text-[10px] font-bold text-[#DC2626] bg-[#FEE2E2] px-2 py-0.5 rounded-full">
-                                <TrendingUp className="w-3 h-3" /> +{diffLateMinutes}m more late
+                              <span className="inline-flex items-center gap-1 text-[10px] font-bold text-rose-700 dark:text-rose-300 bg-rose-100 dark:bg-rose-900/60 px-2 py-0.5 rounded-full">
+                                <TrendingUp className="w-3" /> +{diffLateMinutes}m more late
                               </span>
                             ) : (
-                              <span className="inline-flex items-center gap-1 text-[10px] font-medium text-[#64748B] bg-[#F1F5F9] px-2 py-0.5 rounded-full">
-                                <Minus className="w-3 h-3" /> Unchanged
+                              <span className="inline-flex items-center gap-1 text-[10px] font-medium text-slate-600 dark:text-slate-400 bg-slate-100 dark:bg-slate-800 px-2 py-0.5 rounded-full">
+                                <Minus className="w-3" /> Unchanged
                               </span>
                             )}
                           </td>
@@ -751,24 +748,24 @@ const EmployeePayslipsModal = ({ payslip, allPayslips = [], onClose }) => {
 
                         {/* Row: Custom Admin Adjustments */}
                         {(totalCustomDeductions > 0 || prevCustomTotal > 0) && (
-                          <tr className="hover:bg-[#F8FAFC] transition-colors">
+                          <tr className="hover:bg-slate-50/50 dark:hover:bg-[#162033]/60 transition-colors">
                             <td className="py-2.5 px-3.5">
-                              <div className="font-semibold text-[#0F172A]">Custom Administrative Deductions</div>
-                              <div className="text-[10px] text-[#64748B]">Other administrative adjustments & payroll items</div>
+                              <div className="font-semibold text-slate-900 dark:text-white">Custom Administrative Deductions</div>
+                              <div className="text-[10px] text-slate-500 dark:text-slate-400">Other administrative adjustments & payroll items</div>
                             </td>
-                            <td className="py-2.5 px-3 text-right text-[#64748B] font-mono tabular-nums">
+                            <td className="py-2.5 px-3 text-right text-slate-500 dark:text-slate-400 font-mono tabular-nums">
                               {formatCurrency(prevCustomTotal)}
                             </td>
-                            <td className="py-2.5 px-3 text-right text-[#DC2626] font-mono font-semibold tabular-nums">
+                            <td className="py-2.5 px-3 text-right text-rose-600 dark:text-rose-400 font-mono font-semibold tabular-nums">
                               {formatCurrency(totalCustomDeductions)}
                             </td>
                             <td className="py-2.5 px-3 text-right font-mono font-bold tabular-nums">
-                              <span className={diffCustomAmount < 0 ? "text-[#16A34A]" : diffCustomAmount > 0 ? "text-[#DC2626]" : "text-[#64748B]"}>
+                              <span className={diffCustomAmount < 0 ? "text-emerald-600 dark:text-emerald-400" : diffCustomAmount > 0 ? "text-rose-600 dark:text-rose-400" : "text-slate-500 dark:text-slate-400"}>
                                 {diffCustomAmount > 0 ? `+${formatCurrency(diffCustomAmount)}` : diffCustomAmount < 0 ? `-${formatCurrency(Math.abs(diffCustomAmount))}` : "GH₵0.00"}
                               </span>
                             </td>
                             <td className="py-2.5 px-3.5 text-center">
-                              <span className="text-[10px] font-medium text-[#64748B] bg-[#F1F5F9] px-2 py-0.5 rounded-full">
+                              <span className="text-[10px] font-medium text-slate-600 dark:text-slate-400 bg-slate-100 dark:bg-slate-800 px-2 py-0.5 rounded-full">
                                 {diffCustomAmount === 0 ? "Unchanged" : `${diffCustomAmount > 0 ? "+" : ""}${formatCurrency(diffCustomAmount)}`}
                               </span>
                             </td>
@@ -776,32 +773,32 @@ const EmployeePayslipsModal = ({ payslip, allPayslips = [], onClose }) => {
                         )}
 
                         {/* Summary Row: Total Deductions */}
-                        <tr className="bg-[#F8FAFC] font-bold border-t-2 border-[#E2E8F0]">
-                          <td className="py-3 px-3.5 text-[#0F172A] text-xs">
+                        <tr className="bg-slate-50 dark:bg-[#162033] font-bold border-t-2 border-slate-200 dark:border-slate-800/80">
+                          <td className="py-3 px-3.5 text-slate-900 dark:text-white text-xs">
                             TOTAL MONTHLY DEDUCTIONS
                           </td>
-                          <td className="py-3 px-3 text-right font-mono text-[#64748B] tabular-nums">
+                          <td className="py-3 px-3 text-right font-mono text-slate-500 dark:text-slate-400 tabular-nums">
                             {formatCurrency(prevTotalAllDeductions)}
                           </td>
-                          <td className="py-3 px-3 text-right font-mono text-[#DC2626] tabular-nums">
+                          <td className="py-3 px-3 text-right font-mono text-rose-600 dark:text-rose-400 tabular-nums">
                             {formatCurrency(totalAllDeductions)}
                           </td>
                           <td className="py-3 px-3 text-right font-mono tabular-nums">
-                            <span className={isDeductionFavorable ? "text-[#16A34A]" : isDeductionUnfavorable ? "text-[#DC2626]" : "text-[#64748B]"}>
+                            <span className={isDeductionFavorable ? "text-emerald-600 dark:text-emerald-400" : isDeductionUnfavorable ? "text-rose-600 dark:text-rose-400" : "text-slate-500 dark:text-slate-400"}>
                               {diffTotalDeductions > 0 ? `+${formatCurrency(diffTotalDeductions)}` : diffTotalDeductions < 0 ? `-${formatCurrency(Math.abs(diffTotalDeductions))}` : "GH₵0.00"}
                             </span>
                           </td>
                           <td className="py-3 px-3.5 text-center">
                             {isDeductionFavorable ? (
-                              <span className="inline-flex items-center gap-1 text-[11px] font-bold text-[#16A34A] bg-[#DCFCE7] border border-[#BBF7D0] px-2.5 py-0.5 rounded-md">
+                              <span className="inline-flex items-center gap-1 text-[11px] font-bold text-emerald-700 dark:text-emerald-300 bg-emerald-100 dark:bg-emerald-900/60 border border-emerald-200 dark:border-emerald-800/60 px-2.5 py-0.5 rounded-md">
                                 <TrendingDown className="w-3.5 h-3.5" /> -{Math.abs(deductionPercentChange)}% Deductions
                               </span>
                             ) : isDeductionUnfavorable ? (
-                              <span className="inline-flex items-center gap-1 text-[11px] font-bold text-[#DC2626] bg-[#FEE2E2] border border-[#FECACA] px-2.5 py-0.5 rounded-md">
+                              <span className="inline-flex items-center gap-1 text-[11px] font-bold text-rose-700 dark:text-rose-300 bg-rose-100 dark:bg-rose-900/60 border border-rose-200 dark:border-rose-800/60 px-2.5 py-0.5 rounded-md">
                                 <TrendingUp className="w-3.5 h-3.5" /> +{Math.abs(deductionPercentChange)}% Deductions
                               </span>
                             ) : (
-                              <span className="inline-flex items-center gap-1 text-[11px] font-medium text-[#64748B] bg-[#F1F5F9] px-2.5 py-0.5 rounded-md">
+                              <span className="inline-flex items-center gap-1 text-[11px] font-medium text-slate-600 dark:text-slate-400 bg-slate-100 dark:bg-slate-800 px-2.5 py-0.5 rounded-md">
                                 Neutral (0.0%)
                               </span>
                             )}
@@ -809,28 +806,28 @@ const EmployeePayslipsModal = ({ payslip, allPayslips = [], onClose }) => {
                         </tr>
 
                         {/* Summary Row: Net Take-Home Salary */}
-                        <tr className="bg-[#EFF6FF] font-bold border-t border-[#BFDBFE]">
-                          <td className="py-3 px-3.5 text-[#002185] text-xs">
+                        <tr className="bg-blue-50/70 dark:bg-blue-950/40 font-bold border-t border-blue-200 dark:border-blue-800/60">
+                          <td className="py-3 px-3.5 text-[#002185] dark:text-blue-300 text-xs">
                             FINAL NET TAKE-HOME PAY
                           </td>
-                          <td className="py-3 px-3 text-right font-mono text-[#475569] tabular-nums">
+                          <td className="py-3 px-3 text-right font-mono text-slate-600 dark:text-slate-400 tabular-nums">
                             {formatCurrency(prevNetSalary)}
                           </td>
-                          <td className="py-3 px-3 text-right font-mono text-[#002185] text-sm tabular-nums">
+                          <td className="py-3 px-3 text-right font-mono text-[#002185] dark:text-blue-400 text-sm tabular-nums">
                             {formatCurrency(netSalary)}
                           </td>
                           <td className="py-3 px-3 text-right font-mono tabular-nums">
-                            <span className={diffNetSalary > 0 ? "text-[#16A34A]" : diffNetSalary < 0 ? "text-[#DC2626]" : "text-[#64748B]"}>
+                            <span className={diffNetSalary > 0 ? "text-emerald-600 dark:text-emerald-400" : diffNetSalary < 0 ? "text-rose-600 dark:text-rose-400" : "text-slate-500 dark:text-slate-400"}>
                               {diffNetSalary > 0 ? `+${formatCurrency(diffNetSalary)}` : diffNetSalary < 0 ? `-${formatCurrency(Math.abs(diffNetSalary))}` : "GH₵0.00"}
                             </span>
                           </td>
                           <td className="py-3 px-3.5 text-center">
                             <span className={`inline-flex items-center gap-1 text-[11px] font-bold px-2.5 py-0.5 rounded-md ${
                               diffNetSalary > 0
-                                ? "text-[#16A34A] bg-[#DCFCE7] border border-[#BBF7D0]"
+                                ? "text-emerald-700 dark:text-emerald-300 bg-emerald-100 dark:bg-emerald-900/60 border border-emerald-200 dark:border-emerald-800/60"
                                 : diffNetSalary < 0
-                                ? "text-[#D97706] bg-[#FEF3C7] border border-[#FDE68A]"
-                                : "text-[#64748B] bg-[#F1F5F9]"
+                                ? "text-amber-700 dark:text-amber-300 bg-amber-100 dark:bg-amber-900/60 border border-amber-200 dark:border-amber-800/60"
+                                : "text-slate-600 dark:text-slate-400 bg-slate-100 dark:bg-slate-800"
                             }`}>
                               {diffNetSalary > 0 ? `+${formatCurrency(diffNetSalary)} Gain` : diffNetSalary < 0 ? `-${formatCurrency(Math.abs(diffNetSalary))} Reduction` : "Exact Match"}
                             </span>
@@ -842,17 +839,17 @@ const EmployeePayslipsModal = ({ payslip, allPayslips = [], onClose }) => {
                 </div>
 
                 {/* Plain-Language Takeaway Insight */}
-                <div className="rounded-lg bg-white border border-[#E2E8F0] p-3 text-xs flex items-start gap-2.5">
+                <div className="rounded-lg bg-white dark:bg-[#111927] border border-slate-200 dark:border-slate-800/80 p-3 text-xs flex items-start gap-2.5">
                   <Sparkles className="w-4 h-4 text-[#ff5500] shrink-0 mt-0.5" />
-                  <p className="text-[#334155]">
+                  <p className="text-slate-700 dark:text-slate-300">
                     {isDeductionFavorable ? (
                       <span>
-                        <strong className="text-[#16A34A]">Favorable Attendance Trend:</strong> Your total deductions decreased by{" "}
+                        <strong className="text-emerald-600 dark:text-emerald-400">Favorable Attendance Trend:</strong> Your total deductions decreased by{" "}
                         <strong>{formatCurrency(Math.abs(diffTotalDeductions))} ({Math.abs(deductionPercentChange)}%)</strong> compared to {prevPayMonth}. This attendance improvement contributed directly to an increased net take-home salary of {formatCurrency(netSalary)}.
                       </span>
                     ) : isDeductionUnfavorable ? (
                       <span>
-                        <strong className="text-[#DC2626]">Deduction Increase Notice:</strong> Total deductions increased by{" "}
+                        <strong className="text-rose-600 dark:text-rose-400">Deduction Increase Notice:</strong> Total deductions increased by{" "}
                         <strong>{formatCurrency(diffTotalDeductions)} (+{Math.abs(deductionPercentChange)}%)</strong> compared to {prevPayMonth} due to{" "}
                         {diffAbsenceAmount > 0 && diffLatenessAmount > 0
                           ? `${diffAbsenceDays} additional absent day(s) and ${diffLateMinutes} additional late minute(s)`
@@ -863,7 +860,7 @@ const EmployeePayslipsModal = ({ payslip, allPayslips = [], onClose }) => {
                       </span>
                     ) : (
                       <span>
-                        <strong className="text-[#002185]">Consistent Attendance Record:</strong> Your deductions remained completely identical to {prevPayMonth} at {formatCurrency(totalAllDeductions)}.
+                        <strong className="text-[#002185] dark:text-blue-400">Consistent Attendance Record:</strong> Your deductions remained completely identical to {prevPayMonth} at {formatCurrency(totalAllDeductions)}.
                       </span>
                     )}
                   </p>
@@ -872,59 +869,59 @@ const EmployeePayslipsModal = ({ payslip, allPayslips = [], onClose }) => {
             )}
 
             {/* 1. Base Salary */}
-            <div className="rounded-xl border border-[#E2E8F0] overflow-hidden">
-              <div className="flex items-center justify-between px-4 py-3 bg-[#F8FAFC]">
+            <div className="rounded-xl border border-slate-200 dark:border-slate-800/80 overflow-hidden">
+              <div className="flex items-center justify-between px-4 py-3 bg-slate-50 dark:bg-[#162033]">
                 <div className="flex items-center gap-2.5">
-                  <div className="w-7 h-7 rounded-md bg-[#002185]/10 flex items-center justify-center text-[#002185]">
+                  <div className="w-7 h-7 rounded-md bg-[#002185]/10 dark:bg-blue-500/20 flex items-center justify-center text-[#002185] dark:text-blue-400">
                     <BanknoteIcon className="w-4 h-4" />
                   </div>
                   <div>
-                    <span className="text-sm font-bold text-[#0F172A]">Employee Base Salary</span>
-                    <p className="text-[11px] text-[#64748B]">Agreed contractual monthly base salary from database</p>
+                    <span className="text-sm font-bold text-slate-900 dark:text-white">Employee Base Salary</span>
+                    <p className="text-[11px] text-slate-500 dark:text-slate-400">Agreed contractual monthly base salary from database</p>
                   </div>
                 </div>
-                <span className="text-base font-bold text-[#002185] tabular-nums">
+                <span className="text-base font-bold text-[#002185] dark:text-blue-400 tabular-nums">
                   {formatCurrency(baseSalary)}
                 </span>
               </div>
             </div>
 
             {/* 2. Dynamic Allowances & Additional Earnings */}
-            <div className="rounded-xl border border-[#BBF7D0] overflow-hidden">
-              <div className="flex items-center justify-between px-4 py-2.5 bg-[#F0FDF4] border-b border-[#BBF7D0]">
+            <div className="rounded-xl border border-emerald-200 dark:border-emerald-800/60 overflow-hidden">
+              <div className="flex items-center justify-between px-4 py-2.5 bg-emerald-50/70 dark:bg-emerald-950/40 border-b border-emerald-200 dark:border-emerald-800/60">
                 <div className="flex items-center gap-2">
-                  <span className="text-xs font-bold uppercase tracking-wider text-[#166534]">
+                  <span className="text-xs font-bold uppercase tracking-wider text-emerald-800 dark:text-emerald-300">
                     Allowances & Dynamic Earnings
                   </span>
-                  <span className="text-[11px] font-semibold bg-[#DCFCE7] text-[#15803D] px-2 py-0.5 rounded-full">
+                  <span className="text-[11px] font-semibold bg-emerald-100 dark:bg-emerald-900/60 text-emerald-800 dark:text-emerald-300 px-2 py-0.5 rounded-full">
                     {allowancesList.length} item{allowancesList.length !== 1 ? "s" : ""}
                   </span>
                 </div>
-                <span className="text-sm font-bold text-[#166534] tabular-nums">
+                <span className="text-sm font-bold text-emerald-700 dark:text-emerald-300 tabular-nums">
                   +{formatCurrency(totalAllowances)}
                 </span>
               </div>
 
-              <div className="divide-y divide-[#F0FDF4] bg-white">
+              <div className="divide-y divide-emerald-50 dark:divide-emerald-950/40 bg-white dark:bg-[#111927]">
                 {allowancesList.length > 0 ? (
                   allowancesList.map((item, idx) => (
                     <div
                       key={`allowance-${idx}`}
-                      className="flex items-center justify-between px-4 py-2.5 text-xs hover:bg-[#F8FAFC] transition-colors"
+                      className="flex items-center justify-between px-4 py-2.5 text-xs hover:bg-slate-50 dark:hover:bg-[#162033]/50 transition-colors"
                     >
                       <div className="flex items-center gap-2">
-                        <CheckCircle2 className="w-3.5 h-3.5 text-[#16A34A]" />
-                        <span className="font-medium text-[#334155]">
+                        <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600 dark:text-emerald-400" />
+                        <span className="font-medium text-slate-700 dark:text-slate-300">
                           {item.title || item.description || item.name || `Allowance #${idx + 1}`}
                         </span>
                       </div>
-                      <span className="font-semibold text-[#16A34A] tabular-nums">
+                      <span className="font-semibold text-emerald-600 dark:text-emerald-400 tabular-nums">
                         +{formatCurrency(item.amount)}
                       </span>
                     </div>
                   ))
                 ) : (
-                  <div className="px-4 py-3 text-xs text-[#94A3B8] italic">
+                  <div className="px-4 py-3 text-xs text-slate-400 dark:text-slate-500 italic">
                     No custom allowances recorded for this pay period.
                   </div>
                 )}
@@ -932,39 +929,39 @@ const EmployeePayslipsModal = ({ payslip, allPayslips = [], onClose }) => {
             </div>
 
             {/* 3. Attendance Penalty Breakdown: Absenteeism & Lateness */}
-            <div className="rounded-xl border border-[#FECACA] overflow-hidden">
-              <div className="flex items-center justify-between px-4 py-2.5 bg-[#FEF2F2] border-b border-[#FECACA]">
+            <div className="rounded-xl border border-rose-200 dark:border-rose-800/60 overflow-hidden">
+              <div className="flex items-center justify-between px-4 py-2.5 bg-rose-50/70 dark:bg-rose-950/40 border-b border-rose-200 dark:border-rose-800/60">
                 <div className="flex items-center gap-2">
-                  <AlertTriangle className="w-4 h-4 text-[#DC2626]" />
-                  <span className="text-xs font-bold uppercase tracking-wider text-[#991B1B]">
+                  <AlertTriangle className="w-4 h-4 text-rose-600 dark:text-rose-400" />
+                  <span className="text-xs font-bold uppercase tracking-wider text-rose-800 dark:text-rose-300">
                     Attendance Deductions (Absenteeism & Lateness)
                   </span>
                 </div>
-                <span className="text-sm font-bold text-[#DC2626] tabular-nums">
+                <span className="text-sm font-bold text-rose-600 dark:text-rose-400 tabular-nums">
                   -{formatCurrency(totalAttendancePenalties)}
                 </span>
               </div>
 
-              <div className="p-4 space-y-4 bg-white">
+              <div className="p-4 space-y-4 bg-white dark:bg-[#111927]">
                 {/* Absenteeism Breakdown */}
-                <div className="rounded-lg bg-[#F8FAFC] border border-[#E2E8F0] p-3.5">
+                <div className="rounded-lg bg-slate-50 dark:bg-[#162033] border border-slate-200 dark:border-slate-700/60 p-3.5">
                   <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
                     <div>
                       <div className="flex items-center gap-2">
-                        <span className="font-semibold text-xs text-[#0F172A]">
+                        <span className="font-semibold text-xs text-slate-900 dark:text-white">
                           Absenteeism Penalty
                         </span>
-                        <span className="text-[10px] bg-[#FEF2F2] text-[#DC2626] font-semibold px-2 py-0.5 rounded">
+                        <span className="text-[10px] bg-rose-100 dark:bg-rose-950/60 text-rose-700 dark:text-rose-300 font-semibold px-2 py-0.5 rounded border border-rose-200 dark:border-rose-800/60">
                           {absenceDays} unexcused absent day{absenceDays !== 1 ? "s" : ""}
                         </span>
                       </div>
-                      <p className="text-[11px] text-[#64748B] mt-1">
+                      <p className="text-[11px] text-slate-500 dark:text-slate-400 mt-1">
                         Calculation Rule: <span className="font-mono">{absenceDays} days × {formatCurrency(absenceRate)}/day</span>
                       </p>
                     </div>
                     <div className="text-right">
-                      <span className="text-xs text-[#64748B] block">Absenteeism Deduction</span>
-                      <span className="font-bold text-[#DC2626] text-sm tabular-nums">
+                      <span className="text-xs text-slate-500 dark:text-slate-400 block">Absenteeism Deduction</span>
+                      <span className="font-bold text-rose-600 dark:text-rose-400 text-sm tabular-nums">
                         {absenceTotal > 0 ? `-${formatCurrency(absenceTotal)}` : "GH₵0.00"}
                       </span>
                     </div>
@@ -972,25 +969,25 @@ const EmployeePayslipsModal = ({ payslip, allPayslips = [], onClose }) => {
                 </div>
 
                 {/* Lateness Penalties Breakdown */}
-                <div className="rounded-lg bg-[#F8FAFC] border border-[#E2E8F0] p-3.5 space-y-3">
-                  <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 border-b border-[#E2E8F0] pb-2.5">
+                <div className="rounded-lg bg-slate-50 dark:bg-[#162033] border border-slate-200 dark:border-slate-700/60 p-3.5 space-y-3">
+                  <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 border-b border-slate-200 dark:border-slate-700/60 pb-2.5">
                     <div>
                       <div className="flex items-center gap-2">
-                        <Clock className="w-3.5 h-3.5 text-[#D97706]" />
-                        <span className="font-semibold text-xs text-[#0F172A]">
+                        <Clock className="w-3.5 h-3.5 text-amber-600 dark:text-amber-400" />
+                        <span className="font-semibold text-xs text-slate-900 dark:text-white">
                           Lateness Penalties Breakdown
                         </span>
-                        <span className="text-[10px] bg-[#FFFBEB] text-[#D97706] font-semibold px-2 py-0.5 rounded">
+                        <span className="text-[10px] bg-amber-100 dark:bg-amber-950/60 text-amber-700 dark:text-amber-300 font-semibold px-2 py-0.5 rounded border border-amber-200 dark:border-amber-800/60">
                           {lateDaysCount} late day{lateDaysCount !== 1 ? "s" : ""} • {totalLateMinutes} total mins late
                         </span>
                       </div>
-                      <p className="text-[11px] text-[#64748B] mt-0.5">
+                      <p className="text-[11px] text-slate-500 dark:text-slate-400 mt-0.5">
                         Tiered fine matrix applied against official clock-in timestamps
                       </p>
                     </div>
                     <div className="text-right">
-                      <span className="text-xs text-[#64748B] block">Total Lateness Deductions</span>
-                      <span className="font-bold text-[#DC2626] text-sm tabular-nums">
+                      <span className="text-xs text-slate-500 dark:text-slate-400 block">Total Lateness Deductions</span>
+                      <span className="font-bold text-rose-600 dark:text-rose-400 text-sm tabular-nums">
                         {latenessTotal > 0 ? `-${formatCurrency(latenessTotal)}` : "GH₵0.00"}
                       </span>
                     </div>
@@ -1001,7 +998,7 @@ const EmployeePayslipsModal = ({ payslip, allPayslips = [], onClose }) => {
                     <div className="overflow-x-auto">
                       <table className="w-full text-left text-xs border-collapse">
                         <thead>
-                          <tr className="border-b border-[#E2E8F0] text-[11px] text-[#64748B] font-semibold">
+                          <tr className="border-b border-slate-200 dark:border-slate-700/60 text-[11px] text-slate-500 dark:text-slate-400 font-semibold">
                             <th className="py-1.5 pr-3">Date</th>
                             <th className="py-1.5 px-3">Clock-In</th>
                             <th className="py-1.5 px-3">Minutes Late</th>
@@ -1009,22 +1006,22 @@ const EmployeePayslipsModal = ({ payslip, allPayslips = [], onClose }) => {
                             <th className="py-1.5 pl-3 text-right">Fine</th>
                           </tr>
                         </thead>
-                        <tbody className="divide-y divide-[#E2E8F0]">
+                        <tbody className="divide-y divide-slate-200 dark:divide-slate-700/60">
                           {tierBreakdown.map((tierItem, tIdx) => (
-                            <tr key={`tier-${tIdx}`} className="text-[#334155] hover:bg-[#F1F5F9]/50">
+                            <tr key={`tier-${tIdx}`} className="text-slate-700 dark:text-slate-300 hover:bg-slate-100/50 dark:hover:bg-[#162033]/80">
                               <td className="py-2 pr-3 font-medium">{tierItem.date || "N/A"}</td>
                               <td className="py-2 px-3 font-mono">{tierItem.clockIn || "Late"}</td>
                               <td className="py-2 px-3">
-                                <span className="inline-flex items-center gap-1 font-semibold text-[#D97706]">
+                                <span className="inline-flex items-center gap-1 font-semibold text-amber-600 dark:text-amber-400">
                                   {tierItem.minutesLate || 0} mins
                                 </span>
                               </td>
                               <td className="py-2 px-3">
-                                <span className="bg-[#FEF3C7] text-[#92400E] px-2 py-0.5 rounded text-[10px] font-semibold">
+                                <span className="bg-amber-100 dark:bg-amber-950/60 text-amber-800 dark:text-amber-300 px-2 py-0.5 rounded text-[10px] font-semibold border border-amber-200 dark:border-amber-800/60">
                                   {tierItem.tier || "Standard Tier"}
                                 </span>
                               </td>
-                              <td className="py-2 pl-3 text-right font-bold text-[#DC2626] tabular-nums">
+                              <td className="py-2 pl-3 text-right font-bold text-rose-600 dark:text-rose-400 tabular-nums">
                                 -{formatCurrency(tierItem.penalty || tierItem.total || 0)}
                               </td>
                             </tr>
@@ -1033,8 +1030,8 @@ const EmployeePayslipsModal = ({ payslip, allPayslips = [], onClose }) => {
                       </table>
                     </div>
                   ) : lateDaysCount === 0 && absenceDays === 0 ? (
-                    <div className="flex items-center gap-2 text-xs text-[#166534] bg-[#F0FDF4] p-2.5 rounded border border-[#BBF7D0]">
-                      <CheckCircle2 className="w-4 h-4 text-[#16A34A] shrink-0" />
+                    <div className="flex items-center gap-2 text-xs text-emerald-800 dark:text-emerald-300 bg-emerald-50 dark:bg-emerald-950/40 p-2.5 rounded border border-emerald-200 dark:border-emerald-800/60">
+                      <CheckCircle2 className="w-4 h-4 text-emerald-600 dark:text-emerald-400 shrink-0" />
                       <span>Perfect Attendance & Punctuality: Zero penalties incurred during this billing cycle.</span>
                     </div>
                   ) : null}
@@ -1044,25 +1041,25 @@ const EmployeePayslipsModal = ({ payslip, allPayslips = [], onClose }) => {
 
             {/* 4. Custom Admin Deductions */}
             {customDeductionsList.length > 0 && (
-              <div className="rounded-xl border border-[#E2E8F0] overflow-hidden">
-                <div className="flex items-center justify-between px-4 py-2.5 bg-[#F8FAFC] border-b border-[#E2E8F0]">
-                  <span className="text-xs font-bold uppercase tracking-wider text-[#334155]">
+              <div className="rounded-xl border border-slate-200 dark:border-slate-800/80 overflow-hidden">
+                <div className="flex items-center justify-between px-4 py-2.5 bg-slate-50 dark:bg-[#162033] border-b border-slate-200 dark:border-slate-800/80">
+                  <span className="text-xs font-bold uppercase tracking-wider text-slate-700 dark:text-slate-300">
                     Custom Administrative Adjustments & Deductions
                   </span>
-                  <span className="text-sm font-bold text-[#DC2626] tabular-nums">
+                  <span className="text-sm font-bold text-rose-600 dark:text-rose-400 tabular-nums">
                     -{formatCurrency(totalCustomDeductions)}
                   </span>
                 </div>
-                <div className="divide-y divide-[#E2E8F0] bg-white">
+                <div className="divide-y divide-slate-200 dark:divide-slate-800/80 bg-white dark:bg-[#111927]">
                   {customDeductionsList.map((item, idx) => (
                     <div
                       key={`custom-ded-${idx}`}
-                      className="flex items-center justify-between px-4 py-2.5 text-xs hover:bg-[#F8FAFC]"
+                      className="flex items-center justify-between px-4 py-2.5 text-xs hover:bg-slate-50 dark:hover:bg-[#162033]/50"
                     >
-                      <span className="font-medium text-[#334155]">
+                      <span className="font-medium text-slate-700 dark:text-slate-300">
                         {item.title || item.description || item.name || `Adjustment #${idx + 1}`}
                       </span>
-                      <span className="font-semibold text-[#DC2626] tabular-nums">
+                      <span className="font-semibold text-rose-600 dark:text-rose-400 tabular-nums">
                         -{formatCurrency(item.amount)}
                       </span>
                     </div>
@@ -1072,13 +1069,13 @@ const EmployeePayslipsModal = ({ payslip, allPayslips = [], onClose }) => {
             )}
 
             {/* 5. Net Salary Calculation Flow */}
-            <div className="rounded-xl bg-[#002185] text-white p-5 shadow-sm">
+            <div className="rounded-xl bg-[#002185] dark:bg-blue-600 text-white p-5 shadow-sm">
               <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
                 <div>
-                  <span className="text-xs font-semibold uppercase tracking-wider text-[#93C5FD] block">
+                  <span className="text-xs font-semibold uppercase tracking-wider text-blue-200 block">
                     Net Take-Home Salary
                   </span>
-                  <div className="text-xs text-[#BFDBFE] mt-1 space-y-0.5">
+                  <div className="text-xs text-blue-100 mt-1 space-y-0.5">
                     <div>
                       <span className="font-mono">
                         Base ({formatCurrency(baseSalary)}) + Allowances ({formatCurrency(totalAllowances)}) - Absence ({formatCurrency(absenceTotal)}) - Lateness ({formatCurrency(latenessTotal)}) - Custom ({formatCurrency(totalCustomDeductions)})
@@ -1090,18 +1087,18 @@ const EmployeePayslipsModal = ({ payslip, allPayslips = [], onClose }) => {
                   <span className="text-3xl font-extrabold tracking-tight tabular-nums block">
                     {formatCurrency(netSalary)}
                   </span>
-                  <span className="text-[11px] text-[#93C5FD]">Total Verified Net Payable</span>
+                  <span className="text-[11px] text-blue-200">Total Verified Net Payable</span>
                 </div>
               </div>
             </div>
           </div>
 
           {/* Action Buttons */}
-          <div className="flex flex-col sm:flex-row justify-end gap-3 border-t border-[#E2E8F0] pt-4">
+          <div className="flex flex-col-reverse sm:flex-row justify-end gap-2.5 sm:gap-3 border-t border-slate-200 dark:border-slate-800/80 pt-4">
             <button
               type="button"
               onClick={onClose}
-              className="rounded-lg border border-[#E2E8F0] px-5 py-2.5 text-xs font-semibold text-[#64748B] transition hover:bg-[#F8FAFC] hover:text-[#002185]"
+              className="w-full sm:w-auto rounded-xl border border-slate-200 dark:border-slate-700/80 px-5 py-2.5 text-xs font-semibold text-slate-600 dark:text-slate-300 transition hover:bg-slate-50 dark:hover:bg-[#162033] hover:text-[#002185] dark:hover:text-white cursor-pointer text-center"
             >
               Close
             </button>
@@ -1109,7 +1106,7 @@ const EmployeePayslipsModal = ({ payslip, allPayslips = [], onClose }) => {
             <button
               type="button"
               onClick={printPayslip}
-              className="flex items-center justify-center gap-2 rounded-lg border border-[#002185] text-[#002185] px-5 py-2.5 text-xs font-semibold hover:bg-[#002185] hover:text-white transition-all shadow-xs"
+              className="w-full sm:w-auto flex items-center justify-center gap-2 rounded-xl border border-[#002185] dark:border-blue-400 text-[#002185] dark:text-blue-400 px-5 py-2.5 text-xs font-semibold hover:bg-[#002185] hover:text-white dark:hover:bg-blue-600 dark:hover:text-white transition-all shadow-xs cursor-pointer text-center"
             >
               <FileText className="h-4 w-4" />
               Print Payslip
@@ -1118,10 +1115,10 @@ const EmployeePayslipsModal = ({ payslip, allPayslips = [], onClose }) => {
             <button
               type="button"
               onClick={downloadPayslip}
-              className="flex items-center justify-center gap-2 rounded-lg bg-[#002185] px-5 py-2.5 text-xs font-semibold text-white transition hover:bg-[#ff5500] shadow-sm hover:shadow-lg"
+              className="w-full sm:w-auto flex items-center justify-center gap-2 rounded-xl bg-[#002185] dark:bg-blue-600 px-5 py-2.5 text-xs font-semibold text-white transition hover:bg-[#001760] dark:hover:bg-blue-700 shadow-sm cursor-pointer text-center"
             >
               <Download className="h-4 w-4" />
-              Download Official PDF
+              Download PDF
             </button>
           </div>
         </div>

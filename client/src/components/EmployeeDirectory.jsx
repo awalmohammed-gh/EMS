@@ -962,217 +962,472 @@ export const EmployeeDirectory = ({
         </div>
       )}
 
-      {/* Table / List View */}
+      {/* Table / List View - Desktop Table + Mobile Card-View */}
       {viewMode === "table" && (
-        <div className="bg-white dark:bg-slate-900 border border-slate-200/80 dark:border-slate-800/80 rounded-2xl sm:rounded-3xl overflow-hidden shadow-sm dark:shadow-black/20">
-          <div className="overflow-x-auto">
-            <table className="w-full text-left text-xs">
-              <thead className="bg-slate-50 dark:bg-slate-800/50 border-b border-slate-200/80 dark:border-slate-800/80 text-slate-400 uppercase font-semibold text-xs tracking-wider">
-                <tr>
-                  {isAdmin && (
-                    <th className="px-4 py-3.5 w-10">
+        <>
+          {/* Mobile Card-View Mode (Visible on small screens: < md) */}
+          <div className="block md:hidden space-y-3.5">
+            {/* Mobile Bulk Selection Bar (Admin only) */}
+            {isAdmin && filteredEmployees.length > 0 && (
+              <div className="flex items-center justify-between p-3 bg-white dark:bg-slate-900 rounded-2xl border border-slate-200/80 dark:border-slate-800/80 shadow-2xs">
+                <button
+                  type="button"
+                  onClick={handleToggleSelectAll}
+                  className="flex items-center gap-2 text-xs font-semibold text-slate-700 dark:text-slate-300 cursor-pointer"
+                >
+                  {isAllSelected ? (
+                    <CheckSquare className="w-4 h-4 text-blue-600" />
+                  ) : (
+                    <Square className="w-4 h-4 text-slate-400" />
+                  )}
+                  <span>
+                    {isAllSelected
+                      ? `All ${filteredEmployees.length} selected`
+                      : selectedEmployeeIds.length > 0
+                      ? `${selectedEmployeeIds.length} selected`
+                      : "Select all staff"}
+                  </span>
+                </button>
+                {selectedEmployeeIds.length > 0 && (
+                  <button
+                    type="button"
+                    onClick={() => setShowBulkModal(true)}
+                    className="px-2.5 py-1 bg-blue-600 text-white rounded-lg text-xs font-bold shadow-2xs"
+                  >
+                    Bulk Action
+                  </button>
+                )}
+              </div>
+            )}
+
+            {/* Mobile Cards List */}
+            {filteredEmployees.map((emp) => {
+              const badge = getStatusBadge(emp.status, emp.isActive, emp);
+              const empId = emp._id || emp.employeeId;
+              const isSelected = selectedEmployeeIds.includes(empId);
+              const initials = (emp.fullName || "E")
+                .split(" ")
+                .map((n) => n[0])
+                .join("")
+                .slice(0, 2)
+                .toUpperCase();
+              const isUpdatingThis = statusUpdatingId === empId;
+
+              return (
+                <div
+                  key={`mobile-card-${empId}`}
+                  id={`mobile-employee-card-${empId}`}
+                  className={`bg-white dark:bg-slate-900 border rounded-2xl p-4 shadow-xs transition-all ${
+                    isSelected
+                      ? "border-blue-500/80 bg-blue-50/20 dark:bg-blue-950/20 shadow-blue-500/5"
+                      : "border-slate-200/80 dark:border-slate-800/80"
+                  }`}
+                >
+                  {/* Card Header: Checkbox + Avatar + Names + Status */}
+                  <div className="flex items-start justify-between gap-3">
+                    <div className="flex items-center gap-3 min-w-0">
+                      {isAdmin && (
+                        <button
+                          type="button"
+                          onClick={() => handleToggleSelectOne(empId)}
+                          className="text-slate-400 hover:text-blue-600 p-0.5 cursor-pointer shrink-0"
+                          title={isSelected ? "Deselect" : "Select"}
+                        >
+                          {isSelected ? (
+                            <CheckSquare className="w-4 h-4 text-blue-600" />
+                          ) : (
+                            <Square className="w-4 h-4 text-slate-300 dark:text-slate-600" />
+                          )}
+                        </button>
+                      )}
+
+                      <Avatar
+                        src={
+                          emp.profilePicture ||
+                          emp.profile_picture ||
+                          emp.avatar ||
+                          emp.avatar_url ||
+                          emp.profile_image_url
+                        }
+                        name={emp.fullName}
+                        size="md"
+                        shape="rounded"
+                        className="w-11 h-11 rounded-xl shrink-0 shadow-2xs"
+                        fallbackInitials={initials}
+                      />
+
+                      <div className="min-w-0">
+                        <h4 className="text-sm font-bold text-slate-900 dark:text-white truncate">
+                          {emp.fullName}
+                        </h4>
+                        <div className="flex items-center gap-1.5 mt-0.5">
+                          <span className="font-mono bg-blue-50 dark:bg-blue-950/60 text-blue-600 dark:text-blue-400 text-[10px] font-bold px-1.5 py-0.2 rounded border border-blue-200/60 dark:border-blue-800/60">
+                            {emp.employeeId || "EMP"}
+                          </span>
+                          <span className="text-xs text-slate-500 dark:text-slate-400 truncate">
+                            {emp.role || "Staff"}
+                          </span>
+                        </div>
+                      </div>
+                    </div>
+
+                    {/* Status Badge */}
+                    <span
+                      className={`inline-flex items-center gap-1 text-[10px] font-bold px-2 py-0.5 rounded-full border shrink-0 ${badge.bg}`}
+                    >
+                      <span className={`w-1.5 h-1.5 rounded-full ${badge.dot}`} />
+                      {badge.label}
+                    </span>
+                  </div>
+
+                  {/* Department & Role Badge */}
+                  <div className="mt-3 flex items-center justify-between gap-2 p-2 rounded-xl bg-slate-50 dark:bg-slate-800/50 border border-slate-200/60 dark:border-slate-800/60 text-xs">
+                    <div className="flex items-center gap-1.5 text-slate-700 dark:text-slate-300 font-semibold truncate">
+                      <Briefcase className="w-3.5 h-3.5 text-blue-600 dark:text-blue-400 shrink-0" />
+                      <span className="truncate">{emp.position || "Staff Member"}</span>
+                    </div>
+                    <span className="text-[11px] font-medium text-slate-500 dark:text-slate-400 shrink-0 bg-white dark:bg-slate-900 px-2 py-0.5 rounded-lg border border-slate-200/60 dark:border-slate-700/60">
+                      {emp.department || "General"}
+                    </span>
+                  </div>
+
+                  {/* Contact Info (Clickable for Mobile) */}
+                  <div className="mt-2.5 space-y-1.5 text-xs">
+                    {/* Email */}
+                    <div className="flex items-center justify-between p-1.5 rounded-lg bg-slate-50/50 dark:bg-slate-800/30">
+                      <a
+                        href={`mailto:${emp.email}`}
+                        className="flex items-center gap-2 text-slate-600 dark:text-slate-300 hover:text-blue-600 truncate text-[11px]"
+                      >
+                        <Mail className="w-3 h-3 text-slate-400 shrink-0" />
+                        <span className="truncate">{emp.email || "No email"}</span>
+                      </a>
                       <button
                         type="button"
-                        onClick={handleToggleSelectAll}
-                        className="text-slate-400 hover:text-blue-600 transition-colors p-0.5 cursor-pointer"
-                        title={isAllSelected ? "Deselect all" : "Select all"}
+                        onClick={() => handleCopy(emp.email, `mobile_email_${empId}`)}
+                        className="text-slate-400 hover:text-blue-600 p-1 rounded cursor-pointer"
+                        title="Copy email"
                       >
-                        {isAllSelected ? (
-                          <CheckSquare className="w-4 h-4 text-blue-600" />
+                        {copiedField === `mobile_email_${empId}` ? (
+                          <Check className="w-3 h-3 text-emerald-600" />
                         ) : (
-                          <Square className="w-4 h-4 text-slate-400" />
+                          <Copy className="w-3 h-3" />
                         )}
                       </button>
-                    </th>
-                  )}
-                  <th className="px-4 py-3.5">Staff Member</th>
-                  <th className="px-4 py-3.5">ID</th>
-                  <th className="px-4 py-3.5">Role & Department</th>
-                  <th className="px-4 py-3.5">Contact Details</th>
-                  <th className="px-4 py-3.5">Location</th>
-                  <th className="px-4 py-3.5 text-center">Status</th>
-                  {isAdmin && <th className="px-4 py-3.5 text-center">Update Status</th>}
-                  <th className="px-4 py-3.5 text-right">Actions</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-slate-100 dark:divide-slate-800/80">
-                {filteredEmployees.map((emp) => {
-                  const badge = getStatusBadge(emp.status, emp.isActive, emp);
-                  const empId = emp._id || emp.employeeId;
-                  const isSelected = selectedEmployeeIds.includes(empId);
-                  const initials = (emp.fullName || "E")
-                    .split(" ")
-                    .map((n) => n[0])
-                    .join("")
-                    .slice(0, 2)
-                    .toUpperCase();
-                  const isUpdatingThis = statusUpdatingId === empId;
+                    </div>
 
-                  return (
-                    <tr
-                      key={empId}
-                      className={`hover:bg-slate-50/80 dark:hover:bg-slate-800/40 transition-colors ${
-                        isSelected ? "bg-blue-50/40 dark:bg-blue-950/20" : ""
-                      }`}
-                    >
-                      {/* Checkbox for Admin */}
-                      {isAdmin && (
-                        <td className="px-4 py-3">
-                          <button
-                            type="button"
-                            onClick={() => handleToggleSelectOne(empId)}
-                            className="text-slate-400 hover:text-blue-600 transition-colors p-0.5 cursor-pointer"
-                          >
-                            {isSelected ? (
-                              <CheckSquare className="w-4 h-4 text-blue-600" />
-                            ) : (
-                              <Square className="w-4 h-4 text-slate-300 dark:text-slate-600" />
-                            )}
-                          </button>
-                        </td>
-                      )}
+                    {/* Phone */}
+                    <div className="flex items-center justify-between p-1.5 rounded-lg bg-slate-50/50 dark:bg-slate-800/30">
+                      <a
+                        href={`tel:${emp.phone}`}
+                        className="flex items-center gap-2 text-slate-600 dark:text-slate-300 hover:text-blue-600 text-[11px]"
+                      >
+                        <Phone className="w-3 h-3 text-slate-400 shrink-0" />
+                        <span>{emp.phone || "+233 24 000 0000"}</span>
+                      </a>
+                      <button
+                        type="button"
+                        onClick={() => handleCopy(emp.phone, `mobile_phone_${empId}`)}
+                        className="text-slate-400 hover:text-blue-600 p-1 rounded cursor-pointer"
+                        title="Copy phone"
+                      >
+                        {copiedField === `mobile_phone_${empId}` ? (
+                          <Check className="w-3 h-3 text-emerald-600" />
+                        ) : (
+                          <Copy className="w-3 h-3" />
+                        )}
+                      </button>
+                    </div>
 
-                      {/* Name & Avatar */}
-                      <td className="px-4 py-3">
-                        <div className="flex items-center gap-3">
-                          <Avatar
-                            src={
-                              emp.profilePicture ||
-                              emp.profile_picture ||
-                              emp.avatar ||
-                              emp.avatar_url ||
-                              emp.profile_image_url
-                            }
-                            name={emp.fullName}
-                            size="sm"
-                            shape="rounded"
-                            className="w-9 h-9 rounded-xl shrink-0"
-                            fallbackInitials={initials}
-                          />
-                          <div>
-                            <div className="font-bold text-slate-900 dark:text-white">
-                              {emp.fullName}
-                            </div>
-                            <div className="text-[11px] text-slate-500 dark:text-slate-400">
-                              {emp.role || "Employee"}
-                            </div>
-                          </div>
-                        </div>
-                      </td>
+                    {/* Location */}
+                    <div className="flex items-center gap-2 px-1.5 text-slate-400 text-[11px]">
+                      <MapPin className="w-3 h-3 text-slate-400 shrink-0" />
+                      <span>{emp.location || "Accra Head Office"}</span>
+                    </div>
+                  </div>
 
-                      {/* Employee ID */}
-                      <td className="px-4 py-3 font-mono font-semibold text-blue-600 dark:text-blue-400">
-                        {emp.employeeId || "EMP"}
-                      </td>
-
-                      {/* Role & Dept */}
-                      <td className="px-4 py-3">
-                        <div className="font-semibold text-slate-800 dark:text-slate-200">
-                          {emp.position || "Staff Member"}
-                        </div>
-                        <div className="text-[11px] text-slate-500 dark:text-slate-400">
-                          {emp.department}
-                        </div>
-                      </td>
-
-                      {/* Contact Details */}
-                      <td className="px-4 py-3 space-y-0.5">
-                        <div className="flex items-center gap-1.5 text-slate-700 dark:text-slate-300">
-                          <Mail className="w-3 h-3 text-slate-400" />
-                          <a
-                            href={`mailto:${emp.email}`}
-                            className="hover:text-blue-600 hover:underline truncate max-w-[160px]"
-                          >
-                            {emp.email}
-                          </a>
-                        </div>
-                        <div className="flex items-center gap-1.5 text-slate-500 dark:text-slate-400">
-                          <Phone className="w-3 h-3" />
-                          <span>{emp.phone || "+233 24 000 0000"}</span>
-                        </div>
-                      </td>
-
-                      {/* Location */}
-                      <td className="px-4 py-3 text-slate-500 dark:text-slate-400">
-                        <div className="flex items-center gap-1">
-                          <MapPin className="w-3 h-3 text-slate-400" />
-                          <span>{emp.location || "Accra Head Office"}</span>
-                        </div>
-                      </td>
-
-                      {/* Status Badge */}
-                      <td className="px-4 py-3 text-center">
-                        <span
-                          className={`inline-flex items-center gap-1.5 text-[10px] font-bold px-2.5 py-1 rounded-full border shadow-2xs ${badge.bg}`}
-                        >
-                          <span className={`w-1.5 h-1.5 rounded-full ${badge.dot}`} />
-                          {badge.label}
+                  {/* Admin Status Switcher Row */}
+                  {isAdmin && (
+                    <div className="mt-3 pt-2.5 border-t border-slate-100 dark:border-slate-800/80">
+                      <div className="flex items-center justify-between gap-1">
+                        <span className="text-[10px] uppercase font-bold text-slate-400 tracking-wider">
+                          Status:
                         </span>
-                      </td>
+                        <div className="grid grid-cols-4 gap-1 flex-1 max-w-[240px]">
+                          {[
+                            { key: "active", label: "Active", activeClass: "bg-emerald-600 text-white" },
+                            { key: "on leave", label: "Leave", activeClass: "bg-blue-600 text-white" },
+                            { key: "terminated", label: "Term", activeClass: "bg-rose-600 text-white" },
+                            { key: "inactive", label: "Inact", activeClass: "bg-amber-600 text-white" },
+                          ].map((st) => {
+                            const isCurrent =
+                              badge.code === st.key ||
+                              badge.label.toLowerCase() === st.key;
+                            return (
+                              <button
+                                key={st.key}
+                                type="button"
+                                disabled={isUpdatingThis || isCurrent}
+                                onClick={() => handleStatusChange(empId, st.key)}
+                                className={`py-1 rounded-lg text-[10px] font-semibold text-center transition-all cursor-pointer ${
+                                  isCurrent
+                                    ? `${st.activeClass} shadow-2xs font-bold`
+                                    : "bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 text-slate-600 dark:text-slate-400"
+                                } disabled:opacity-50`}
+                                title={`Set status to ${st.label}`}
+                              >
+                                {st.label}
+                              </button>
+                            );
+                          })}
+                        </div>
+                      </div>
+                    </div>
+                  )}
 
-                      {/* Change Status Action (Admin only) */}
-                      {isAdmin && (
-                        <td className="px-4 py-3 text-center">
-                          <div className="inline-flex items-center gap-1 p-1 bg-slate-100 dark:bg-slate-800 rounded-xl border border-slate-200 dark:border-slate-700">
-                            {[
-                              { key: "active", label: "Active", activeClass: "bg-emerald-600 text-white" },
-                              { key: "on leave", label: "On Leave", activeClass: "bg-blue-600 text-white" },
-                              { key: "terminated", label: "Terminated", activeClass: "bg-rose-600 text-white" },
-                              { key: "inactive", label: "Inactive", activeClass: "bg-amber-600 text-white" },
-                            ].map((st) => {
-                              const isCurrent =
-                                badge.code === st.key ||
-                                badge.label.toLowerCase() === st.key;
-                              return (
-                                <button
-                                  key={st.key}
-                                  type="button"
-                                  disabled={isUpdatingThis || isCurrent}
-                                  onClick={() => handleStatusChange(empId, st.key)}
-                                  className={`px-2 py-1 rounded-lg text-[10px] font-semibold transition-all cursor-pointer ${
-                                    isCurrent
-                                      ? `${st.activeClass} shadow-xs font-bold`
-                                      : "bg-white dark:bg-slate-900 hover:bg-slate-50 dark:hover:bg-slate-750 text-slate-600 dark:text-slate-400 hover:text-blue-600"
-                                  } disabled:opacity-50`}
-                                  title={`Set status to ${st.label}`}
-                                >
-                                  {st.label}
-                                </button>
-                              );
-                            })}
-                          </div>
-                        </td>
-                      )}
+                  {/* Card Actions Footer */}
+                  <div className="mt-3 pt-2.5 border-t border-slate-100 dark:border-slate-800/80 flex items-center justify-between gap-2">
+                    {isAdmin ? (
+                      <button
+                        type="button"
+                        onClick={() => setEmployeeToDelete(emp)}
+                        className="px-2.5 py-1.5 rounded-xl border border-rose-200 dark:border-rose-800 text-rose-600 dark:text-rose-400 hover:bg-rose-50 dark:hover:bg-rose-950/30 text-xs font-semibold transition-all flex items-center gap-1 cursor-pointer"
+                        title="Delete employee permanently"
+                      >
+                        <Trash2 className="w-3.5 h-3.5" />
+                        <span>Delete</span>
+                      </button>
+                    ) : (
+                      <span className="text-[10px] text-slate-400 font-medium">
+                        {emp.employmentType || "Full-time"}
+                      </span>
+                    )}
 
-                      {/* Action Buttons */}
-                      <td className="px-4 py-3 text-right">
-                        <div className="flex items-center justify-end gap-1.5">
-                          <button
-                            type="button"
-                            onClick={() => setSelectedEmployee(emp)}
-                            className="px-3 py-1.5 rounded-xl bg-slate-100 dark:bg-slate-800 hover:bg-blue-600 hover:text-white text-slate-700 dark:text-slate-300 text-xs font-semibold transition-all cursor-pointer"
-                          >
-                            Profile
-                          </button>
-                          {isAdmin && (
+                    <button
+                      type="button"
+                      onClick={() => setSelectedEmployee(emp)}
+                      className="px-3.5 py-1.5 rounded-xl bg-blue-600 hover:bg-blue-700 text-white text-xs font-semibold transition-all shadow-xs flex items-center gap-1 cursor-pointer"
+                    >
+                      <span>View Profile</span>
+                      <ChevronRight className="w-3.5 h-3.5" />
+                    </button>
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+
+          {/* Desktop Table View (Visible on md and larger screens) */}
+          <div className="hidden md:block bg-white dark:bg-slate-900 border border-slate-200/80 dark:border-slate-800/80 rounded-2xl sm:rounded-3xl overflow-hidden shadow-sm dark:shadow-black/20">
+            <div className="overflow-x-auto">
+              <table className="w-full text-left text-xs">
+                <thead className="bg-slate-50 dark:bg-slate-800/50 border-b border-slate-200/80 dark:border-slate-800/80 text-slate-400 uppercase font-semibold text-xs tracking-wider">
+                  <tr>
+                    {isAdmin && (
+                      <th className="px-4 py-3.5 w-10">
+                        <button
+                          type="button"
+                          onClick={handleToggleSelectAll}
+                          className="text-slate-400 hover:text-blue-600 transition-colors p-0.5 cursor-pointer"
+                          title={isAllSelected ? "Deselect all" : "Select all"}
+                        >
+                          {isAllSelected ? (
+                            <CheckSquare className="w-4 h-4 text-blue-600" />
+                          ) : (
+                            <Square className="w-4 h-4 text-slate-400" />
+                          )}
+                        </button>
+                      </th>
+                    )}
+                    <th className="px-4 py-3.5">Staff Member</th>
+                    <th className="px-4 py-3.5">ID</th>
+                    <th className="px-4 py-3.5">Role & Department</th>
+                    <th className="px-4 py-3.5">Contact Details</th>
+                    <th className="px-4 py-3.5">Location</th>
+                    <th className="px-4 py-3.5 text-center">Status</th>
+                    {isAdmin && <th className="px-4 py-3.5 text-center">Update Status</th>}
+                    <th className="px-4 py-3.5 text-right">Actions</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-slate-100 dark:divide-slate-800/80">
+                  {filteredEmployees.map((emp) => {
+                    const badge = getStatusBadge(emp.status, emp.isActive, emp);
+                    const empId = emp._id || emp.employeeId;
+                    const isSelected = selectedEmployeeIds.includes(empId);
+                    const initials = (emp.fullName || "E")
+                      .split(" ")
+                      .map((n) => n[0])
+                      .join("")
+                      .slice(0, 2)
+                      .toUpperCase();
+                    const isUpdatingThis = statusUpdatingId === empId;
+
+                    return (
+                      <tr
+                        key={empId}
+                        className={`hover:bg-slate-50/80 dark:hover:bg-slate-800/40 transition-colors ${
+                          isSelected ? "bg-blue-50/40 dark:bg-blue-950/20" : ""
+                        }`}
+                      >
+                        {/* Checkbox for Admin */}
+                        {isAdmin && (
+                          <td className="px-4 py-3">
                             <button
                               type="button"
-                              onClick={() => setEmployeeToDelete(emp)}
-                              className="p-1.5 rounded-xl border border-rose-200 dark:border-rose-800 text-rose-600 dark:text-rose-400 hover:bg-rose-50 dark:hover:bg-rose-950/30 transition-colors cursor-pointer"
-                              title="Delete employee permanently"
+                              onClick={() => handleToggleSelectOne(empId)}
+                              className="text-slate-400 hover:text-blue-600 transition-colors p-0.5 cursor-pointer"
                             >
-                              <Trash2 className="w-4 h-4" />
+                              {isSelected ? (
+                                <CheckSquare className="w-4 h-4 text-blue-600" />
+                              ) : (
+                                <Square className="w-4 h-4 text-slate-300 dark:text-slate-600" />
+                              )}
                             </button>
-                          )}
-                        </div>
-                      </td>
-                    </tr>
-                  );
-                })}
-              </tbody>
-            </table>
+                          </td>
+                        )}
+
+                        {/* Name & Avatar */}
+                        <td className="px-4 py-3">
+                          <div className="flex items-center gap-3">
+                            <Avatar
+                              src={
+                                emp.profilePicture ||
+                                emp.profile_picture ||
+                                emp.avatar ||
+                                emp.avatar_url ||
+                                emp.profile_image_url
+                              }
+                              name={emp.fullName}
+                              size="sm"
+                              shape="rounded"
+                              className="w-9 h-9 rounded-xl shrink-0"
+                              fallbackInitials={initials}
+                            />
+                            <div>
+                              <div className="font-bold text-slate-900 dark:text-white">
+                                {emp.fullName}
+                              </div>
+                              <div className="text-[11px] text-slate-500 dark:text-slate-400">
+                                {emp.role || "Employee"}
+                              </div>
+                            </div>
+                          </div>
+                        </td>
+
+                        {/* Employee ID */}
+                        <td className="px-4 py-3 font-mono font-semibold text-blue-600 dark:text-blue-400">
+                          {emp.employeeId || "EMP"}
+                        </td>
+
+                        {/* Role & Dept */}
+                        <td className="px-4 py-3">
+                          <div className="font-semibold text-slate-800 dark:text-slate-200">
+                            {emp.position || "Staff Member"}
+                          </div>
+                          <div className="text-[11px] text-slate-500 dark:text-slate-400">
+                            {emp.department}
+                          </div>
+                        </td>
+
+                        {/* Contact Details */}
+                        <td className="px-4 py-3 space-y-0.5">
+                          <div className="flex items-center gap-1.5 text-slate-700 dark:text-slate-300">
+                            <Mail className="w-3 h-3 text-slate-400" />
+                            <a
+                              href={`mailto:${emp.email}`}
+                              className="hover:text-blue-600 hover:underline truncate max-w-[160px]"
+                            >
+                              {emp.email}
+                            </a>
+                          </div>
+                          <div className="flex items-center gap-1.5 text-slate-500 dark:text-slate-400">
+                            <Phone className="w-3 h-3" />
+                            <span>{emp.phone || "+233 24 000 0000"}</span>
+                          </div>
+                        </td>
+
+                        {/* Location */}
+                        <td className="px-4 py-3 text-slate-500 dark:text-slate-400">
+                          <div className="flex items-center gap-1">
+                            <MapPin className="w-3 h-3 text-slate-400" />
+                            <span>{emp.location || "Accra Head Office"}</span>
+                          </div>
+                        </td>
+
+                        {/* Status Badge */}
+                        <td className="px-4 py-3 text-center">
+                          <span
+                            className={`inline-flex items-center gap-1.5 text-[10px] font-bold px-2.5 py-1 rounded-full border shadow-2xs ${badge.bg}`}
+                          >
+                            <span className={`w-1.5 h-1.5 rounded-full ${badge.dot}`} />
+                            {badge.label}
+                          </span>
+                        </td>
+
+                        {/* Change Status Action (Admin only) */}
+                        {isAdmin && (
+                          <td className="px-4 py-3 text-center">
+                            <div className="inline-flex items-center gap-1 p-1 bg-slate-100 dark:bg-slate-800 rounded-xl border border-slate-200 dark:border-slate-700">
+                              {[
+                                { key: "active", label: "Active", activeClass: "bg-emerald-600 text-white" },
+                                { key: "on leave", label: "On Leave", activeClass: "bg-blue-600 text-white" },
+                                { key: "terminated", label: "Terminated", activeClass: "bg-rose-600 text-white" },
+                                { key: "inactive", label: "Inactive", activeClass: "bg-amber-600 text-white" },
+                              ].map((st) => {
+                                const isCurrent =
+                                  badge.code === st.key ||
+                                  badge.label.toLowerCase() === st.key;
+                                return (
+                                  <button
+                                    key={st.key}
+                                    type="button"
+                                    disabled={isUpdatingThis || isCurrent}
+                                    onClick={() => handleStatusChange(empId, st.key)}
+                                    className={`px-2 py-1 rounded-lg text-[10px] font-semibold transition-all cursor-pointer ${
+                                      isCurrent
+                                        ? `${st.activeClass} shadow-xs font-bold`
+                                        : "bg-white dark:bg-slate-900 hover:bg-slate-50 dark:hover:bg-slate-750 text-slate-600 dark:text-slate-400 hover:text-blue-600"
+                                    } disabled:opacity-50`}
+                                    title={`Set status to ${st.label}`}
+                                  >
+                                    {st.label}
+                                  </button>
+                                );
+                              })}
+                            </div>
+                          </td>
+                        )}
+
+                        {/* Action Buttons */}
+                        <td className="px-4 py-3 text-right">
+                          <div className="flex items-center justify-end gap-1.5">
+                            <button
+                              type="button"
+                              onClick={() => setSelectedEmployee(emp)}
+                              className="px-3 py-1.5 rounded-xl bg-slate-100 dark:bg-slate-800 hover:bg-blue-600 hover:text-white text-slate-700 dark:text-slate-300 text-xs font-semibold transition-all cursor-pointer"
+                            >
+                              Profile
+                            </button>
+                            {isAdmin && (
+                              <button
+                                type="button"
+                                onClick={() => setEmployeeToDelete(emp)}
+                                className="p-1.5 rounded-xl border border-rose-200 dark:border-rose-800 text-rose-600 dark:text-rose-400 hover:bg-rose-50 dark:hover:bg-rose-950/30 transition-colors cursor-pointer"
+                                title="Delete employee permanently"
+                              >
+                                <Trash2 className="w-4 h-4" />
+                              </button>
+                            )}
+                          </div>
+                        </td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
           </div>
-        </div>
+        </>
       )}
 
       {/* Empty State */}

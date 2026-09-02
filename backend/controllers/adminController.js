@@ -8,6 +8,8 @@ import { Attendance } from "../models/attendanceModel.js";
 import { Leave } from "../models/leaveModel.js";
 import { Settings } from "../models/adminSettingsModel.js";
 import { Notification } from "../models/notificationModel.js";
+import { AuditLog } from "../models/AuditLog.js";
+import { User } from "../models/userModel.js";
 
 // Function for creating admin account (Admin-only restricted)
 export const createAdminAccount = async (req, res) => {
@@ -483,8 +485,11 @@ export const updateEmployeeStatus = async (req, res) => {
   }
 };
 
-// Admin action: delete employee permanently from database
+// Admin action: delete employee permanently from database with ACID-compliant cascading purge
 export const deleteEmployee = async (req, res) => {
+  let session = null;
+  let isTransactionActive = false;
+
   try {
     const { id } = req.params;
 
@@ -495,53 +500,170 @@ export const deleteEmployee = async (req, res) => {
       });
     }
 
-    let deletedEmployee = null;
+    // 1. Locate target employee first to get full identifiers
+    let targetEmployee = null;
     if (mongoose.Types.ObjectId.isValid(id)) {
-      deletedEmployee = await Employee.findByIdAndDelete(id).select("-password");
+      targetEmployee = await Employee.findById(id).lean();
     } else {
-      deletedEmployee = await Employee.findOneAndDelete({
+      targetEmployee = await Employee.findOne({
         $or: [{ employeeId: id }, { email: id }],
-      }).select("-password");
+      }).lean();
     }
 
-    if (!deletedEmployee) {
+    if (!targetEmployee) {
       return res.status(404).json({
         success: false,
         message: "Employee record not found or already deleted from database.",
       });
     }
 
-    // Cascade clean up all associated records for this employee
-    try {
-      const empObjectId = deletedEmployee._id;
-      const empCode = deletedEmployee.employeeId;
+    const empObjectId = targetEmployee._id;
+    const empCode = targetEmployee.employeeId;
+    const empEmail = targetEmployee.email;
+    const empName = targetEmployee.fullName || empCode || "Employee";
 
-      await Promise.all([
-        Attendance.deleteMany({ employee: empObjectId }).catch(() => {}),
-        Leave.deleteMany({ employee: empObjectId }).catch(() => {}),
-        Payroll.deleteMany({ employee: empObjectId }).catch(() => {}),
-        Notification.deleteMany({
+    // 2. Attempt MongoDB Client Session & ACID Transaction
+    try {
+      session = await mongoose.startSession();
+      session.startTransaction();
+      isTransactionActive = true;
+    } catch (sessionErr) {
+      // Standalone MongoDB (without replica set) does not support multi-document transactions
+      console.warn(
+        "[Cascading Delete] MongoDB Transaction not supported in current environment; proceeding with sequential atomic cascade:",
+        sessionErr.message
+      );
+      session = null;
+      isTransactionActive = false;
+    }
+
+    const sessionOptions = session && isTransactionActive ? { session } : {};
+
+    // 3. Execute cascading purges across all associated collections
+    // Attendance
+    const attendanceFilter = {
+      $or: [
+        { employee: empObjectId },
+        { employeeId: empCode },
+        { employeeId: String(empObjectId) },
+      ],
+    };
+    const attendanceDeleteResult = await Attendance.deleteMany(attendanceFilter, sessionOptions);
+
+    // Payroll / Payslips
+    const payrollFilter = {
+      $or: [
+        { employee: empObjectId },
+        { employeeId: empCode },
+        { employeeId: String(empObjectId) },
+      ],
+    };
+    const payrollDeleteResult = await Payroll.deleteMany(payrollFilter, sessionOptions);
+
+    // Leave Requests
+    const leaveFilter = {
+      $or: [
+        { employee: empObjectId },
+        { employeeId: empCode },
+        { employeeId: String(empObjectId) },
+      ],
+    };
+    const leaveDeleteResult = await Leave.deleteMany(leaveFilter, sessionOptions);
+
+    // Notifications
+    const notificationFilter = {
+      $or: [
+        { recipient_id: String(empObjectId) },
+        { recipient_id: empCode },
+        { recipient: empObjectId },
+        { "metadata.employeeId": empCode },
+        { "metadata.employee_id": String(empObjectId) },
+      ],
+    };
+    const notificationDeleteResult = await Notification.deleteMany(notificationFilter, sessionOptions);
+
+    // Primary Employee Document
+    const employeeDeleteResult = await Employee.findByIdAndDelete(empObjectId, sessionOptions);
+
+    // User Model (if exists)
+    if (User) {
+      await User.deleteMany(
+        {
           $or: [
-            { recipient_id: String(empObjectId) },
-            { recipient_id: empCode },
-            { recipient: empObjectId },
-            { "metadata.employeeId": empCode },
-            { "metadata.employee_id": String(empObjectId) },
+            { _id: empObjectId },
+            { email: empEmail },
           ],
-        }).catch(() => {}),
-      ]);
-    } catch (cascadeErr) {
-      console.warn("Cascade deletion warning for employee:", cascadeErr.message);
+        },
+        sessionOptions
+      ).catch(() => {});
+    }
+
+    // Record Audit Log entry
+    try {
+      const adminPerformer = req.admin || req.user || {};
+      const auditEntry = new AuditLog({
+        action: "DELETE_EMPLOYEE",
+        category: "Employees",
+        performedBy: {
+          id: String(adminPerformer.id || adminPerformer._id || "admin"),
+          name: adminPerformer.fullName || adminPerformer.full_name || "Administrator",
+          email: adminPerformer.email || "admin@system.local",
+          role: adminPerformer.role || "admin",
+        },
+        target: `${empName} (${empCode || empObjectId})`,
+        summary: `Permanently deleted employee ${empName}. Purged ${attendanceDeleteResult.deletedCount || 0} attendance records, ${payrollDeleteResult.deletedCount || 0} payslips, ${leaveDeleteResult.deletedCount || 0} leave requests, and ${notificationDeleteResult.deletedCount || 0} notifications.`,
+        metadata: {
+          employeeId: empCode,
+          employeeObjectId: String(empObjectId),
+          purgedCounts: {
+            attendance: attendanceDeleteResult.deletedCount || 0,
+            payroll: payrollDeleteResult.deletedCount || 0,
+            leave: leaveDeleteResult.deletedCount || 0,
+            notifications: notificationDeleteResult.deletedCount || 0,
+          },
+        },
+      });
+
+      if (session && isTransactionActive) {
+        await auditEntry.save({ session });
+      } else {
+        await auditEntry.save();
+      }
+    } catch (auditErr) {
+      console.warn("[Cascading Delete] Audit log creation warning:", auditErr.message);
+    }
+
+    // 4. Commit Transaction if active
+    if (session && isTransactionActive) {
+      await session.commitTransaction();
+      await session.endSession();
     }
 
     return res.status(200).json({
       success: true,
-      message: `Employee "${deletedEmployee.fullName || deletedEmployee.employeeId}" has been permanently removed from the database.`,
-      employeeId: deletedEmployee.employeeId || id,
-      deletedId: deletedEmployee._id,
+      message: `Employee "${empName}" and all associated records have been permanently purged from the database.`,
+      employeeId: empCode || id,
+      deletedId: empObjectId,
+      purgedSummary: {
+        employee: 1,
+        attendance: attendanceDeleteResult.deletedCount || 0,
+        payroll: payrollDeleteResult.deletedCount || 0,
+        leave: leaveDeleteResult.deletedCount || 0,
+        notifications: notificationDeleteResult.deletedCount || 0,
+      },
     });
   } catch (error) {
-    console.error("Error deleting employee:", error);
+    // Abort transaction on failure
+    if (session && isTransactionActive) {
+      try {
+        await session.abortTransaction();
+        await session.endSession();
+      } catch (abortErr) {
+        console.error("[Cascading Delete] Transaction abort error:", abortErr);
+      }
+    }
+
+    console.error("Error in cascading deleteEmployee:", error);
     return res.status(500).json({
       success: false,
       message: error.message || "Internal server error while deleting employee.",

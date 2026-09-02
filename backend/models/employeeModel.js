@@ -142,6 +142,58 @@ employeeSchema.methods.comparePassword = async function (candidatePassword) {
   return bcrypt.compare(candidatePassword, this.password);
 };
 
+// Post-hook for cascading delete when employee document is removed
+employeeSchema.post("findOneAndDelete", async function (doc) {
+  if (!doc) return;
+  try {
+    const empId = doc._id;
+    const empCode = doc.employeeId;
+    const AttendanceModel = mongoose.models.Attendance;
+    const PayrollModel = mongoose.models.Payroll;
+    const LeaveModel = mongoose.models.Leave;
+    const NotificationModel = mongoose.models.Notification;
+
+    const promises = [];
+    if (AttendanceModel) {
+      promises.push(
+        AttendanceModel.deleteMany({
+          $or: [{ employee: empId }, { employeeId: empCode }, { employeeId: String(empId) }],
+        }).catch(() => {})
+      );
+    }
+    if (PayrollModel) {
+      promises.push(
+        PayrollModel.deleteMany({
+          $or: [{ employee: empId }, { employeeId: empCode }, { employeeId: String(empId) }],
+        }).catch(() => {})
+      );
+    }
+    if (LeaveModel) {
+      promises.push(
+        LeaveModel.deleteMany({
+          $or: [{ employee: empId }, { employeeId: empCode }, { employeeId: String(empId) }],
+        }).catch(() => {})
+      );
+    }
+    if (NotificationModel) {
+      promises.push(
+        NotificationModel.deleteMany({
+          $or: [
+            { recipient_id: String(empId) },
+            { recipient_id: empCode },
+            { recipient: empId },
+            { "metadata.employeeId": empCode },
+            { "metadata.employee_id": String(empId) },
+          ],
+        }).catch(() => {})
+      );
+    }
+    await Promise.all(promises);
+  } catch (err) {
+    console.warn("[Employee Model] Cascading post-hook warning:", err.message);
+  }
+});
+
 employeeSchema.index({ department: 1, status: 1 });
 employeeSchema.index({ status: 1, role: 1 });
 

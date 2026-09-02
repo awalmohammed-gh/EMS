@@ -1,17 +1,26 @@
 import { Settings } from "../models/adminSettingsModel.js";
 import { CompanySettings } from "../models/CompanySettings.js";
 import { AuditLog } from "../models/AuditLog.js";
+import { getStandardizedLatenessTiers } from "../utils/latenessPenaltyCalculator.js";
 
 // In-memory fallback for penalty settings
 let inMemoryPenaltySettings = {
   workStartTime: "08:00",
   absenceDeductionRate: 15,
   lateTier1_amount: 10,
-  lateTier2_amount: 20,
-  lateTier3_amount: 35,
-  lateTier4_amount: 50,
-  lateTier5_amount: 75,
-  lateTier6_amount: 100,
+  lateTier2_amount: 30,
+  lateTier3_amount: 50,
+  lateTier4_amount: 75,
+  lateTier5_amount: 100,
+  lateTier6_amount: 150,
+  latenessTiers: [
+    { tier: 1, name: "Tier 1: 1–30 mins late", minMinutes: 1, maxMinutes: 30, fine: 10 },
+    { tier: 2, name: "Tier 2: 31–60 mins late", minMinutes: 31, maxMinutes: 60, fine: 30 },
+    { tier: 3, name: "Tier 3: 61–120 mins (1–2 hrs)", minMinutes: 61, maxMinutes: 120, fine: 50 },
+    { tier: 4, name: "Tier 4: 121–180 mins (2–3 hrs)", minMinutes: 121, maxMinutes: 180, fine: 75 },
+    { tier: 5, name: "Tier 5: 181–240 mins (3–4 hrs)", minMinutes: 181, maxMinutes: 240, fine: 100 },
+    { tier: 6, name: "Tier 6: 241+ mins (4+ hrs)", minMinutes: 241, maxMinutes: 9999, fine: 150 },
+  ],
   updatedAt: new Date(),
 };
 
@@ -32,7 +41,11 @@ export const getPenaltySettings = async (req, res) => {
       console.warn("DB fallback for getPenaltySettings:", dbErr.message);
     }
 
-    const finalSettings = settingsDoc || inMemoryPenaltySettings;
+    const rawSettings = settingsDoc || inMemoryPenaltySettings;
+    const finalSettings = {
+      ...rawSettings,
+      latenessTiers: getStandardizedLatenessTiers(rawSettings),
+    };
 
     return res.status(200).json({
       success: true,
@@ -73,15 +86,44 @@ export const updatePenaltySettings = async (req, res) => {
       console.warn("DB fetch previous settings fallback:", dbErr.message);
     }
 
+    const parseAmount = (val, currentVal, fallback = 0) => {
+      if (val !== undefined && val !== null && val !== "") {
+        const n = Number(val);
+        return isNaN(n) ? fallback : Math.max(0, n);
+      }
+      if (currentVal !== undefined && currentVal !== null && currentVal !== "") {
+        const n = Number(currentVal);
+        return isNaN(n) ? fallback : Math.max(0, n);
+      }
+      return fallback;
+    };
+
+    const t1 = parseAmount(lateTier1_amount, currentSettings.lateTier1_amount, 10);
+    const t2 = parseAmount(lateTier2_amount, currentSettings.lateTier2_amount, 30);
+    const t3 = parseAmount(lateTier3_amount, currentSettings.lateTier3_amount, 50);
+    const t4 = parseAmount(lateTier4_amount, currentSettings.lateTier4_amount, 75);
+    const t5 = parseAmount(lateTier5_amount, currentSettings.lateTier5_amount, 100);
+    const t6 = parseAmount(lateTier6_amount, currentSettings.lateTier6_amount, 150);
+
+    const latenessTiers = [
+      { tier: 1, name: "Tier 1: 1–30 mins late", minMinutes: 1, maxMinutes: 30, fine: t1 },
+      { tier: 2, name: "Tier 2: 31–60 mins late", minMinutes: 31, maxMinutes: 60, fine: t2 },
+      { tier: 3, name: "Tier 3: 61–120 mins (1–2 hrs)", minMinutes: 61, maxMinutes: 120, fine: t3 },
+      { tier: 4, name: "Tier 4: 121–180 mins (2–3 hrs)", minMinutes: 121, maxMinutes: 180, fine: t4 },
+      { tier: 5, name: "Tier 5: 181–240 mins (3–4 hrs)", minMinutes: 181, maxMinutes: 240, fine: t5 },
+      { tier: 6, name: "Tier 6: 241+ mins (4+ hrs)", minMinutes: 241, maxMinutes: 9999, fine: t6 },
+    ];
+
     const payload = {
       workStartTime: workStartTime !== undefined ? String(workStartTime).trim() : currentSettings.workStartTime,
-      absenceDeductionRate: absenceDeductionRate !== undefined ? Math.max(0, Number(absenceDeductionRate)) : currentSettings.absenceDeductionRate,
-      lateTier1_amount: lateTier1_amount !== undefined ? Math.max(0, Number(lateTier1_amount)) : currentSettings.lateTier1_amount,
-      lateTier2_amount: lateTier2_amount !== undefined ? Math.max(0, Number(lateTier2_amount)) : currentSettings.lateTier2_amount,
-      lateTier3_amount: lateTier3_amount !== undefined ? Math.max(0, Number(lateTier3_amount)) : currentSettings.lateTier3_amount,
-      lateTier4_amount: lateTier4_amount !== undefined ? Math.max(0, Number(lateTier4_amount)) : currentSettings.lateTier4_amount,
-      lateTier5_amount: lateTier5_amount !== undefined ? Math.max(0, Number(lateTier5_amount)) : currentSettings.lateTier5_amount,
-      lateTier6_amount: lateTier6_amount !== undefined ? Math.max(0, Number(lateTier6_amount)) : currentSettings.lateTier6_amount,
+      absenceDeductionRate: parseAmount(absenceDeductionRate, currentSettings.absenceDeductionRate, 10),
+      lateTier1_amount: t1,
+      lateTier2_amount: t2,
+      lateTier3_amount: t3,
+      lateTier4_amount: t4,
+      lateTier5_amount: t5,
+      lateTier6_amount: t6,
+      latenessTiers,
       updatedAt: new Date(),
     };
 

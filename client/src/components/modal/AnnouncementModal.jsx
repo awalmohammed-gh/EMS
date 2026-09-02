@@ -185,7 +185,7 @@ export const AnnouncementModal = ({
   const modalContent = (
     <div
       id="announcement-detail-modal-overlay"
-      className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-sm animate-fadeIn"
+      className="fixed inset-0 z-50 flex items-end sm:items-center justify-center p-0 sm:p-4 bg-slate-950/60 backdrop-blur-sm animate-fade-in"
       onClick={handleDismiss}
       role="dialog"
       aria-modal="true"
@@ -193,11 +193,11 @@ export const AnnouncementModal = ({
     >
       <div
         id="announcement-detail-modal-container"
-        className="relative w-full max-w-lg bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl shadow-2xl p-6 overflow-hidden flex flex-col gap-4 animate-in zoom-in-95 duration-200"
+        className="relative w-full max-h-[90vh] bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-t-[28px] sm:rounded-3xl sm:max-w-lg shadow-2xl p-5 sm:p-6 overflow-hidden flex flex-col gap-4 animate-fade-in"
         onClick={(e) => e.stopPropagation()}
       >
         {/* Header Section */}
-        <div className="flex items-start justify-between gap-3 border-b border-slate-100 dark:border-slate-800 pb-4">
+        <div className="flex items-start justify-between gap-3 border-b border-slate-100 dark:border-slate-800 pb-4 shrink-0">
           <div className="flex items-center gap-3 min-w-0">
             {/* S badge avatar */}
             <div
@@ -233,7 +233,7 @@ export const AnnouncementModal = ({
               onClick={handleCopyLink}
               title="Copy announcement text"
               aria-label="Copy announcement text"
-              className="p-1.5 rounded-lg text-slate-400 hover:text-slate-700 dark:hover:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors"
+              className="p-1.5 rounded-lg text-slate-400 hover:text-slate-700 dark:hover:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors cursor-pointer"
             >
               {copied ? <Check className="w-4 h-4 text-emerald-600" /> : <Share2 className="w-4 h-4" />}
             </button>
@@ -251,7 +251,7 @@ export const AnnouncementModal = ({
         </div>
 
         {/* Priority & Tags Strip */}
-        <div className="flex flex-wrap items-center gap-2">
+        <div className="flex flex-wrap items-center gap-2 shrink-0">
           {renderPriorityBadge()}
 
           {currentItem.isPinned && (
@@ -279,7 +279,7 @@ export const AnnouncementModal = ({
         {currentItem.title && (
           <h2
             id="announcement-modal-title"
-            className="text-base sm:text-lg font-bold text-slate-900 dark:text-white leading-snug tracking-tight"
+            className="text-base sm:text-lg font-bold text-slate-900 dark:text-white leading-snug tracking-tight shrink-0"
           >
             {currentItem.title}
           </h2>
@@ -303,7 +303,7 @@ export const AnnouncementModal = ({
           ) : (
             <div
               id="announcement-full-content"
-              className="text-sm text-slate-700 dark:text-slate-300 whitespace-pre-line leading-relaxed"
+              className="text-xs sm:text-sm text-slate-700 dark:text-slate-300 whitespace-pre-line leading-relaxed"
             >
               {currentItem.content || currentItem.message || "No content details provided for this announcement."}
             </div>
@@ -311,8 +311,8 @@ export const AnnouncementModal = ({
         </div>
 
         {/* Modal Footer Controls */}
-        <div className="flex items-center justify-between gap-3 pt-3 border-t border-slate-100 dark:border-slate-800 mt-1">
-          <div className="flex items-center gap-1.5 text-xs text-emerald-600 dark:text-emerald-400 font-semibold">
+        <div className="flex flex-col-reverse sm:flex-row sm:items-center justify-between gap-3 pt-3 border-t border-slate-100 dark:border-slate-800 mt-1 shrink-0">
+          <div className="flex items-center gap-1.5 text-xs text-emerald-600 dark:text-emerald-400 font-semibold justify-center sm:justify-start">
             <CheckCircle2 className="w-4 h-4" />
             <span>Marked as read</span>
           </div>
@@ -321,7 +321,7 @@ export const AnnouncementModal = ({
             id="announcement-modal-dismiss-btn"
             type="button"
             onClick={handleDismiss}
-            className="px-5 py-2 rounded-xl bg-[#002185] hover:bg-[#ff5500] text-white text-xs sm:text-sm font-bold shadow-md hover:shadow-lg transition-all duration-200 cursor-pointer flex items-center gap-1.5"
+            className="w-full sm:w-auto px-5 py-2.5 rounded-xl bg-[#002185] hover:bg-[#ff5500] text-white text-xs sm:text-sm font-bold shadow-md hover:shadow-lg transition-all duration-200 cursor-pointer flex items-center justify-center gap-1.5 text-center"
           >
             <X className="w-4 h-4" />
             <span>Close</span>

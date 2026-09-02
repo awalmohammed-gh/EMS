@@ -365,26 +365,26 @@ export const AttendanceIntensityHeatmap = ({
   return (
     <div
       id="attendance-intensity-heatmap"
-      className="w-full rounded-2xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 shadow-sm p-5 sm:p-6 lg:p-7 space-y-6 overflow-hidden"
+      className="w-full rounded-2xl bg-white dark:bg-[#111927] border border-slate-200 dark:border-slate-800/80 shadow-sm p-5 sm:p-6 lg:p-7 space-y-6 overflow-hidden"
     >
       {/* Header & Controls */}
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pb-4 border-b border-slate-100 dark:border-slate-800">
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pb-4 border-b border-slate-200 dark:border-slate-800">
         <div>
           <div className="flex items-center gap-2">
-            <div className="w-8 h-8 rounded-xl bg-blue-50 dark:bg-blue-950/50 text-[#002185] dark:text-blue-400 flex items-center justify-center">
+            <div className="w-8 h-8 rounded-xl bg-blue-50 dark:bg-blue-950/60 text-[#0B1E48] dark:text-blue-400 flex items-center justify-center">
               <Zap className="w-4 h-4" />
             </div>
-            <h3 className="text-base sm:text-lg font-bold text-slate-900 dark:text-slate-100 tracking-tight">
+            <h3 className="text-base sm:text-lg font-bold text-[#0B1E48] dark:text-white tracking-tight">
               {title}
             </h3>
-            <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[11px] font-semibold bg-emerald-50 dark:bg-emerald-950/40 text-emerald-700 dark:text-emerald-300 border border-emerald-200 dark:border-emerald-800">
+            <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[11px] font-semibold bg-emerald-50 dark:bg-emerald-950/50 text-emerald-700 dark:text-emerald-300 border border-emerald-200 dark:border-emerald-800">
               <Flame className="w-3 h-3 text-amber-500" />
               {monthStats.currentStreak > 0
                 ? `${monthStats.currentStreak}-Day Habit Streak`
                 : "Live Matrix"}
             </span>
           </div>
-          <p className="text-xs text-slate-500 dark:text-slate-400 mt-1">
+          <p className="text-xs text-slate-500 dark:text-slate-300 mt-1">
             {subtitle}
           </p>
         </div>
@@ -401,7 +401,7 @@ export const AttendanceIntensityHeatmap = ({
             <ChevronLeft className="w-4 h-4" />
           </button>
 
-          <span className="min-w-[130px] sm:min-w-[150px] text-center text-xs sm:text-sm font-bold text-slate-900 dark:text-slate-100 bg-slate-50 dark:bg-slate-800/80 px-3.5 py-2 rounded-xl border border-slate-200 dark:border-slate-700">
+          <span className="min-w-[130px] sm:min-w-[150px] text-center text-xs sm:text-sm font-bold text-slate-900 dark:text-white bg-slate-50 dark:bg-slate-800/80 px-3.5 py-2 rounded-xl border border-slate-200 dark:border-slate-700">
             {monthLabel}
           </span>
 
@@ -418,7 +418,7 @@ export const AttendanceIntensityHeatmap = ({
           <button
             type="button"
             onClick={handleTodayMonth}
-            className="px-3 py-2 rounded-xl text-xs font-semibold text-[#002185] dark:text-blue-400 bg-blue-50 dark:bg-blue-950/40 hover:bg-blue-100 dark:hover:bg-blue-900/60 border border-blue-200 dark:border-blue-800 transition-colors cursor-pointer"
+            className="px-3 py-2 rounded-xl text-xs font-semibold text-[#0B1E48] dark:text-white bg-blue-50 dark:bg-slate-800 hover:bg-blue-100 dark:hover:bg-slate-700 border border-blue-200 dark:border-slate-700 transition-colors cursor-pointer"
           >
             Current Month
           </button>
@@ -427,16 +427,16 @@ export const AttendanceIntensityHeatmap = ({
 
       {/* Top Quick Metrics Summary Strip */}
       {showSummaryStats && (
-        <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 p-3.5 rounded-2xl bg-slate-50/80 dark:bg-slate-800/40 border border-slate-200/80 dark:border-slate-800">
+        <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 p-3.5 rounded-2xl bg-slate-50/80 dark:bg-[#162033] border border-slate-200/80 dark:border-slate-800">
           <div className="flex items-center gap-3">
-            <div className="w-8 h-8 rounded-xl bg-[#002185] text-white flex items-center justify-center text-xs font-bold shrink-0">
+            <div className="w-8 h-8 rounded-xl bg-[#0B1E48] dark:bg-blue-600 text-white flex items-center justify-center text-xs font-bold shrink-0">
               <Zap className="w-4 h-4" />
             </div>
             <div>
               <p className="text-[11px] font-medium text-slate-500 dark:text-slate-400">
                 High-Intensity (8h+)
               </p>
-              <p className="text-base font-bold text-slate-900 dark:text-slate-100">
+              <p className="text-base font-bold text-[#0B1E48] dark:text-white">
                 {monthStats.highIntensityDays} Days
               </p>
             </div>
@@ -450,7 +450,7 @@ export const AttendanceIntensityHeatmap = ({
               <p className="text-[11px] font-medium text-slate-500 dark:text-slate-400">
                 Standard (6-8h)
               </p>
-              <p className="text-base font-bold text-slate-900 dark:text-slate-100">
+              <p className="text-base font-bold text-slate-900 dark:text-white">
                 {monthStats.standardDays} Days
               </p>
             </div>
@@ -464,7 +464,7 @@ export const AttendanceIntensityHeatmap = ({
               <p className="text-[11px] font-medium text-slate-500 dark:text-slate-400">
                 Total Month Hours
               </p>
-              <p className="text-base font-bold text-slate-900 dark:text-slate-100">
+              <p className="text-base font-bold text-slate-900 dark:text-white">
                 {monthStats.totalWorkHours} hrs
               </p>
             </div>
@@ -478,7 +478,7 @@ export const AttendanceIntensityHeatmap = ({
               <p className="text-[11px] font-medium text-slate-500 dark:text-slate-400">
                 Consistency Rate
               </p>
-              <p className="text-base font-bold text-slate-900 dark:text-slate-100">
+              <p className="text-base font-bold text-slate-900 dark:text-white">
                 {monthStats.attendanceRate}%
               </p>
             </div>
@@ -559,7 +559,7 @@ export const AttendanceIntensityHeatmap = ({
 
       {/* Interactive Hover / Selected Day Telemetry Panel */}
       {(hoveredDay || selectedDay) && (
-        <div className="p-4 rounded-xl bg-slate-50 dark:bg-slate-800/80 border border-slate-200 dark:border-slate-700 animate-in fade-in duration-150 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+        <div className="p-4 rounded-xl bg-slate-50 dark:bg-[#162033] border border-slate-200 dark:border-slate-800 animate-in fade-in duration-150 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
           {(() => {
             const active = hoveredDay || selectedDay;
             const formattedLongDate = active.dayDate?.toLocaleDateString("en-US", {
@@ -573,37 +573,37 @@ export const AttendanceIntensityHeatmap = ({
               <>
                 <div className="space-y-1">
                   <div className="flex items-center gap-2">
-                    <CalendarIcon className="w-4 h-4 text-[#002185] dark:text-blue-400" />
-                    <span className="text-xs sm:text-sm font-bold text-slate-900 dark:text-slate-100">
+                    <CalendarIcon className="w-4 h-4 text-[#0B1E48] dark:text-blue-400" />
+                    <span className="text-xs sm:text-sm font-bold text-slate-900 dark:text-white">
                       {formattedLongDate}
                     </span>
                     {active.isToday && (
-                      <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-blue-100 dark:bg-blue-900/60 text-[#002185] dark:text-blue-300">
+                      <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-blue-100 dark:bg-blue-900/60 text-[#0B1E48] dark:text-blue-300">
                         Today
                       </span>
                     )}
                   </div>
-                  <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-slate-500 dark:text-slate-400">
+                  <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-slate-500 dark:text-slate-300">
                     <span className="flex items-center gap-1">
                       <LogIn className="w-3.5 h-3.5 text-emerald-500" />
-                      In: <strong>{formatTime(active.clockIn)}</strong>
+                      In: <strong className="text-slate-700 dark:text-white">{formatTime(active.clockIn)}</strong>
                     </span>
                     <span>•</span>
                     <span className="flex items-center gap-1">
                       <LogOut className="w-3.5 h-3.5 text-rose-500" />
-                      Out: <strong>{formatTime(active.clockOut)}</strong>
+                      Out: <strong className="text-slate-700 dark:text-white">{formatTime(active.clockOut)}</strong>
                     </span>
                     <span>•</span>
                     <span className="flex items-center gap-1">
-                      <Clock className="w-3.5 h-3.5 text-[#002185] dark:text-blue-400" />
-                      Duration: <strong>{active.workHours || 0} hrs</strong>
+                      <Clock className="w-3.5 h-3.5 text-[#0B1E48] dark:text-blue-400" />
+                      Duration: <strong className="text-slate-700 dark:text-white">{active.workHours || 0} hrs</strong>
                     </span>
                   </div>
                 </div>
 
                 <div className="flex items-center gap-2 shrink-0">
                   {active.intensityLevel === 3 && (
-                    <span className="px-3 py-1 rounded-full text-xs font-bold bg-[#002185] text-white flex items-center gap-1 shadow-xs">
+                    <span className="px-3 py-1 rounded-full text-xs font-bold bg-[#0B1E48] dark:bg-blue-600 text-white flex items-center gap-1 shadow-xs">
                       <Sparkles className="w-3.5 h-3.5" />
                       High Intensity (8h+)
                     </span>
@@ -626,12 +626,12 @@ export const AttendanceIntensityHeatmap = ({
                     </span>
                   )}
                   {active.isWeekend && active.intensityLevel === 0 && (
-                    <span className="px-3 py-1 rounded-full text-xs font-medium bg-slate-100 dark:bg-slate-800 text-slate-500">
+                    <span className="px-3 py-1 rounded-full text-xs font-medium bg-slate-100 dark:bg-slate-800 text-slate-500 dark:text-slate-400">
                       Weekend / Scheduled Rest Day
                     </span>
                   )}
                   {!active.isWeekend && !active.isFuture && active.intensityLevel === 0 && (
-                    <span className="px-3 py-1 rounded-full text-xs font-medium bg-slate-100 dark:bg-slate-800 text-slate-500">
+                    <span className="px-3 py-1 rounded-full text-xs font-medium bg-slate-100 dark:bg-slate-800 text-slate-500 dark:text-slate-400">
                       No Records
                     </span>
                   )}
@@ -656,7 +656,7 @@ export const AttendanceIntensityHeatmap = ({
 
         {/* Color Matrix Scale */}
         <div className="flex items-center gap-2">
-          <span className="text-[11px] font-medium text-slate-400">Intensity:</span>
+          <span className="text-[11px] font-medium text-slate-400 dark:text-slate-300">Intensity:</span>
           <div className="flex items-center gap-1">
             <span className="text-[10px] text-slate-400 mr-0.5">Less</span>
             
@@ -677,7 +677,7 @@ export const AttendanceIntensityHeatmap = ({
             />
             {/* Level 3: High Intensity */}
             <div
-              className="w-4 h-4 rounded-md bg-[#002185] dark:bg-blue-600 border border-[#001760] dark:border-blue-500 text-white"
+              className="w-4 h-4 rounded-md bg-[#0B1E48] dark:bg-blue-600 border border-[#001760] dark:border-blue-500 text-white"
               title="High Intensity / Overtime (8.5h+)"
             />
 
@@ -690,7 +690,7 @@ export const AttendanceIntensityHeatmap = ({
               className="w-4 h-4 rounded-md bg-rose-100 dark:bg-rose-950/70 border border-rose-300 dark:border-rose-800"
               title="Absent"
             />
-            <span className="text-[10px] text-rose-600 dark:text-rose-400">Absent</span>
+            <span className="text-[10px] text-rose-600 dark:text-rose-400 font-medium">Absent</span>
           </div>
         </div>
       </div>

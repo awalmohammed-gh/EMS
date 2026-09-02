@@ -11,7 +11,6 @@ import {
 import { useManagement } from "../../../context/ManagementContextProvider";
 import { getPenaltySettings, updatePenaltySettings } from "../../../apis/fontApis";
 import AuditLogView from "../../../components/AuditLogView";
-import LiveDeductionSimulationSandbox from "../../../components/LiveDeductionSimulationSandbox";
 
 const defaultPenaltyConfig = {
   workStartTime: "08:00",
@@ -329,9 +328,6 @@ const PenaltySettings = ({ onSaveSuccess }) => {
           ))}
         </div>
       </div>
-
-      {/* Section 3: Live Interactive Deduction Calculator / Simulation Sandbox */}
-      <LiveDeductionSimulationSandbox penalties={penalties} />
 
       {/* Action Footer */}
       <div className="flex flex-col sm:flex-row items-center justify-between gap-4 pt-4 border-t border-slate-200 dark:border-slate-800">

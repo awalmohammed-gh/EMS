@@ -185,6 +185,8 @@ export const RecentActivityFeed = ({ className = "" }) => {
             itemsToDisplay.map((item, index) => {
               const isAttendance = item.category === "attendance";
               const statusLower = (item.status || "").toLowerCase();
+              const displayName = item.employeeName || item.fullName || item.employee?.fullName || item.employee?.name || "Employee";
+              const displayDept = item.department || item.employee?.department || "Staff";
 
               return (
                 <div
@@ -196,8 +198,8 @@ export const RecentActivityFeed = ({ className = "" }) => {
                   <div className="flex items-center gap-3 min-w-0">
                     <div className="relative shrink-0">
                       <Avatar
-                        src={item.avatar}
-                        fullName={item.employeeName}
+                        src={item.avatar || item.employee?.avatar || item.employee?.profilePicture}
+                        fullName={displayName}
                         size="sm"
                         className="w-9 h-9"
                       />
@@ -229,10 +231,10 @@ export const RecentActivityFeed = ({ className = "" }) => {
                     <div className="min-w-0">
                       <div className="flex items-center gap-2">
                         <span className="font-semibold text-sm text-slate-900 dark:text-white truncate">
-                          {item.employeeName}
+                          {displayName}
                         </span>
                         <span className="text-[10px] text-slate-400 dark:text-slate-500 hidden sm:inline">
-                          • {item.department}
+                          • {displayDept}
                         </span>
                       </div>
                       <p className="text-xs text-slate-500 dark:text-slate-400 truncate">

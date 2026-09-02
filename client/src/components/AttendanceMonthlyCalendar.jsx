@@ -6,7 +6,6 @@ import {
   Users,
   Clock,
   Filter,
-  CalendarDays,
   Activity,
   Layers,
   ArrowRight,
@@ -889,26 +888,21 @@ export const AttendanceMonthlyCalendar = ({
   };
 
   return (
-    <div className="bg-white border border-[#E2E8F0] rounded-2xl p-5 sm:p-6 shadow-xs space-y-6">
+    <div className="bg-white dark:bg-[#111927] border border-slate-200 dark:border-slate-800/80 rounded-2xl p-5 sm:p-6 shadow-xs space-y-6">
       {/* Calendar Top Header with Controls, Filters & CSV Export */}
-      <div className="flex flex-col xl:flex-row xl:items-center justify-between gap-4 border-b border-[#E2E8F0] pb-5">
-        {/* Title & Description */}
+      <div className="flex flex-col xl:flex-row xl:items-center justify-between gap-4 border-b border-slate-200 dark:border-slate-800 pb-5">
+        {/* Title & Description without decorative icon */}
         <div>
-          <div className="flex items-center gap-2.5">
-            <div className="w-9 h-9 rounded-xl bg-[#002185]/10 text-[#002185] flex items-center justify-center font-bold shrink-0">
-              <CalendarDays className="w-5 h-5 text-[#002185]" />
-            </div>
-            <div>
-              <h2 className="text-lg font-bold text-[#002185] flex items-center gap-2">
-                Monthly Attendance Pattern & Hours Analysis
-                <span className="text-[11px] font-semibold px-2 py-0.5 rounded-md bg-[#F0FDF4] text-[#16A34A] border border-[#BBF7D0]">
-                  Manager View
-                </span>
-              </h2>
-              <p className="text-xs text-[#64748B] mt-0.5">
-                Track workforce presence, color-coded statuses, monthly total work hours, and export CSV reports
-              </p>
-            </div>
+          <div>
+            <h2 className="text-base sm:text-xl font-bold text-[#0B1E48] dark:text-white flex items-center gap-2">
+              Monthly Attendance Pattern & Hours Analysis
+              <span className="text-[11px] font-semibold px-2 py-0.5 rounded-md bg-emerald-50 dark:bg-emerald-950/50 text-emerald-600 dark:text-emerald-400 border border-emerald-200 dark:border-emerald-800">
+                Manager View
+              </span>
+            </h2>
+            <p className="text-xs text-slate-500 dark:text-slate-300 mt-0.5">
+              Track workforce presence, color-coded statuses, monthly total work hours, and export CSV reports
+            </p>
           </div>
         </div>
 
@@ -927,11 +921,11 @@ export const AttendanceMonthlyCalendar = ({
           </button>
 
           {/* Month & Year Stepper */}
-          <div className="flex items-center bg-[#F8FAFC] border border-[#E2E8F0] rounded-xl p-1 shadow-2xs">
+          <div className="flex items-center bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl p-1 shadow-2xs">
             <button
               type="button"
               onClick={handlePrevMonth}
-              className="p-1.5 rounded-lg text-[#002185] hover:bg-white hover:shadow-xs transition-colors cursor-pointer"
+              className="p-1.5 rounded-lg text-slate-700 dark:text-slate-200 hover:bg-white dark:hover:bg-slate-700 hover:shadow-xs transition-colors cursor-pointer"
               title="Previous Month"
             >
               <ChevronLeft className="w-4 h-4" />
@@ -941,10 +935,10 @@ export const AttendanceMonthlyCalendar = ({
               <select
                 value={currentMonth}
                 onChange={(e) => setCurrentMonth(Number(e.target.value))}
-                className="bg-transparent text-xs font-bold text-[#002185] focus:outline-none cursor-pointer py-1"
+                className="bg-transparent text-xs font-bold text-slate-800 dark:text-white focus:outline-none cursor-pointer py-1"
               >
                 {MONTH_NAMES.map((name, idx) => (
-                  <option key={name} value={idx}>
+                  <option key={name} value={idx} className="bg-white dark:bg-slate-800 text-slate-800 dark:text-white">
                     {name}
                   </option>
                 ))}
@@ -953,10 +947,10 @@ export const AttendanceMonthlyCalendar = ({
               <select
                 value={currentYear}
                 onChange={(e) => setCurrentYear(Number(e.target.value))}
-                className="bg-transparent text-xs font-bold text-[#002185] focus:outline-none cursor-pointer py-1"
+                className="bg-transparent text-xs font-bold text-slate-800 dark:text-white focus:outline-none cursor-pointer py-1"
               >
                 {[2024, 2025, 2026, 2027].map((y) => (
-                  <option key={y} value={y}>
+                  <option key={y} value={y} className="bg-white dark:bg-slate-800 text-slate-800 dark:text-white">
                     {y}
                   </option>
                 ))}
@@ -966,7 +960,7 @@ export const AttendanceMonthlyCalendar = ({
             <button
               type="button"
               onClick={handleNextMonth}
-              className="p-1.5 rounded-lg text-[#002185] hover:bg-white hover:shadow-xs transition-colors cursor-pointer"
+              className="p-1.5 rounded-lg text-slate-700 dark:text-slate-200 hover:bg-white dark:hover:bg-slate-700 hover:shadow-xs transition-colors cursor-pointer"
               title="Next Month"
             >
               <ChevronRight className="w-4 h-4" />
@@ -977,27 +971,27 @@ export const AttendanceMonthlyCalendar = ({
           <button
             type="button"
             onClick={handleGoToToday}
-            className="px-3 py-2 text-xs font-semibold text-[#002185] bg-[#FFFFFF] border border-[#E2E8F0] rounded-xl hover:bg-[#F8FAFC] transition-colors shadow-2xs cursor-pointer flex items-center gap-1.5"
+            className="px-3 py-2 text-xs font-semibold text-slate-800 dark:text-white bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl hover:bg-slate-50 dark:hover:bg-slate-700 transition-colors shadow-2xs cursor-pointer flex items-center gap-1.5"
           >
-            <CalendarIcon className="w-3.5 h-3.5 text-[#ff5500]" />
+            <CalendarIcon className="w-3.5 h-3.5 text-amber-500" />
             <span>Today</span>
           </button>
 
           {/* Department Filter */}
           {departments.length > 0 && (
-            <div className="flex items-center gap-1.5 bg-[#F8FAFC] border border-[#E2E8F0] rounded-xl px-2.5 py-1.5">
-              <Filter className="w-3.5 h-3.5 text-[#64748B]" />
+            <div className="flex items-center gap-1.5 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl px-2.5 py-1.5">
+              <Filter className="w-3.5 h-3.5 text-slate-400 dark:text-slate-400" />
               <select
                 value={selectedDepartment}
                 onChange={(e) => {
                   setSelectedDepartment(e.target.value);
                   setSelectedEmployeeId("All");
                 }}
-                className="bg-transparent text-xs font-medium text-[#002185] focus:outline-none cursor-pointer"
+                className="bg-transparent text-xs font-medium text-slate-800 dark:text-white focus:outline-none cursor-pointer"
               >
-                <option value="All">All Depts</option>
+                <option value="All" className="bg-white dark:bg-slate-800 text-slate-800 dark:text-white">All Depts</option>
                 {departments.map((dept) => (
-                  <option key={dept} value={dept}>
+                  <option key={dept} value={dept} className="bg-white dark:bg-slate-800 text-slate-800 dark:text-white">
                     {dept}
                   </option>
                 ))}
@@ -1006,16 +1000,16 @@ export const AttendanceMonthlyCalendar = ({
           )}
 
           {/* Individual Employee Filter */}
-          <div className="flex items-center gap-1.5 bg-[#F8FAFC] border border-[#E2E8F0] rounded-xl px-2.5 py-1.5 max-w-[160px] sm:max-w-xs">
-            <Users className="w-3.5 h-3.5 text-[#64748B] shrink-0" />
+          <div className="flex items-center gap-1.5 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl px-2.5 py-1.5 max-w-[160px] sm:max-w-xs">
+            <Users className="w-3.5 h-3.5 text-slate-400 dark:text-slate-400 shrink-0" />
             <select
               value={selectedEmployeeId}
               onChange={(e) => setSelectedEmployeeId(e.target.value)}
-              className="bg-transparent text-xs font-medium text-[#002185] focus:outline-none cursor-pointer truncate w-full"
+              className="bg-transparent text-xs font-medium text-slate-800 dark:text-white focus:outline-none cursor-pointer truncate w-full"
             >
-              <option value="All">All Staff Roster</option>
+              <option value="All" className="bg-white dark:bg-slate-800 text-slate-800 dark:text-white">All Staff Roster</option>
               {filteredEmployeesList.map((emp) => (
-                <option key={emp._id || emp.employeeId} value={emp._id || emp.employeeId}>
+                <option key={emp._id || emp.employeeId} value={emp._id || emp.employeeId} className="bg-white dark:bg-slate-800 text-slate-800 dark:text-white">
                   {emp.fullName || emp.name}
                 </option>
               ))}
@@ -1023,14 +1017,14 @@ export const AttendanceMonthlyCalendar = ({
           </div>
 
           {/* View Mode Toggle: Grid vs Heatmap */}
-          <div className="flex items-center bg-[#F8FAFC] border border-[#E2E8F0] rounded-xl p-1 shadow-2xs">
+          <div className="flex items-center bg-slate-100 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl p-1 shadow-2xs">
             <button
               type="button"
               onClick={() => setViewMode("grid")}
               className={`px-2.5 py-1 rounded-lg text-xs font-bold transition-colors cursor-pointer flex items-center gap-1 ${
                 viewMode === "grid"
-                  ? "bg-[#002185] text-white shadow-xs"
-                  : "text-[#64748B] hover:text-[#002185]"
+                  ? "bg-[#0B1E48] text-white shadow-xs"
+                  : "text-slate-600 dark:text-slate-300 hover:text-white"
               }`}
             >
               <Layers className="w-3 h-3" />
@@ -1041,8 +1035,8 @@ export const AttendanceMonthlyCalendar = ({
               onClick={() => setViewMode("heatmap")}
               className={`px-2.5 py-1 rounded-lg text-xs font-bold transition-colors cursor-pointer flex items-center gap-1 ${
                 viewMode === "heatmap"
-                  ? "bg-[#002185] text-white shadow-xs"
-                  : "text-[#64748B] hover:text-[#002185]"
+                  ? "bg-[#0B1E48] text-white shadow-xs"
+                  : "text-slate-600 dark:text-slate-300 hover:text-white"
               }`}
             >
               <Activity className="w-3 h-3" />
@@ -1057,49 +1051,51 @@ export const AttendanceMonthlyCalendar = ({
         {/* LEFT COLUMN: Calendar Matrix (xl:col-span-8) */}
         <div className="xl:col-span-8 space-y-4">
           {/* Quick Context Sub-header & Status Badges Ribbon */}
-          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2.5 text-xs text-[#64748B]">
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2.5 text-xs text-slate-500 dark:text-slate-300">
             <div className="flex items-center gap-2 flex-wrap">
-              <span className="font-bold text-[#002185] text-sm">
+              <span className="font-bold text-[#0B1E48] dark:text-white text-sm">
                 {MONTH_NAMES[currentMonth]} {currentYear}
               </span>
-              <span className="text-[#94A3B8]">•</span>
-              <span>{monthlySummaryStats.totalWorkingDays} Working Days</span>
-              <span className="text-[#94A3B8]">•</span>
-              <span className="font-semibold text-[#16A34A]">
+              <span className="text-slate-400 dark:text-slate-500">•</span>
+              <span className="text-slate-600 dark:text-slate-300">{monthlySummaryStats.totalWorkingDays} Working Days</span>
+              <span className="text-slate-400 dark:text-slate-500">•</span>
+              <span className="font-semibold text-emerald-600 dark:text-emerald-400">
                 {monthlySummaryStats.punctualityRate}% Punctual
               </span>
             </div>
 
             {/* Glanceable Status Badges Indicator Bar */}
             <div className="flex items-center gap-1.5 flex-wrap">
-              <span className="inline-flex items-center gap-1 text-[10px] font-bold px-2 py-0.5 rounded-md bg-[#F0FDF4] text-[#15803D] border border-[#86EFAC]">
-                <span className="w-1.5 h-1.5 rounded-full bg-[#16A34A]" />
+              <span className="inline-flex items-center gap-1 text-[10px] font-bold px-2 py-0.5 rounded-md bg-[#F0FDF4] dark:bg-emerald-950/50 text-[#15803D] dark:text-emerald-300 border border-[#86EFAC] dark:border-emerald-800">
+                <span className="w-1.5 h-1.5 rounded-full bg-[#16A34A] dark:bg-emerald-400" />
                 Present
               </span>
-              <span className="inline-flex items-center gap-1 text-[10px] font-bold px-2 py-0.5 rounded-md bg-[#FFF7ED] text-[#C2410C] border border-[#FDBA74]">
-                <span className="w-1.5 h-1.5 rounded-full bg-[#EA580C]" />
+              <span className="inline-flex items-center gap-1 text-[10px] font-bold px-2 py-0.5 rounded-md bg-[#FFF7ED] dark:bg-amber-950/50 text-[#C2410C] dark:text-amber-300 border border-[#FDBA74] dark:border-amber-800">
+                <span className="w-1.5 h-1.5 rounded-full bg-[#EA580C] dark:bg-amber-400" />
                 Half-day
               </span>
-              <span className="inline-flex items-center gap-1 text-[10px] font-bold px-2 py-0.5 rounded-md bg-[#EFF6FF] text-[#1D4ED8] border border-[#93C5FD]">
-                <span className="w-1.5 h-1.5 rounded-full bg-[#2563EB]" />
+              <span className="inline-flex items-center gap-1 text-[10px] font-bold px-2 py-0.5 rounded-md bg-[#EFF6FF] dark:bg-blue-950/50 text-[#1D4ED8] dark:text-blue-300 border border-[#93C5FD] dark:border-blue-800">
+                <span className="w-1.5 h-1.5 rounded-full bg-[#2563EB] dark:bg-blue-400" />
                 Leave
               </span>
-              <span className="inline-flex items-center gap-1 text-[10px] font-bold px-2 py-0.5 rounded-md bg-[#FEF2F2] text-[#B91C1C] border border-[#FCA5A5]">
-                <span className="w-1.5 h-1.5 rounded-full bg-[#DC2626]" />
+              <span className="inline-flex items-center gap-1 text-[10px] font-bold px-2 py-0.5 rounded-md bg-[#FEF2F2] dark:bg-rose-950/50 text-[#B91C1C] dark:text-rose-300 border border-[#FCA5A5] dark:border-rose-800">
+                <span className="w-1.5 h-1.5 rounded-full bg-[#DC2626] dark:bg-rose-400" />
                 Absent
               </span>
             </div>
           </div>
 
           {/* Calendar Frame */}
-          <div className="border border-[#E2E8F0] rounded-2xl overflow-hidden shadow-2xs">
+          <div className="border border-slate-200 dark:border-slate-800 rounded-2xl overflow-hidden shadow-2xs">
             {/* Days of Week Header */}
-            <div className="grid grid-cols-7 bg-[#F8FAFC] border-b border-[#E2E8F0] text-center">
+            <div className="grid grid-cols-7 bg-slate-50 dark:bg-slate-800/80 border-b border-slate-200 dark:border-slate-800 text-center">
               {DAYS_OF_WEEK.map((day, idx) => (
                 <div
                   key={day}
                   className={`py-2.5 text-xs font-bold uppercase tracking-wider ${
-                    idx === 0 || idx === 6 ? "text-[#94A3B8]" : "text-[#002185]"
+                    idx === 0 || idx === 6
+                      ? "text-slate-400 dark:text-slate-500 font-semibold"
+                      : "text-[#0B1E48] dark:text-slate-300 font-semibold"
                   }`}
                 >
                   {day}
@@ -1108,7 +1104,7 @@ export const AttendanceMonthlyCalendar = ({
             </div>
 
             {/* Calendar Day Matrix */}
-            <div className="grid grid-cols-7 divide-x divide-y divide-[#E2E8F0] bg-[#FFFFFF]">
+            <div className="grid grid-cols-7 divide-x divide-y divide-slate-200 dark:divide-slate-800 bg-white dark:bg-[#111927]">
               {calendarData.map((day, index) => {
                 const hasRecords = day.records && day.records.length > 0;
                 const isSingleEmp = selectedEmployeeId !== "All";
@@ -1123,9 +1119,9 @@ export const AttendanceMonthlyCalendar = ({
                     }}
                     className={`min-h-[92px] sm:min-h-[104px] p-2 transition-all flex flex-col justify-between relative group ${
                       day.isCurrentMonth
-                        ? "cursor-pointer hover:bg-[#F8FAFC] hover:shadow-inner"
-                        : "bg-[#F8FAFC]/40 opacity-40 select-none cursor-default"
-                    } ${day.isToday ? "bg-[#EFF6FF]/40 ring-1.5 ring-inset ring-[#2563EB]" : ""} ${
+                        ? "cursor-pointer hover:bg-slate-50 dark:hover:bg-slate-800/60 hover:shadow-inner"
+                        : "bg-slate-50/40 dark:bg-slate-900/40 opacity-40 select-none cursor-default"
+                    } ${day.isToday ? "bg-blue-50/40 dark:bg-blue-950/40 ring-1.5 ring-inset ring-blue-600 dark:ring-blue-400" : ""} ${
                       viewMode === "heatmap" ? getHeatmapColor(day) : ""
                     }`}
                   >
@@ -1133,21 +1129,21 @@ export const AttendanceMonthlyCalendar = ({
                     <div className="flex items-center justify-between">
                       <div className="flex items-center gap-1">
                         <span
-                          className={`text-xs font-bold w-5 h-5 flex items-center justify-center rounded-full ${
+                          className={`text-xs w-5 h-5 flex items-center justify-center rounded-full ${
                             day.isToday
-                              ? "bg-[#002185] text-white shadow-xs"
+                              ? "bg-[#0B1E48] text-white font-bold shadow-xs"
                               : day.isWeekend
-                              ? "text-[#94A3B8]"
+                              ? "text-slate-400 dark:text-slate-500 font-medium"
                               : day.isCurrentMonth
-                              ? "text-[#0F172A]"
-                              : "text-[#94A3B8]"
+                              ? "text-slate-800 dark:text-white font-bold"
+                              : "text-slate-400 dark:text-slate-500 font-medium"
                           }`}
                         >
                           {day.dayNumber}
                         </span>
 
                         {day.isToday && (
-                          <span className="hidden sm:inline-block text-[8px] font-bold uppercase tracking-wider text-[#2563EB] bg-[#EFF6FF] px-1 py-0.2 rounded-xs">
+                          <span className="hidden sm:inline-block text-[8px] font-bold uppercase tracking-wider text-blue-600 dark:text-blue-400 bg-blue-50 dark:bg-blue-950/60 px-1 py-0.2 rounded-xs">
                             Today
                           </span>
                         )}
@@ -1161,10 +1157,10 @@ export const AttendanceMonthlyCalendar = ({
                           <span
                             className={`text-[9px] font-bold px-1.5 py-0.2 rounded-full ${
                               day.dailyRate >= 80
-                                ? "bg-[#F0FDF4] text-[#16A34A]"
+                                ? "bg-emerald-50 dark:bg-emerald-950/50 text-emerald-600 dark:text-emerald-300"
                                 : day.dailyRate >= 50
-                                ? "bg-[#FFFBEB] text-[#D97706]"
-                                : "bg-[#FEF2F2] text-[#DC2626]"
+                                ? "bg-amber-50 dark:bg-amber-950/50 text-amber-600 dark:text-amber-300"
+                                : "bg-rose-50 dark:bg-rose-950/50 text-rose-600 dark:text-rose-300"
                             }`}
                           >
                             {day.dailyRate}%
@@ -1192,7 +1188,7 @@ export const AttendanceMonthlyCalendar = ({
                             /* Team Aggregated Color-Coded Status Badges & Distribution Bar */
                             <div className="space-y-1">
                               {/* Segmented status distribution bar */}
-                              <div className="w-full bg-[#E2E8F0] h-1.5 rounded-full overflow-hidden flex">
+                              <div className="w-full bg-slate-200 dark:bg-slate-700 h-1.5 rounded-full overflow-hidden flex">
                                 {day.presentCount > 0 && (
                                   <div
                                     style={{
@@ -1235,7 +1231,7 @@ export const AttendanceMonthlyCalendar = ({
                               <div className="flex flex-wrap items-center gap-1 text-[9px] font-bold">
                                 {day.presentCount > 0 && (
                                   <span
-                                    className="inline-flex items-center gap-0.5 px-1 py-0.2 rounded bg-[#F0FDF4] text-[#15803D] border border-[#86EFAC]"
+                                    className="inline-flex items-center gap-0.5 px-1 py-0.2 rounded bg-emerald-50 dark:bg-emerald-950/60 text-emerald-700 dark:text-emerald-300 border border-emerald-200 dark:border-emerald-800"
                                     title={`${day.presentCount} Staff Present`}
                                   >
                                     <span className="w-1.5 h-1.5 rounded-full bg-[#16A34A]" />
@@ -1244,7 +1240,7 @@ export const AttendanceMonthlyCalendar = ({
                                 )}
                                 {day.halfDayCount > 0 && (
                                   <span
-                                    className="inline-flex items-center gap-0.5 px-1 py-0.2 rounded bg-[#FFF7ED] text-[#C2410C] border border-[#FDBA74]"
+                                    className="inline-flex items-center gap-0.5 px-1 py-0.2 rounded bg-amber-50 dark:bg-amber-950/60 text-amber-700 dark:text-amber-300 border border-amber-200 dark:border-amber-800"
                                     title={`${day.halfDayCount} Staff Half-day`}
                                   >
                                     <span className="w-1.5 h-1.5 rounded-full bg-[#EA580C]" />
@@ -1253,7 +1249,7 @@ export const AttendanceMonthlyCalendar = ({
                                 )}
                                 {day.leaveCount > 0 && (
                                   <span
-                                    className="inline-flex items-center gap-0.5 px-1 py-0.2 rounded bg-[#EFF6FF] text-[#1D4ED8] border border-[#93C5FD]"
+                                    className="inline-flex items-center gap-0.5 px-1 py-0.2 rounded bg-blue-50 dark:bg-blue-950/60 text-blue-700 dark:text-blue-300 border border-blue-200 dark:border-blue-800"
                                     title={`${day.leaveCount} Staff on Leave`}
                                   >
                                     <span className="w-1.5 h-1.5 rounded-full bg-[#2563EB]" />
@@ -1262,7 +1258,7 @@ export const AttendanceMonthlyCalendar = ({
                                 )}
                                 {day.absentCount > 0 && (
                                   <span
-                                    className="inline-flex items-center gap-0.5 px-1 py-0.2 rounded bg-[#FEF2F2] text-[#B91C1C] border border-[#FCA5A5]"
+                                    className="inline-flex items-center gap-0.5 px-1 py-0.2 rounded bg-rose-50 dark:bg-rose-950/60 text-rose-700 dark:text-rose-300 border border-rose-200 dark:border-rose-800"
                                     title={`${day.absentCount} Staff Absent`}
                                   >
                                     <span className="w-1.5 h-1.5 rounded-full bg-[#DC2626]" />
@@ -1274,29 +1270,29 @@ export const AttendanceMonthlyCalendar = ({
                           ) : (
                             /* Heatmap Compact Density Indicator */
                             <div className="text-center py-0.5">
-                              <span className="text-[10px] font-bold">
+                              <span className="text-[10px] font-bold text-slate-800 dark:text-slate-200">
                                 {day.presentCount + day.halfDayCount} logged
                               </span>
                             </div>
                           )
                         ) : (
-                          <div className="text-[9px] text-[#94A3B8] italic py-0.5">
+                          <div className="text-[9px] text-slate-400 dark:text-slate-500 italic py-0.5">
                             No logs
                           </div>
                         )
                       ) : day.isWeekend && day.isCurrentMonth ? (
-                        <div className="text-[9px] text-[#94A3B8] font-medium py-0.5">
+                        <div className="text-[9px] text-slate-400 dark:text-slate-500 font-medium py-0.5">
                           Weekend
                         </div>
                       ) : null}
                     </div>
 
                     {/* Bottom Row: Hours & Drilldown Prompt */}
-                    <div className="flex items-center justify-between pt-0.5 text-[9px] text-[#64748B] border-t border-dashed border-[#E2E8F0]/60">
+                    <div className="flex items-center justify-between pt-0.5 text-[9px] text-slate-500 dark:text-slate-400 border-t border-dashed border-slate-200 dark:border-slate-800">
                       {day.isCurrentMonth && !day.isWeekend && hasRecords ? (
                         <>
-                          <span className="truncate font-medium">{day.totalHours} hrs</span>
-                          <span className="text-[#002185] font-bold opacity-0 group-hover:opacity-100 transition-opacity flex items-center gap-0.5">
+                          <span className="truncate font-medium text-slate-600 dark:text-slate-300">{day.totalHours} hrs</span>
+                          <span className="text-[#0B1E48] dark:text-blue-400 font-bold opacity-0 group-hover:opacity-100 transition-opacity flex items-center gap-0.5">
                             View <ArrowRight className="w-2 h-2" />
                           </span>
                         </>
@@ -1311,35 +1307,35 @@ export const AttendanceMonthlyCalendar = ({
           </div>
 
           {/* Color-Coded Status Legend & Export Trigger */}
-          <div className="flex flex-wrap items-center justify-between gap-3 pt-1 text-xs text-[#64748B]">
+          <div className="flex flex-wrap items-center justify-between gap-3 pt-1 text-xs text-slate-500 dark:text-slate-400">
             {/* 4 Status Badges Legend */}
             <div className="flex items-center gap-2.5 flex-wrap text-[11px]">
-              <span className="font-bold text-[#002185]">Legend:</span>
-              <div className="flex items-center gap-1 bg-[#F0FDF4] px-2 py-0.5 rounded-md border border-[#86EFAC] text-[#15803D] font-semibold">
+              <span className="font-bold text-[#0B1E48] dark:text-white">Legend:</span>
+              <div className="flex items-center gap-1 bg-emerald-50 dark:bg-emerald-950/60 px-2 py-0.5 rounded-md border border-emerald-200 dark:border-emerald-800 text-emerald-700 dark:text-emerald-300 font-semibold">
                 <span className="w-2 h-2 rounded-full bg-[#16A34A]" />
                 <span>Present (P)</span>
               </div>
-              <div className="flex items-center gap-1 bg-[#FFF7ED] px-2 py-0.5 rounded-md border border-[#FDBA74] text-[#C2410C] font-semibold">
+              <div className="flex items-center gap-1 bg-amber-50 dark:bg-amber-950/60 px-2 py-0.5 rounded-md border border-amber-200 dark:border-amber-800 text-amber-700 dark:text-amber-300 font-semibold">
                 <span className="w-2 h-2 rounded-full bg-[#EA580C]" />
                 <span>Half-day (HD)</span>
               </div>
-              <div className="flex items-center gap-1 bg-[#EFF6FF] px-2 py-0.5 rounded-md border border-[#93C5FD] text-[#1D4ED8] font-semibold">
+              <div className="flex items-center gap-1 bg-blue-50 dark:bg-blue-950/60 px-2 py-0.5 rounded-md border border-blue-200 dark:border-blue-800 text-blue-700 dark:text-blue-300 font-semibold">
                 <span className="w-2 h-2 rounded-full bg-[#2563EB]" />
                 <span>Leave (L)</span>
               </div>
-              <div className="flex items-center gap-1 bg-[#FEF2F2] px-2 py-0.5 rounded-md border border-[#FCA5A5] text-[#B91C1C] font-semibold">
+              <div className="flex items-center gap-1 bg-rose-50 dark:bg-rose-950/60 px-2 py-0.5 rounded-md border border-rose-200 dark:border-rose-800 text-rose-700 dark:text-rose-300 font-semibold">
                 <span className="w-2 h-2 rounded-full bg-[#DC2626]" />
                 <span>Absent (A)</span>
               </div>
             </div>
 
-            <div className="flex items-center gap-3 text-[11px] text-[#64748B]">
+            <div className="flex items-center gap-3 text-[11px] text-slate-500 dark:text-slate-400">
               <button
                 type="button"
                 onClick={handleExportCSV}
-                className="text-[#002185] hover:text-[#ff5500] font-bold flex items-center gap-1 transition-colors cursor-pointer"
+                className="text-[#0B1E48] dark:text-blue-400 hover:text-amber-500 font-bold flex items-center gap-1 transition-colors cursor-pointer"
               >
-                <FileSpreadsheet className="w-3.5 h-3.5 text-[#ff5500]" />
+                <FileSpreadsheet className="w-3.5 h-3.5 text-amber-500" />
                 <span>Download Report (.csv)</span>
               </button>
             </div>
@@ -1349,14 +1345,14 @@ export const AttendanceMonthlyCalendar = ({
         {/* RIGHT COLUMN: DEDICATED SUMMARY STATISTICS PANEL (xl:col-span-4) */}
         <div className="xl:col-span-4 space-y-4">
           {/* Panel Top Header Card */}
-          <div className="bg-[#F8FAFC] border border-[#E2E8F0] rounded-2xl p-4.5 shadow-2xs space-y-4">
-            <div className="flex items-center justify-between border-b border-[#E2E8F0] pb-3">
+          <div className="bg-slate-50 dark:bg-[#162033] border border-slate-200/80 dark:border-slate-800 rounded-2xl p-4.5 shadow-2xs space-y-4">
+            <div className="flex items-center justify-between border-b border-slate-200 dark:border-slate-700/60 pb-3">
               <div>
-                <span className="text-[10px] font-bold uppercase tracking-wider text-[#64748B]">
+                <span className="text-[10px] font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400">
                   Monthly Summary Statistics
                 </span>
-                <h3 className="text-base font-bold text-[#002185] flex items-center gap-1.5 mt-0.5">
-                  <Briefcase className="w-4 h-4 text-[#ff5500]" />
+                <h3 className="text-base font-bold text-[#0B1E48] dark:text-white flex items-center gap-1.5 mt-0.5">
+                  <Briefcase className="w-4 h-4 text-amber-500" />
                   <span>{MONTH_NAMES[currentMonth]} {currentYear}</span>
                 </h3>
               </div>
@@ -1364,28 +1360,28 @@ export const AttendanceMonthlyCalendar = ({
               <button
                 type="button"
                 onClick={handleExportCSV}
-                className="text-[10px] font-bold px-2.5 py-1 rounded-lg bg-white border border-[#E2E8F0] text-[#002185] hover:bg-[#EFF6FF] hover:border-[#BFDBFE] transition-colors flex items-center gap-1 cursor-pointer shadow-2xs"
+                className="text-[10px] font-bold px-2.5 py-1 rounded-lg bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-[#0B1E48] dark:text-white hover:bg-slate-100 dark:hover:bg-slate-700 transition-colors flex items-center gap-1 cursor-pointer shadow-2xs"
                 title="Download CSV"
               >
-                <Download className="w-3 h-3 text-[#ff5500]" />
+                <Download className="w-3 h-3 text-amber-500" />
                 <span>CSV</span>
               </button>
             </div>
 
             {/* 1. TOTAL WORK HOURS STATISTIC CARD */}
-            <div className="bg-white border border-[#E2E8F0] rounded-xl p-4 shadow-xs space-y-3">
+            <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl p-4 shadow-xs space-y-3">
               <div className="flex items-center justify-between">
                 <div className="flex items-center gap-2">
-                  <div className="w-7 h-7 rounded-lg bg-[#EFF6FF] text-[#2563EB] flex items-center justify-center">
+                  <div className="w-7 h-7 rounded-lg bg-blue-50 dark:bg-blue-950/60 text-blue-600 dark:text-blue-400 flex items-center justify-center">
                     <Clock className="w-4 h-4" />
                   </div>
                   <div>
-                    <span className="text-xs font-bold text-[#0F172A]">Total Work Hours</span>
-                    <p className="text-[10px] text-[#64748B]">Logged hours across workforce</p>
+                    <span className="text-xs font-bold text-slate-800 dark:text-white">Total Work Hours</span>
+                    <p className="text-[10px] text-slate-500 dark:text-slate-400">Logged hours across workforce</p>
                   </div>
                 </div>
 
-                <span className="text-[10px] font-bold px-2 py-0.5 rounded-md bg-[#EFF6FF] text-[#1D4ED8] border border-[#BFDBFE]">
+                <span className="text-[10px] font-bold px-2 py-0.5 rounded-md bg-blue-50 dark:bg-blue-950/50 text-blue-700 dark:text-blue-300 border border-blue-200 dark:border-blue-800">
                   {monthlySummaryStats.hoursCompletionRate}% of target
                 </span>
               </div>
@@ -1393,20 +1389,20 @@ export const AttendanceMonthlyCalendar = ({
               {/* Work Hours Big Display */}
               <div className="flex items-baseline justify-between pt-1">
                 <div>
-                  <span className="text-2xl sm:text-3xl font-black text-[#002185] tracking-tight">
+                  <span className="text-2xl sm:text-3xl font-extrabold text-[#0B1E48] dark:text-white tracking-tight">
                     {monthlySummaryStats.totalWorkHours}
                   </span>
-                  <span className="text-sm font-bold text-[#64748B] ml-1">hrs</span>
+                  <span className="text-sm font-bold text-slate-500 dark:text-slate-400 ml-1">hrs</span>
                 </div>
                 <div className="text-right text-xs">
-                  <span className="text-[11px] text-[#64748B] block">Target Capacity</span>
-                  <span className="font-bold text-[#0F172A]">{monthlySummaryStats.targetCapacityHours} hrs</span>
+                  <span className="text-[11px] text-slate-500 dark:text-slate-400 block">Target Capacity</span>
+                  <span className="font-bold text-slate-800 dark:text-white">{monthlySummaryStats.targetCapacityHours} hrs</span>
                 </div>
               </div>
 
               {/* Progress Bar: Standard vs Overtime Hours */}
               <div className="space-y-1.5 pt-1">
-                <div className="w-full bg-[#F1F5F9] h-2 rounded-full overflow-hidden flex">
+                <div className="w-full bg-slate-100 dark:bg-slate-800 h-2 rounded-full overflow-hidden flex">
                   <div
                     style={{
                       width: `${Math.min(
@@ -1416,7 +1412,7 @@ export const AttendanceMonthlyCalendar = ({
                           : 0
                       )}%`,
                     }}
-                    className="bg-[#2563EB] h-full"
+                    className="bg-blue-600 dark:bg-blue-500 h-full"
                     title={`Standard Hours: ${monthlySummaryStats.standardHours}h`}
                   />
                   {monthlySummaryStats.overtimeHours > 0 && (
@@ -1429,57 +1425,57 @@ export const AttendanceMonthlyCalendar = ({
                             : 0
                         )}%`,
                       }}
-                      className="bg-[#F59E0B] h-full"
+                      className="bg-amber-500 h-full"
                       title={`Overtime Hours: ${monthlySummaryStats.overtimeHours}h`}
                     />
                   )}
                 </div>
 
-                <div className="flex items-center justify-between text-[10px] font-semibold text-[#64748B]">
+                <div className="flex items-center justify-between text-[10px] font-semibold text-slate-500 dark:text-slate-400">
                   <span className="flex items-center gap-1">
-                    <span className="w-2 h-2 rounded-full bg-[#2563EB]" />
+                    <span className="w-2 h-2 rounded-full bg-blue-600 dark:bg-blue-400" />
                     Regular: {monthlySummaryStats.standardHours}h
                   </span>
                   <span className="flex items-center gap-1">
-                    <span className="w-2 h-2 rounded-full bg-[#F59E0B]" />
+                    <span className="w-2 h-2 rounded-full bg-amber-500" />
                     Overtime: {monthlySummaryStats.overtimeHours}h
                   </span>
                 </div>
               </div>
 
               {/* Quick Hours Averages Mini-Grid */}
-              <div className="grid grid-cols-2 gap-2 pt-2 border-t border-[#F1F5F9]">
-                <div className="bg-[#F8FAFC] p-2 rounded-lg text-center">
-                  <span className="text-[9px] font-bold text-[#64748B] uppercase block">Daily Avg / Staff</span>
-                  <span className="text-xs font-bold text-[#0F172A]">{monthlySummaryStats.avgDailyHoursPerStaff} hrs/day</span>
+              <div className="grid grid-cols-2 gap-2 pt-2 border-t border-slate-100 dark:border-slate-800">
+                <div className="bg-slate-50 dark:bg-[#162033] p-2 rounded-lg text-center border border-slate-200/60 dark:border-slate-700/60">
+                  <span className="text-[9px] font-bold text-slate-500 dark:text-slate-400 uppercase block">Daily Avg / Staff</span>
+                  <span className="text-xs font-bold text-slate-800 dark:text-white">{monthlySummaryStats.avgDailyHoursPerStaff} hrs/day</span>
                 </div>
-                <div className="bg-[#F8FAFC] p-2 rounded-lg text-center">
-                  <span className="text-[9px] font-bold text-[#64748B] uppercase block">Daily Team Total</span>
-                  <span className="text-xs font-bold text-[#0F172A]">{monthlySummaryStats.avgHoursPerDay} hrs/day</span>
+                <div className="bg-slate-50 dark:bg-[#162033] p-2 rounded-lg text-center border border-slate-200/60 dark:border-slate-700/60">
+                  <span className="text-[9px] font-bold text-slate-500 dark:text-slate-400 uppercase block">Daily Team Total</span>
+                  <span className="text-xs font-bold text-slate-800 dark:text-white">{monthlySummaryStats.avgHoursPerDay} hrs/day</span>
                 </div>
               </div>
             </div>
 
             {/* 2. TOTAL LEAVE DAYS STATISTIC CARD */}
-            <div className="bg-white border border-[#E2E8F0] rounded-xl p-4 shadow-xs space-y-3">
+            <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl p-4 shadow-xs space-y-3">
               <div className="flex items-center justify-between">
                 <div className="flex items-center gap-2">
-                  <div className="w-7 h-7 rounded-lg bg-[#F0FDF4] text-[#16A34A] flex items-center justify-center">
+                  <div className="w-7 h-7 rounded-lg bg-emerald-50 dark:bg-emerald-950/60 text-emerald-600 dark:text-emerald-400 flex items-center justify-center">
                     <Palmtree className="w-4 h-4" />
                   </div>
                   <div>
-                    <span className="text-xs font-bold text-[#0F172A]">Total Leave Days</span>
-                    <p className="text-[10px] text-[#64748B]">Approved leaves in {MONTH_NAMES[currentMonth]}</p>
+                    <span className="text-xs font-bold text-slate-800 dark:text-white">Total Leave Days</span>
+                    <p className="text-[10px] text-slate-500 dark:text-slate-400">Approved leaves in {MONTH_NAMES[currentMonth]}</p>
                   </div>
                 </div>
 
                 {monthlySummaryStats.pendingLeaveDays > 0 ? (
-                  <span className="text-[10px] font-bold px-2 py-0.5 rounded-md bg-[#FFFBEB] text-[#B45309] border border-[#FDE68A] flex items-center gap-1">
-                    <AlertTriangle className="w-3 h-3 text-[#D97706]" />
+                  <span className="text-[10px] font-bold px-2 py-0.5 rounded-md bg-amber-50 dark:bg-amber-950/50 text-amber-700 dark:text-amber-300 border border-amber-200 dark:border-amber-800 flex items-center gap-1">
+                    <AlertTriangle className="w-3 h-3 text-amber-500" />
                     {monthlySummaryStats.pendingLeaveDays} pending
                   </span>
                 ) : (
-                  <span className="text-[10px] font-bold px-2 py-0.5 rounded-md bg-[#F0FDF4] text-[#15803D] border border-[#BBF7D0]">
+                  <span className="text-[10px] font-bold px-2 py-0.5 rounded-md bg-emerald-50 dark:bg-emerald-950/50 text-emerald-700 dark:text-emerald-300 border border-emerald-200 dark:border-emerald-800">
                     All Reviewed
                   </span>
                 )}
@@ -1488,44 +1484,44 @@ export const AttendanceMonthlyCalendar = ({
               {/* Leave Days Big Display */}
               <div className="flex items-baseline justify-between pt-1">
                 <div>
-                  <span className="text-2xl sm:text-3xl font-black text-[#16A34A] tracking-tight">
+                  <span className="text-2xl sm:text-3xl font-extrabold text-emerald-600 dark:text-emerald-400 tracking-tight">
                     {monthlySummaryStats.approvedLeaveDays}
                   </span>
-                  <span className="text-sm font-bold text-[#64748B] ml-1">days</span>
+                  <span className="text-sm font-bold text-slate-500 dark:text-slate-400 ml-1">days</span>
                 </div>
                 <div className="text-right text-xs">
-                  <span className="text-[11px] text-[#64748B] block">Leave Utilization</span>
-                  <span className="font-bold text-[#0F172A]">{monthlySummaryStats.leaveUtilizationRate}%</span>
+                  <span className="text-[11px] text-slate-500 dark:text-slate-400 block">Leave Utilization</span>
+                  <span className="font-bold text-slate-800 dark:text-white">{monthlySummaryStats.leaveUtilizationRate}%</span>
                 </div>
               </div>
 
               {/* Leave Types Breakdown List */}
               <div className="space-y-1.5 pt-1">
-                <span className="text-[10px] font-bold text-[#64748B] uppercase tracking-wider block">
+                <span className="text-[10px] font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider block">
                   Leave Breakdown by Category
                 </span>
                 <div className="grid grid-cols-2 gap-1.5">
-                  <div className="flex items-center justify-between p-1.5 rounded-lg bg-[#F8FAFC] border border-[#E2E8F0] text-[11px]">
-                    <span className="text-[#64748B]">Annual</span>
-                    <span className="font-bold text-[#002185]">
+                  <div className="flex items-center justify-between p-1.5 rounded-lg bg-slate-50 dark:bg-[#162033] border border-slate-200/60 dark:border-slate-700/60 text-[11px]">
+                    <span className="text-slate-600 dark:text-slate-400">Annual</span>
+                    <span className="font-bold text-[#0B1E48] dark:text-white">
                       {monthlySummaryStats.leaveTypesDistribution.Annual || 0}d
                     </span>
                   </div>
-                  <div className="flex items-center justify-between p-1.5 rounded-lg bg-[#F8FAFC] border border-[#E2E8F0] text-[11px]">
-                    <span className="text-[#64748B]">Sick</span>
-                    <span className="font-bold text-[#002185]">
+                  <div className="flex items-center justify-between p-1.5 rounded-lg bg-slate-50 dark:bg-[#162033] border border-slate-200/60 dark:border-slate-700/60 text-[11px]">
+                    <span className="text-slate-600 dark:text-slate-400">Sick</span>
+                    <span className="font-bold text-[#0B1E48] dark:text-white">
                       {monthlySummaryStats.leaveTypesDistribution.Sick || 0}d
                     </span>
                   </div>
-                  <div className="flex items-center justify-between p-1.5 rounded-lg bg-[#F8FAFC] border border-[#E2E8F0] text-[11px]">
-                    <span className="text-[#64748B]">Casual</span>
-                    <span className="font-bold text-[#002185]">
+                  <div className="flex items-center justify-between p-1.5 rounded-lg bg-slate-50 dark:bg-[#162033] border border-slate-200/60 dark:border-slate-700/60 text-[11px]">
+                    <span className="text-slate-600 dark:text-slate-400">Casual</span>
+                    <span className="font-bold text-[#0B1E48] dark:text-white">
                       {monthlySummaryStats.leaveTypesDistribution.Casual || 0}d
                     </span>
                   </div>
-                  <div className="flex items-center justify-between p-1.5 rounded-lg bg-[#F8FAFC] border border-[#E2E8F0] text-[11px]">
-                    <span className="text-[#64748B]">Other/Special</span>
-                    <span className="font-bold text-[#002185]">
+                  <div className="flex items-center justify-between p-1.5 rounded-lg bg-slate-50 dark:bg-[#162033] border border-slate-200/60 dark:border-slate-700/60 text-[11px]">
+                    <span className="text-slate-600 dark:text-slate-400">Other/Special</span>
+                    <span className="font-bold text-[#0B1E48] dark:text-white">
                       {(monthlySummaryStats.leaveTypesDistribution.Maternity || 0) +
                         (monthlySummaryStats.leaveTypesDistribution.Paternity || 0) +
                         (monthlySummaryStats.leaveTypesDistribution.Bereavement || 0) +
@@ -1537,15 +1533,15 @@ export const AttendanceMonthlyCalendar = ({
 
               {/* Absence vs Half-Day Summary Badges */}
               <div className="grid grid-cols-2 gap-2 pt-1">
-                <div className="flex items-center justify-between p-2 rounded-lg bg-[#FFF7ED]/80 border border-[#FDBA74] text-[11px]">
-                  <span className="font-semibold text-[#C2410C]">Half-days:</span>
-                  <span className="font-bold text-[#EA580C]">
+                <div className="flex items-center justify-between p-2 rounded-lg bg-amber-50/80 dark:bg-amber-950/40 border border-amber-200 dark:border-amber-800 text-[11px]">
+                  <span className="font-semibold text-amber-700 dark:text-amber-300">Half-days:</span>
+                  <span className="font-bold text-amber-600 dark:text-amber-400">
                     {monthlySummaryStats.halfDayCount}
                   </span>
                 </div>
-                <div className="flex items-center justify-between p-2 rounded-lg bg-[#FEF2F2]/80 border border-[#FECACA] text-[11px]">
-                  <span className="font-semibold text-[#991B1B]">Absences:</span>
-                  <span className="font-bold text-[#DC2626]">
+                <div className="flex items-center justify-between p-2 rounded-lg bg-rose-50/80 dark:bg-rose-950/40 border border-rose-200 dark:border-rose-800 text-[11px]">
+                  <span className="font-semibold text-rose-700 dark:text-rose-300">Absences:</span>
+                  <span className="font-bold text-rose-600 dark:text-rose-400">
                     {monthlySummaryStats.totalUnexcusedAbsences}d
                   </span>
                 </div>
@@ -1554,40 +1550,40 @@ export const AttendanceMonthlyCalendar = ({
 
             {/* 3. TOP STAFF HOURS CONTRIBUTORS THIS MONTH */}
             {monthlySummaryStats.topEmployees.length > 0 && (
-              <div className="bg-white border border-[#E2E8F0] rounded-xl p-3.5 shadow-xs space-y-2.5">
+              <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl p-3.5 shadow-xs space-y-2.5">
                 <div className="flex items-center justify-between">
                   <div className="flex items-center gap-1.5">
-                    <Award className="w-3.5 h-3.5 text-[#ff5500]" />
-                    <span className="text-xs font-bold text-[#002185]">
+                    <Award className="w-3.5 h-3.5 text-amber-500" />
+                    <span className="text-xs font-bold text-[#0B1E48] dark:text-white">
                       Top Staff Hours Logged
                     </span>
                   </div>
-                  <span className="text-[10px] text-[#64748B]">
+                  <span className="text-[10px] text-slate-500 dark:text-slate-400">
                     {MONTH_NAMES[currentMonth]}
                   </span>
                 </div>
 
-                <div className="divide-y divide-[#F1F5F9] text-xs">
+                <div className="divide-y divide-slate-100 dark:divide-slate-800 text-xs">
                   {monthlySummaryStats.topEmployees.map((emp, idx) => (
                     <div
                       key={emp.id || idx}
                       className="py-1.5 flex items-center justify-between"
                     >
                       <div className="flex items-center gap-2 truncate pr-2">
-                        <span className="w-4 h-4 rounded-full bg-[#EFF6FF] text-[#2563EB] text-[9px] font-black flex items-center justify-center shrink-0">
+                        <span className="w-4 h-4 rounded-full bg-blue-50 dark:bg-blue-950/60 text-blue-600 dark:text-blue-400 text-[9px] font-black flex items-center justify-center shrink-0">
                           {idx + 1}
                         </span>
-                        <span className="font-medium text-[#0F172A] truncate">
+                        <span className="font-medium text-slate-800 dark:text-white truncate">
                           {emp.name}
                         </span>
                       </div>
                       <div className="flex items-center gap-2 shrink-0">
                         {emp.leaveDays > 0 && (
-                          <span className="text-[10px] text-[#1D4ED8] font-semibold bg-[#EFF6FF] px-1.5 py-0.2 rounded border border-[#BFDBFE]">
+                          <span className="text-[10px] text-blue-700 dark:text-blue-300 font-semibold bg-blue-50 dark:bg-blue-950/60 px-1.5 py-0.2 rounded border border-blue-200 dark:border-blue-800">
                             {emp.leaveDays}d leave
                           </span>
                         )}
-                        <span className="font-bold text-[#002185] tabular-nums">
+                        <span className="font-bold text-[#0B1E48] dark:text-white tabular-nums">
                           {emp.hours} hrs
                         </span>
                       </div>
@@ -1602,19 +1598,19 @@ export const AttendanceMonthlyCalendar = ({
 
       {/* DAY DRILLDOWN MODAL */}
       {selectedDayDetail && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50 backdrop-blur-xs animate-in fade-in duration-200">
-          <div className="bg-white rounded-2xl max-w-2xl w-full max-h-[85vh] flex flex-col shadow-2xl border border-[#E2E8F0] overflow-hidden">
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-xs animate-in fade-in duration-200">
+          <div className="bg-white dark:bg-[#111927] rounded-2xl max-w-2xl w-full max-h-[85vh] flex flex-col shadow-2xl border border-slate-200 dark:border-slate-800 overflow-hidden">
             {/* Modal Header */}
-            <div className="p-5 border-b border-[#E2E8F0] bg-[#F8FAFC] flex items-center justify-between">
+            <div className="p-5 border-b border-slate-200 dark:border-slate-800 bg-slate-50 dark:bg-[#162033] flex items-center justify-between">
               <div className="flex items-center gap-3">
-                <div className="w-10 h-10 rounded-xl bg-[#002185] text-white flex items-center justify-center font-bold">
+                <div className="w-10 h-10 rounded-xl bg-[#0B1E48] text-white flex items-center justify-center font-bold">
                   <CalendarIcon className="w-5 h-5" />
                 </div>
                 <div>
-                  <h3 className="text-base font-bold text-[#002185]">
+                  <h3 className="text-base font-bold text-[#0B1E48] dark:text-white">
                     Attendance Detail for {selectedDayDetail.dateString}
                   </h3>
-                  <p className="text-xs text-[#64748B]">
+                  <p className="text-xs text-slate-500 dark:text-slate-300">
                     {new Date(
                       selectedDayDetail.dateString + "T00:00:00"
                     ).toLocaleDateString("en-GH", {
@@ -1630,52 +1626,52 @@ export const AttendanceMonthlyCalendar = ({
               <button
                 type="button"
                 onClick={() => setSelectedDayDetail(null)}
-                className="w-8 h-8 rounded-lg hover:bg-[#E2E8F0] text-[#64748B] flex items-center justify-center transition-colors cursor-pointer"
+                className="w-8 h-8 rounded-lg hover:bg-slate-200 dark:hover:bg-slate-700 text-slate-500 dark:text-slate-400 flex items-center justify-center transition-colors cursor-pointer"
               >
                 <X className="w-5 h-5" />
               </button>
             </div>
 
             {/* Modal Day Summary Stats Bar with Color Badges */}
-            <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 p-4 bg-[#FFFFFF] border-b border-[#E2E8F0] text-center text-xs">
-              <div className="p-2.5 rounded-xl bg-[#F0FDF4] border border-[#86EFAC]">
-                <span className="text-[10px] text-[#15803D] uppercase font-bold block">
+            <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 p-4 bg-white dark:bg-[#111927] border-b border-slate-200 dark:border-slate-800 text-center text-xs">
+              <div className="p-2.5 rounded-xl bg-emerald-50 dark:bg-emerald-950/40 border border-emerald-200 dark:border-emerald-800">
+                <span className="text-[10px] text-emerald-700 dark:text-emerald-400 uppercase font-bold block">
                   Present
                 </span>
-                <span className="text-base font-black text-[#16A34A]">
+                <span className="text-base font-black text-emerald-600 dark:text-emerald-300">
                   {selectedDayDetail.presentCount}
                 </span>
               </div>
-              <div className="p-2.5 rounded-xl bg-[#FFF7ED] border border-[#FDBA74]">
-                <span className="text-[10px] text-[#C2410C] uppercase font-bold block">
+              <div className="p-2.5 rounded-xl bg-amber-50 dark:bg-amber-950/40 border border-amber-200 dark:border-amber-800">
+                <span className="text-[10px] text-amber-700 dark:text-amber-400 uppercase font-bold block">
                   Half-day
                 </span>
-                <span className="text-base font-black text-[#EA580C]">
+                <span className="text-base font-black text-amber-600 dark:text-amber-300">
                   {selectedDayDetail.halfDayCount}
                 </span>
               </div>
-              <div className="p-2.5 rounded-xl bg-[#EFF6FF] border border-[#93C5FD]">
-                <span className="text-[10px] text-[#1D4ED8] uppercase font-bold block">
+              <div className="p-2.5 rounded-xl bg-blue-50 dark:bg-blue-950/40 border border-blue-200 dark:border-blue-800">
+                <span className="text-[10px] text-blue-700 dark:text-blue-400 uppercase font-bold block">
                   Leave
                 </span>
-                <span className="text-base font-black text-[#2563EB]">
+                <span className="text-base font-black text-blue-600 dark:text-blue-300">
                   {selectedDayDetail.leaveCount}
                 </span>
               </div>
-              <div className="p-2.5 rounded-xl bg-[#FEF2F2] border border-[#FCA5A5]">
-                <span className="text-[10px] text-[#B91C1C] uppercase font-bold block">
+              <div className="p-2.5 rounded-xl bg-rose-50 dark:bg-rose-950/40 border border-rose-200 dark:border-rose-800">
+                <span className="text-[10px] text-rose-700 dark:text-rose-400 uppercase font-bold block">
                   Absent
                 </span>
-                <span className="text-base font-black text-[#DC2626]">
+                <span className="text-base font-black text-rose-600 dark:text-rose-300">
                   {selectedDayDetail.absentCount}
                 </span>
               </div>
             </div>
 
             {/* Records Roster List */}
-            <div className="p-5 overflow-y-auto space-y-3 flex-1">
+            <div className="p-5 overflow-y-auto space-y-3 flex-1 bg-white dark:bg-[#111927]">
               <div className="flex items-center justify-between mb-2">
-                <h4 className="text-xs font-bold text-[#002185] uppercase tracking-wider">
+                <h4 className="text-xs font-bold text-[#0B1E48] dark:text-white uppercase tracking-wider">
                   Employee Logs ({selectedDayDetail.records.length})
                 </h4>
                 {onSelectDate && (
@@ -1685,7 +1681,7 @@ export const AttendanceMonthlyCalendar = ({
                       onSelectDate(selectedDayDetail.dateString);
                       setSelectedDayDetail(null);
                     }}
-                    className="text-xs font-bold text-[#ff5500] hover:underline flex items-center gap-1 cursor-pointer"
+                    className="text-xs font-bold text-amber-500 hover:underline flex items-center gap-1 cursor-pointer"
                   >
                     <span>Filter Main Table to this Date</span>
                     <ArrowRight className="w-3 h-3" />
@@ -1694,7 +1690,7 @@ export const AttendanceMonthlyCalendar = ({
               </div>
 
               {selectedDayDetail.records.length > 0 ? (
-                <div className="divide-y divide-[#E2E8F0] border border-[#E2E8F0] rounded-xl overflow-hidden">
+                <div className="divide-y divide-slate-200 dark:divide-slate-800 border border-slate-200 dark:border-slate-800 rounded-xl overflow-hidden bg-white dark:bg-slate-900">
                   {selectedDayDetail.records.map((record, rIdx) => {
                     const empName = record.employee?.fullName || record.employee?.name || "Employee";
                     const empDept = record.employee?.department || "General";
@@ -1707,22 +1703,22 @@ export const AttendanceMonthlyCalendar = ({
                     return (
                       <div
                         key={rIdx}
-                        className="p-3.5 flex flex-col sm:flex-row sm:items-center justify-between gap-3 hover:bg-[#F8FAFC] transition-colors"
+                        className="p-3.5 flex flex-col sm:flex-row sm:items-center justify-between gap-3 hover:bg-slate-50 dark:hover:bg-slate-800/60 transition-colors"
                       >
                         <div className="flex items-center gap-3">
-                          <div className="w-9 h-9 rounded-xl bg-[#002185]/10 text-[#002185] font-bold flex items-center justify-center text-xs">
+                          <div className="w-9 h-9 rounded-xl bg-blue-50 dark:bg-blue-950/60 text-[#0B1E48] dark:text-blue-300 font-bold flex items-center justify-center text-xs">
                             {empName.slice(0, 2).toUpperCase()}
                           </div>
                           <div>
                             <div className="flex items-center gap-2">
-                              <span className="text-sm font-bold text-[#0F172A]">
+                              <span className="text-sm font-bold text-slate-800 dark:text-white">
                                 {empName}
                               </span>
-                              <span className="text-[10px] font-semibold text-[#64748B] bg-[#F1F5F9] px-1.5 py-0.5 rounded">
+                              <span className="text-[10px] font-semibold text-slate-500 dark:text-slate-400 bg-slate-100 dark:bg-slate-800 px-1.5 py-0.5 rounded">
                                 {empCode}
                               </span>
                             </div>
-                            <span className="text-xs text-[#64748B]">
+                            <span className="text-xs text-slate-500 dark:text-slate-400">
                               {empDept}
                             </span>
                           </div>
@@ -1731,12 +1727,12 @@ export const AttendanceMonthlyCalendar = ({
                         <div className="flex items-center gap-3 self-end sm:self-auto">
                           {/* Clock In / Out & Hours */}
                           <div className="text-right text-xs">
-                            <div className="flex items-center gap-2 text-[#0F172A] font-medium">
+                            <div className="flex items-center gap-2 text-slate-800 dark:text-white font-medium">
                               <span>In: {formatTimeStr(record.clockIn || record.checkIn)}</span>
                               <span>•</span>
                               <span>Out: {formatTimeStr(record.clockOut || record.checkOut)}</span>
                             </div>
-                            <span className="text-[11px] text-[#64748B]">
+                            <span className="text-[11px] text-slate-500 dark:text-slate-400">
                               {record.workHours ? `${record.workHours} hours` : "Standard shift"}
                             </span>
                           </div>
@@ -1749,11 +1745,11 @@ export const AttendanceMonthlyCalendar = ({
                   })}
                 </div>
               ) : (
-                <div className="p-8 text-center bg-[#F8FAFC] rounded-xl border border-dashed border-[#E2E8F0]">
-                  <p className="text-sm font-semibold text-[#64748B]">
+                <div className="p-8 text-center bg-slate-50 dark:bg-slate-900 rounded-xl border border-dashed border-slate-200 dark:border-slate-800">
+                  <p className="text-sm font-semibold text-slate-600 dark:text-slate-300">
                     No attendance records logged for this day
                   </p>
-                  <p className="text-xs text-[#94A3B8] mt-1">
+                  <p className="text-xs text-slate-400 dark:text-slate-500 mt-1">
                     This day may be a weekend, holiday, or before clock-in records were initiated.
                   </p>
                 </div>
@@ -1761,8 +1757,8 @@ export const AttendanceMonthlyCalendar = ({
             </div>
 
             {/* Modal Footer */}
-            <div className="p-4 bg-[#F8FAFC] border-t border-[#E2E8F0] flex items-center justify-between">
-              <span className="text-xs text-[#64748B]">
+            <div className="p-4 bg-slate-50 dark:bg-[#162033] border-t border-slate-200 dark:border-slate-800 flex items-center justify-between">
+              <span className="text-xs text-slate-500 dark:text-slate-400">
                 {selectedDayDetail.records.length} records retrieved
               </span>
               <div className="flex items-center gap-2">
@@ -1773,7 +1769,7 @@ export const AttendanceMonthlyCalendar = ({
                       onOpenOverride(selectedDayDetail.dateString);
                       setSelectedDayDetail(null);
                     }}
-                    className="px-3 py-1.5 text-xs font-semibold text-[#002185] bg-white border border-[#E2E8F0] rounded-xl hover:bg-[#F1F5F9] transition-colors cursor-pointer"
+                    className="px-3 py-1.5 text-xs font-semibold text-[#0B1E48] dark:text-white bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl hover:bg-slate-100 dark:hover:bg-slate-700 transition-colors cursor-pointer"
                   >
                     Adjust / Override Record
                   </button>
@@ -1781,7 +1777,7 @@ export const AttendanceMonthlyCalendar = ({
                 <button
                   type="button"
                   onClick={() => setSelectedDayDetail(null)}
-                  className="px-4 py-1.5 text-xs font-bold text-white bg-[#002185] rounded-xl hover:bg-[#00175f] transition-colors cursor-pointer"
+                  className="px-4 py-1.5 text-xs font-bold text-white bg-[#0B1E48] dark:bg-blue-600 rounded-xl hover:bg-[#00175f] dark:hover:bg-blue-500 transition-colors cursor-pointer"
                 >
                   Close
                 </button>

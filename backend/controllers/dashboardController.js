@@ -5,7 +5,8 @@ import { Leave } from "../models/leaveModel.js";
 import { Payroll } from "../models/payrollModel.js";
 import { User } from "../models/userModel.js";
 import CompanySettings from "../models/CompanySettings.js";
-import { evaluateLatenessPenalty, livePayrollStore } from "./payrollController.js";
+import { evaluateLatenessPenalty, calculateLatenessPenalty } from "../utils/latenessPenaltyCalculator.js";
+import { livePayrollStore } from "./payrollController.js";
 import { computeNetSalary } from "../services/payrollEngine.js";
 import {
   getEmployeeLiveToday,
@@ -405,12 +406,12 @@ export const employeeDashboardOverview = async (req, res) => {
     let companySettings = {
       workStartTime: "08:00",
       absenceDeductionRate: 10,
-      lateTier1_amount: 5,
-      lateTier2_amount: 10,
-      lateTier3_amount: 20,
-      lateTier4_amount: 30,
-      lateTier5_amount: 50,
-      lateTier6_amount: 75,
+      lateTier1_amount: 10,
+      lateTier2_amount: 30,
+      lateTier3_amount: 50,
+      lateTier4_amount: 75,
+      lateTier5_amount: 100,
+      lateTier6_amount: 150,
     };
     try {
       if (typeof CompanySettings.getSingletonSettings === "function") {
@@ -540,11 +541,17 @@ export const employeeDashboardOverview = async (req, res) => {
 
         if (isLate) {
           lateDays++;
-          const mins = penaltyResult?.minutesLate || Number(rec.lateMinutes || rec.delayMinutes || 15);
+          const mins = penaltyResult?.minutesLate || Number(rec.lateMinutes || rec.delayMinutes || 0);
           totalLateMinutes += mins;
-          const penaltyVal = rec.latePenalty !== undefined && rec.latePenalty > 0
-            ? Number(rec.latePenalty)
-            : (penaltyResult?.penalty || Number(companySettings.lateTier1_amount || 5));
+          let penaltyVal = 0;
+          if (rec.latePenalty !== undefined && rec.latePenalty !== null && rec.latePenalty !== "" && !isNaN(Number(rec.latePenalty))) {
+            penaltyVal = Math.max(0, Number(rec.latePenalty));
+          } else if (penaltyResult && penaltyResult.isLate) {
+            penaltyVal = penaltyResult.penalty;
+          } else {
+            const fallbackCalc = calculateLatenessPenalty(mins, companySettings);
+            penaltyVal = fallbackCalc.penalty;
+          }
           totalLatenessDeduction += penaltyVal;
         } else {
           onTimeDays++;
@@ -794,18 +801,119 @@ export const getRecentActivityFeed = async (req, res) => {
     const [recentAttendance, recentPayroll] = await Promise.all([
       Attendance.find({})
         .sort({ updatedAt: -1, createdAt: -1, date: -1 })
-        .limit(5)
-        .populate("employee", "fullName employeeId department position profilePicture avatar")
+        .limit(10)
+        .populate("employee", "fullName name full_name employeeId department position profilePicture avatar email")
         .lean(),
       Payroll.find({})
         .sort({ updatedAt: -1, createdAt: -1, paymentDate: -1 })
-        .limit(5)
-        .populate("employee", "fullName employeeId department position profilePicture avatar")
+        .limit(10)
+        .populate("employee", "fullName name full_name employeeId department position profilePicture avatar email")
         .lean(),
     ]);
 
-    const attendanceActivity = (recentAttendance || []).map((att) => {
-      const emp = att.employee || {};
+    // Gather candidate IDs, employee codes, and emails to guarantee resolving employee details
+    const candidateIds = new Set();
+    const candidateCodes = new Set();
+
+    (recentAttendance || []).forEach((att) => {
+      if (att.employee) {
+        if (typeof att.employee === "object" && att.employee._id) {
+          candidateIds.add(String(att.employee._id));
+        } else if (typeof att.employee === "string" && isValidObjectId(att.employee)) {
+          candidateIds.add(att.employee);
+        }
+      }
+      if (att.employeeId) candidateCodes.add(String(att.employeeId));
+    });
+
+    (recentPayroll || []).forEach((pay) => {
+      if (pay.employee) {
+        if (typeof pay.employee === "object" && pay.employee._id) {
+          candidateIds.add(String(pay.employee._id));
+        } else if (typeof pay.employee === "string" && isValidObjectId(pay.employee)) {
+          candidateIds.add(pay.employee);
+        }
+      }
+      if (pay.employeeId) candidateCodes.add(String(pay.employeeId));
+    });
+
+    const [allEmployees, allUsers] = await Promise.all([
+      Employee.find({
+        $or: [
+          { _id: { $in: Array.from(candidateIds).filter(isValidObjectId) } },
+          { employeeId: { $in: Array.from(candidateCodes) } },
+        ],
+      }).lean().catch(() => []),
+      User.find({
+        _id: { $in: Array.from(candidateIds).filter(isValidObjectId) },
+      }).lean().catch(() => []),
+    ]);
+
+    const employeeMap = new Map();
+    (allEmployees || []).forEach((emp) => {
+      if (emp._id) employeeMap.set(String(emp._id), emp);
+      if (emp.employeeId) employeeMap.set(String(emp.employeeId), emp);
+      if (emp.email) employeeMap.set(String(emp.email).toLowerCase(), emp);
+    });
+
+    (allUsers || []).forEach((usr) => {
+      if (usr._id && !employeeMap.has(String(usr._id))) {
+        employeeMap.set(String(usr._id), {
+          _id: usr._id,
+          fullName: usr.fullName || usr.name || usr.full_name || usr.username || "Staff Member",
+          department: usr.department || "General",
+          position: usr.position || usr.role || "Employee",
+          employeeId: usr.employeeId || "EMP",
+          avatar: usr.avatar || usr.profilePicture || null,
+        });
+      }
+    });
+
+    const resolveEmp = (recEmp, recEmpId) => {
+      if (recEmp && typeof recEmp === "object" && (recEmp.fullName || recEmp.name || recEmp.full_name)) {
+        return {
+          fullName: recEmp.fullName || recEmp.name || recEmp.full_name,
+          employeeId: recEmp.employeeId || recEmpId || "EMP",
+          department: recEmp.department || "General",
+          position: recEmp.position || "Employee",
+          avatar: recEmp.avatar || recEmp.profilePicture || null,
+        };
+      }
+
+      const empIdStr = recEmp ? (typeof recEmp === "object" ? String(recEmp._id || "") : String(recEmp)) : "";
+      if (empIdStr && employeeMap.has(empIdStr)) {
+        const found = employeeMap.get(empIdStr);
+        return {
+          fullName: found.fullName || found.name || found.full_name || "Employee",
+          employeeId: found.employeeId || recEmpId || "EMP",
+          department: found.department || "General",
+          position: found.position || "Employee",
+          avatar: found.avatar || found.profilePicture || null,
+        };
+      }
+
+      if (recEmpId && employeeMap.has(String(recEmpId))) {
+        const found = employeeMap.get(String(recEmpId));
+        return {
+          fullName: found.fullName || found.name || found.full_name || "Employee",
+          employeeId: found.employeeId || recEmpId || "EMP",
+          department: found.department || "General",
+          position: found.position || "Employee",
+          avatar: found.avatar || found.profilePicture || null,
+        };
+      }
+
+      return {
+        fullName: "Employee",
+        employeeId: recEmpId || "EMP",
+        department: "General",
+        position: "Employee",
+        avatar: null,
+      };
+    };
+
+    const attendanceActivity = (recentAttendance || []).slice(0, 5).map((att) => {
+      const emp = resolveEmp(att.employee, att.employeeId);
       const empName = emp.fullName || "Employee";
       const status = (att.status || "").toLowerCase();
       let action = "Attendance Logged";
@@ -829,7 +937,7 @@ export const getRecentActivityFeed = async (req, res) => {
         employeeName: empName,
         employeeId: emp.employeeId || att.employeeId || "N/A",
         department: emp.department || "General",
-        avatar: emp.avatar || emp.profilePicture || null,
+        avatar: emp.avatar || null,
         status: att.status || "Present",
         date: att.date,
         clockIn: att.clockIn || att.clockInTime,
@@ -840,8 +948,8 @@ export const getRecentActivityFeed = async (req, res) => {
       };
     });
 
-    const payrollActivity = (recentPayroll || []).map((pay) => {
-      const emp = pay.employee || {};
+    const payrollActivity = (recentPayroll || []).slice(0, 5).map((pay) => {
+      const emp = resolveEmp(pay.employee, pay.employeeId);
       const empName = emp.fullName || "Employee";
       const amount = Number(
         pay.netSalary !== undefined
@@ -860,7 +968,7 @@ export const getRecentActivityFeed = async (req, res) => {
         employeeName: empName,
         employeeId: emp.employeeId || "N/A",
         department: emp.department || "General",
-        avatar: emp.avatar || emp.profilePicture || null,
+        avatar: emp.avatar || null,
         status: st,
         amount: parseFloat(amount.toFixed(2)),
         payslipNumber: pay.payslipNumber || "N/A",

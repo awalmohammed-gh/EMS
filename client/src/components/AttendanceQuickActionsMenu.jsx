@@ -9,6 +9,7 @@ import {
   Trash2,
   Zap,
   CheckCircle2,
+  Printer,
 } from "lucide-react";
 
 const AttendanceQuickActionsMenu = ({
@@ -18,6 +19,7 @@ const AttendanceQuickActionsMenu = ({
   onUnflag,
   onRecalculate,
   onViewDetails,
+  onPrintReport,
   onEdit,
   onDelete,
 }) => {
@@ -181,8 +183,23 @@ const AttendanceQuickActionsMenu = ({
             </button>
           </div>
 
-          {/* Standard Navigation / Editing */}
+          {/* Standard Navigation / Editing & Print Report */}
           <div className="py-1">
+            {typeof onPrintReport === "function" && (
+              <button
+                type="button"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  setIsOpen(false);
+                  onPrintReport(item);
+                }}
+                className="w-full text-left px-3 py-1.5 text-xs text-[#1e3a8a] hover:bg-blue-50 transition-colors flex items-center gap-2 cursor-pointer font-semibold"
+              >
+                <Printer className="w-3.5 h-3.5 text-[#1e3a8a]" />
+                <span>Print Official Report</span>
+              </button>
+            )}
+
             <button
               type="button"
               onClick={(e) => {

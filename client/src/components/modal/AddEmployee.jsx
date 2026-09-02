@@ -263,30 +263,27 @@ Login URL: ${window.location.origin}/auth/employee/login`;
 
   return (
     <>
-      {/* Backdrop */}
+      {/* Modal Overlay & Backdrop Container */}
       <div
-        id="add-employee-backdrop"
+        id="modal-add-employee"
         onClick={() => setShowEmployeeModal(false)}
-        className="fixed inset-0 z-40 bg-slate-950/60 backdrop-blur-xs min-h-screen"
-      />
-
-      {/* Modal */}
-      <div id="modal-add-employee" className="fixed inset-0 z-50 flex items-center justify-center p-4">
+        className="fixed inset-0 z-50 flex items-end sm:items-center justify-center p-0 sm:p-4 bg-slate-950/60 backdrop-blur-sm animate-fade-in"
+      >
         <div
           onClick={(e) => e.stopPropagation()}
-          className="w-full max-w-2xl max-h-[92vh] rounded-2xl bg-white dark:bg-slate-900 shadow-2xl border border-slate-200 dark:border-slate-800 animate-fade-in flex flex-col overflow-hidden"
+          className="w-full max-h-[90vh] rounded-t-[28px] sm:rounded-3xl sm:max-w-2xl bg-white dark:bg-slate-900 shadow-2xl border border-slate-200 dark:border-slate-800 animate-fade-in flex flex-col overflow-hidden"
         >
           {createdCredentials ? (
             /* Success & Copyable Credentials Screen */
             <div id="employee-credentials-success-screen" className="flex flex-col flex-1 overflow-y-auto">
-              <div className="bg-blue-600 dark:bg-blue-700 px-6 py-5 text-white flex items-center justify-between">
+              <div className="bg-blue-600 dark:bg-blue-700 px-5 sm:px-6 py-4 sm:py-5 text-white flex items-center justify-between">
                 <div className="flex items-center gap-3">
-                  <div className="w-10 h-10 rounded-xl bg-emerald-500 flex items-center justify-center shadow-xs">
-                    <CheckCircle2 className="w-6 h-6 text-white" />
+                  <div className="w-9 h-9 sm:w-10 sm:h-10 rounded-xl bg-emerald-500 flex items-center justify-center shadow-xs shrink-0">
+                    <CheckCircle2 className="w-5 h-5 sm:w-6 sm:h-6 text-white" />
                   </div>
                   <div>
-                    <h2 className="text-base font-bold">Account Created Successfully</h2>
-                    <p className="text-xs text-blue-100">
+                    <h2 className="text-sm sm:text-base font-bold">Account Created Successfully</h2>
+                    <p className="text-[11px] sm:text-xs text-blue-100">
                       Share the following login credentials with the employee
                     </p>
                   </div>
@@ -295,21 +292,21 @@ Login URL: ${window.location.origin}/auth/employee/login`;
                   id="btn-close-credentials-modal"
                   type="button"
                   onClick={() => setShowEmployeeModal(false)}
-                  className="p-1.5 text-blue-100 hover:text-white hover:bg-white/10 rounded-lg cursor-pointer transition-all"
+                  className="p-1.5 text-blue-100 hover:text-white hover:bg-white/10 rounded-lg cursor-pointer transition-all shrink-0"
                 >
                   <X className="w-5 h-5" />
                 </button>
               </div>
 
-              <div className="p-6 space-y-4 flex-1">
-                <div className="p-4 bg-emerald-50 dark:bg-emerald-950/40 border border-emerald-200 dark:border-emerald-800 rounded-xl flex items-center gap-3 text-xs text-emerald-800 dark:text-emerald-300">
+              <div className="p-4 sm:p-6 space-y-4 flex-1">
+                <div className="p-3.5 sm:p-4 bg-emerald-50 dark:bg-emerald-950/40 border border-emerald-200 dark:border-emerald-800 rounded-xl flex items-center gap-3 text-xs text-emerald-800 dark:text-emerald-300">
                   <CheckCircle2 className="w-5 h-5 text-emerald-600 dark:text-emerald-400 shrink-0" />
                   <div>
                     <span className="font-bold">Database Synchronized:</span> The employee record has been added to the directory and activated for immediate login.
                   </div>
                 </div>
 
-                <div className="bg-slate-50 dark:bg-slate-800/60 border border-slate-200 dark:border-slate-700 rounded-xl p-5 space-y-3">
+                <div className="bg-slate-50 dark:bg-slate-800/60 border border-slate-200 dark:border-slate-700 rounded-xl p-4 sm:p-5 space-y-3">
                   <div className="flex justify-between items-center pb-2 border-b border-slate-200 dark:border-slate-700">
                     <span className="text-xs font-semibold text-slate-500 dark:text-slate-400">Staff Member</span>
                     <span className="text-xs font-bold text-slate-900 dark:text-white">
@@ -370,12 +367,12 @@ Login URL: ${window.location.origin}/auth/employee/login`;
                 </button>
               </div>
 
-              <div className="bg-white dark:bg-slate-900 px-6 py-4 flex items-center justify-between border-t border-slate-200 dark:border-slate-800">
+              <div className="bg-white dark:bg-slate-900 px-4 sm:px-6 py-3.5 sm:py-4 flex flex-col-reverse sm:flex-row items-center justify-between gap-2.5 sm:gap-3 border-t border-slate-200 dark:border-slate-800">
                 <button
                   id="btn-add-another-employee"
                   type="button"
                   onClick={handleResetForAnother}
-                  className="px-4 py-2 text-xs font-semibold text-blue-600 dark:text-blue-400 bg-blue-50 dark:bg-blue-950/40 border border-blue-200 dark:border-blue-800 rounded-xl hover:bg-blue-100 dark:hover:bg-blue-900/50 transition-all cursor-pointer"
+                  className="w-full sm:w-auto px-4 py-2.5 text-xs font-semibold text-blue-600 dark:text-blue-400 bg-blue-50 dark:bg-blue-950/40 border border-blue-200 dark:border-blue-800 rounded-xl hover:bg-blue-100 dark:hover:bg-blue-900/50 transition-all cursor-pointer text-center"
                 >
                   Add Another Employee
                 </button>
@@ -384,7 +381,7 @@ Login URL: ${window.location.origin}/auth/employee/login`;
                   id="btn-done-add-employee"
                   type="button"
                   onClick={() => setShowEmployeeModal(false)}
-                  className="px-5 py-2 text-xs font-bold text-white bg-slate-900 hover:bg-black dark:bg-slate-800 dark:hover:bg-slate-700 rounded-xl transition-all cursor-pointer"
+                  className="w-full sm:w-auto px-5 py-2.5 text-xs font-bold text-white bg-slate-900 hover:bg-black dark:bg-slate-800 dark:hover:bg-slate-700 rounded-xl transition-all cursor-pointer text-center"
                 >
                   Done & Close
                 </button>
@@ -393,16 +390,16 @@ Login URL: ${window.location.origin}/auth/employee/login`;
           ) : (
             <>
               {/* Header */}
-              <div className="shrink-0 bg-white dark:bg-slate-900 px-6 pt-6 pb-5 flex items-center justify-between border-b border-slate-200 dark:border-slate-800">
+              <div className="shrink-0 bg-white dark:bg-slate-900 px-5 sm:px-6 pt-5 sm:pt-6 pb-4 sm:pb-5 flex items-center justify-between border-b border-slate-200 dark:border-slate-800">
                 <div className="flex items-center gap-3">
-                  <div className="w-11 h-11 rounded-xl bg-blue-600 dark:bg-blue-700 flex items-center justify-center shrink-0 shadow-xs">
+                  <div className="w-10 h-10 sm:w-11 sm:h-11 rounded-xl bg-blue-600 dark:bg-blue-700 flex items-center justify-center shrink-0 shadow-xs">
                     <UserPlus className="w-5 h-5 text-white" />
                   </div>
                   <div>
-                    <h2 className="text-lg font-bold text-slate-900 dark:text-white leading-tight">
+                    <h2 className="text-base sm:text-lg font-bold text-slate-900 dark:text-white leading-tight">
                       Add New Employee
                     </h2>
-                    <p className="text-xs text-slate-500 dark:text-slate-400">
+                    <p className="text-[11px] sm:text-xs text-slate-500 dark:text-slate-400">
                       Create and activate a new employee record with system credentials and department placement
                     </p>
                   </div>
@@ -411,7 +408,7 @@ Login URL: ${window.location.origin}/auth/employee/login`;
                   id="btn-close-add-employee-modal"
                   type="button"
                   onClick={() => setShowEmployeeModal(false)}
-                  className="p-2 text-slate-400 hover:text-slate-700 dark:hover:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-800 rounded-lg transition-all shrink-0 cursor-pointer"
+                  className="p-1.5 sm:p-2 text-slate-400 hover:text-slate-700 dark:hover:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-800 rounded-lg transition-all shrink-0 cursor-pointer"
                 >
                   <X className="w-5 h-5" />
                 </button>
@@ -422,7 +419,7 @@ Login URL: ${window.location.origin}/auth/employee/login`;
                 id="add-employee-form"
                 onSubmit={handleSubmit}
                 noValidate
-                className="flex-1 overflow-y-auto px-6 py-5 space-y-4"
+                className="flex-1 overflow-y-auto max-h-[85vh] sm:max-h-[80vh] px-4 sm:px-6 py-4 sm:py-5 space-y-4"
               >
                 {/* Validation errors summary banner */}
                 {Object.keys(formErrors).some((k) => formErrors[k]) && (
@@ -741,12 +738,12 @@ Login URL: ${window.location.origin}/auth/employee/login`;
               </form>
 
               {/* Footer */}
-              <div className="shrink-0 bg-white dark:bg-slate-900 px-6 py-4 flex justify-end gap-3 border-t border-slate-200 dark:border-slate-800">
+              <div className="shrink-0 bg-white dark:bg-slate-900 px-4 sm:px-6 py-3.5 sm:py-4 flex flex-col-reverse sm:flex-row sm:items-center sm:justify-end gap-2.5 sm:gap-3 border-t border-slate-200 dark:border-slate-800">
                 <button
                   id="btn-cancel-add-employee"
                   type="button"
                   onClick={() => setShowEmployeeModal(false)}
-                  className="px-4 py-2 text-xs font-semibold text-slate-600 dark:text-slate-400 bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 rounded-xl transition-all cursor-pointer"
+                  className="w-full sm:w-auto px-4 py-2.5 text-xs font-semibold text-slate-600 dark:text-slate-400 bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 rounded-xl transition-all cursor-pointer text-center"
                 >
                   Cancel
                 </button>
@@ -756,7 +753,7 @@ Login URL: ${window.location.origin}/auth/employee/login`;
                   type="submit"
                   form="add-employee-form"
                   disabled={isSubmitting}
-                  className="px-5 py-2 text-xs font-bold text-white bg-blue-600 hover:bg-blue-700 rounded-xl transition-all shadow-sm flex items-center gap-2 cursor-pointer disabled:opacity-50"
+                  className="w-full sm:w-auto px-5 py-2.5 text-xs font-bold text-white bg-blue-600 hover:bg-blue-700 rounded-xl transition-all shadow-sm flex items-center justify-center gap-2 cursor-pointer disabled:opacity-50"
                 >
                   <UserPlus className="w-4 h-4" />
                   <span>{isSubmitting ? "Creating Record..." : "Add to Directory"}</span>

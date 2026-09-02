@@ -96,23 +96,25 @@ export const ManualOverrideModal = ({
   return (
     <div
       id="manual-override-modal-backdrop"
-      className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4 backdrop-blur-xs animate-in fade-in duration-200"
+      onClick={onClose}
+      className="fixed inset-0 z-50 flex items-end sm:items-center justify-center p-0 sm:p-4 bg-slate-950/60 backdrop-blur-sm animate-fade-in"
     >
       <div
         id="manual-override-modal-container"
-        className="w-full max-w-lg rounded-2xl bg-white dark:bg-slate-900 shadow-2xl border border-slate-200 dark:border-slate-800 overflow-hidden animate-in zoom-in-95 duration-200"
+        onClick={(e) => e.stopPropagation()}
+        className="w-full max-h-[90vh] rounded-t-[28px] sm:rounded-3xl sm:max-w-lg bg-white dark:bg-slate-900 shadow-2xl border border-slate-200 dark:border-slate-800 overflow-hidden animate-fade-in flex flex-col"
       >
         {/* Modal Header */}
-        <div className="flex items-center justify-between border-b border-slate-100 dark:border-slate-800 px-6 py-4 bg-slate-50/80 dark:bg-slate-800/50">
+        <div className="flex items-center justify-between border-b border-slate-100 dark:border-slate-800 px-5 sm:px-6 py-4 bg-slate-50/80 dark:bg-slate-800/50 shrink-0">
           <div className="flex items-center gap-3">
-            <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-[#0B1E48] text-white shadow-xs">
+            <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-[#0B1E48] text-white shadow-xs shrink-0">
               <Edit3 className="h-5 w-5" />
             </div>
             <div>
-              <h2 className="text-base font-bold text-[#0B1E48] dark:text-blue-100 tracking-tight">
+              <h2 className="text-sm sm:text-base font-bold text-[#0B1E48] dark:text-blue-100 tracking-tight">
                 {formData.id ? "Admin Attendance Adjustment" : "Manual Attendance Override"}
               </h2>
-              <p className="text-xs text-slate-500 dark:text-slate-400">
+              <p className="text-[11px] sm:text-xs text-slate-500 dark:text-slate-400">
                 {formData.id
                   ? `Adjusting attendance record for ${formData.employeeName || "selected employee"}`
                   : "Create a verified retroactive attendance entry"}
@@ -123,14 +125,14 @@ export const ManualOverrideModal = ({
             id="close-manual-override-modal-btn"
             type="button"
             onClick={onClose}
-            className="rounded-lg p-1.5 text-slate-400 hover:text-slate-700 dark:hover:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors"
+            className="rounded-lg p-1.5 text-slate-400 hover:text-slate-700 dark:hover:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors cursor-pointer shrink-0"
           >
             <X className="h-5 w-5" />
           </button>
         </div>
 
         {/* Modal Form */}
-        <form onSubmit={handleSubmit} className="p-6 space-y-4">
+        <form onSubmit={handleSubmit} className="p-4 sm:p-6 space-y-4 overflow-y-auto max-h-[85vh] sm:max-h-[80vh] flex-1">
           {/* Employee Selector (Only shown for new records) */}
           {!formData.id && (
             <div>
@@ -303,12 +305,12 @@ export const ManualOverrideModal = ({
           </div>
 
           {/* Action Footer */}
-          <div className="flex items-center justify-end gap-3 pt-3 border-t border-slate-100 dark:border-slate-800">
+          <div className="flex flex-col-reverse sm:flex-row sm:items-center sm:justify-end gap-2.5 sm:gap-3 pt-3 border-t border-slate-100 dark:border-slate-800">
             <button
               id="cancel-override-btn"
               type="button"
               onClick={onClose}
-              className="px-4 py-2.5 text-xs sm:text-sm font-semibold text-slate-600 dark:text-slate-400 hover:text-slate-800 dark:hover:text-slate-200 rounded-xl hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors"
+              className="w-full sm:w-auto px-4 py-2.5 text-xs sm:text-sm font-semibold text-slate-600 dark:text-slate-400 hover:text-slate-800 dark:hover:text-slate-200 rounded-xl hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors text-center cursor-pointer"
             >
               Cancel
             </button>
@@ -316,7 +318,7 @@ export const ManualOverrideModal = ({
               id="save-override-btn"
               type="submit"
               disabled={isSaving || Object.keys(errors).some((k) => Boolean(errors[k]))}
-              className="inline-flex items-center gap-2 px-5 py-2.5 text-xs sm:text-sm font-bold text-white bg-[#0B1E48] hover:bg-[#002185] active:scale-[0.98] rounded-xl transition-all shadow-xs disabled:opacity-50 disabled:pointer-events-none cursor-pointer"
+              className="w-full sm:w-auto inline-flex items-center justify-center gap-2 px-5 py-2.5 text-xs sm:text-sm font-bold text-white bg-[#0B1E48] hover:bg-[#002185] active:scale-[0.98] rounded-xl transition-all shadow-xs disabled:opacity-50 disabled:pointer-events-none cursor-pointer"
             >
               {isSaving ? (
                 <span>Saving Record...</span>

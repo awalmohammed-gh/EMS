@@ -369,25 +369,23 @@ export const PayslipsModal = ({ onClose, onSuccess }) => {
   }
 
   return (
-    <div id="payslip-modal-container" className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-4">
-      {/* Backdrop */}
-      <div
-        onClick={onClose}
-        className="absolute inset-0 bg-[#0F172A]/50 backdrop-blur-xs"
-      />
-
+    <div
+      id="payslip-modal-container"
+      onClick={onClose}
+      className="fixed inset-0 z-50 flex items-end sm:items-center justify-center p-0 sm:p-4 bg-slate-950/60 backdrop-blur-sm animate-fade-in"
+    >
       {/* Modal Container */}
       <div
         onClick={(e) => e.stopPropagation()}
-        className="relative z-10 flex max-h-[92vh] w-full max-w-2xl flex-col rounded-2xl bg-white dark:bg-slate-900 shadow-2xl border-2 border-[#002185] animate-fade-in overflow-hidden"
+        className="relative z-10 flex max-h-[90vh] w-full max-w-2xl flex-col rounded-t-[28px] sm:rounded-3xl bg-white dark:bg-slate-900 shadow-2xl border border-slate-200 dark:border-slate-800 animate-fade-in overflow-hidden"
       >
         {/* Header */}
         <div className="flex items-center justify-between border-b border-slate-200 dark:border-slate-800 px-5 sm:px-6 py-3.5 bg-white dark:bg-slate-900 shrink-0">
           <div>
-            <h2 className="text-lg sm:text-xl font-black text-[#002185] dark:text-blue-400">
+            <h2 className="text-base sm:text-xl font-black text-[#002185] dark:text-blue-400">
               Generate & Calculate Payslip
             </h2>
-            <p className="text-[11px] sm:text-xs text-slate-500 dark:text-slate-400">
+            <p className="text-[10px] sm:text-xs text-slate-500 dark:text-slate-400">
               Auto-syncs stored base salary, attendance penalties, custom allowances, and live net salary.
             </p>
           </div>
@@ -396,9 +394,9 @@ export const PayslipsModal = ({ onClose, onSuccess }) => {
             id="btn-close-payslip-modal"
             type="button"
             onClick={onClose}
-            className="rounded-lg p-1.5 text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800 hover:text-slate-600 transition cursor-pointer"
+            className="rounded-lg p-1.5 text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800 hover:text-slate-600 transition cursor-pointer shrink-0"
           >
-            <X className="h-5 w-5" />
+            <X className="w-5 h-5" />
           </button>
         </div>
 
@@ -832,12 +830,12 @@ export const PayslipsModal = ({ onClose, onSuccess }) => {
         </form>
 
         {/* Footer */}
-        <div className="flex items-center justify-end gap-3 border-t border-slate-200 dark:border-slate-800 px-5 sm:px-6 py-3 bg-white dark:bg-slate-900 shrink-0">
+        <div className="flex flex-col-reverse sm:flex-row sm:items-center sm:justify-end gap-2.5 sm:gap-3 border-t border-slate-200 dark:border-slate-800 px-5 sm:px-6 py-3 bg-white dark:bg-slate-900 shrink-0">
           <button
             id="btn-cancel-payslip"
             type="button"
             onClick={onClose}
-            className="rounded-xl border border-slate-200 dark:border-slate-700 px-5 py-2 font-semibold text-slate-600 dark:text-slate-300 transition hover:bg-slate-100 dark:hover:bg-slate-800 cursor-pointer"
+            className="w-full sm:w-auto rounded-xl border border-slate-200 dark:border-slate-700 px-5 py-2.5 font-semibold text-xs sm:text-sm text-slate-600 dark:text-slate-300 transition hover:bg-slate-100 dark:hover:bg-slate-800 cursor-pointer text-center"
           >
             Cancel
           </button>
@@ -847,7 +845,7 @@ export const PayslipsModal = ({ onClose, onSuccess }) => {
             type="submit"
             form="payslip-form"
             disabled={!payslipForm.employeeId || isCalculating}
-            className="rounded-xl bg-[#002185] hover:bg-[#ff5500] px-6 py-2 font-bold text-white transition shadow-sm cursor-pointer disabled:opacity-50 flex items-center gap-2"
+            className="w-full sm:w-auto rounded-xl bg-[#002185] hover:bg-[#ff5500] px-6 py-2.5 font-bold text-xs sm:text-sm text-white transition shadow-sm cursor-pointer disabled:opacity-50 flex items-center justify-center gap-2 text-center"
           >
             <Banknote className="w-4 h-4" />
             <span>Save &amp; Publish Payslip</span>

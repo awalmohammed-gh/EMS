@@ -191,24 +191,24 @@ const EmployeeLeave = () => {
   const getStatusStyle = (status) => {
     switch (status?.toLowerCase()) {
       case "approved":
-        return "bg-[#F0FDF4] text-[#16A34A] border border-[#16A34A]/25 font-bold";
+        return "bg-emerald-50 dark:bg-emerald-950/40 text-emerald-700 dark:text-emerald-300 border border-emerald-200 dark:border-emerald-800/60 font-bold";
       case "rejected":
-        return "bg-[#FEF2F2] text-[#DC2626] border border-[#DC2626]/25 font-bold";
+        return "bg-rose-50 dark:bg-rose-950/40 text-rose-700 dark:text-rose-300 border border-rose-200 dark:border-rose-800/60 font-bold";
       case "pending":
-        return "bg-[#FFFBEB] text-[#D97706] border border-[#F59E0B]/30 font-bold";
+        return "bg-amber-50 dark:bg-amber-950/40 text-amber-700 dark:text-amber-300 border border-amber-200 dark:border-amber-800/60 font-bold";
       default:
-        return "bg-[#F1F5F9] text-[#64748B] border border-[#E2E8F0] font-semibold";
+        return "bg-slate-100 dark:bg-[#162033] text-slate-600 dark:text-slate-300 border border-slate-200 dark:border-slate-700/60 font-semibold";
     }
   };
 
   const getStatusIcon = (status) => {
     switch (status?.toLowerCase()) {
       case "approved":
-        return <CheckCircle className="w-3.5 h-3.5 text-[#16A34A]" />;
+        return <CheckCircle className="w-3.5 h-3.5 text-emerald-600 dark:text-emerald-400" />;
       case "rejected":
-        return <XCircle className="w-3.5 h-3.5 text-[#DC2626]" />;
+        return <XCircle className="w-3.5 h-3.5 text-rose-600 dark:text-rose-400" />;
       case "pending":
-        return <ClockIcon className="w-3.5 h-3.5 text-[#D97706]" />;
+        return <ClockIcon className="w-3.5 h-3.5 text-amber-600 dark:text-amber-400" />;
       default:
         return null;
     }
@@ -217,13 +217,13 @@ const EmployeeLeave = () => {
   const getStatusColor = (status) => {
     switch (status?.toLowerCase()) {
       case "approved":
-        return "text-[#16A34A]";
+        return "text-emerald-600 dark:text-emerald-400";
       case "rejected":
-        return "text-[#DC2626]";
+        return "text-rose-600 dark:text-rose-400";
       case "pending":
-        return "text-[#D97706]";
+        return "text-amber-600 dark:text-amber-400";
       default:
-        return "text-[#64748B]";
+        return "text-slate-600 dark:text-slate-400";
     }
   };
 
@@ -303,7 +303,7 @@ const EmployeeLeave = () => {
         {/* Header */}
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
           <div>
-            <h1 className="text-2xl sm:text-3xl font-extrabold tracking-tight text-[#0B1E48] dark:text-blue-100">
+            <h1 className="text-2xl sm:text-3xl font-extrabold tracking-tight text-[#0B1E48] dark:text-white">
               My Leave Requests & Tracking
             </h1>
             <p className="text-sm font-medium text-slate-500 dark:text-slate-400 mt-1">
@@ -314,7 +314,7 @@ const EmployeeLeave = () => {
             <button
               type="button"
               onClick={() => fetchLeaveData(false)}
-              className="p-2.5 rounded-xl border border-[#E2E8F0] bg-white hover:bg-[#F8FAFC] text-[#64748B] hover:text-[#002185] transition"
+              className="p-2.5 rounded-xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-[#111927] hover:bg-slate-50 dark:hover:bg-[#162033] text-slate-600 dark:text-slate-300 hover:text-[#002185] dark:hover:text-blue-400 transition cursor-pointer"
               title="Refresh requests"
             >
               <RefreshCw className="w-4 h-4" />
@@ -322,10 +322,10 @@ const EmployeeLeave = () => {
             <button
               type="button"
               onClick={() => setShowInlineForm(!showInlineForm)}
-              className={`flex-1 sm:flex-initial flex items-center justify-center gap-2 rounded-xl px-4 py-2.5 text-xs font-bold transition-all shadow-xs ${
+              className={`flex-1 sm:flex-initial flex items-center justify-center gap-2 rounded-xl px-4 py-2.5 text-xs font-bold transition-all shadow-xs cursor-pointer ${
                 showInlineForm
-                  ? "bg-[#F8FAFC] text-[#002185] border border-[#002185]"
-                  : "bg-[#002185] text-white hover:bg-[#ff5500]"
+                  ? "bg-slate-100 dark:bg-[#162033] text-[#002185] dark:text-blue-400 border border-[#002185] dark:border-blue-500"
+                  : "bg-[#002185] hover:bg-[#001760] dark:bg-blue-600 dark:hover:bg-blue-700 text-white"
               }`}
             >
               <Plus className="h-4 w-4" />
@@ -351,28 +351,28 @@ const EmployeeLeave = () => {
         {/* Leave Balance & Status Summary Cards */}
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
           {/* Total Entitlement */}
-          <div className="rounded-xl border border-[#E2E8F0] bg-[#FFFFFF] p-5 shadow-sm hover:shadow-md hover:border-[#002185] transition-all duration-300">
+          <div className="rounded-xl border border-slate-200 dark:border-slate-800/80 bg-white dark:bg-[#111927] p-5 shadow-sm hover:shadow-md transition-all duration-300">
             <div className="flex items-center justify-between">
               <div>
-                <p className="text-xs font-semibold text-[#64748B] uppercase tracking-wide">
+                <p className="text-xs font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wide">
                   Available Balance
                 </p>
                 <div className="flex items-baseline gap-1 mt-1.5">
-                  <span className="text-2xl font-bold text-[#002185]">
+                  <span className="text-2xl font-bold text-[#002185] dark:text-blue-400">
                     {balanceStats.availableDays}
                   </span>
-                  <span className="text-xs font-semibold text-[#64748B]">
+                  <span className="text-xs font-semibold text-slate-500 dark:text-slate-400">
                     / {balanceStats.totalDays} Days
                   </span>
                 </div>
               </div>
-              <div className="w-11 h-11 rounded-xl bg-[#002185]/10 flex items-center justify-center text-[#002185]">
+              <div className="w-11 h-11 rounded-xl bg-[#002185]/10 dark:bg-blue-900/30 flex items-center justify-center text-[#002185] dark:text-blue-400">
                 <ShieldCheck className="w-5 h-5" />
               </div>
             </div>
-            <div className="mt-3 w-full bg-[#F1F5F9] rounded-full h-1.5 overflow-hidden">
+            <div className="mt-3 w-full bg-slate-100 dark:bg-[#162033] rounded-full h-1.5 overflow-hidden">
               <div
-                className="bg-[#002185] h-1.5 rounded-full transition-all duration-500"
+                className="bg-[#002185] dark:bg-blue-500 h-1.5 rounded-full transition-all duration-500"
                 style={{
                   width: `${Math.min(100, Math.max(0, (balanceStats.availableDays / (balanceStats.totalDays || 20)) * 100))}%`,
                 }}
@@ -381,85 +381,85 @@ const EmployeeLeave = () => {
           </div>
 
           {/* Approved Requests */}
-          <div className="rounded-xl border border-[#E2E8F0] bg-[#FFFFFF] p-5 shadow-sm hover:shadow-md hover:border-[#16A34A] transition-all duration-300">
+          <div className="rounded-xl border border-slate-200 dark:border-slate-800/80 bg-white dark:bg-[#111927] p-5 shadow-sm hover:shadow-md transition-all duration-300">
             <div className="flex items-center justify-between">
               <div>
-                <p className="text-xs font-semibold text-[#64748B] uppercase tracking-wide">
+                <p className="text-xs font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wide">
                   Approved Leaves
                 </p>
                 <div className="flex items-baseline gap-1 mt-1.5">
-                  <span className="text-2xl font-bold text-[#16A34A]">
+                  <span className="text-2xl font-bold text-emerald-600 dark:text-emerald-400">
                     {approvedRequests}
                   </span>
-                  <span className="text-xs text-[#16A34A] font-semibold">
+                  <span className="text-xs text-emerald-600 dark:text-emerald-400 font-semibold">
                     ({balanceStats.usedDays} Days used)
                   </span>
                 </div>
               </div>
-              <div className="w-11 h-11 rounded-xl bg-[#F0FDF4] flex items-center justify-center text-[#16A34A]">
+              <div className="w-11 h-11 rounded-xl bg-emerald-50 dark:bg-emerald-950/40 flex items-center justify-center text-emerald-600 dark:text-emerald-400">
                 <CheckCircle className="w-5 h-5" />
               </div>
             </div>
-            <p className="text-[11px] text-[#64748B] mt-2">
+            <p className="text-[11px] text-slate-500 dark:text-slate-400 mt-2">
               Excluded from attendance penalties
             </p>
           </div>
 
           {/* Pending Approval */}
-          <div className="rounded-xl border-2 border-[#F59E0B]/40 bg-[#FFFFFF] p-5 shadow-sm hover:shadow-md hover:border-[#F59E0B] transition-all duration-300">
+          <div className="rounded-xl border border-amber-300 dark:border-amber-800/60 bg-white dark:bg-[#111927] p-5 shadow-sm hover:shadow-md transition-all duration-300">
             <div className="flex items-center justify-between">
               <div>
-                <p className="text-xs font-semibold text-[#B45309] uppercase tracking-wide flex items-center gap-1">
+                <p className="text-xs font-semibold text-amber-700 dark:text-amber-400 uppercase tracking-wide flex items-center gap-1">
                   <span>Pending Approval</span>
                   {pendingRequests > 0 && (
-                    <span className="w-2 h-2 rounded-full bg-[#F59E0B] animate-pulse" />
+                    <span className="w-2 h-2 rounded-full bg-amber-500 animate-pulse" />
                   )}
                 </p>
-                <p className="text-2xl font-bold text-[#D97706] mt-1.5">
+                <p className="text-2xl font-bold text-amber-600 dark:text-amber-400 mt-1.5">
                   {pendingRequests}
                 </p>
               </div>
-              <div className="w-11 h-11 rounded-xl bg-[#FFFBEB] flex items-center justify-center text-[#D97706]">
+              <div className="w-11 h-11 rounded-xl bg-amber-50 dark:bg-amber-950/40 flex items-center justify-center text-amber-600 dark:text-amber-400">
                 <ClockIcon className="w-5 h-5" />
               </div>
             </div>
-            <p className="text-[11px] text-[#64748B] mt-2">
+            <p className="text-[11px] text-slate-500 dark:text-slate-400 mt-2">
               Awaiting manager review & approval
             </p>
           </div>
 
           {/* Rejected */}
-          <div className="rounded-xl border border-[#E2E8F0] bg-[#FFFFFF] p-5 shadow-sm hover:shadow-md hover:border-[#DC2626] transition-all duration-300">
+          <div className="rounded-xl border border-slate-200 dark:border-slate-800/80 bg-white dark:bg-[#111927] p-5 shadow-sm hover:shadow-md transition-all duration-300">
             <div className="flex items-center justify-between">
               <div>
-                <p className="text-xs font-semibold text-[#64748B] uppercase tracking-wide">
+                <p className="text-xs font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wide">
                   Rejected / Unapproved
                 </p>
-                <p className="text-2xl font-bold text-[#DC2626] mt-1.5">
+                <p className="text-2xl font-bold text-rose-600 dark:text-rose-400 mt-1.5">
                   {rejectedRequests}
                 </p>
               </div>
-              <div className="w-11 h-11 rounded-xl bg-[#FEF2F2] flex items-center justify-center text-[#DC2626]">
+              <div className="w-11 h-11 rounded-xl bg-rose-50 dark:bg-rose-950/40 flex items-center justify-center text-rose-600 dark:text-rose-400">
                 <XCircle className="w-5 h-5" />
               </div>
             </div>
-            <p className="text-[11px] text-[#64748B] mt-2">
+            <p className="text-[11px] text-slate-500 dark:text-slate-400 mt-2">
               View admin remarks in details
             </p>
           </div>
         </div>
 
         {/* Filter and Search Bar */}
-        <div className="bg-[#FFFFFF] border border-[#E2E8F0] rounded-xl p-3.5 shadow-sm">
+        <div className="bg-white dark:bg-[#111927] border border-slate-200 dark:border-slate-800/80 rounded-xl p-3.5 shadow-sm">
           <div className="flex flex-col sm:flex-row items-center justify-between gap-3">
             <div className="w-full sm:flex-1 relative">
-              <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 w-4 h-4 text-[#94A3B8]" />
+              <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
               <input
                 type="text"
                 placeholder="Search your leave requests by type or reason..."
                 value={searchTerm}
                 onChange={(e) => setSearchTerm(e.target.value)}
-                className="w-full pl-10 pr-4 py-2 bg-[#F8FAFC] border border-[#E2E8F0] rounded-lg text-xs font-medium text-[#0F172A] placeholder-[#94A3B8] focus:outline-none focus:ring-2 focus:ring-[#002185]"
+                className="w-full pl-10 pr-4 py-2 bg-slate-50 dark:bg-[#162033] border border-slate-200 dark:border-slate-700/60 rounded-lg text-xs font-medium text-slate-900 dark:text-slate-100 placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-[#002185] dark:focus:ring-blue-500"
               />
             </div>
 
@@ -472,8 +472,8 @@ const EmployeeLeave = () => {
                   onClick={() => setStatusFilter(status)}
                   className={`px-3 py-1.5 rounded-lg text-xs font-bold transition cursor-pointer shrink-0 ${
                     statusFilter === status
-                      ? "bg-[#002185] text-white shadow-2xs"
-                      : "bg-[#F8FAFC] text-[#64748B] hover:bg-[#F1F5F9] hover:text-[#002185] border border-[#E2E8F0]"
+                      ? "bg-[#002185] dark:bg-blue-600 text-white shadow-2xs"
+                      : "bg-slate-50 dark:bg-[#162033] text-slate-600 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800 hover:text-[#002185] dark:hover:text-white border border-slate-200 dark:border-slate-700/60"
                   }`}
                 >
                   {status}
@@ -499,12 +499,12 @@ const EmployeeLeave = () => {
               return (
                 <div
                   key={leaveId || Math.random()}
-                  className={`rounded-xl border bg-[#FFFFFF] p-5 shadow-sm hover:shadow-md transition-all duration-300 ${
+                  className={`rounded-xl border bg-white dark:bg-[#111927] p-5 shadow-sm hover:shadow-md transition-all duration-300 ${
                     isApproved
-                      ? "border-emerald-200/80 hover:border-emerald-400"
+                      ? "border-emerald-200/80 dark:border-emerald-800/60 hover:border-emerald-400 dark:hover:border-emerald-600"
                       : isRejected
-                      ? "border-rose-200/80 hover:border-rose-400"
-                      : "border-amber-200/80 hover:border-amber-400"
+                      ? "border-rose-200/80 dark:border-rose-800/60 hover:border-rose-400 dark:hover:border-rose-600"
+                      : "border-amber-200/80 dark:border-amber-800/60 hover:border-amber-400 dark:hover:border-amber-600"
                   }`}
                 >
                   {/* Top Section */}
@@ -514,10 +514,10 @@ const EmployeeLeave = () => {
                       <div
                         className={`w-10 h-10 rounded-xl flex items-center justify-center shrink-0 ${
                           isApproved
-                            ? "bg-[#F0FDF4] text-[#16A34A]"
+                            ? "bg-emerald-50 dark:bg-emerald-950/40 text-emerald-600 dark:text-emerald-400"
                             : isRejected
-                            ? "bg-[#FEF2F2] text-[#DC2626]"
-                            : "bg-[#FFFBEB] text-[#D97706]"
+                            ? "bg-rose-50 dark:bg-rose-950/40 text-rose-600 dark:text-rose-400"
+                            : "bg-amber-50 dark:bg-amber-950/40 text-amber-600 dark:text-amber-400"
                         }`}
                       >
                         {getStatusIcon(leave.status)}
@@ -525,20 +525,20 @@ const EmployeeLeave = () => {
 
                       <div>
                         <div className="flex items-center gap-2">
-                          <h3 className="font-bold text-[#002185] text-sm">
+                          <h3 className="font-bold text-slate-900 dark:text-white text-sm">
                             {leave.leaveType || "Leave Request"}
                           </h3>
-                          <span className="text-[11px] font-bold text-[#ff5500] bg-[#ff5500]/10 px-2 py-0.5 rounded-md">
+                          <span className="text-[11px] font-bold text-amber-700 dark:text-amber-400 bg-amber-50 dark:bg-amber-950/40 border border-amber-200 dark:border-amber-800/60 px-2 py-0.5 rounded-md">
                             {daysCount} Day{daysCount !== 1 ? "s" : ""}
                           </span>
                         </div>
-                        <p className="text-xs text-[#64748B] flex items-center gap-1.5 mt-0.5">
-                          <Calendar className="w-3.5 h-3.5 text-[#002185]" />
-                          <span className="font-semibold text-[#0F172A]">
+                        <p className="text-xs text-slate-500 dark:text-slate-400 flex items-center gap-1.5 mt-0.5">
+                          <Calendar className="w-3.5 h-3.5 text-[#002185] dark:text-blue-400" />
+                          <span className="font-semibold text-slate-800 dark:text-slate-200">
                             {formatDate(leave.startDate)}
                           </span>
                           <span>to</span>
-                          <span className="font-semibold text-[#0F172A]">
+                          <span className="font-semibold text-slate-800 dark:text-slate-200">
                             {formatDate(leave.endDate)}
                           </span>
                         </p>
@@ -557,7 +557,7 @@ const EmployeeLeave = () => {
                       <button
                         type="button"
                         onClick={() => handleViewDetails(leave)}
-                        className="flex items-center gap-1.5 rounded-lg border border-[#E2E8F0] px-3 py-1.5 text-xs font-semibold text-[#002185] hover:bg-[#F8FAFC] hover:border-[#002185] transition cursor-pointer"
+                        className="flex items-center gap-1.5 rounded-lg border border-slate-200 dark:border-slate-700/60 px-3 py-1.5 text-xs font-semibold text-[#002185] dark:text-blue-400 hover:bg-slate-50 dark:hover:bg-[#162033] transition cursor-pointer"
                       >
                         <Eye className="w-3.5 h-3.5" />
                         <span>Details</span>
@@ -567,11 +567,11 @@ const EmployeeLeave = () => {
 
                   {/* Stated Reason */}
                   {leave.reason && (
-                    <div className="mt-3 rounded-lg bg-[#F8FAFC] px-3.5 py-2.5 border border-[#E2E8F0]">
-                      <p className="text-[11px] font-semibold text-[#64748B]">
+                    <div className="mt-3 rounded-lg bg-slate-50 dark:bg-[#162033] px-3.5 py-2.5 border border-slate-200 dark:border-slate-700/60">
+                      <p className="text-[11px] font-semibold text-slate-500 dark:text-slate-400">
                         Applicant Reason:
                       </p>
-                      <p className="mt-0.5 text-xs text-[#334155] leading-relaxed">
+                      <p className="mt-0.5 text-xs text-slate-800 dark:text-slate-200 leading-relaxed">
                         {leave.reason}
                       </p>
                     </div>
@@ -582,10 +582,10 @@ const EmployeeLeave = () => {
                     <div
                       className={`mt-3 rounded-lg px-3.5 py-2.5 text-xs border flex flex-col sm:flex-row sm:items-center justify-between gap-2 ${
                         isApproved
-                          ? "bg-[#F0FDF4]/60 border-[#16A34A]/20 text-[#166534]"
+                          ? "bg-emerald-50/60 dark:bg-emerald-950/20 border-emerald-200/60 dark:border-emerald-800/40 text-emerald-800 dark:text-emerald-300"
                           : isRejected
-                          ? "bg-[#FEF2F2]/60 border-[#DC2626]/20 text-[#991B1B]"
-                          : "bg-[#FFFBEB]/60 border-[#F59E0B]/20 text-[#92400E]"
+                          ? "bg-rose-50/60 dark:bg-rose-950/20 border-rose-200/60 dark:border-rose-800/40 text-rose-800 dark:text-rose-300"
+                          : "bg-amber-50/60 dark:bg-amber-950/20 border-amber-200/60 dark:border-amber-800/40 text-amber-800 dark:text-amber-300"
                       }`}
                     >
                       <div className="flex items-start sm:items-center gap-2">
@@ -604,7 +604,7 @@ const EmployeeLeave = () => {
                       </div>
 
                       {reviewDate && (
-                        <span className="text-[11px] text-[#64748B] font-medium shrink-0">
+                        <span className="text-[11px] text-slate-500 dark:text-slate-400 font-medium shrink-0">
                           Reviewed: {formatDate(reviewDate)}
                         </span>
                       )}
@@ -616,16 +616,16 @@ const EmployeeLeave = () => {
           </div>
         ) : (
           /* Empty State */
-          <div className="rounded-2xl border-2 border-dashed border-[#CBD5E1] bg-[#FFFFFF] py-16 px-4 text-center shadow-xs">
-            <div className="w-16 h-16 rounded-2xl bg-[#F8FAFC] border border-[#E2E8F0] flex items-center justify-center mx-auto mb-4 text-[#002185]">
-              <CalendarDays className="w-8 h-8 text-[#002185]" />
+          <div className="rounded-2xl border-2 border-dashed border-slate-200 dark:border-slate-800 bg-white dark:bg-[#111927] py-16 px-4 text-center shadow-xs">
+            <div className="w-16 h-16 rounded-2xl bg-slate-50 dark:bg-[#162033] border border-slate-200 dark:border-slate-700/60 flex items-center justify-center mx-auto mb-4 text-[#002185] dark:text-blue-400">
+              <CalendarDays className="w-8 h-8 text-[#002185] dark:text-blue-400" />
             </div>
-            <h3 className="text-lg font-bold text-[#002185]">
+            <h3 className="text-lg font-bold text-slate-900 dark:text-white">
               {searchTerm || statusFilter !== "All"
                 ? "No matching leave requests"
                 : "No leave requests submitted yet"}
             </h3>
-            <p className="text-xs text-[#64748B] mt-1 max-w-md mx-auto leading-relaxed">
+            <p className="text-xs text-slate-500 dark:text-slate-400 mt-1 max-w-md mx-auto leading-relaxed">
               {searchTerm || statusFilter !== "All"
                 ? "Try clearing your search query or selecting 'All' statuses to view your complete record history."
                 : "When you submit a leave application, you can track its review progress in real-time right here without needing to refresh."}
@@ -638,7 +638,7 @@ const EmployeeLeave = () => {
                     setSearchTerm("");
                     setStatusFilter("All");
                   }}
-                  className="px-4 py-2 rounded-xl bg-[#F1F5F9] text-xs font-bold text-[#002185] hover:bg-[#E2E8F0] transition"
+                  className="px-4 py-2 rounded-xl bg-slate-100 dark:bg-[#162033] text-xs font-bold text-slate-700 dark:text-slate-300 hover:bg-slate-200 dark:hover:bg-slate-800 transition cursor-pointer"
                 >
                   Clear Filters
                 </button>
@@ -646,7 +646,7 @@ const EmployeeLeave = () => {
                 <button
                   type="button"
                   onClick={() => setShowLeaveModal(true)}
-                  className="flex items-center gap-2 rounded-xl bg-[#002185] hover:bg-[#ff5500] px-5 py-2.5 text-xs font-bold text-white shadow-xs transition"
+                  className="flex items-center gap-2 rounded-xl bg-[#002185] hover:bg-[#001760] dark:bg-blue-600 dark:hover:bg-blue-700 px-5 py-2.5 text-xs font-bold text-white shadow-xs transition cursor-pointer"
                 >
                   <Plus className="h-4 w-4" />
                   <span>+ Apply for Leave</span>
@@ -659,22 +659,22 @@ const EmployeeLeave = () => {
 
       {/* Leave Details Modal */}
       {showDetailsModal && selectedLeave && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-xs animate-in fade-in duration-200">
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-xs animate-in fade-in duration-200">
           <div
             onClick={(e) => e.stopPropagation()}
-            className="relative z-10 w-full max-w-xl max-h-[90vh] overflow-y-auto rounded-2xl bg-[#FFFFFF] shadow-2xl border border-[#E2E8F0] space-y-5 p-6 animate-in zoom-in-95 duration-200"
+            className="relative z-10 w-full max-w-xl max-h-[90vh] overflow-y-auto rounded-2xl bg-white dark:bg-[#111927] shadow-2xl border border-slate-200 dark:border-slate-800 space-y-5 p-6 animate-in zoom-in-95 duration-200"
           >
             {/* Header */}
-            <div className="flex items-center justify-between border-b border-[#E2E8F0] pb-4">
+            <div className="flex items-center justify-between border-b border-slate-200 dark:border-slate-800 pb-4">
               <div className="flex items-center gap-3">
-                <div className="w-10 h-10 rounded-xl bg-[#002185] flex items-center justify-center text-white">
+                <div className="w-10 h-10 rounded-xl bg-[#002185] dark:bg-blue-600 flex items-center justify-center text-white">
                   <CalendarDays className="w-5 h-5" />
                 </div>
                 <div>
-                  <h2 className="text-lg font-bold text-[#002185]">
+                  <h2 className="text-lg font-bold text-slate-900 dark:text-white">
                     Leave Request Details
                   </h2>
-                  <p className="text-xs text-[#64748B]">
+                  <p className="text-xs text-slate-500 dark:text-slate-400">
                     ID: {selectedLeave.id || selectedLeave._id || "N/A"}
                   </p>
                 </div>
@@ -683,7 +683,7 @@ const EmployeeLeave = () => {
               <button
                 type="button"
                 onClick={() => setShowDetailsModal(false)}
-                className="rounded-lg p-1.5 text-[#64748B] hover:bg-[#F8FAFC] hover:text-[#DC2626] transition cursor-pointer"
+                className="rounded-lg p-1.5 text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800 hover:text-rose-600 transition cursor-pointer"
               >
                 <X className="h-5 w-5" />
               </button>
@@ -693,55 +693,55 @@ const EmployeeLeave = () => {
             <div
               className={`rounded-xl p-4 border flex items-center justify-between ${
                 (selectedLeave.status || "").toLowerCase() === "approved"
-                  ? "bg-[#F0FDF4] border-[#16A34A]/25"
+                  ? "bg-emerald-50 dark:bg-emerald-950/30 border-emerald-200 dark:border-emerald-800/60"
                   : (selectedLeave.status || "").toLowerCase() === "rejected"
-                  ? "bg-[#FEF2F2] border-[#DC2626]/25"
-                  : "bg-[#FFFBEB] border-[#F59E0B]/25"
+                  ? "bg-rose-50 dark:bg-rose-950/30 border-rose-200 dark:border-rose-800/60"
+                  : "bg-amber-50 dark:bg-amber-950/30 border-amber-200 dark:border-amber-800/60"
               }`}
             >
               <div className="flex items-center gap-3">
-                <div className="w-9 h-9 rounded-full flex items-center justify-center bg-white shadow-2xs">
+                <div className="w-9 h-9 rounded-full flex items-center justify-center bg-white dark:bg-[#162033] shadow-2xs">
                   {getStatusIcon(selectedLeave.status)}
                 </div>
                 <div>
-                  <p className="text-xs font-semibold text-[#64748B]">Current Status</p>
+                  <p className="text-xs font-semibold text-slate-500 dark:text-slate-400">Current Status</p>
                   <p className={`text-base font-bold capitalize ${getStatusColor(selectedLeave.status)}`}>
                     {selectedLeave.status || "Pending"}
                   </p>
                 </div>
               </div>
 
-              <span className="text-xs font-bold px-3 py-1 rounded-full bg-white border border-[#E2E8F0] text-[#002185]">
+              <span className="text-xs font-bold px-3 py-1 rounded-full bg-white dark:bg-[#162033] border border-slate-200 dark:border-slate-700 text-slate-900 dark:text-slate-100">
                 {selectedLeave.totalDays || selectedLeave.days || 1} Day(s)
               </span>
             </div>
 
             {/* Leave Details Grid */}
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-3.5 text-xs">
-              <div className="p-3.5 bg-[#F8FAFC] rounded-xl border border-[#E2E8F0]">
-                <p className="text-[#64748B] font-medium">Leave Category</p>
-                <p className="text-sm font-bold text-[#002185] mt-1">
+              <div className="p-3.5 bg-slate-50 dark:bg-[#162033] rounded-xl border border-slate-200 dark:border-slate-700/60">
+                <p className="text-slate-500 dark:text-slate-400 font-medium">Leave Category</p>
+                <p className="text-sm font-bold text-slate-900 dark:text-slate-100 mt-1">
                   {selectedLeave.leaveType || "Annual Leave"}
                 </p>
               </div>
 
-              <div className="p-3.5 bg-[#F8FAFC] rounded-xl border border-[#E2E8F0]">
-                <p className="text-[#64748B] font-medium">Leave Period</p>
-                <p className="text-sm font-bold text-[#002185] mt-1">
+              <div className="p-3.5 bg-slate-50 dark:bg-[#162033] rounded-xl border border-slate-200 dark:border-slate-700/60">
+                <p className="text-slate-500 dark:text-slate-400 font-medium">Leave Period</p>
+                <p className="text-sm font-bold text-slate-900 dark:text-slate-100 mt-1">
                   {formatDate(selectedLeave.startDate)} — {formatDate(selectedLeave.endDate)}
                 </p>
               </div>
 
-              <div className="p-3.5 bg-[#F8FAFC] rounded-xl border border-[#E2E8F0]">
-                <p className="text-[#64748B] font-medium">Submitted Date</p>
-                <p className="text-sm font-bold text-[#0F172A] mt-1">
+              <div className="p-3.5 bg-slate-50 dark:bg-[#162033] rounded-xl border border-slate-200 dark:border-slate-700/60">
+                <p className="text-slate-500 dark:text-slate-400 font-medium">Submitted Date</p>
+                <p className="text-sm font-bold text-slate-900 dark:text-slate-100 mt-1">
                   {formatDateLong(selectedLeave.requestedDate || selectedLeave.createdAt)}
                 </p>
               </div>
 
-              <div className="p-3.5 bg-[#F8FAFC] rounded-xl border border-[#E2E8F0]">
-                <p className="text-[#64748B] font-medium">Review Status</p>
-                <p className="text-sm font-bold text-[#0F172A] mt-1">
+              <div className="p-3.5 bg-slate-50 dark:bg-[#162033] rounded-xl border border-slate-200 dark:border-slate-700/60">
+                <p className="text-slate-500 dark:text-slate-400 font-medium">Review Status</p>
+                <p className="text-sm font-bold text-slate-900 dark:text-slate-100 mt-1">
                   {selectedLeave.reviewedAt || selectedLeave.approvedAt
                     ? `Reviewed on ${formatDate(selectedLeave.reviewedAt || selectedLeave.approvedAt)}`
                     : "Pending Review"}
@@ -752,8 +752,8 @@ const EmployeeLeave = () => {
             {/* Stated Reason */}
             {selectedLeave.reason && (
               <div className="space-y-1.5">
-                <p className="text-xs font-bold text-[#64748B]">Applicant Reason:</p>
-                <div className="p-3.5 bg-[#F8FAFC] rounded-xl border border-[#E2E8F0] text-xs text-[#0F172A] leading-relaxed">
+                <p className="text-xs font-bold text-slate-500 dark:text-slate-400">Applicant Reason:</p>
+                <div className="p-3.5 bg-slate-50 dark:bg-[#162033] rounded-xl border border-slate-200 dark:border-slate-700/60 text-xs text-slate-800 dark:text-slate-200 leading-relaxed">
                   {selectedLeave.reason}
                 </div>
               </div>
@@ -762,22 +762,22 @@ const EmployeeLeave = () => {
             {/* Admin Notes / Remarks */}
             {(selectedLeave.adminNotes || selectedLeave.adminRemark) && (
               <div className="space-y-1.5">
-                <p className="text-xs font-bold text-[#002185] flex items-center gap-1.5">
-                  <MessageSquare className="w-3.5 h-3.5 text-[#002185]" />
+                <p className="text-xs font-bold text-slate-700 dark:text-slate-300 flex items-center gap-1.5">
+                  <MessageSquare className="w-3.5 h-3.5 text-blue-600 dark:text-blue-400" />
                   <span>Management Feedback / Notes:</span>
                 </p>
-                <div className="p-3.5 bg-blue-50/50 rounded-xl border border-blue-200 text-xs text-[#0F172A] leading-relaxed">
+                <div className="p-3.5 bg-blue-50/50 dark:bg-blue-950/30 rounded-xl border border-blue-200 dark:border-blue-800 text-xs text-slate-800 dark:text-slate-200 leading-relaxed">
                   "{selectedLeave.adminNotes || selectedLeave.adminRemark}"
                 </div>
               </div>
             )}
 
             {/* Actions */}
-            <div className="flex justify-end pt-3 border-t border-[#E2E8F0]">
+            <div className="flex justify-end pt-3 border-t border-slate-200 dark:border-slate-800">
               <button
                 type="button"
                 onClick={() => setShowDetailsModal(false)}
-                className="px-5 py-2.5 rounded-xl bg-[#002185] text-white text-xs font-bold hover:bg-[#ff5500] transition cursor-pointer"
+                className="px-5 py-2.5 rounded-xl bg-[#002185] hover:bg-[#001760] dark:bg-blue-600 dark:hover:bg-blue-700 text-white text-xs font-bold transition cursor-pointer"
               >
                 Close Details
               </button>

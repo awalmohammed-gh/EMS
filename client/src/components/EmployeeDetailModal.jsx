@@ -182,16 +182,16 @@ export const EmployeeDetailModal = ({
 
   return (
     <div
-      className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-xs p-3 sm:p-4 animate-fade-in"
+      className="fixed inset-0 z-50 flex items-end sm:items-center justify-center bg-slate-950/60 backdrop-blur-sm p-0 sm:p-4 animate-fade-in"
       onClick={onClose}
     >
       <div
         id="print-employee-profile-card"
-        className="bg-white dark:bg-slate-900 rounded-3xl max-w-2xl w-full overflow-hidden shadow-2xl border border-slate-200 dark:border-slate-800 animate-scale-up flex flex-col max-h-[90vh] print-container"
+        className="bg-white dark:bg-slate-900 rounded-t-[28px] sm:rounded-3xl max-w-2xl w-full overflow-hidden shadow-2xl border border-slate-200 dark:border-slate-800 animate-fade-in flex flex-col max-h-[90vh] print-container"
         onClick={(e) => e.stopPropagation()}
       >
         {/* Header with gradient */}
-        <div className="bg-gradient-to-r from-[#002185] via-blue-800 to-indigo-900 p-5 sm:p-6 text-white relative shrink-0">
+        <div className="bg-gradient-to-r from-[#002185] via-blue-800 to-indigo-900 p-4 sm:p-6 text-white relative shrink-0">
           <div className="flex items-center justify-between no-print mb-3">
             <div className="flex items-center gap-1.5 bg-white/10 backdrop-blur-md px-2.5 py-1 rounded-full text-[11px] font-semibold text-white/90">
               <span>Employee Record Profile</span>
@@ -657,24 +657,24 @@ export const EmployeeDetailModal = ({
         </div>
 
         {/* Modal Footer */}
-        <div className="p-4 bg-slate-50 dark:bg-slate-800/80 border-t border-slate-200 dark:border-slate-700/80 flex items-center justify-between shrink-0 no-print">
-          <div className="flex items-center gap-2">
+        <div className="p-3.5 sm:p-4 bg-slate-50 dark:bg-slate-800/80 border-t border-slate-200 dark:border-slate-700/80 flex flex-col-reverse sm:flex-row sm:items-center sm:justify-between gap-2.5 sm:gap-2 shrink-0 no-print">
+          <div className="flex flex-wrap items-center gap-2">
             {isAdmin && (
               <button
                 type="button"
                 onClick={() => {
                   onDeleteRequest(employee);
                 }}
-                className="px-3 py-2 bg-rose-50 dark:bg-rose-950/40 hover:bg-rose-100 dark:hover:bg-rose-900/40 text-rose-600 dark:text-rose-400 border border-rose-200 dark:border-rose-800/70 text-xs font-bold rounded-xl transition-all flex items-center gap-1.5 cursor-pointer"
+                className="flex-1 sm:flex-initial justify-center px-3 py-2.5 bg-rose-50 dark:bg-rose-950/40 hover:bg-rose-100 dark:hover:bg-rose-900/40 text-rose-600 dark:text-rose-400 border border-rose-200 dark:border-rose-800/70 text-xs font-bold rounded-xl transition-all flex items-center gap-1.5 cursor-pointer text-center"
               >
                 <Trash2 className="w-3.5 h-3.5" />
-                <span>Delete Record</span>
+                <span>Delete</span>
               </button>
             )}
             <button
               type="button"
               onClick={handlePrint}
-              className="px-3 py-2 bg-white dark:bg-slate-900 hover:bg-slate-100 dark:hover:bg-slate-750 text-slate-700 dark:text-slate-200 border border-slate-200 dark:border-slate-700 text-xs font-bold rounded-xl transition-all flex items-center gap-1.5 cursor-pointer shadow-2xs"
+              className="flex-1 sm:flex-initial justify-center px-3 py-2.5 bg-white dark:bg-slate-900 hover:bg-slate-100 dark:hover:bg-slate-750 text-slate-700 dark:text-slate-200 border border-slate-200 dark:border-slate-700 text-xs font-bold rounded-xl transition-all flex items-center gap-1.5 cursor-pointer shadow-2xs text-center"
             >
               <Printer className="w-3.5 h-3.5 text-blue-600 dark:text-blue-400" />
               <span>Print Profile</span>
@@ -684,7 +684,7 @@ export const EmployeeDetailModal = ({
           <button
             type="button"
             onClick={onClose}
-            className="px-4 py-2 bg-[#002185] hover:bg-blue-700 text-white text-xs font-bold rounded-xl transition-all cursor-pointer shadow-xs"
+            className="w-full sm:w-auto px-4 py-2.5 bg-[#002185] hover:bg-blue-700 text-white text-xs font-bold rounded-xl transition-all cursor-pointer shadow-xs text-center"
           >
             Close Profile
           </button>

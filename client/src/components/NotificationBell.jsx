@@ -276,7 +276,7 @@ export const NotificationBell = ({ role = "admin", className = "", userId }) => 
               exit={{ opacity: 0, scale: 0.95, y: -10 }}
               transition={{ duration: 0.2, ease: [0.16, 1, 0.3, 1] }}
               style={{ transformOrigin: "top right" }}
-              className="absolute right-0 mt-3 w-[360px] sm:w-[440px] max-w-[calc(100vw-28px)] bg-white dark:bg-slate-900 rounded-2xl border border-[#E2E8F0] dark:border-slate-800 shadow-2xl z-50 overflow-hidden"
+              className="fixed inset-x-3 sm:inset-x-auto top-16 sm:absolute sm:right-0 sm:mt-3 w-auto sm:w-96 md:w-[420px] bg-white dark:bg-slate-900 rounded-2xl border border-[#E2E8F0] dark:border-slate-800 shadow-2xl z-50 overflow-hidden"
             >
               {/* Header */}
               <div className="p-4 px-5 border-b border-[#E2E8F0] dark:border-slate-800 bg-white dark:bg-slate-900 flex items-center justify-between">
@@ -472,7 +472,7 @@ export const NotificationBell = ({ role = "admin", className = "", userId }) => 
               </div>
 
               {/* Notification List Body */}
-              <div className="max-h-[380px] overflow-y-auto divide-y divide-[#F1F5F9] dark:divide-slate-800">
+              <div className="max-h-[60vh] sm:max-h-[380px] overflow-y-auto divide-y divide-slate-100 dark:divide-slate-800">
                 {filteredList.length === 0 ? (
                   <div className="py-12 px-6 text-center">
                     <div className="w-12 h-12 rounded-2xl bg-[#F8FAFC] dark:bg-slate-800 border border-[#E2E8F0] dark:border-slate-700 flex items-center justify-center mx-auto mb-3 text-[#94A3B8]">

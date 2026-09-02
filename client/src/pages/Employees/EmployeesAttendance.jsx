@@ -18,6 +18,7 @@ import {
   Lock,
   Unlock,
   ShieldCheck,
+  Printer,
 } from "lucide-react";
 import Toaster from "../../ui/Toaster";
 import { useManagement } from "../../context/ManagementContextProvider";
@@ -34,6 +35,7 @@ import WeeklyAttendanceChart from "../../components/WeeklyAttendanceChart";
 import AttendanceIntensityHeatmap from "../../components/AttendanceIntensityHeatmap";
 import AttendanceMonthlyCalendar from "../../components/AttendanceMonthlyCalendar";
 import GlobalDateRangePicker from "../../components/GlobalDateRangePicker";
+import AttendanceReportModal from "../../components/modal/AttendanceReportModal";
 import {
   ResponsiveContainer,
   BarChart,
@@ -150,6 +152,7 @@ const EmployeesAttendance = () => {
   const [endDateFilter, setEndDateFilter] = useState("");
   const [dateRangePreset, setDateRangePreset] = useState("all");
   const [activeView, setActiveView] = useState("heatmap"); // 'heatmap' | 'table' | 'chart'
+  const [showPrintReport, setShowPrintReport] = useState(false);
 
   // Live ticking digital clock
   const [currentTime, setCurrentTime] = useState(new Date());
@@ -849,7 +852,7 @@ const EmployeesAttendance = () => {
       {/* SECTION 1: MODERN HERO CARD & SHIFT CONTROL HEADER */}
       <div
         id="hero-attendance-clock-card"
-        className="w-full bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-3xl p-6 shadow-sm space-y-6"
+        className="w-full bg-white dark:bg-[#111927] border border-slate-200 dark:border-slate-800/80 rounded-3xl p-6 shadow-sm space-y-6"
       >
         {/* Top Row (Status & Live Time Integration) */}
         <div className="flex flex-col xl:flex-row xl:items-center justify-between gap-5 pb-6 border-b border-slate-100 dark:border-slate-800/80">
@@ -858,13 +861,13 @@ const EmployeesAttendance = () => {
             <div className="flex flex-wrap items-center gap-2.5">
               {/* Shift status pill */}
               {currentStep === 1 && (
-                <div className="inline-flex items-center gap-2 px-3.5 py-1.5 rounded-full text-xs font-semibold bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-400 border border-slate-200 dark:border-slate-700">
+                <div className="inline-flex items-center gap-2 px-3.5 py-1.5 rounded-full text-xs font-semibold bg-slate-100 dark:bg-[#162033] text-slate-600 dark:text-slate-300 border border-slate-200 dark:border-slate-700/60">
                   <span className="w-2 h-2 rounded-full bg-slate-400" />
                   <span>Not Clocked In Today</span>
                 </div>
               )}
               {currentStep === 2 && (
-                <div className="inline-flex items-center gap-2 px-3.5 py-1.5 rounded-full text-xs font-semibold bg-emerald-500/10 dark:bg-emerald-950/50 text-emerald-700 dark:text-emerald-300 border border-emerald-200 dark:border-emerald-800/80 shadow-xs">
+                <div className="inline-flex items-center gap-2 px-3.5 py-1.5 rounded-full text-xs font-semibold bg-emerald-500/10 dark:bg-emerald-950/40 text-emerald-700 dark:text-emerald-300 border border-emerald-200 dark:border-emerald-800/80 shadow-xs">
                   <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse" />
                   <span>
                     Currently Working · Clocked in at {formatTime(attendanceData.clockIn)}
@@ -872,7 +875,7 @@ const EmployeesAttendance = () => {
                 </div>
               )}
               {currentStep === 3 && (
-                <div className="inline-flex items-center gap-2 px-3.5 py-1.5 rounded-full text-xs font-semibold bg-emerald-500/10 dark:bg-emerald-950/50 text-emerald-700 dark:text-emerald-300 border border-emerald-200 dark:border-emerald-800/80 shadow-xs">
+                <div className="inline-flex items-center gap-2 px-3.5 py-1.5 rounded-full text-xs font-semibold bg-emerald-500/10 dark:bg-emerald-950/40 text-emerald-700 dark:text-emerald-300 border border-emerald-200 dark:border-emerald-800/80 shadow-xs">
                   <span className="w-2 h-2 rounded-full bg-emerald-500 animate-ping" />
                   <span>
                     Shift Closing Time Reached · Ready to Clock Out
@@ -880,7 +883,7 @@ const EmployeesAttendance = () => {
                 </div>
               )}
               {currentStep === 4 && (
-                <div className="inline-flex items-center gap-2 px-3.5 py-1.5 rounded-full text-xs font-semibold bg-emerald-500/10 dark:bg-emerald-950/50 text-emerald-700 dark:text-emerald-300 border border-emerald-200 dark:border-emerald-800/80">
+                <div className="inline-flex items-center gap-2 px-3.5 py-1.5 rounded-full text-xs font-semibold bg-emerald-500/10 dark:bg-emerald-950/40 text-emerald-700 dark:text-emerald-300 border border-emerald-200 dark:border-emerald-800/80">
                   <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600 dark:text-emerald-400" />
                   <span>
                     Shift Completed · Checked out at {formatTime(attendanceData.clockOut)}
@@ -893,7 +896,7 @@ const EmployeesAttendance = () => {
                 attendanceData.lateMinutes > 0 || (attendanceData.status || "").toLowerCase() === "late" ? (
                   <div
                     id="attendance-status-badge-late"
-                    className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-semibold bg-amber-50 text-amber-800 dark:bg-amber-950/40 dark:text-amber-300 border border-amber-200 dark:border-amber-800 shadow-xs"
+                    className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-semibold bg-amber-50 text-amber-800 dark:bg-amber-950/40 dark:text-amber-300 border border-amber-200 dark:border-amber-800/60 shadow-xs"
                   >
                     <AlertTriangle className="w-3.5 h-3.5 text-amber-600 dark:text-amber-400 shrink-0" />
                     <span>Late Arrival ({attendanceData.lateMinutes} min late)</span>
@@ -906,7 +909,7 @@ const EmployeesAttendance = () => {
                 ) : (
                   <div
                     id="attendance-status-badge-ontime"
-                    className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-semibold bg-emerald-50 text-emerald-700 dark:bg-emerald-950/40 dark:text-emerald-300 border border-emerald-200 dark:border-emerald-800 shadow-xs"
+                    className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-semibold bg-emerald-50 text-emerald-700 dark:bg-emerald-950/40 dark:text-emerald-300 border border-emerald-200 dark:border-emerald-800/60 shadow-xs"
                   >
                     <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse" />
                     <span>On Time Check-in</span>
@@ -915,7 +918,7 @@ const EmployeesAttendance = () => {
               )}
 
               {/* Scheduled Shift Pill */}
-              <span className="inline-flex items-center gap-1.5 px-3.5 py-1.5 rounded-full text-xs font-medium bg-slate-50 dark:bg-slate-800/60 text-slate-600 dark:text-slate-300 border border-slate-200 dark:border-slate-700">
+              <span className="inline-flex items-center gap-1.5 px-3.5 py-1.5 rounded-full text-xs font-medium bg-slate-50 dark:bg-[#162033] text-slate-600 dark:text-slate-300 border border-slate-200 dark:border-slate-700/60">
                 <Clock className="w-3.5 h-3.5 text-[#002185] dark:text-blue-400" />
                 Scheduled: {shiftEvaluation.formattedStartTime} – {shiftEvaluation.formattedEndTime}
               </span>
@@ -934,7 +937,7 @@ const EmployeesAttendance = () => {
                 disabled={hasClockedIn || isClocking}
                 className={`flex items-center justify-center gap-2 px-4 sm:px-5 py-2.5 rounded-xl text-xs sm:text-sm font-bold transition-all duration-200 shadow-xs cursor-pointer ${
                   hasClockedIn
-                    ? "bg-slate-100 dark:bg-slate-800 text-slate-500 dark:text-slate-400 border border-slate-200 dark:border-slate-700 cursor-not-allowed"
+                    ? "bg-slate-100 dark:bg-[#162033] text-slate-500 dark:text-slate-400 border border-slate-200 dark:border-slate-700/60 cursor-not-allowed"
                     : isClocking
                     ? "bg-blue-400 text-white cursor-not-allowed"
                     : "bg-[#002185] hover:bg-[#001760] dark:bg-blue-600 dark:hover:bg-blue-700 text-white active:scale-[0.98]"
@@ -971,11 +974,11 @@ const EmployeesAttendance = () => {
                 disabled={!hasClockedIn || hasClockedOut || !isClockOutUnlocked || isClocking}
                 className={`flex items-center justify-center gap-2 px-4 sm:px-5 py-2.5 rounded-xl text-xs sm:text-sm font-bold transition-all duration-200 shadow-xs cursor-pointer ${
                   hasClockedOut
-                    ? "bg-slate-100 dark:bg-slate-800 text-slate-500 dark:text-slate-400 border border-slate-200 dark:border-slate-700 cursor-not-allowed"
+                    ? "bg-slate-100 dark:bg-[#162033] text-slate-500 dark:text-slate-400 border border-slate-200 dark:border-slate-700/60 cursor-not-allowed"
                     : !hasClockedIn
-                    ? "bg-slate-100 dark:bg-slate-800 text-slate-400 dark:text-slate-500 border border-slate-200 dark:border-slate-700 cursor-not-allowed"
+                    ? "bg-slate-100 dark:bg-[#162033] text-slate-400 dark:text-slate-500 border border-slate-200 dark:border-slate-700/60 cursor-not-allowed"
                     : !isClockOutUnlocked
-                    ? "bg-slate-100 dark:bg-slate-800 text-slate-400 dark:text-slate-500 border border-slate-200 dark:border-slate-700 cursor-not-allowed"
+                    ? "bg-slate-100 dark:bg-[#162033] text-slate-400 dark:text-slate-500 border border-slate-200 dark:border-slate-700/60 cursor-not-allowed"
                     : isClocking
                     ? "bg-amber-400 text-white cursor-not-allowed"
                     : "bg-amber-600 hover:bg-amber-700 text-white active:scale-[0.98]"
@@ -1023,7 +1026,7 @@ const EmployeesAttendance = () => {
             className={`p-5 rounded-2xl border transition-all ${
               hasClockedIn
                 ? "bg-emerald-50/30 dark:bg-emerald-950/20 border-emerald-200 dark:border-emerald-800/60"
-                : "bg-slate-50/70 dark:bg-slate-800/40 border-slate-200 dark:border-slate-800"
+                : "bg-slate-50/70 dark:bg-[#162033] border-slate-200 dark:border-slate-700/60"
             }`}
           >
             <div className="flex items-center justify-between text-xs text-slate-500 dark:text-slate-400 mb-2">
@@ -1056,7 +1059,7 @@ const EmployeesAttendance = () => {
                 ? "bg-blue-50/50 dark:bg-blue-950/30 border-blue-200 dark:border-blue-800"
                 : hasClockedOut
                 ? "bg-emerald-50/30 dark:bg-emerald-950/20 border-emerald-200 dark:border-emerald-800/60"
-                : "bg-slate-50/70 dark:bg-slate-800/40 border-slate-200 dark:border-slate-800"
+                : "bg-slate-50/70 dark:bg-[#162033] border-slate-200 dark:border-slate-700/60"
             }`}
           >
             <div className="flex items-center justify-between text-xs text-slate-500 dark:text-slate-400 mb-2">
@@ -1104,7 +1107,7 @@ const EmployeesAttendance = () => {
             className={`p-5 rounded-2xl border transition-all ${
               hasClockedOut
                 ? "bg-emerald-50/30 dark:bg-emerald-950/20 border-emerald-200 dark:border-emerald-800/60"
-                : "bg-slate-50/70 dark:bg-slate-800/40 border-slate-200 dark:border-slate-800"
+                : "bg-slate-50/70 dark:bg-[#162033] border-slate-200 dark:border-slate-700/60"
             }`}
           >
             <div className="flex items-center justify-between text-xs text-slate-500 dark:text-slate-400 mb-2">
@@ -1121,7 +1124,7 @@ const EmployeesAttendance = () => {
                   Unlocked
                 </span>
               ) : (
-                <span className="text-[10px] font-bold uppercase px-2 py-0.5 rounded bg-slate-100 dark:bg-slate-800 text-slate-500 dark:text-slate-400">
+                <span className="text-[10px] font-bold uppercase px-2 py-0.5 rounded bg-slate-100 dark:bg-[#162033] text-slate-500 dark:text-slate-400">
                   Locked
                 </span>
               )}
@@ -1175,7 +1178,7 @@ const EmployeesAttendance = () => {
         {/* Early Clock-Out Override Modal */}
         {showOverrideModal && (
           <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-xs animate-in fade-in duration-200">
-            <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl max-w-md w-full p-6 shadow-2xl space-y-4">
+            <div className="bg-white dark:bg-[#111927] border border-slate-200 dark:border-slate-800 rounded-2xl max-w-md w-full p-6 shadow-2xl space-y-4">
               <div className="flex items-center gap-3">
                 <div className="w-10 h-10 rounded-xl bg-amber-500/10 text-amber-600 dark:text-amber-400 flex items-center justify-center shrink-0 border border-amber-500/20">
                   <ShieldCheck className="w-5 h-5" />
@@ -1224,7 +1227,7 @@ const EmployeesAttendance = () => {
       {/* SECTION 2: SUMMARY METRIC CARDS (MOVED DIRECTLY BELOW ACTION CARD) */}
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
         {/* Metric 1: Attended Days */}
-        <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl p-5 shadow-sm">
+        <div className="bg-white dark:bg-[#111927] border border-slate-200 dark:border-slate-800/80 rounded-2xl p-5 shadow-sm">
           <div className="flex items-center justify-between">
             <div className="w-9 h-9 rounded-xl bg-blue-50 dark:bg-blue-950/60 text-[#002185] dark:text-blue-400 flex items-center justify-center">
               <Calendar className="w-4 h-4" />
@@ -1246,12 +1249,12 @@ const EmployeesAttendance = () => {
         </div>
 
         {/* Metric 2: Late Check-ins */}
-        <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl p-5 shadow-sm">
+        <div className="bg-white dark:bg-[#111927] border border-slate-200 dark:border-slate-800/80 rounded-2xl p-5 shadow-sm">
           <div className="flex items-center justify-between">
             <div className="w-9 h-9 rounded-xl bg-amber-50 dark:bg-amber-950/60 text-amber-600 dark:text-amber-400 flex items-center justify-center">
               <TrendingDown className="w-4 h-4" />
             </div>
-            <span className="text-[11px] font-semibold text-slate-500 dark:text-slate-400 bg-slate-50 dark:bg-slate-800 px-2 py-0.5 rounded-full border border-slate-200 dark:border-slate-700">
+            <span className="text-[11px] font-semibold text-slate-500 dark:text-slate-400 bg-slate-50 dark:bg-[#162033] px-2 py-0.5 rounded-full border border-slate-200 dark:border-slate-700/60">
               MTD Total
             </span>
           </div>
@@ -1271,7 +1274,7 @@ const EmployeesAttendance = () => {
         </div>
 
         {/* Metric 3: Unexcused Absences */}
-        <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl p-5 shadow-sm">
+        <div className="bg-white dark:bg-[#111927] border border-slate-200 dark:border-slate-800/80 rounded-2xl p-5 shadow-sm">
           <div className="flex items-center justify-between">
             <div className="w-9 h-9 rounded-xl bg-rose-50 dark:bg-rose-950/60 text-rose-600 dark:text-rose-400 flex items-center justify-center">
               <AlertTriangle className="w-4 h-4" />
@@ -1293,7 +1296,7 @@ const EmployeesAttendance = () => {
         </div>
 
         {/* Metric 4: Hours Logged This Month */}
-        <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl p-5 shadow-sm">
+        <div className="bg-white dark:bg-[#111927] border border-slate-200 dark:border-slate-800/80 rounded-2xl p-5 shadow-sm">
           <div className="flex items-center justify-between">
             <div className="w-9 h-9 rounded-xl bg-indigo-50 dark:bg-indigo-950/60 text-indigo-600 dark:text-indigo-400 flex items-center justify-center">
               <Clock className="w-4 h-4" />
@@ -1314,7 +1317,7 @@ const EmployeesAttendance = () => {
       </div>
 
       {/* SECTION: WEEKLY WORK HOURS CHART (RECHARTS) */}
-      <div id="weekly-work-hours-section" className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl p-5 shadow-sm space-y-4">
+      <div id="weekly-work-hours-section" className="bg-white dark:bg-[#111927] border border-slate-200 dark:border-slate-800/80 rounded-2xl p-5 shadow-sm space-y-4">
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
           <div className="flex items-center gap-2.5">
             <div className="w-9 h-9 rounded-xl bg-[#002185]/10 dark:bg-blue-900/30 text-[#002185] dark:text-blue-400 flex items-center justify-center">
@@ -1332,7 +1335,7 @@ const EmployeesAttendance = () => {
 
           {/* Quick Metrics Badges */}
           <div className="flex flex-wrap items-center gap-2">
-            <div className="px-3 py-1.5 rounded-xl bg-slate-50 dark:bg-slate-800/80 border border-slate-200 dark:border-slate-700 flex items-center gap-2">
+            <div className="px-3 py-1.5 rounded-xl bg-slate-50 dark:bg-[#162033] border border-slate-200 dark:border-slate-700/60 flex items-center gap-2">
               <span className="text-[11px] font-medium text-slate-500 dark:text-slate-400">Week Total:</span>
               <span className="text-xs font-bold text-slate-900 dark:text-slate-100">
                 {currentWeekWorkHours.totalLoggedHours} / {currentWeekWorkHours.targetWeeklyHours}h
@@ -1421,7 +1424,7 @@ const EmployeesAttendance = () => {
               className={`p-2.5 rounded-xl border transition-all ${
                 item.isToday
                   ? "bg-blue-50/70 dark:bg-blue-950/40 border-blue-300 dark:border-blue-800 shadow-2xs"
-                  : "bg-slate-50/60 dark:bg-slate-800/40 border-slate-200/70 dark:border-slate-800"
+                  : "bg-slate-50/60 dark:bg-[#162033] border-slate-200/70 dark:border-slate-700/60"
               }`}
             >
               <div className="flex items-center justify-between">
@@ -1480,7 +1483,7 @@ const EmployeesAttendance = () => {
       />
 
       {/* SECTION 3: MONTHLY ATTENDANCE LOGS TABLE / WEEKLY CHART */}
-      <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl shadow-sm overflow-hidden">
+      <div className="bg-white dark:bg-[#111927] border border-slate-200 dark:border-slate-800/80 rounded-2xl shadow-sm overflow-hidden">
         {/* Table & View Controls Header */}
         <div className="p-5 border-b border-slate-200 dark:border-slate-800 flex flex-col lg:flex-row lg:items-center justify-between gap-4">
           <div>
@@ -1496,14 +1499,14 @@ const EmployeesAttendance = () => {
           {/* View Toggles & Filter Bar */}
           <div className="flex flex-wrap items-center gap-2.5">
             {/* View Switcher */}
-            <div className="inline-flex p-1 rounded-xl bg-slate-100 dark:bg-slate-800 border border-slate-200 dark:border-slate-700">
+            <div className="inline-flex p-1 rounded-xl bg-slate-100 dark:bg-[#162033] border border-slate-200 dark:border-slate-700/60">
               <button
                 type="button"
                 id="btn-view-calendar"
                 onClick={() => setActiveView("calendar")}
                 className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold transition-colors cursor-pointer ${
                   activeView === "calendar"
-                    ? "bg-white dark:bg-slate-900 text-[#002185] dark:text-blue-400 shadow-xs font-bold"
+                    ? "bg-white dark:bg-[#111927] text-[#002185] dark:text-blue-400 shadow-xs font-bold"
                     : "text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-slate-100"
                 }`}
               >
@@ -1516,7 +1519,7 @@ const EmployeesAttendance = () => {
                 onClick={() => setActiveView("heatmap")}
                 className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold transition-colors cursor-pointer ${
                   activeView === "heatmap"
-                    ? "bg-white dark:bg-slate-900 text-[#002185] dark:text-blue-400 shadow-xs font-bold"
+                    ? "bg-white dark:bg-[#111927] text-[#002185] dark:text-blue-400 shadow-xs font-bold"
                     : "text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-slate-100"
                 }`}
               >
@@ -1529,7 +1532,7 @@ const EmployeesAttendance = () => {
                 onClick={() => setActiveView("table")}
                 className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold transition-colors cursor-pointer ${
                   activeView === "table"
-                    ? "bg-white dark:bg-slate-900 text-slate-900 dark:text-slate-100 shadow-xs font-bold"
+                    ? "bg-white dark:bg-[#111927] text-slate-900 dark:text-slate-100 shadow-xs font-bold"
                     : "text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-slate-100"
                 }`}
               >
@@ -1542,7 +1545,7 @@ const EmployeesAttendance = () => {
                 onClick={() => setActiveView("chart")}
                 className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold transition-colors cursor-pointer ${
                   activeView === "chart"
-                    ? "bg-white dark:bg-slate-900 text-slate-900 dark:text-slate-100 shadow-xs font-bold"
+                    ? "bg-white dark:bg-[#111927] text-slate-900 dark:text-slate-100 shadow-xs font-bold"
                     : "text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-slate-100"
                 }`}
               >
@@ -1556,7 +1559,7 @@ const EmployeesAttendance = () => {
               <select
                 value={selectedMonth}
                 onChange={(e) => setSelectedMonth(e.target.value)}
-                className="px-3 py-1.5 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl text-xs font-medium text-slate-700 dark:text-slate-200 focus:outline-none focus:border-[#002185]"
+                className="px-3 py-1.5 bg-slate-50 dark:bg-[#162033] border border-slate-200 dark:border-slate-700/60 rounded-xl text-xs font-medium text-slate-700 dark:text-slate-200 focus:outline-none focus:border-[#002185]"
               >
                 <option value="all">All Months</option>
                 {availableMonths.map((m) => (
@@ -1572,7 +1575,7 @@ const EmployeesAttendance = () => {
               <select
                 value={statusFilter}
                 onChange={(e) => setStatusFilter(e.target.value)}
-                className="px-3 py-1.5 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl text-xs font-medium text-slate-700 dark:text-slate-200 focus:outline-none focus:border-[#002185]"
+                className="px-3 py-1.5 bg-slate-50 dark:bg-[#162033] border border-slate-200 dark:border-slate-700/60 rounded-xl text-xs font-medium text-slate-700 dark:text-slate-200 focus:outline-none focus:border-[#002185]"
               >
                 <option value="all">All Statuses</option>
                 <option value="ontime">On Time</option>
@@ -1590,10 +1593,22 @@ const EmployeesAttendance = () => {
                   placeholder="Search date..."
                   value={searchTerm}
                   onChange={(e) => setSearchTerm(e.target.value)}
-                  className="w-32 sm:w-44 pl-8 pr-3 py-1.5 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl text-xs text-slate-900 dark:text-slate-100 focus:outline-none focus:border-[#002185]"
+                  className="w-32 sm:w-44 pl-8 pr-3 py-1.5 bg-slate-50 dark:bg-[#162033] border border-slate-200 dark:border-slate-700/60 rounded-xl text-xs text-slate-900 dark:text-slate-100 focus:outline-none focus:border-[#002185]"
                 />
               </div>
             )}
+
+            {/* Print Official Attendance Report */}
+            <button
+              type="button"
+              id="btn-employee-print-attendance-report"
+              onClick={() => setShowPrintReport(true)}
+              className="flex items-center gap-1.5 px-3.5 py-1.5 rounded-xl bg-[#002185] hover:bg-[#ff5500] text-white text-xs font-semibold transition-all shadow-xs cursor-pointer"
+              title="Print official monthly attendance audit sheet"
+            >
+              <Printer className="w-3.5 h-3.5" />
+              <span>Print Official Sheet</span>
+            </button>
           </div>
         </div>
 
@@ -1650,13 +1665,13 @@ const EmployeesAttendance = () => {
         {activeView === "table" && (
           <>
             {/* Selected Period Summary Sub-Header */}
-            <div className="p-4 sm:p-5 bg-slate-50/60 dark:bg-slate-800/40 border-b border-slate-200 dark:border-slate-800">
+            <div className="p-4 sm:p-5 bg-slate-50/60 dark:bg-[#162033]/60 border-b border-slate-200 dark:border-slate-800">
               <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2.5 pb-3">
                 <div className="flex items-center gap-2">
                   <span className="text-xs font-bold text-slate-700 dark:text-slate-300 uppercase tracking-wider">
                     Period Summary:
                   </span>
-                  <span className="text-xs font-bold text-[#002185] dark:text-blue-400 bg-white dark:bg-slate-800 px-2.5 py-0.5 rounded-full border border-slate-200 dark:border-slate-700 shadow-2xs">
+                  <span className="text-xs font-bold text-[#002185] dark:text-blue-400 bg-white dark:bg-[#162033] px-2.5 py-0.5 rounded-full border border-slate-200 dark:border-slate-700 shadow-2xs">
                     {selectedPeriodSummary.periodTitle}
                   </span>
                   <span className="text-xs text-slate-500 dark:text-slate-400">
@@ -1672,7 +1687,7 @@ const EmployeesAttendance = () => {
 
               <div className="grid grid-cols-2 sm:grid-cols-4 gap-2.5">
                 {/* Present Days */}
-                <div className="bg-white dark:bg-slate-800 p-2.5 sm:p-3 rounded-xl border border-emerald-200/80 dark:border-emerald-900/60 flex items-center gap-2.5 shadow-2xs">
+                <div className="bg-white dark:bg-[#162033] p-2.5 sm:p-3 rounded-xl border border-emerald-200/80 dark:border-emerald-900/60 flex items-center gap-2.5 shadow-2xs">
                   <div className="w-8 h-8 rounded-lg bg-emerald-50 dark:bg-emerald-950/60 text-emerald-600 dark:text-emerald-400 flex items-center justify-center shrink-0">
                     <CheckCircle2 className="w-4 h-4" />
                   </div>
@@ -1692,7 +1707,7 @@ const EmployeesAttendance = () => {
                 </div>
 
                 {/* Late Check-ins */}
-                <div className="bg-white dark:bg-slate-800 p-2.5 sm:p-3 rounded-xl border border-amber-200/80 dark:border-amber-900/60 flex items-center gap-2.5 shadow-2xs">
+                <div className="bg-white dark:bg-[#162033] p-2.5 sm:p-3 rounded-xl border border-amber-200/80 dark:border-amber-900/60 flex items-center gap-2.5 shadow-2xs">
                   <div className="w-8 h-8 rounded-lg bg-amber-50 dark:bg-amber-950/60 text-amber-600 dark:text-amber-400 flex items-center justify-center shrink-0">
                     <TrendingDown className="w-4 h-4" />
                   </div>
@@ -1712,7 +1727,7 @@ const EmployeesAttendance = () => {
                 </div>
 
                 {/* Absences */}
-                <div className="bg-white dark:bg-slate-800 p-2.5 sm:p-3 rounded-xl border border-rose-200/80 dark:border-rose-900/60 flex items-center gap-2.5 shadow-2xs">
+                <div className="bg-white dark:bg-[#162033] p-2.5 sm:p-3 rounded-xl border border-rose-200/80 dark:border-rose-900/60 flex items-center gap-2.5 shadow-2xs">
                   <div className="w-8 h-8 rounded-lg bg-rose-50 dark:bg-rose-950/60 text-rose-600 dark:text-rose-400 flex items-center justify-center shrink-0">
                     <AlertTriangle className="w-4 h-4" />
                   </div>
@@ -1732,7 +1747,7 @@ const EmployeesAttendance = () => {
                 </div>
 
                 {/* Logged Hours */}
-                <div className="bg-white dark:bg-slate-800 p-2.5 sm:p-3 rounded-xl border border-slate-200 dark:border-slate-700 flex items-center gap-2.5 shadow-2xs">
+                <div className="bg-white dark:bg-[#162033] p-2.5 sm:p-3 rounded-xl border border-slate-200 dark:border-slate-700/60 flex items-center gap-2.5 shadow-2xs">
                   <div className="w-8 h-8 rounded-lg bg-indigo-50 dark:bg-indigo-950/60 text-indigo-600 dark:text-indigo-400 flex items-center justify-center shrink-0">
                     <Clock className="w-4 h-4" />
                   </div>
@@ -1757,7 +1772,7 @@ const EmployeesAttendance = () => {
             <div className="hidden md:block overflow-x-auto">
               <table className="w-full text-left text-xs">
                 <thead>
-                  <tr className="bg-slate-50 dark:bg-slate-800/60 border-b border-slate-200 dark:border-slate-800 text-slate-500 dark:text-slate-400 font-semibold uppercase tracking-wider">
+                  <tr className="bg-slate-50 dark:bg-[#162033]/80 border-b border-slate-200 dark:border-slate-800 text-slate-500 dark:text-slate-400 font-semibold uppercase tracking-wider">
                     <th className="px-6 py-3.5">Shift Date</th>
                     <th className="px-6 py-3.5">Clock In / Out Stamps</th>
                     <th className="px-6 py-3.5">Duration</th>
@@ -1774,7 +1789,7 @@ const EmployeesAttendance = () => {
                       return (
                         <tr
                           key={item._id || item.id || item.date}
-                          className="hover:bg-slate-50/80 dark:hover:bg-slate-800/40 transition-colors"
+                          className="hover:bg-slate-50/80 dark:hover:bg-[#162033]/60 transition-colors"
                         >
                           {/* Date */}
                           <td className="px-6 py-4 font-semibold text-slate-900 dark:text-slate-100">
@@ -1869,7 +1884,7 @@ const EmployeesAttendance = () => {
                         {getStatusBadge(item.status, lateMins)}
                       </div>
 
-                      <div className="grid grid-cols-2 gap-2 bg-slate-50 dark:bg-slate-800/40 p-3 rounded-xl text-xs">
+                      <div className="grid grid-cols-2 gap-2 bg-slate-50 dark:bg-[#162033] p-3 rounded-xl text-xs">
                         <div>
                           <span className="text-[10px] uppercase font-bold text-slate-400 block">
                             Clock In
@@ -1918,6 +1933,18 @@ const EmployeesAttendance = () => {
           </>
         )}
       </div>
+
+      {/* Official Attendance Report Print Modal */}
+      {showPrintReport && (
+        <AttendanceReportModal
+          isOpen={showPrintReport}
+          onClose={() => setShowPrintReport(false)}
+          employee={employee || user || { fullName: "Staff Member" }}
+          attendanceList={filteredHistory.length > 0 ? filteredHistory : attendanceHistory}
+          period={selectedMonth !== "all" ? selectedMonth : "Current Period"}
+          title="My Official Attendance Sheet"
+        />
+      )}
 
       {/* Toast feedback */}
       {showToast.show && (

@@ -71,20 +71,24 @@ const ExcuseLatenessModal = ({
   return (
     <div
       id="modal-excuse-lateness"
-      className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-xs p-4 overflow-y-auto animate-in fade-in duration-200"
+      onClick={onClose}
+      className="fixed inset-0 z-50 flex items-end sm:items-center justify-center p-0 sm:p-4 bg-slate-950/60 backdrop-blur-sm animate-fade-in"
     >
-      <div className="w-full max-w-lg rounded-2xl bg-white shadow-2xl border border-[#E2E8F0] overflow-hidden">
+      <div
+        onClick={(e) => e.stopPropagation()}
+        className="w-full max-h-[90vh] rounded-t-[28px] sm:rounded-3xl sm:max-w-lg bg-white dark:bg-slate-900 shadow-2xl border border-[#E2E8F0] dark:border-slate-800 overflow-hidden flex flex-col animate-fade-in"
+      >
         {/* Modal Header */}
-        <div className="flex items-center justify-between px-6 py-4 border-b border-[#E2E8F0] bg-[#F8FAFC]">
+        <div className="flex items-center justify-between px-5 sm:px-6 py-4 border-b border-[#E2E8F0] dark:border-slate-800 bg-[#F8FAFC] dark:bg-slate-800/50 shrink-0">
           <div className="flex items-center gap-3">
-            <div className="w-10 h-10 rounded-xl bg-emerald-50 border border-emerald-200 text-emerald-600 flex items-center justify-center">
+            <div className="w-10 h-10 rounded-xl bg-emerald-50 dark:bg-emerald-950/60 border border-emerald-200 dark:border-emerald-800 text-emerald-600 dark:text-emerald-400 flex items-center justify-center shrink-0">
               <ShieldCheck className="w-5 h-5" />
             </div>
             <div>
-              <h3 className="text-base font-bold text-[#002185]">
+              <h3 className="text-sm sm:text-base font-bold text-[#002185] dark:text-blue-300">
                 Excuse Lateness Entry
               </h3>
-              <p className="text-xs text-[#64748B]">
+              <p className="text-[11px] sm:text-xs text-[#64748B] dark:text-slate-400">
                 Waive payroll penalties and record management justification
               </p>
             </div>
@@ -94,44 +98,44 @@ const ExcuseLatenessModal = ({
             id="btn-close-excuse-modal"
             onClick={onClose}
             disabled={isLoading}
-            className="p-1.5 rounded-lg text-[#64748B] hover:text-[#002185] hover:bg-[#E2E8F0]/50 transition-colors cursor-pointer"
+            className="p-1.5 rounded-lg text-[#64748B] hover:text-[#002185] dark:hover:text-slate-200 hover:bg-[#E2E8F0]/50 dark:hover:bg-slate-800 transition-colors cursor-pointer shrink-0"
           >
             <X className="w-4 h-4" />
           </button>
         </div>
 
         {/* Modal Form Content */}
-        <form onSubmit={handleSubmit} className="p-6 space-y-5 text-sm">
+        <form onSubmit={handleSubmit} className="p-4 sm:p-6 space-y-4 overflow-y-auto max-h-[85vh] sm:max-h-[80vh] flex-1 text-sm">
           {/* Employee & Record Brief */}
-          <div className="p-4 rounded-xl bg-[#F8FAFC] border border-[#E2E8F0] space-y-3">
+          <div className="p-3.5 sm:p-4 rounded-xl bg-[#F8FAFC] dark:bg-slate-800/50 border border-[#E2E8F0] dark:border-slate-700 space-y-3">
             <div className="flex items-center justify-between">
               <div className="flex items-center gap-2.5">
                 <div className="w-8 h-8 rounded-lg bg-[#002185] text-white flex items-center justify-center text-xs font-bold">
                   {empName.charAt(0).toUpperCase()}
                 </div>
                 <div>
-                  <p className="font-bold text-[#002185] text-sm">{empName}</p>
-                  <p className="text-xs text-[#64748B]">
+                  <p className="font-bold text-[#002185] dark:text-blue-300 text-sm">{empName}</p>
+                  <p className="text-xs text-[#64748B] dark:text-slate-400">
                     ID: {empCode} • {empDept}
                   </p>
                 </div>
               </div>
-              <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-xs font-semibold bg-amber-50 text-amber-700 border border-amber-200">
+              <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-xs font-semibold bg-amber-50 dark:bg-amber-950/60 text-amber-700 dark:text-amber-300 border border-amber-200 dark:border-amber-800">
                 <Clock className="w-3 h-3" />
                 {lateMin > 0 ? `${lateMin} min delay` : "Marked Late"}
               </span>
             </div>
 
-            <div className="grid grid-cols-2 gap-2 pt-2 border-t border-[#E2E8F0] text-xs">
+            <div className="grid grid-cols-2 gap-2 pt-2 border-t border-[#E2E8F0] dark:border-slate-700 text-xs">
               <div>
-                <span className="text-[#64748B]">Log Date: </span>
-                <span className="font-semibold text-[#334155]">
+                <span className="text-[#64748B] dark:text-slate-400">Log Date: </span>
+                <span className="font-semibold text-[#334155] dark:text-slate-200">
                   {record.date}
                 </span>
               </div>
               <div>
-                <span className="text-[#64748B]">Current Penalty: </span>
-                <span className="font-bold text-rose-600">
+                <span className="text-[#64748B] dark:text-slate-400">Current Penalty: </span>
+                <span className="font-bold text-rose-600 dark:text-rose-400">
                   GH₵ {Number(lateFee).toFixed(2)}
                 </span>
               </div>
@@ -140,7 +144,7 @@ const ExcuseLatenessModal = ({
 
           {/* Preset Reasons */}
           <div className="space-y-2">
-            <label className="block text-xs font-bold text-[#002185] uppercase tracking-wider">
+            <label className="block text-xs font-bold text-[#002185] dark:text-blue-300 uppercase tracking-wider">
               Select Justification Reason
             </label>
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
@@ -153,13 +157,13 @@ const ExcuseLatenessModal = ({
                     onClick={() => setSelectedPreset(preset.id)}
                     className={`text-left p-2.5 rounded-xl border text-xs font-medium transition-all cursor-pointer flex items-center justify-between ${
                       isSelected
-                        ? "bg-emerald-50 border-emerald-500 text-emerald-800 font-semibold shadow-2xs"
-                        : "bg-[#FFFFFF] border-[#E2E8F0] text-[#334155] hover:border-emerald-300 hover:bg-[#F8FAFC]"
+                        ? "bg-emerald-50 dark:bg-emerald-950/60 border-emerald-500 text-emerald-800 dark:text-emerald-300 font-semibold shadow-2xs"
+                        : "bg-white dark:bg-slate-800 border-[#E2E8F0] dark:border-slate-700 text-[#334155] dark:text-slate-300 hover:border-emerald-300 hover:bg-[#F8FAFC] dark:hover:bg-slate-700"
                     }`}
                   >
                     <span className="truncate pr-1">{preset.label}</span>
                     {isSelected && (
-                      <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600 shrink-0" />
+                      <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600 dark:text-emerald-400 shrink-0" />
                     )}
                   </button>
                 );
@@ -171,7 +175,7 @@ const ExcuseLatenessModal = ({
           <div className="space-y-1.5">
             <label
               htmlFor="excuse-custom-notes"
-              className="block text-xs font-bold text-[#002185]"
+              className="block text-xs font-bold text-[#002185] dark:text-blue-300"
             >
               Manager Notes / Specific Details
             </label>
@@ -181,16 +185,16 @@ const ExcuseLatenessModal = ({
               value={customReason}
               onChange={(e) => setCustomReason(e.target.value)}
               placeholder="e.g. Doctor's receipt confirmed via email. Waived per HR policy."
-              className="w-full rounded-xl border border-[#E2E8F0] bg-white px-3 py-2 text-xs text-[#334155] placeholder-[#94A3B8] focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500 focus:outline-hidden transition-all"
+              className="w-full rounded-xl border border-[#E2E8F0] dark:border-slate-700 bg-white dark:bg-slate-800 px-3 py-2 text-xs text-[#334155] dark:text-slate-200 placeholder-[#94A3B8] focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500 focus:outline-hidden transition-all"
             />
           </div>
 
           {/* Configuration Options */}
-          <div className="space-y-2 pt-2 border-t border-[#E2E8F0]">
-            <div className="flex items-center justify-between">
+          <div className="space-y-2 pt-2 border-t border-[#E2E8F0] dark:border-slate-700">
+            <div className="flex items-center justify-between flex-wrap gap-2">
               <label
                 htmlFor="target-status-select"
-                className="text-xs font-semibold text-[#334155]"
+                className="text-xs font-semibold text-[#334155] dark:text-slate-300"
               >
                 Update Attendance Status to:
               </label>
@@ -198,7 +202,7 @@ const ExcuseLatenessModal = ({
                 id="target-status-select"
                 value={targetStatus}
                 onChange={(e) => setTargetStatus(e.target.value)}
-                className="rounded-lg border border-[#E2E8F0] bg-white px-3 py-1 text-xs font-semibold text-[#002185] focus:outline-hidden focus:border-emerald-500"
+                className="rounded-lg border border-[#E2E8F0] dark:border-slate-700 bg-white dark:bg-slate-800 px-3 py-1 text-xs font-semibold text-[#002185] dark:text-blue-300 focus:outline-hidden focus:border-emerald-500 cursor-pointer"
               >
                 <option value="Present">Present (Excused)</option>
                 <option value="On Time">On Time</option>
@@ -206,27 +210,27 @@ const ExcuseLatenessModal = ({
               </select>
             </div>
 
-            <label className="flex items-center gap-2.5 p-2 rounded-lg bg-emerald-50/60 border border-emerald-100 cursor-pointer">
+            <label className="flex items-center gap-2.5 p-2 rounded-lg bg-emerald-50/60 dark:bg-emerald-950/40 border border-emerald-100 dark:border-emerald-800 cursor-pointer">
               <input
                 type="checkbox"
                 checked={waivePenalty}
                 onChange={(e) => setWaivePenalty(e.target.checked)}
                 className="rounded text-emerald-600 focus:ring-emerald-500 h-4 w-4"
               />
-              <span className="text-xs text-emerald-900 font-medium">
+              <span className="text-xs text-emerald-900 dark:text-emerald-300 font-medium">
                 Waive payroll lateness deduction (Sets penalty to GH₵ 0.00)
               </span>
             </label>
           </div>
 
           {/* Action Buttons */}
-          <div className="flex items-center justify-end gap-3 pt-3 border-t border-[#E2E8F0]">
+          <div className="flex flex-col-reverse sm:flex-row sm:items-center sm:justify-end gap-2.5 sm:gap-3 pt-3 border-t border-[#E2E8F0] dark:border-slate-800">
             <button
               type="button"
               id="btn-cancel-excuse"
               onClick={onClose}
               disabled={isLoading}
-              className="px-4 py-2 text-xs font-semibold text-[#64748B] hover:text-[#002185] bg-white border border-[#E2E8F0] rounded-xl hover:bg-[#F8FAFC] transition-colors cursor-pointer"
+              className="w-full sm:w-auto px-4 py-2.5 text-xs font-semibold text-[#64748B] dark:text-slate-400 hover:text-[#002185] dark:hover:text-white bg-white dark:bg-slate-800 border border-[#E2E8F0] dark:border-slate-700 rounded-xl hover:bg-[#F8FAFC] dark:hover:bg-slate-700 transition-colors cursor-pointer text-center"
             >
               Cancel
             </button>
@@ -234,7 +238,7 @@ const ExcuseLatenessModal = ({
               type="submit"
               id="btn-confirm-excuse"
               disabled={isLoading}
-              className="px-5 py-2 text-xs font-bold text-white bg-emerald-600 hover:bg-emerald-700 rounded-xl shadow-sm transition-all flex items-center gap-1.5 cursor-pointer disabled:opacity-50"
+              className="w-full sm:w-auto px-5 py-2.5 text-xs font-bold text-white bg-emerald-600 hover:bg-emerald-700 rounded-xl shadow-sm transition-all flex items-center justify-center gap-1.5 cursor-pointer disabled:opacity-50"
             >
               {isLoading ? (
                 <>

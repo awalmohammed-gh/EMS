@@ -3,7 +3,7 @@ import { Attendance } from "../models/attendanceModel.js";
 import { Employee } from "../models/employeeModel.js";
 import { CompanySettings } from "../models/CompanySettings.js";
 import { createNotificationRecord } from "./notificationController.js";
-import { evaluateLatenessPenalty } from "./payrollController.js";
+import { evaluateLatenessPenalty, calculateLatenessPenalty } from "../utils/latenessPenaltyCalculator.js";
 import { calculateWorkHours, parseTimeToMinutes, safeDateTime } from "../utils/calculateWorkHours.js";
 
 const isValidObjectId = (id) =>

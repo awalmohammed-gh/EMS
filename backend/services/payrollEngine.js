@@ -6,6 +6,14 @@ import Employee from "../models/Employee.js";
 import Leave from "../models/Leave.js";
 import { liveAttendanceStore } from "../controllers/employeeAttendance.js";
 import { liveLeaveStore } from "../controllers/leaveController.js";
+import {
+  evaluateLatenessPenalty,
+  calculateLatenessPenalty,
+  getStandardizedLatenessTiers,
+  getTierConfiguredFine,
+} from "../utils/latenessPenaltyCalculator.js";
+
+export { evaluateLatenessPenalty, calculateLatenessPenalty, getStandardizedLatenessTiers, getTierConfiguredFine };
 
 const isValidObjectId = (id) =>
   id &&
@@ -32,118 +40,6 @@ export function getWorkingDaysInMonth(year, monthIndex) {
     }
   }
   return count || 22;
-}
-
-/**
- * Evaluates lateness penalty for a given clock-in time and company settings.
- */
-export function evaluateLatenessPenalty(clockInInput, workStartTime = "08:00", settings = {}) {
-  if (!clockInInput) {
-    return { isLate: false, minutesLate: 0, penalty: 0, tier: "On Time" };
-  }
-
-  let startHour = 8;
-  let startMinute = 0;
-  if (typeof workStartTime === "string" && workStartTime.trim()) {
-    const clean = workStartTime.trim();
-    const isPM = /pm/i.test(clean);
-    const isAM = /am/i.test(clean);
-    const match = clean.match(/(\d{1,2}):(\d{2})/);
-    if (match) {
-      let h = parseInt(match[1], 10);
-      const m = parseInt(match[2], 10);
-      if (isPM && h < 12) h += 12;
-      if (isAM && h === 12) h = 0;
-      startHour = h;
-      startMinute = m;
-    }
-  }
-
-  let clockInDate = null;
-  if (clockInInput instanceof Date) {
-    clockInDate = clockInInput;
-  } else if (typeof clockInInput === "string") {
-    const parsed = new Date(clockInInput);
-    if (!isNaN(parsed.getTime())) {
-      clockInDate = parsed;
-    } else {
-      const timeMatch = clockInInput.match(/(\d{1,2}):(\d{2})/);
-      if (timeMatch) {
-        const dummy = new Date();
-        let h = parseInt(timeMatch[1], 10);
-        const m = parseInt(timeMatch[2], 10);
-        if (/pm/i.test(clockInInput) && h < 12) h += 12;
-        if (/am/i.test(clockInInput) && h === 12) h = 0;
-        dummy.setHours(h, m, 0, 0);
-        clockInDate = dummy;
-      }
-    }
-  }
-
-  if (!clockInDate || isNaN(clockInDate.getTime())) {
-    return { isLate: false, minutesLate: 0, penalty: 0, tier: "On Time" };
-  }
-
-  const clockInHour = clockInDate.getHours();
-  const clockInMinute = clockInDate.getMinutes();
-  const startTotalMinutes = startHour * 60 + startMinute;
-  const clockInTotalMinutes = clockInHour * 60 + clockInMinute;
-  const delayMinutes = Math.max(0, clockInTotalMinutes - startTotalMinutes);
-
-  if (delayMinutes === 0) {
-    return { isLate: false, minutesLate: 0, penalty: 0, tier: "On Time" };
-  }
-
-  // Check custom latenessTiers if provided
-  if (Array.isArray(settings.latenessTiers) && settings.latenessTiers.length > 0) {
-    const matched = settings.latenessTiers.find(
-      (t) => delayMinutes <= (t.maxMinutes || 9999) && delayMinutes >= (t.minMinutes || 1)
-    );
-    if (matched) {
-      return {
-        isLate: true,
-        minutesLate: delayMinutes,
-        penalty: Number(matched.penalty || matched.fine || 0),
-        tier: matched.name || `Tier ${matched.tier || ""}`,
-      };
-    }
-  }
-
-  const t1 = settings.lateTier1_amount !== undefined && Number(settings.lateTier1_amount) >= 0 ? Number(settings.lateTier1_amount) : 10;
-  const t2 = settings.lateTier2_amount !== undefined && Number(settings.lateTier2_amount) >= 0 ? Number(settings.lateTier2_amount) : 30;
-  const t3 = settings.lateTier3_amount !== undefined && Number(settings.lateTier3_amount) >= 0 ? Number(settings.lateTier3_amount) : 50;
-  const t4 = settings.lateTier4_amount !== undefined && Number(settings.lateTier4_amount) >= 0 ? Number(settings.lateTier4_amount) : 75;
-  const t5 = settings.lateTier5_amount !== undefined && Number(settings.lateTier5_amount) >= 0 ? Number(settings.lateTier5_amount) : 100;
-  const t6 = settings.lateTier6_amount !== undefined && Number(settings.lateTier6_amount) >= 0 ? Number(settings.lateTier6_amount) : 150;
-
-  let penalty = 0;
-  let tier = "";
-  if (delayMinutes >= 1 && delayMinutes <= 30) {
-    penalty = t1;
-    tier = "1–30 mins late (Tier 1)";
-  } else if (delayMinutes >= 31 && delayMinutes <= 60) {
-    penalty = t2;
-    tier = "31–60 mins late (Tier 2)";
-  } else if (delayMinutes >= 61 && delayMinutes <= 120) {
-    penalty = t3;
-    tier = "61–120 mins (Tier 3)";
-  } else if (delayMinutes >= 121 && delayMinutes <= 180) {
-    penalty = t4;
-    tier = "121–180 mins (Tier 4)";
-  } else if (delayMinutes >= 181 && delayMinutes <= 240) {
-    penalty = t5;
-    tier = "181–240 mins (Tier 5)";
-  } else {
-    penalty = t6;
-    tier = "241+ mins (Tier 6)";
-  }
-
-  return {
-    isLate: true,
-    minutesLate: delayMinutes,
-    penalty,
-    tier,
-  };
 }
 
 /**
@@ -316,26 +212,29 @@ export async function calculateMonthlyPenalties(employeeId, year, monthIndex) {
     if (isLate && !isExplicitAbsent) {
       lateCount += 1;
       let fine = 0;
-      if (log.latePenalty !== undefined && Number(log.latePenalty) > 0) {
-        fine = Number(log.latePenalty);
-      } else if (evalResult && evalResult.penalty > 0) {
+      let lateMins = Number(log.lateMinutes || log.delayMinutes || (evalResult ? evalResult.minutesLate : 0));
+      let tierName = log.penaltyTier || (evalResult ? evalResult.tier : "Late Penalty");
+
+      if (log.latePenalty !== undefined && log.latePenalty !== null && log.latePenalty !== "" && !isNaN(Number(log.latePenalty))) {
+        fine = Math.max(0, Number(log.latePenalty));
+      } else if (evalResult && evalResult.isLate) {
         fine = evalResult.penalty;
-      } else if (Number(log.lateMinutes || log.delayMinutes || 0) > 0) {
-        const mins = Number(log.lateMinutes || log.delayMinutes);
-        if (mins <= 30) fine = settings.lateTier1_amount || 10;
-        else if (mins <= 60) fine = settings.lateTier2_amount || 30;
-        else fine = settings.lateTier6_amount || 150;
+        tierName = evalResult.tier;
+        lateMins = evalResult.minutesLate;
       } else {
-        fine = settings.lateTier1_amount || 10;
+        const fallbackCalc = calculateLatenessPenalty(lateMins || 15, settings);
+        fine = fallbackCalc.penalty;
+        tierName = fallbackCalc.tier;
+        lateMins = fallbackCalc.minutesLate;
       }
 
       totalLatePenalties += fine;
       lateLogs.push({
         date: log.date,
         clockInTime: hasClockIn,
-        lateMinutes: log.lateMinutes || log.delayMinutes || evalResult?.minutesLate || 15,
+        lateMinutes: lateMins,
         penalty: fine,
-        tier: log.penaltyTier || evalResult?.tier || "Late Penalty",
+        tier: tierName,
       });
     }
   });

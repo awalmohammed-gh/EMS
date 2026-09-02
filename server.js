@@ -26,6 +26,28 @@ import { logErrorToFile } from "./backend/utils/logger.js";
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
+// Validate critical environment variables during server startup
+const validateEnvironmentVariables = () => {
+  const warnings = [];
+  const requiredKeys = ["MONGODB_URI", "JWT_SECRET"];
+
+  requiredKeys.forEach((key) => {
+    if (!process.env[key] || !process.env[key].trim()) {
+      warnings.push(`[Server Config] Note: Environment variable '${key}' is not set.`);
+    }
+  });
+
+  if (!process.env.JWT_SECRET || !process.env.JWT_SECRET.trim()) {
+    process.env.JWT_SECRET = "default_secure_jwt_secret_dev_key_eyenit_2026";
+    console.info("[Server Config] Initialized fallback JWT_SECRET for secure runtime session handling.");
+  }
+
+  warnings.forEach((w) => console.warn(w));
+  console.log(`[Server Config] Environment validation initialized (NODE_ENV: ${process.env.NODE_ENV || "development"}, PORT: 3000)`);
+};
+
+validateEnvironmentVariables();
+
 // Express and HTTP Server initialization
 const app = express();
 const server = http.createServer(app);

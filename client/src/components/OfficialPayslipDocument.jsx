@@ -44,14 +44,18 @@ export const OfficialPayslipDocument = ({
   };
 
   const handlePrint = () => {
-    printPayslipDocument(payslip);
+    try {
+      window.print();
+    } catch {
+      printPayslipDocument(payslip);
+    }
   };
 
   return (
-    <div className="w-full max-w-4xl mx-auto space-y-6">
+    <div className="w-full max-w-4xl mx-auto space-y-6 print-container">
       {/* Controls Bar */}
       {showControls && (
-        <div className="flex flex-col sm:flex-row items-center justify-between gap-3 p-4 bg-white dark:bg-slate-800 rounded-2xl border border-slate-200 dark:border-slate-700 shadow-xs print:hidden">
+        <div className="flex flex-col sm:flex-row items-center justify-between gap-3 p-4 bg-white dark:bg-slate-800 rounded-2xl border border-slate-200 dark:border-slate-700 shadow-xs print:hidden no-print">
           <div className="flex items-center gap-3">
             {onBack && (
               <button
@@ -77,6 +81,7 @@ export const OfficialPayslipDocument = ({
           <div className="flex items-center gap-2.5 w-full sm:w-auto justify-end">
             <button
               type="button"
+              id="btn-print-payslip-sheet"
               onClick={handlePrint}
               className="px-4 py-2 bg-slate-100 dark:bg-slate-700 hover:bg-slate-200 dark:hover:bg-slate-600 text-slate-800 dark:text-white rounded-xl text-xs font-bold flex items-center gap-2 transition cursor-pointer"
             >
@@ -86,6 +91,7 @@ export const OfficialPayslipDocument = ({
 
             <button
               type="button"
+              id="btn-download-payslip-pdf"
               onClick={handleDownload}
               disabled={isExporting}
               className="px-4 py-2 bg-[#1e3a8a] hover:bg-[#172554] text-white rounded-xl text-xs font-bold flex items-center gap-2 shadow-sm transition cursor-pointer disabled:opacity-75"
@@ -100,7 +106,7 @@ export const OfficialPayslipDocument = ({
       {/* Official Corporate Document Card */}
       <div
         id="corporate-payslip-canvas"
-        className="bg-white text-slate-900 rounded-2xl border border-slate-200 shadow-xl p-8 sm:p-12 print:shadow-none print:border-none print:p-0 print:m-0"
+        className="bg-white text-slate-900 rounded-2xl border border-slate-200 shadow-xl p-8 sm:p-12 print-card print:shadow-none print:border-none print:p-0 print:m-0"
       >
         {/* 1. Document Header & Branding */}
         <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 mb-4">

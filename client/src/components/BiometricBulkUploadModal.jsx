@@ -289,33 +289,35 @@ export const BiometricBulkUploadModal = ({
   return (
     <div
       id="biometric-upload-modal-overlay"
-      className="fixed inset-0 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-4 z-50 animate-fadeIn"
+      onClick={onClose}
+      className="fixed inset-0 z-50 flex items-end sm:items-center justify-center p-0 sm:p-4 bg-slate-950/60 backdrop-blur-sm animate-fade-in"
     >
       <div
         id="biometric-upload-modal"
-        className="bg-white dark:bg-slate-900 border border-[#E2E8F0] dark:border-slate-800 rounded-2xl w-full max-w-3xl max-h-[90vh] flex flex-col shadow-2xl overflow-hidden transition-colors"
+        onClick={(e) => e.stopPropagation()}
+        className="bg-white dark:bg-slate-900 border border-[#E2E8F0] dark:border-slate-800 rounded-t-[28px] sm:rounded-3xl w-full max-w-3xl max-h-[90vh] flex flex-col shadow-2xl overflow-hidden transition-colors animate-fade-in"
       >
         {/* Modal Header */}
-        <div className="p-5 border-b border-[#E2E8F0] dark:border-slate-800 flex items-center justify-between bg-gradient-to-r from-blue-50/50 via-white to-orange-50/30 dark:from-slate-900 dark:to-slate-900">
-          <div className="flex items-center gap-3">
-            <div className="w-10 h-10 rounded-xl bg-[#002185]/10 dark:bg-blue-950 flex items-center justify-center text-[#002185] dark:text-blue-400">
+        <div className="p-4 sm:p-5 border-b border-[#E2E8F0] dark:border-slate-800 flex items-center justify-between bg-gradient-to-r from-blue-50/50 via-white to-orange-50/30 dark:from-slate-900 dark:to-slate-900 shrink-0">
+          <div className="flex items-center gap-3 min-w-0">
+            <div className="w-10 h-10 rounded-xl bg-[#002185]/10 dark:bg-blue-950 flex items-center justify-center text-[#002185] dark:text-blue-400 shrink-0">
               <Fingerprint className="w-5 h-5" />
             </div>
-            <div>
-              <h3 className="text-base font-bold text-[#002185] dark:text-white flex items-center gap-2">
-                Biometric Time-Clock Bulk Import
-                <span className="text-[10px] bg-blue-100 dark:bg-blue-900/60 text-[#002185] dark:text-blue-300 px-2 py-0.5 rounded-full font-semibold">
+            <div className="min-w-0">
+              <h3 className="text-sm sm:text-base font-bold text-[#002185] dark:text-white flex items-center gap-2 truncate">
+                Biometric Bulk Import
+                <span className="text-[10px] bg-blue-100 dark:bg-blue-900/60 text-[#002185] dark:text-blue-300 px-2 py-0.5 rounded-full font-semibold shrink-0">
                   CSV
                 </span>
               </h3>
-              <p className="text-xs text-[#64748B] dark:text-slate-400">
-                Upload daily biometric attendance logs to auto-calculate lateness & update employee status
+              <p className="text-[11px] sm:text-xs text-[#64748B] dark:text-slate-400 truncate">
+                Upload daily biometric attendance logs to auto-calculate lateness & update status
               </p>
             </div>
           </div>
           <button
             onClick={onClose}
-            className="p-1.5 rounded-lg text-[#64748B] hover:text-slate-900 dark:hover:text-white hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors"
+            className="p-1.5 rounded-lg text-[#64748B] hover:text-slate-900 dark:hover:text-white hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors cursor-pointer shrink-0"
           >
             <X className="w-5 h-5" />
           </button>
@@ -555,22 +557,22 @@ export const BiometricBulkUploadModal = ({
 
         {/* Modal Footer */}
         {!uploadResult && (
-          <div className="p-4 border-t border-[#E2E8F0] dark:border-slate-800 bg-slate-50/50 dark:bg-slate-900/50 flex items-center justify-between">
+          <div className="p-3.5 sm:p-4 border-t border-[#E2E8F0] dark:border-slate-800 bg-slate-50/50 dark:bg-slate-900/50 flex flex-col-reverse sm:flex-row sm:items-center sm:justify-between gap-3 shrink-0">
             <button
               type="button"
               onClick={handleDownloadTemplate}
-              className="text-xs text-[#002185] dark:text-blue-400 hover:text-[#ff5500] font-semibold flex items-center gap-1.5"
+              className="text-xs text-[#002185] dark:text-blue-400 hover:text-[#ff5500] font-semibold flex items-center justify-center sm:justify-start gap-1.5 py-1"
             >
               <Download className="w-3.5 h-3.5" />
               <span>Sample Template</span>
             </button>
 
-            <div className="flex items-center gap-2">
+            <div className="flex flex-col-reverse sm:flex-row sm:items-center gap-2">
               <button
                 type="button"
                 onClick={onClose}
                 disabled={isUploading}
-                className="px-4 py-2 text-xs font-semibold text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 rounded-xl transition-colors"
+                className="w-full sm:w-auto px-4 py-2.5 text-xs font-semibold text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 rounded-xl transition-colors cursor-pointer text-center"
               >
                 Cancel
               </button>
@@ -578,7 +580,7 @@ export const BiometricBulkUploadModal = ({
                 type="button"
                 onClick={handleUploadSubmit}
                 disabled={parsedRecords.length === 0 || isUploading}
-                className="flex items-center gap-2 px-5 py-2 text-xs font-semibold text-white bg-[#002185] hover:bg-[#ff5500] rounded-xl transition-colors disabled:opacity-50 shadow-xs"
+                className="w-full sm:w-auto flex items-center justify-center gap-2 px-5 py-2.5 text-xs font-semibold text-white bg-[#002185] hover:bg-[#ff5500] rounded-xl transition-colors disabled:opacity-50 shadow-xs cursor-pointer text-center"
               >
                 {isUploading ? (
                   <>
