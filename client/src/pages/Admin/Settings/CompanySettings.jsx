@@ -22,7 +22,7 @@ const defaultCompany = {
   email: "info@eyenit.com",
   website: "https://www.eyenit.com",
   workStartTime: "08:00",
-  workEndTime: "17:00",
+  workEndTime: "19:00",
   defaultCurrency: "GHS",
   emailNotifications: true,
   systemAlerts: true,

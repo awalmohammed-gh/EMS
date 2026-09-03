@@ -132,12 +132,12 @@ export const EmployeeDetailModal = ({
     const q = salarySearch.toLowerCase().trim();
     return rawSalaryHistory.filter(
       (item) =>
-        item.effectiveDate.toLowerCase().includes(q) ||
-        item.type.toLowerCase().includes(q) ||
-        item.reason.toLowerCase().includes(q) ||
-        item.approvedBy.toLowerCase().includes(q) ||
-        String(item.newSalary).includes(q) ||
-        String(item.percentageChange).includes(q)
+        (item.effectiveDate || "").toLowerCase().includes(q) ||
+        (item.type || "").toLowerCase().includes(q) ||
+        (item.reason || "").toLowerCase().includes(q) ||
+        (item.approvedBy || "").toLowerCase().includes(q) ||
+        String(item.newSalary || "").includes(q) ||
+        String(item.percentageChange || "").includes(q)
     );
   }, [rawSalaryHistory, salarySearch]);
 
@@ -190,8 +190,8 @@ export const EmployeeDetailModal = ({
         className="bg-white dark:bg-slate-900 rounded-t-[28px] sm:rounded-3xl max-w-2xl w-full overflow-hidden shadow-2xl border border-slate-200 dark:border-slate-800 animate-fade-in flex flex-col max-h-[90vh] print-container"
         onClick={(e) => e.stopPropagation()}
       >
-        {/* Header with gradient */}
-        <div className="bg-gradient-to-r from-[#002185] via-blue-800 to-indigo-900 p-4 sm:p-6 text-white relative shrink-0">
+        {/* Header */}
+        <div className="bg-[#002185] p-4 sm:p-6 text-white relative shrink-0">
           <div className="flex items-center justify-between no-print mb-3">
             <div className="flex items-center gap-1.5 bg-white/10 backdrop-blur-md px-2.5 py-1 rounded-full text-[11px] font-semibold text-white/90">
               <span>Employee Record Profile</span>

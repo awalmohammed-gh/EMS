@@ -169,7 +169,7 @@ const PenaltySettings = ({ onSaveSuccess }) => {
   return (
     <form onSubmit={handleSave} className="space-y-8">
       {/* Overview Banner */}
-      <div className="relative overflow-hidden rounded-3xl bg-gradient-to-br from-[#002185]/5 via-blue-500/5 to-transparent dark:from-blue-950/20 dark:via-slate-900 dark:to-slate-900 p-6 sm:p-8 border border-blue-100 dark:border-blue-900/40">
+      <div className="relative overflow-hidden rounded-3xl bg-blue-50/60 dark:bg-slate-900 p-6 sm:p-8 border border-blue-100 dark:border-blue-900/40">
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
           <div className="flex items-start gap-4">
             <div className="h-12 w-12 rounded-2xl bg-[#002185] text-white flex items-center justify-center shadow-md shadow-[#002185]/20 shrink-0">

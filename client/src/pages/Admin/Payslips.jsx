@@ -31,6 +31,7 @@ import PenaltyPayrollImpactChart from "../../components/PenaltyPayrollImpactChar
 import GlobalDateRangePicker from "../../components/GlobalDateRangePicker";
 import { getAllPayslips, updatePayrollStatus, deletePayroll, getAdminPayrollSummary, namesList } from "../../apis/fontApis";
 import { downloadPayslipPDF } from "../../utils/payslipPdfGenerator";
+import ExportPayrollReportButton from "../../components/ExportPayrollReportButton";
 import {
   List,
   History,
@@ -401,81 +402,6 @@ const Payslips = () => {
     }
   };
 
-  // Export Monthly Payroll Report as CSV
-  const handleExportReport = () => {
-    if (filteredData.length === 0) {
-      setShowToast({
-        message: "No payroll records to export.",
-        type: "error",
-        show: true,
-      });
-      return;
-    }
-
-    const headers = [
-      "Payslip No",
-      "Employee ID",
-      "Employee Name",
-      "Department",
-      "Pay Month",
-      "Payment Date",
-      "Basic Salary (GHS)",
-      "Allowances (GHS)",
-      "Deductions (GHS)",
-      "Net Salary (GHS)",
-      "Payment Method",
-      "Status",
-    ];
-
-    const rows = filteredData.map((item, idx) => {
-      const pNum = item.payslipNumber || item.id || `PAY-2026-08-${idx + 1}`;
-      const empId = item.employee?.employeeId || item.employeeId || `EMP00${idx + 1}`;
-      const empName = item.employee?.fullName || item.employeeName || "Employee";
-      const dept = item.employee?.department || item.department || "Operations";
-      const month = item.payMonth || item.month || "August 2026";
-      const date = item.paymentDate || "2026-08-25";
-      const basic = Number(item.basicSalary || 0);
-      const allow = Number(item.allowances || 0);
-      const deduct = Number(item.deductions || 0);
-      const net = Number(item.netSalary || (basic + allow - deduct));
-      const method = item.paymentMethod || "Bank Transfer";
-      const status = item.status || "Paid";
-
-      return [
-        `"${pNum}"`,
-        `"${empId}"`,
-        `"${empName}"`,
-        `"${dept}"`,
-        `"${month}"`,
-        `"${date}"`,
-        basic.toFixed(2),
-        allow.toFixed(2),
-        deduct.toFixed(2),
-        net.toFixed(2),
-        `"${method}"`,
-        `"${status}"`,
-      ].join(",");
-    });
-
-    const csvContent = "data:text/csv;charset=utf-8," + [headers.join(","), ...rows].join("\n");
-    const encodedUri = encodeURI(csvContent);
-    const link = document.createElement("a");
-    link.setAttribute("href", encodedUri);
-    link.setAttribute(
-      "download",
-      `Payroll_Report_${filterMonth !== "All Months" ? filterMonth : "Summary"}_${currentYear}.csv`
-    );
-    document.body.appendChild(link);
-    link.click();
-    document.body.removeChild(link);
-
-    setShowToast({
-      message: "Monthly payroll report exported successfully.",
-      type: "success",
-      show: true,
-    });
-  };
-
   if (isLoading && payslips.length === 0) {
     return <Loading />;
   }
@@ -494,15 +420,27 @@ const Payslips = () => {
             </p>
           </div>
           <div className="flex items-center gap-2.5 flex-wrap">
-            <button
-              type="button"
-              onClick={handleExportReport}
-              className="px-3.5 py-2 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 hover:bg-slate-50 dark:hover:bg-slate-750 text-slate-700 dark:text-slate-200 rounded-xl transition-all duration-200 text-xs font-semibold flex items-center gap-2 shadow-2xs cursor-pointer"
-              title="Export filtered records to CSV"
-            >
-              <Download className="w-3.5 h-3.5 text-blue-600 dark:text-blue-400" />
-              <span>Export CSV</span>
-            </button>
+            {/* Accounting Direct Export Suite: CSV & PDF */}
+            <ExportPayrollReportButton
+              records={filteredData}
+              month={filterMonth !== "All Months" ? filterMonth : "Summary"}
+              year={currentYear}
+              buttonText="Export Payroll Report"
+              onSuccess={(res) => {
+                setShowToast({
+                  message: `Exported ${res.format} report (${res.count} records).`,
+                  type: "success",
+                  show: true,
+                });
+              }}
+              onError={(errMsg) => {
+                setShowToast({
+                  message: errMsg,
+                  type: "error",
+                  show: true,
+                });
+              }}
+            />
 
             <div className="text-xs text-slate-600 dark:text-slate-300 bg-slate-50 dark:bg-slate-800 px-3.5 py-2 rounded-xl border border-slate-200 dark:border-slate-700 flex items-center gap-1.5 font-medium">
               <Calendar className="h-3.5 w-3.5 text-blue-600 dark:text-blue-400" />

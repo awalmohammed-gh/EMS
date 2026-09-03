@@ -2,9 +2,8 @@ const Loading = () => {
   return (
     <div className="flex flex-col items-center justify-center py-20 px-4 min-h-100">
       <div className="relative">
-        {/* Outer ring with gradient */}
-        <div className="w-16 h-16 rounded-full bg-linear-to-r from-[#002185] via-[#ff5500] to-[#002185] p-0.75 animate-spin">
-          <div className="w-full h-full rounded-full bg-[#F8FAFC]"></div>
+        {/* Outer spinner ring */}
+        <div className="w-16 h-16 rounded-full border-4 border-slate-200 dark:border-slate-800 border-t-[#002185] animate-spin">
         </div>
 
         {/* Inner icon/pulse */}

@@ -129,7 +129,7 @@ export const LeaveApprovalWorkflow = ({
   return (
     <div id="automated-leave-workflow" className="space-y-6 animate-fade-in">
       {/* Workflow Process Banner */}
-      <div className="bg-gradient-to-r from-[#002185] via-[#0A2E9E] to-[#002185] rounded-2xl p-6 text-white shadow-md">
+      <div className="bg-[#002185] rounded-2xl p-6 text-white shadow-md">
         <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4">
           <div>
             <div className="flex items-center gap-2 mb-1.5">

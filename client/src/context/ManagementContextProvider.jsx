@@ -1,5 +1,5 @@
 import { createContext, useContext, useState, useEffect, useCallback } from "react";
-import { getAuthMe, getAdminMe, getEmployee, authLogout, adminLogout, employeeLogout } from "../apis/fontApis";
+import { getAuthMe, getAdminMe, getEmployee, authLogout, adminLogout, employeeLogout, getSettings } from "../apis/fontApis";
 import { notificationService } from "../services/notificationService";
 import Toaster from "../ui/Toaster";
 
@@ -149,10 +149,64 @@ export const ManagementContextProvider = ({ children }) => {
     }
   }, []);
 
+  // Dynamic Company & Attendance Settings
+  const [settings, setSettings] = useState({
+    workStartTime: "08:00",
+    workEndTime: "19:00",
+    attendance: {
+      workStartTime: "08:00",
+      workEndTime: "19:00",
+    },
+    company: {
+      workStartTime: "08:00",
+      workEndTime: "19:00",
+    },
+  });
+
+  const fetchSettings = useCallback(async () => {
+    try {
+      const res = await getSettings();
+      if (res?.data?.success && res.data.settings) {
+        const fetched = res.data.settings;
+        const workEndTime =
+          fetched.workEndTime ||
+          fetched.attendance?.workEndTime ||
+          fetched.company?.workEndTime ||
+          "19:00";
+        const workStartTime =
+          fetched.workStartTime ||
+          fetched.attendance?.workStartTime ||
+          fetched.company?.workStartTime ||
+          "08:00";
+        setSettings((prev) => ({
+          ...prev,
+          ...fetched,
+          workStartTime,
+          workEndTime,
+          attendance: {
+            ...prev.attendance,
+            ...fetched.attendance,
+            workStartTime,
+            workEndTime,
+          },
+          company: {
+            ...prev.company,
+            ...fetched.company,
+            workStartTime,
+            workEndTime,
+          },
+        }));
+      }
+    } catch (err) {
+      console.warn("fetchSettings in ManagementContext error:", err.message);
+    }
+  }, []);
+
   // Initial load
   useEffect(() => {
     fetchCurrentUser();
-  }, [fetchCurrentUser]);
+    fetchSettings();
+  }, [fetchCurrentUser, fetchSettings]);
 
   // Logout handler
   const handleUserLogout = async (targetRole = role) => {
@@ -328,6 +382,10 @@ export const ManagementContextProvider = ({ children }) => {
     toggleMobileSidebar: toggleSidebar,
     closeMobileSidebar: closeSidebar,
     openMobileSidebar: openSidebar,
+    settings,
+    setSettings,
+    fetchSettings,
+    companySettings: settings,
     showEmployeeModal,
     setShowEmployeeModal,
     showPayslipsModal,

@@ -257,7 +257,7 @@ export const AnnouncementBoard = ({
       {/* Header Banner */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pb-5 border-b border-[#E2E8F0] dark:border-slate-800">
         <div className="flex items-center gap-3">
-          <div className="w-10 h-10 rounded-xl bg-gradient-to-tr from-[#002185] to-[#ff5500] flex items-center justify-center text-white shadow-sm shrink-0">
+          <div className="w-10 h-10 rounded-xl bg-[#002185] flex items-center justify-center text-white shadow-sm shrink-0">
             <Megaphone className="w-5 h-5" />
           </div>
           <div>

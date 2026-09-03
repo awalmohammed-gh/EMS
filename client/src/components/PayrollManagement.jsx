@@ -28,6 +28,7 @@ import PayslipsModal from "./modal/PayslipsModal";
 import PayrollDetailsModal from "./modal/PayrollDetailsModal";
 import { downloadPayslipPDF } from "../utils/payslipPdfGenerator";
 import Avatar from "./Avatar";
+import ExportPayrollReportButton from "./ExportPayrollReportButton";
 
 export const PayrollManagement = () => {
   const navigate = useNavigate();
@@ -379,6 +380,27 @@ export const PayrollManagement = () => {
           </div>
 
           <div className="flex items-center gap-2.5 flex-wrap">
+            <ExportPayrollReportButton
+              records={filteredRecords}
+              month={selectedMonth !== "All" && selectedMonth !== "all" ? selectedMonth : "Summary"}
+              year={new Date().getFullYear()}
+              buttonText="Export Payroll Report"
+              onSuccess={(res) => {
+                setShowToast({
+                  show: true,
+                  message: `Exported ${res.format} report (${res.count} records).`,
+                  type: "success",
+                });
+              }}
+              onError={(errMsg) => {
+                setShowToast({
+                  show: true,
+                  message: errMsg,
+                  type: "error",
+                });
+              }}
+            />
+
             <button
               id="payroll-refresh-btn"
               type="button"

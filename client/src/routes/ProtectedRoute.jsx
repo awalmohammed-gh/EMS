@@ -6,7 +6,7 @@ import Loading from "../ui/Loading";
 const ProtectedRoute = ({ allowRole }) => {
   const location = useLocation();
   const { isLoading: isAdminLoading, adminExists, isAuthorized } = useAdminAuth();
-  const { user, token, role: authRole } = useAuth();
+  const { user, token, role: authRole, isLoading: isAuthLoading } = useAuth();
 
   const storedRole =
     typeof window !== "undefined" ? localStorage.getItem("userRole") : null;
@@ -19,12 +19,13 @@ const ProtectedRoute = ({ allowRole }) => {
 
   const effectiveRole = authRole || storedRole || (user?.role ? user.role : null);
 
+  // Await full hydration before any redirect evaluation
+  if (isAuthLoading || (allowRole === "admin" && isAdminLoading)) {
+    return <Loading />;
+  }
+
   // If protecting an Admin route
   if (allowRole === "admin") {
-    if (isAdminLoading) {
-      return <Loading />;
-    }
-
     if (adminExists === false) {
       return <Navigate to="/admin/register" replace state={{ from: location }} />;
     }

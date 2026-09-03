@@ -46,7 +46,7 @@ export function getWorkingDaysInMonth(year, monthIndex) {
  * Unified Single Source of Truth for Monthly Penalties & Attendance Breakdown.
  * Accurately queries attendance logs across date formats and computes exact penalties.
  */
-export async function calculateMonthlyPenalties(employeeId, year, monthIndex) {
+export async function calculateMonthlyPenalties(employeeId, year, monthIndex, options = {}) {
   const currentYear = year || new Date().getFullYear();
   const currentMonthIdx = monthIndex !== undefined ? monthIndex : new Date().getMonth();
 
@@ -258,15 +258,19 @@ export async function calculateMonthlyPenalties(employeeId, year, monthIndex) {
 
   const standardWorkingDays = getWorkingDaysInMonth(currentYear, currentMonthIdx);
   const absentDays = Math.max(0, standardWorkingDays - attendedDays - approvedLeaveDays);
-  const absenceRate = Number(settings.absenceRate || settings.absenceDeductionRate || 15.00);
-  const totalAbsenceDeductions = parseFloat((absentDays * absenceRate).toFixed(2));
 
   const baseSalary = Number(
-    targetEmployee?.baseSalary ??
-    targetEmployee?.basicSalary ??
-    targetEmployee?.salary ??
-    2500
+    options?.baseSalaryInput !== undefined && !isNaN(Number(options.baseSalaryInput))
+      ? Number(options.baseSalaryInput)
+      : (targetEmployee?.baseSalary ??
+         targetEmployee?.basicSalary ??
+         targetEmployee?.salary ??
+         2500)
   );
+
+  // Dynamic Daily Salary Rate = Employee Base Salary / Total Working Days in Month
+  const dailySalaryRate = standardWorkingDays > 0 ? parseFloat((baseSalary / standardWorkingDays).toFixed(2)) : 0;
+  const totalAbsenceDeductions = parseFloat((absentDays * dailySalaryRate).toFixed(2));
 
   return {
     targetEmployee,
@@ -282,7 +286,10 @@ export async function calculateMonthlyPenalties(employeeId, year, monthIndex) {
     latenessPenalties: parseFloat(totalLatePenalties.toFixed(2)),
     approvedLeaveDays,
     absentDays,
-    absenceRate,
+    dailySalaryRate,
+    dailyRate: dailySalaryRate,
+    absenceRate: dailySalaryRate,
+    absenceDeductionRate: dailySalaryRate,
     absenceDeductions: totalAbsenceDeductions,
     baseSalary,
     allowances: 0,
@@ -297,14 +304,18 @@ export async function calculateMonthlyPenalties(employeeId, year, monthIndex) {
  * Calculates complete employee payroll with allowance, waiver, and custom deduction support.
  */
 export async function calculateEmployeePayrollEngine(employeeId, year, monthIndex, options = {}) {
-  const penaltySummary = await calculateMonthlyPenalties(employeeId, year, monthIndex);
+  const penaltySummary = await calculateMonthlyPenalties(employeeId, year, monthIndex, options);
   const baseSalary = options.baseSalaryInput !== undefined && !isNaN(Number(options.baseSalaryInput))
     ? Number(options.baseSalaryInput)
     : penaltySummary.baseSalary;
 
+  const standardWorkingDays = penaltySummary.standardWorkingDays || 22;
+  const dailySalaryRate = standardWorkingDays > 0 ? parseFloat((baseSalary / standardWorkingDays).toFixed(2)) : 0;
+  const absentDays = penaltySummary.absentDays || 0;
+  const absenceDeductions = parseFloat((absentDays * dailySalaryRate).toFixed(2));
+
   const allowances = Number(options.allowances || 0);
   const customDeductions = Number(options.customDeductions || options.deductions || 0);
-  const absenceDeductions = penaltySummary.absenceDeductions;
   const latenessPenalties = penaltySummary.latenessPenalties;
 
   const totalDeductions = parseFloat(
@@ -318,6 +329,11 @@ export async function calculateEmployeePayrollEngine(employeeId, year, monthInde
     ...penaltySummary,
     baseSalary,
     basicSalary: baseSalary,
+    standardWorkingDays,
+    dailySalaryRate,
+    dailyRate: dailySalaryRate,
+    absenceRate: dailySalaryRate,
+    absenceDeductions,
     allowances,
     customDeductions,
     totalDeductions,
@@ -328,35 +344,48 @@ export async function calculateEmployeePayrollEngine(employeeId, year, monthInde
 
 /**
  * Enforces single source of truth for net salary and deduction calculations.
+ * Supports employee-specific dynamic daily salary rate deduction.
  */
 export function computeNetSalary({
   baseSalary = 0,
   allowances = 0,
   absentDays = 0,
-  dailyAbsenceRate = 15.00,
+  dailyAbsenceRate = null,
+  standardWorkingDays = 22,
   latenessFines = 0,
   otherDeductions = 0
 } = {}) {
-  const numBase = Number(baseSalary) || 0;
-  const numAllowances = Number(allowances) || 0;
-  const numAbsentDays = Number(absentDays) || 0;
-  const numDailyAbsenceRate = Number(dailyAbsenceRate) || 15.00;
-  const numLatenessFines = Number(latenessFines) || 0;
-  const numOtherDeductions = Number(otherDeductions) || 0;
+  const numBase = Math.max(0, Number(baseSalary) || 0);
+  const numAllowances = Math.max(0, Number(allowances) || 0);
+  const numAbsentDays = Math.max(0, Number(absentDays) || 0);
+  const numWorkingDays = Number(standardWorkingDays) > 0 ? Number(standardWorkingDays) : 22;
+
+  // Daily Salary Rate = Employee Base Salary / Total Working Days in Month
+  const computedRate = dailyAbsenceRate !== null && dailyAbsenceRate !== undefined && !isNaN(Number(dailyAbsenceRate)) && Number(dailyAbsenceRate) >= 0
+    ? Number(dailyAbsenceRate)
+    : (numWorkingDays > 0 ? numBase / numWorkingDays : 0);
+
+  const numDailySalaryRate = Math.max(0, Number(computedRate.toFixed(2)) || 0);
+  const numLatenessFines = Math.max(0, Number(latenessFines) || 0);
+  const numOtherDeductions = Math.max(0, Number(otherDeductions) || 0);
 
   const totalEarnings = numBase + numAllowances;
-  const totalAbsenceDeduction = numAbsentDays * numDailyAbsenceRate;
-  const totalDeductions = totalAbsenceDeduction + numLatenessFines + numOtherDeductions;
-  const netSalary = Math.max(0, totalEarnings - totalDeductions);
+  const totalAbsenceDeduction = Number((numAbsentDays * numDailySalaryRate).toFixed(2));
+  const totalDeductions = Number((totalAbsenceDeduction + numLatenessFines + numOtherDeductions).toFixed(2));
+  const netSalary = Math.max(0, Number((totalEarnings - totalDeductions).toFixed(2)));
 
   return {
-    baseSalary: Number(numBase),
-    allowances: Number(numAllowances),
+    baseSalary: Number(numBase.toFixed(2)),
+    allowances: Number(numAllowances.toFixed(2)),
+    standardWorkingDays: numWorkingDays,
+    dailySalaryRate: numDailySalaryRate,
+    dailyRate: numDailySalaryRate,
     absentDays: Number(numAbsentDays),
-    absenceDeductions: Number(totalAbsenceDeduction.toFixed(2)),
+    absenceDeductions: totalAbsenceDeduction,
     latenessPenalties: Number(numLatenessFines.toFixed(2)),
-    totalDeductions: Number(totalDeductions.toFixed(2)),
-    netSalary: Number(netSalary.toFixed(2)),
+    otherDeductions: Number(numOtherDeductions.toFixed(2)),
+    totalDeductions,
+    netSalary,
   };
 }
 

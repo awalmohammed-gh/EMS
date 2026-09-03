@@ -298,7 +298,7 @@ export const BiometricBulkUploadModal = ({
         className="bg-white dark:bg-slate-900 border border-[#E2E8F0] dark:border-slate-800 rounded-t-[28px] sm:rounded-3xl w-full max-w-3xl max-h-[90vh] flex flex-col shadow-2xl overflow-hidden transition-colors animate-fade-in"
       >
         {/* Modal Header */}
-        <div className="p-4 sm:p-5 border-b border-[#E2E8F0] dark:border-slate-800 flex items-center justify-between bg-gradient-to-r from-blue-50/50 via-white to-orange-50/30 dark:from-slate-900 dark:to-slate-900 shrink-0">
+        <div className="p-4 sm:p-5 border-b border-[#E2E8F0] dark:border-slate-800 flex items-center justify-between bg-slate-50 dark:bg-slate-900 shrink-0">
           <div className="flex items-center gap-3 min-w-0">
             <div className="w-10 h-10 rounded-xl bg-[#002185]/10 dark:bg-blue-950 flex items-center justify-center text-[#002185] dark:text-blue-400 shrink-0">
               <Fingerprint className="w-5 h-5" />

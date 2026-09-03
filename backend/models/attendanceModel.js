@@ -120,6 +120,13 @@ const attendanceSchema = new mongoose.Schema(
       type: Date,
       default: null,
     },
+
+    auditLog: {
+      adminId: { type: String, default: "" },
+      adminName: { type: String, default: "" },
+      reason: { type: String, default: "" },
+      timestamp: { type: Date, default: null },
+    },
   },
   {
     timestamps: true,

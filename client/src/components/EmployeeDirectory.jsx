@@ -403,13 +403,32 @@ export const EmployeeDirectory = ({
       }
     } catch (err) {
       console.error("Delete employee error:", err);
-      setActionMessage({
-        type: "error",
-        text:
-          err.response?.data?.message ||
-          err.message ||
-          "Failed to delete employee from database.",
-      });
+      // If 404 or record already removed, treat gracefully as success
+      if (err.response?.status === 404) {
+        setActionMessage({
+          type: "success",
+          text: `Employee record was already removed from database.`,
+        });
+        setEmployeeToDelete(null);
+        if (
+          selectedEmployee &&
+          (selectedEmployee._id === targetId ||
+            selectedEmployee.employeeId === targetId)
+        ) {
+          setSelectedEmployee(null);
+        }
+        if (typeof onRefresh === "function") {
+          await onRefresh();
+        }
+      } else {
+        setActionMessage({
+          type: "error",
+          text:
+            err.response?.data?.message ||
+            err.message ||
+            "Failed to delete employee from database.",
+        });
+      }
     } finally {
       setIsDeleting(false);
       setTimeout(() => setActionMessage(null), 5000);

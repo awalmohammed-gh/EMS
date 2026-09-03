@@ -5,7 +5,7 @@ import { getSettings, updateAttendanceSettings } from "../../../apis/fontApis";
 
 const defaultAttendance = {
   workStartTime: "08:00",
-  workEndTime: "17:00",
+  workEndTime: "19:00",
   gracePeriodMinutes: 15,
   halfDayHours: 4,
   overtimeThresholdHours: 8,

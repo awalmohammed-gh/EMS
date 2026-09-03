@@ -236,20 +236,20 @@ const ShiftStatusCard = ({
       id="shift-realtime-status-card"
       className={`relative overflow-hidden rounded-2xl sm:rounded-3xl border transition-all duration-200 shadow-sm ${
         statusEvaluation.type === "ontime"
-          ? "bg-gradient-to-br from-emerald-50/90 via-emerald-50/40 to-white dark:from-emerald-950/40 dark:via-slate-900 dark:to-slate-900 border-emerald-300 dark:border-emerald-800/80 shadow-emerald-500/5"
+          ? "bg-emerald-50 dark:bg-slate-900 border-emerald-300 dark:border-emerald-800/80 shadow-emerald-500/5"
           : statusEvaluation.type === "late"
-          ? "bg-gradient-to-br from-amber-50/95 via-orange-50/40 to-white dark:from-amber-950/40 dark:via-slate-900 dark:to-slate-900 border-amber-300 dark:border-amber-700/80 shadow-amber-500/5"
-          : "bg-gradient-to-br from-slate-50 via-blue-50/20 to-white dark:from-slate-900 dark:via-slate-900 dark:to-slate-900 border-slate-200 dark:border-slate-800"
+          ? "bg-amber-50 dark:bg-slate-900 border-amber-300 dark:border-amber-700/80 shadow-amber-500/5"
+          : "bg-slate-50 dark:bg-slate-900 border-slate-200 dark:border-slate-800"
       }`}
     >
       {/* Decorative top accent bar */}
       <div
         className={`h-1.5 w-full ${
           statusEvaluation.type === "ontime"
-            ? "bg-gradient-to-r from-emerald-500 to-teal-400"
+            ? "bg-emerald-500"
             : statusEvaluation.type === "late"
-            ? "bg-gradient-to-r from-amber-500 via-orange-500 to-rose-500"
-            : "bg-gradient-to-r from-[#002185] via-blue-500 to-indigo-400"
+            ? "bg-amber-500"
+            : "bg-[#002185]"
         }`}
       />
 

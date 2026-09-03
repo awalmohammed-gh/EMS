@@ -665,6 +665,13 @@ export const updateAttendanceRecord = async (req, res) => {
     if (status !== undefined) updateFields.status = status;
     if (notes !== undefined) updateFields.notes = notes;
 
+    updateFields.auditLog = {
+      adminId: String(req.admin?._id || req.admin?.id || "admin"),
+      adminName: req.admin?.fullName || "HR Administrator",
+      reason: notes || "Attendance record adjusted by admin",
+      timestamp: new Date(),
+    };
+
     if (workHours !== undefined) {
       const parsedH = Number(workHours);
       updateFields.workHours = !isNaN(parsedH) && Number.isFinite(parsedH) ? parsedH : 0;
@@ -1053,6 +1060,12 @@ export const createManualAttendance = async (req, res) => {
           lateMinutes: delayMinutes,
           latePenalty,
           penaltyTier,
+          auditLog: {
+            adminId: String(req.admin?._id || req.admin?.id || "admin"),
+            adminName: req.admin?.fullName || "HR Administrator",
+            reason: notes || "Manual attendance entry created by admin",
+            timestamp: new Date(),
+          },
         },
       },
       { upsert: true, returnDocument: "after", setDefaultsOnInsert: true }

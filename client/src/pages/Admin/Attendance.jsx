@@ -34,12 +34,11 @@ import ErrorMessage from "../../ui/ErrorMessage";
 import Toaster from "../../ui/Toaster";
 import {
   getAllAttendance,
-  updateAttendanceRecord,
   excuseAttendanceRecord,
   flagAttendanceRecord,
   unflagAttendanceRecord,
   recalculateAttendanceRecord,
-  createManualAttendanceRecord,
+  overrideAttendanceRecord,
   deleteAttendanceRecord,
   allEmployees,
   allLeaves,
@@ -801,29 +800,30 @@ const Attendance = () => {
     try {
       setIsSavingAdjustment(true);
 
+      const payload = {
+        employeeId: adjustmentFormData.employeeId,
+        date: adjustmentFormData.date,
+        clockIn: adjustmentFormData.clockIn || null,
+        clockOut: adjustmentFormData.clockOut || null,
+        status: adjustmentFormData.status,
+        notes: adjustmentFormData.notes,
+        workHours: adjustmentFormData.workHours,
+        delayMinutes: adjustmentFormData.delayMinutes,
+        latePenalty: adjustmentFormData.latePenalty,
+        isWaived: adjustmentFormData.isWaived,
+      };
+
       if (adjustmentFormData.id) {
-        // Update existing attendance record
-        await updateAttendanceRecord(adjustmentFormData.id, {
-          clockIn: adjustmentFormData.clockIn || null,
-          clockOut: adjustmentFormData.clockOut || null,
-          status: adjustmentFormData.status,
-          notes: adjustmentFormData.notes,
-        });
+        // Update / override existing attendance record
+        await overrideAttendanceRecord(payload, adjustmentFormData.id);
         setShowToast({
           show: true,
           message: "Attendance record adjusted successfully.",
           type: "success",
         });
       } else {
-        // Create manual entry
-        await createManualAttendanceRecord({
-          employeeId: adjustmentFormData.employeeId,
-          date: adjustmentFormData.date,
-          clockIn: adjustmentFormData.clockIn || null,
-          clockOut: adjustmentFormData.clockOut || null,
-          status: adjustmentFormData.status,
-          notes: adjustmentFormData.notes,
-        });
+        // Create manual override entry
+        await overrideAttendanceRecord(payload);
         setShowToast({
           show: true,
           message: "Manual attendance record created.",
@@ -868,9 +868,9 @@ const Attendance = () => {
       employeeId: firstEmp ? (firstEmp.employeeId || firstEmp._id) : "",
       employeeName: firstEmp ? firstEmp.fullName : "",
       date: typeof overrideDate === "string" && overrideDate ? overrideDate : new Date().toISOString().split("T")[0],
-      clockIn: "08:30",
-      clockOut: "17:00",
-      status: "Present",
+      clockIn: "08:00",
+      clockOut: "19:00",
+      status: "On Time",
       notes: "Retroactive admin entry",
     });
     setShowAdjustmentModal(true);
@@ -1625,22 +1625,6 @@ const Attendance = () => {
                         {/* Actions */}
                         <td className="px-5 py-3.5 text-right whitespace-nowrap">
                           <div className="flex items-center justify-end gap-1.5">
-                            {/* Quick Actions Dropdown Menu */}
-                            <AttendanceQuickActionsMenu
-                              item={item}
-                              onExcuse={(rec) => setExcuseModalRecord(rec)}
-                              onFlag={(rec) => setFlagModalRecord(rec)}
-                              onUnflag={(rec) => handleUnflagRecord(rec)}
-                              onRecalculate={(rec) => handleRecalculateRecord(rec)}
-                              onViewDetails={(rec) => {
-                                setSelectedAttendance(rec);
-                                setShowDetailsModal(true);
-                              }}
-                              onPrintReport={(rec) => handleOpenAttendanceReport(rec)}
-                              onEdit={(rec) => handleOpenEditModal(rec)}
-                              onDelete={(rec) => setDeleteConfirmAttendance(rec)}
-                            />
-
                             <button
                               onClick={() => {
                                 setSelectedAttendance(item);
@@ -1671,6 +1655,22 @@ const Attendance = () => {
                             >
                               <Trash2 className="h-3.5 w-3.5" />
                             </button>
+
+                            {/* Quick Actions Dropdown Menu */}
+                            <AttendanceQuickActionsMenu
+                              item={item}
+                              onExcuse={(rec) => setExcuseModalRecord(rec)}
+                              onFlag={(rec) => setFlagModalRecord(rec)}
+                              onUnflag={(rec) => handleUnflagRecord(rec)}
+                              onRecalculate={(rec) => handleRecalculateRecord(rec)}
+                              onViewDetails={(rec) => {
+                                setSelectedAttendance(rec);
+                                setShowDetailsModal(true);
+                              }}
+                              onPrintReport={(rec) => handleOpenAttendanceReport(rec)}
+                              onEdit={(rec) => handleOpenEditModal(rec)}
+                              onDelete={(rec) => setDeleteConfirmAttendance(rec)}
+                            />
                           </div>
                         </td>
                       </tr>

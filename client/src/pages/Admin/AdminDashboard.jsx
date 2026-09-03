@@ -39,13 +39,27 @@ import DashboardMetricsSkeleton from "../../components/DashboardMetricsSkeleton"
 import PenaltyPayrollImpactChart from "../../components/PenaltyPayrollImpactChart";
 import RecentActivityFeed from "../../components/RecentActivityFeed";
 import DashboardSummaryMetrics from "../../components/DashboardSummaryMetrics";
+import DashboardQuickActions from "../../components/DashboardQuickActions";
+import AddEmployee from "../../components/modal/AddEmployee";
+import RecordAttendanceModal from "../../components/modal/RecordAttendanceModal";
+import PayslipsModal from "../../components/modal/PayslipsModal";
+import DashboardDataSummarySection from "../../components/DashboardDataSummarySection";
+import { useManagement } from "../../context/ManagementContextProvider";
 
 const AdminDashboard = () => {
   const navigate = useNavigate();
+  const {
+    showEmployeeModal,
+    setShowEmployeeModal,
+    showPayslipsModal,
+    setShowPayslipsModal,
+  } = useManagement();
+  const [showRecordAttendanceModal, setShowRecordAttendanceModal] = useState(false);
   const [dashboardData, setDashboardData] = useState(null);
   const [isLoading, setIsLoading] = useState(false);
   const [isError, setIsError] = useState(null);
   const [actionProcessingId, setActionProcessingId] = useState(null);
+  const [exportNotice, setExportNotice] = useState(null);
 
   const fetchDashboardData = async () => {
     try {
@@ -273,7 +287,7 @@ const AdminDashboard = () => {
             </p>
           </div>
 
-          <div className="flex items-center gap-2.5 self-start sm:self-auto">
+          <div className="flex flex-wrap items-center gap-2.5 self-start sm:self-auto">
             <div className="text-xs text-slate-600 dark:text-slate-300 bg-slate-50 dark:bg-slate-800/80 px-3.5 py-2 rounded-xl border border-slate-200/80 dark:border-slate-700/80 font-medium flex items-center gap-2 shadow-2xs">
               <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse"></span>
               <span>
@@ -288,6 +302,45 @@ const AdminDashboard = () => {
           </div>
         </div>
       </div>
+
+      {/* Export Notification Toast */}
+      {exportNotice && (
+        <div
+          id="dashboard-export-notice-banner"
+          className={`p-3.5 rounded-xl border flex items-center justify-between text-xs font-semibold animate-in fade-in duration-200 ${
+            exportNotice.type === "error"
+              ? "bg-rose-50 dark:bg-rose-950/60 border-rose-200 dark:border-rose-800 text-rose-700 dark:text-rose-300"
+              : "bg-emerald-50 dark:bg-emerald-950/60 border-emerald-200 dark:border-emerald-800 text-emerald-700 dark:text-emerald-300"
+          }`}
+        >
+          <span>{exportNotice.message}</span>
+          <button
+            type="button"
+            onClick={() => setExportNotice(null)}
+            className="text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 ml-3 cursor-pointer"
+          >
+            ✕
+          </button>
+        </div>
+      )}
+
+      {/* EXECUTIVE DATA SUMMARY SECTION (TOP OF DASHBOARD) */}
+      <DashboardDataSummarySection
+        dashboardData={dashboardData}
+        onExportSuccess={(res) => {
+          setExportNotice({
+            type: "success",
+            message: `✓ Successfully ${res.message} (${res.filename})`,
+          });
+          setTimeout(() => setExportNotice(null), 6000);
+        }}
+        onExportError={(errMsg) => {
+          setExportNotice({
+            type: "error",
+            message: `Export Error: ${errMsg}`,
+          });
+        }}
+      />
 
       {/* Top Metric Cards Grid: 4-column responsive grid */}
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 sm:gap-5">
@@ -551,16 +604,6 @@ const AdminDashboard = () => {
                 data={attendanceTrends}
                 margin={{ top: 10, right: 10, left: -20, bottom: 0 }}
               >
-                <defs>
-                  <linearGradient id="colorPresent" x1="0" y1="0" x2="0" y2="1">
-                    <stop offset="5%" stopColor="#10B981" stopOpacity={0.35} />
-                    <stop offset="95%" stopColor="#10B981" stopOpacity={0.0} />
-                  </linearGradient>
-                  <linearGradient id="colorLate" x1="0" y1="0" x2="0" y2="1">
-                    <stop offset="5%" stopColor="#F59E0B" stopOpacity={0.35} />
-                    <stop offset="95%" stopColor="#F59E0B" stopOpacity={0.0} />
-                  </linearGradient>
-                </defs>
                 <CartesianGrid strokeDasharray="3 3" stroke="#334155" opacity={0.2} vertical={false} />
                 <XAxis
                   dataKey="day"
@@ -593,8 +636,8 @@ const AdminDashboard = () => {
                   name="Present"
                   stroke="#10B981"
                   strokeWidth={2.5}
-                  fillOpacity={1}
-                  fill="url(#colorPresent)"
+                  fillOpacity={0.15}
+                  fill="#10B981"
                 />
                 <Area
                   type="monotone"
@@ -602,8 +645,8 @@ const AdminDashboard = () => {
                   name="Late"
                   stroke="#F59E0B"
                   strokeWidth={2}
-                  fillOpacity={1}
-                  fill="url(#colorLate)"
+                  fillOpacity={0.15}
+                  fill="#F59E0B"
                 />
                 <Bar
                   dataKey="absent"
@@ -948,6 +991,42 @@ const AdminDashboard = () => {
           </div>
         </div>
       </div>
+
+      {/* Floating Quick Actions Menu */}
+      <DashboardQuickActions
+        onOpenAddEmployee={() => setShowEmployeeModal(true)}
+        onOpenRecordAttendance={() => setShowRecordAttendanceModal(true)}
+        onOpenProcessPayroll={() => setShowPayslipsModal(true)}
+      />
+
+      {/* Quick Action Modals */}
+      {showEmployeeModal && (
+        <AddEmployee
+          onEmployeeAdded={() => {
+            fetchDashboardData();
+          }}
+        />
+      )}
+
+      {showRecordAttendanceModal && (
+        <RecordAttendanceModal
+          isOpen={showRecordAttendanceModal}
+          onClose={() => setShowRecordAttendanceModal(false)}
+          onSuccess={() => {
+            fetchDashboardData();
+          }}
+        />
+      )}
+
+      {showPayslipsModal && (
+        <PayslipsModal
+          onClose={() => setShowPayslipsModal(false)}
+          onSuccess={() => {
+            setShowPayslipsModal(false);
+            fetchDashboardData();
+          }}
+        />
+      )}
     </div>
   );
 };

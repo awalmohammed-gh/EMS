@@ -6,6 +6,7 @@ import { getStandardizedLatenessTiers } from "../utils/latenessPenaltyCalculator
 // In-memory fallback for penalty settings
 let inMemoryPenaltySettings = {
   workStartTime: "08:00",
+  workEndTime: "19:00",
   absenceDeductionRate: 15,
   lateTier1_amount: 10,
   lateTier2_amount: 30,
@@ -322,9 +323,32 @@ export const getSettings = async (req, res) => {
       settings = await Settings.create({});
     }
 
+    // Ensure companySettings singleton values are harmonized
+    let compSettings = null;
+    try {
+      compSettings = await CompanySettings.getSingletonSettings();
+    } catch {
+      compSettings = null;
+    }
+
+    const settingsObj = settings.toObject ? settings.toObject() : { ...settings };
+    if (!settingsObj.attendance) settingsObj.attendance = {};
+    if (!settingsObj.company) settingsObj.company = {};
+
+    const resolvedStartTime = compSettings?.workStartTime || settingsObj.attendance.workStartTime || "08:00";
+    const rawEndTime = compSettings?.workEndTime || settingsObj.attendance.workEndTime;
+    const resolvedEndTime = (!rawEndTime || rawEndTime === "17:00") ? "19:00" : rawEndTime;
+
+    settingsObj.attendance.workStartTime = resolvedStartTime;
+    settingsObj.attendance.workEndTime = resolvedEndTime;
+    settingsObj.company.workStartTime = resolvedStartTime;
+    settingsObj.company.workEndTime = resolvedEndTime;
+    settingsObj.workStartTime = resolvedStartTime;
+    settingsObj.workEndTime = resolvedEndTime;
+
     res.status(200).json({
       success: true,
-      settings,
+      settings: settingsObj,
     });
   } catch (error) {
     res.status(500).json({
@@ -342,6 +366,22 @@ export const updateCompanySettings = async (req, res) => {
       { $set: { company: req.body } },
       { returnDocument: "after", upsert: true },
     );
+
+    // Harmonize work hours across attendance settings and CompanySettings singleton
+    if (req.body?.workStartTime || req.body?.workEndTime) {
+      const attUpdate = {};
+      const compUpdate = {};
+      if (req.body.workStartTime) {
+        attUpdate["attendance.workStartTime"] = req.body.workStartTime;
+        compUpdate.workStartTime = req.body.workStartTime;
+      }
+      if (req.body.workEndTime) {
+        attUpdate["attendance.workEndTime"] = req.body.workEndTime;
+        compUpdate.workEndTime = req.body.workEndTime;
+      }
+      await Settings.updateOne({}, { $set: attUpdate });
+      await CompanySettings.updateOne({}, { $set: compUpdate });
+    }
 
     const adminUser = req.admin || {};
     try {
@@ -455,6 +495,22 @@ export const updateAttendanceSettings = async (req, res) => {
       { $set: { attendance: req.body } },
       { returnDocument: "after", upsert: true },
     );
+
+    // Also sync shift hours to company settings and CompanySettings singleton
+    if (req.body?.workStartTime || req.body?.workEndTime) {
+      const compUpdate = {};
+      const companySubdocUpdate = {};
+      if (req.body.workStartTime) {
+        compUpdate.workStartTime = req.body.workStartTime;
+        companySubdocUpdate["company.workStartTime"] = req.body.workStartTime;
+      }
+      if (req.body.workEndTime) {
+        compUpdate.workEndTime = req.body.workEndTime;
+        companySubdocUpdate["company.workEndTime"] = req.body.workEndTime;
+      }
+      await CompanySettings.updateOne({}, { $set: compUpdate });
+      await Settings.updateOne({}, { $set: companySubdocUpdate });
+    }
 
     res.status(200).json({
       success: true,

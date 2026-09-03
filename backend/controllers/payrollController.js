@@ -99,21 +99,31 @@ export const calculateMonthlyPayrollSummary = async (req, res) => {
 
     if (month) {
       const raw = String(month).trim();
-      const yearMatch = raw.match(/\b(20\d\d)\b/);
-      if (yearMatch) {
-        targetYear = parseInt(yearMatch[1], 10);
-      }
-      const foundIdx = monthNames.findIndex((m) =>
-        raw.toLowerCase().includes(m.toLowerCase())
-      );
-      if (foundIdx !== -1) {
-        targetMonthIndex = foundIdx;
-        targetMonthName = monthNames[foundIdx];
-      } else {
-        const num = parseInt(raw, 10);
-        if (!isNaN(num) && num >= 1 && num <= 12) {
-          targetMonthIndex = num - 1;
+      const ymMatch = raw.match(/^(\d{4})-(\d{1,2})$/);
+      if (ymMatch) {
+        targetYear = parseInt(ymMatch[1], 10);
+        const mVal = parseInt(ymMatch[2], 10);
+        if (mVal >= 1 && mVal <= 12) {
+          targetMonthIndex = mVal - 1;
           targetMonthName = monthNames[targetMonthIndex];
+        }
+      } else {
+        const yearMatch = raw.match(/\b(20\d\d)\b/);
+        if (yearMatch) {
+          targetYear = parseInt(yearMatch[1], 10);
+        }
+        const foundIdx = monthNames.findIndex((m) =>
+          raw.toLowerCase().includes(m.toLowerCase())
+        );
+        if (foundIdx !== -1) {
+          targetMonthIndex = foundIdx;
+          targetMonthName = monthNames[foundIdx];
+        } else {
+          const num = parseInt(raw, 10);
+          if (!isNaN(num) && num >= 1 && num <= 12) {
+            targetMonthIndex = num - 1;
+            targetMonthName = monthNames[targetMonthIndex];
+          }
         }
       }
     }
@@ -207,13 +217,11 @@ export const calculateMonthlyPayrollSummary = async (req, res) => {
           ? Number(targetEmployee.salary)
           : 4000));
 
-    const absenceRate = Number(
-      companySettings.absenceDeductionRate !== undefined && companySettings.absenceDeductionRate !== null && Number(companySettings.absenceDeductionRate) > 0
-        ? companySettings.absenceDeductionRate
-        : 15.0
-    );
-    const dailyRate = parseFloat((baseSalary / (standardWorkingDays || 22)).toFixed(2));
-    const hourlyRate = parseFloat((dailyRate / 8).toFixed(2));
+    // Dynamic Daily Salary Rate = Employee Base Salary / Total Working Days in Month
+    const dailySalaryRate = standardWorkingDays > 0 ? parseFloat((baseSalary / standardWorkingDays).toFixed(2)) : 0;
+    const dailyRate = dailySalaryRate;
+    const hourlyRate = parseFloat((dailySalaryRate / 8).toFixed(2));
+    const absenceRate = dailySalaryRate;
 
     // 1. Gather Attendance Records strictly for the selected month and year
     let attendanceRecords = [];
@@ -406,12 +414,13 @@ export const calculateMonthlyPayrollSummary = async (req, res) => {
     let unexcusedAbsences = Math.max(0, standardWorkingDays - payableDays);
     let absentDaysCount = unexcusedAbsences;
 
-    // Call Unified Single Source of Truth Calculation Engine
+    // Call Unified Single Source of Truth Calculation Engine with dynamic base salary
     try {
       const engineResult = await calculateMonthlyPenalties(
         targetEmployee._id || targetEmployee.employeeId || employeeId,
         targetYear,
-        targetMonthIndex
+        targetMonthIndex,
+        { baseSalaryInput: baseSalary }
       );
 
       if (engineResult) {
@@ -480,12 +489,13 @@ export const calculateMonthlyPayrollSummary = async (req, res) => {
 
     const totalCustomDeductions = dynamicCustomDeductions.reduce((acc, item) => acc + Number(item.amount || 0), 0);
 
-    // 6. Deductions Itemization: Absenteeism, Lateness Tiers & Custom Deductions
+    // 6. Deductions Itemization: Dynamic Absenteeism (absentDays * dailySalaryRate), Lateness Tiers & Custom Deductions
     const computedBreakdown = computeNetSalary({
       baseSalary,
       allowances: totalAllowances,
       absentDays: absentDaysCount,
-      dailyAbsenceRate: absenceRate,
+      dailyAbsenceRate: dailySalaryRate,
+      standardWorkingDays,
       latenessFines: totalLatenessDeductions,
       otherDeductions: totalCustomDeductions,
     });
@@ -523,13 +533,17 @@ export const calculateMonthlyPayrollSummary = async (req, res) => {
         approvedPaidLeaveDays,
         approvedUnpaidLeaveDays,
         payableDays,
+        dailySalaryRate,
+        dailyRate: dailySalaryRate,
+        hourlyRate,
       },
       rates: {
         monthlyBaseSalary: baseSalary,
-        dailyRate,
+        dailySalaryRate,
+        dailyRate: dailySalaryRate,
         hourlyRate,
-        fixedAbsenceRate: absenceRate,
-        absenceDeductionRate: absenceRate,
+        standardWorkingDays,
+        absenceDeductionRate: dailySalaryRate,
         workStartTime: companySettings.workStartTime,
         lateTier1_amount: companySettings.lateTier1_amount,
         lateTier2_amount: companySettings.lateTier2_amount,
@@ -546,10 +560,14 @@ export const calculateMonthlyPayrollSummary = async (req, res) => {
         baseSalary,
         basicSalary: baseSalary,
         earnedBaseSalary: baseSalary,
+        standardWorkingDays,
+        dailySalaryRate,
+        dailyRate: dailySalaryRate,
+        hourlyRate,
         grossEarnings,
         totalAllowances,
         absentDays: absentDaysCount,
-        absenceDeductionRate: absenceRate,
+        absenceDeductionRate: dailySalaryRate,
         absentDaysDeduction,
         absenceDeductions: absentDaysDeduction,
         lateDays,
@@ -572,8 +590,20 @@ export const calculateMonthlyPayrollSummary = async (req, res) => {
           total: totalDeductions,
         },
       },
+      dailySalaryRate,
+      dailyRate: dailySalaryRate,
+      standardWorkingDays,
+      absenceDeductionRate: dailySalaryRate,
       absenceDeductions: absentDaysDeduction,
       absentDaysDeduction,
+      absentDaysCount,
+      absenceDeductionDetails: {
+        daysCount: absentDaysCount,
+        ratePerDay: dailySalaryRate,
+        standardWorkingDays,
+        totalAmount: absentDaysDeduction,
+        formula: `${absentDaysCount} days × GH₵${dailySalaryRate.toFixed(2)} = -GH₵${absentDaysDeduction.toFixed(2)}`,
+      },
       latenessPenalties: latenessDeductions,
       latenessDeductions,
       netPay: netCalculatedSalary,
@@ -582,7 +612,8 @@ export const calculateMonthlyPayrollSummary = async (req, res) => {
       payrollRecord: existingPayroll || null,
       formulaExplanation: {
         baseSalaryFormula: `Base Monthly Salary: GH₵${baseSalary.toFixed(2)}`,
-        absentDaysFormula: `Absenteeism Deduction: ${absentDaysCount} absent day(s) × GH₵${absenceRate.toFixed(2)}/day = GH₵${absentDaysDeduction.toFixed(2)}`,
+        dailyRateFormula: `Daily Rate = GH₵${baseSalary.toFixed(2)} ÷ ${standardWorkingDays} Working Days = GH₵${dailySalaryRate.toFixed(2)}/day`,
+        absentDaysFormula: `Absenteeism Deduction: ${absentDaysCount} absent day(s) × GH₵${dailySalaryRate.toFixed(2)}/day = GH₵${absentDaysDeduction.toFixed(2)}`,
         latenessFormula: `Lateness Penalties: ${lateDays} late clock-in(s) evaluated by tier = GH₵${latenessDeductions.toFixed(2)}`,
         netSalaryFormula: `Net Take-Home = Base Salary (GH₵${baseSalary.toFixed(2)}) + Allowances (GH₵${totalAllowances.toFixed(2)}) - Total Deductions (GH₵${totalDeductions.toFixed(2)}) = GH₵${netCalculatedSalary.toFixed(2)}`,
       },
@@ -592,10 +623,20 @@ export const calculateMonthlyPayrollSummary = async (req, res) => {
       success: true,
       baseSalary,
       basicSalary: baseSalary,
+      standardWorkingDays,
+      dailySalaryRate,
+      dailyRate: dailySalaryRate,
       allowances: totalAllowances,
       absentDays: absentDaysCount,
       absenceDeductions: absentDaysDeduction,
       absentDaysDeduction,
+      absenceDeductionDetails: {
+        daysCount: absentDaysCount,
+        ratePerDay: dailySalaryRate,
+        standardWorkingDays,
+        totalAmount: absentDaysDeduction,
+        formula: `${absentDaysCount} days × GH₵${dailySalaryRate.toFixed(2)} = -GH₵${absentDaysDeduction.toFixed(2)}`,
+      },
       lateDays,
       latenessPenalties: latenessDeductions,
       latenessDeductions,
@@ -719,11 +760,45 @@ export const generatePayroll = async (req, res) => {
 
     const totalAttendanceDeductions = finalAbsentDeduction + finalLatenessDeduction;
 
+    // Determine target month and year for working days and dynamic daily rate
+    const now = new Date();
+    let targetYear = now.getFullYear();
+    let targetMonthIndex = now.getMonth();
+    const monthNames = [
+      "January", "February", "March", "April", "May", "June",
+      "July", "August", "September", "October", "November", "December"
+    ];
+
+    if (payMonth) {
+      const rawMonth = String(payMonth).trim();
+      const ymMatch = rawMonth.match(/^(\d{4})-(\d{1,2})$/);
+      if (ymMatch) {
+        targetYear = parseInt(ymMatch[1], 10);
+        const mVal = parseInt(ymMatch[2], 10);
+        if (mVal >= 1 && mVal <= 12) {
+          targetMonthIndex = mVal - 1;
+        }
+      } else {
+        const yMatch = rawMonth.match(/\b(20\d\d)\b/);
+        if (yMatch) targetYear = parseInt(yMatch[1], 10);
+        const mIdx = monthNames.findIndex((m) => rawMonth.toLowerCase().includes(m.toLowerCase()));
+        if (mIdx !== -1) targetMonthIndex = mIdx;
+      }
+    }
+
+    const standardWorkingDays = Number(req.body.standardWorkingDays) || getWorkingDaysInMonth(targetYear, targetMonthIndex);
+    const dailySalaryRate = Number(req.body.dailySalaryRate) || (standardWorkingDays > 0 ? parseFloat((finalBaseSalary / standardWorkingDays).toFixed(2)) : 0);
+
+    const resolvedAbsentDays = req.body.absentDays !== undefined && !isNaN(Number(req.body.absentDays))
+      ? Number(req.body.absentDays)
+      : (origAbsence > 0 && dailySalaryRate > 0 ? Math.round(origAbsence / dailySalaryRate) : 0);
+
     const computedPayroll = computeNetSalary({
       baseSalary: finalBaseSalary,
       allowances: totalCustomEarnings,
-      absentDays: origAbsence > 0 ? Math.max(1, Math.round(origAbsence / 15)) : 0,
-      dailyAbsenceRate: 15.00,
+      absentDays: resolvedAbsentDays,
+      dailyAbsenceRate: dailySalaryRate,
+      standardWorkingDays,
       latenessFines: finalLatenessDeduction,
       otherDeductions: totalCustomDeductions,
     });
@@ -764,9 +839,11 @@ export const generatePayroll = async (req, res) => {
     const finalStatus = req.body.status || "Published";
 
     const absenceDeductionDetails = {
-      daysCount: origAbsence > 0 ? Math.max(1, Math.round(origAbsence / 15)) : 0,
-      ratePerDay: 15,
+      daysCount: resolvedAbsentDays,
+      ratePerDay: dailySalaryRate,
+      standardWorkingDays,
       totalAmount: finalAbsentDeduction,
+      formula: `${resolvedAbsentDays} days × GH₵${dailySalaryRate.toFixed(2)} = -GH₵${finalAbsentDeduction.toFixed(2)}`,
     };
     const latenessDeductionDetails = {
       totalLateMinutes: 0,
@@ -776,6 +853,9 @@ export const generatePayroll = async (req, res) => {
     };
     const breakdownSnapshot = {
       baseSalary: finalBaseSalary,
+      standardWorkingDays,
+      dailySalaryRate,
+      dailyRate: dailySalaryRate,
       grossEarnings: finalBaseSalary + totalCustomEarnings,
       allowances: parsedEarnings,
       absenceDeduction: absenceDeductionDetails,
@@ -800,6 +880,10 @@ export const generatePayroll = async (req, res) => {
       paymentDate,
       basicSalary: finalBaseSalary,
       baseSalary: finalBaseSalary,
+      standardWorkingDays,
+      dailySalaryRate,
+      dailyRate: dailySalaryRate,
+      absentDays: resolvedAbsentDays,
       earnings: parsedEarnings,
       deductions: parsedDeductions,
       absentDaysDeduction: finalAbsentDeduction,
@@ -832,6 +916,8 @@ export const generatePayroll = async (req, res) => {
             paymentDate,
             basicSalary: finalBaseSalary,
             baseSalary: finalBaseSalary,
+            standardWorkingDays,
+            dailySalaryRate,
             earnings: parsedEarnings,
             deductions: parsedDeductions,
             absentDaysDeduction: finalAbsentDeduction,
@@ -1787,32 +1873,87 @@ export const exportPayrollReport = async (req, res) => {
       const empName = r.employee?.fullName || r.employeeName || "Employee";
       const empId = r.employee?.employeeId || r.employeeId || `EMP00${i + 1}`;
       const dept = r.employee?.department || r.department || "Operations";
+      const pos = r.employee?.position || r.position || "Staff Member";
       const basic = Number(r.basicSalary || 0);
       const allow = Number(r.allowances || 0);
       const deduct = Number(r.deductions || 0);
       const net = Number(r.netSalary || (basic + allow - deduct));
+      const bank = r.employee?.bankName || r.bankName || "Ghana Commercial Bank";
+      const account = r.employee?.accountNumber || r.accountNumber || "N/A";
 
       return {
         payslipNumber: r.payslipNumber || r.id || `PAY-${i + 1}`,
         employeeId: empId,
         employeeName: empName,
         department: dept,
+        position: pos,
         payMonth: r.payMonth || r.month || "August 2026",
         paymentDate: r.paymentDate || "2026-08-25",
         basicSalary: basic,
         allowances: allow,
+        grossSalary: basic + allow,
         deductions: deduct,
         netSalary: net,
         paymentMethod: r.paymentMethod || "Bank Transfer",
         status: r.status || "Paid",
+        bankName: bank,
+        accountNumber: account,
       };
     });
+
+    if (format === "csv") {
+      const headers = [
+        "Payslip Number",
+        "Employee ID",
+        "Employee Name",
+        "Department",
+        "Position",
+        "Pay Month",
+        "Payment Date",
+        "Basic Salary (GHS)",
+        "Allowances (GHS)",
+        "Gross Salary (GHS)",
+        "Deductions (GHS)",
+        "Net Salary (GHS)",
+        "Payment Method",
+        "Status",
+        "Bank Name",
+        "Account Number",
+      ];
+      const rows = exportRows.map((row) => [
+        `"${row.payslipNumber}"`,
+        `"${row.employeeId}"`,
+        `"${row.employeeName}"`,
+        `"${row.department}"`,
+        `"${row.position}"`,
+        `"${row.payMonth}"`,
+        `"${row.paymentDate}"`,
+        row.basicSalary.toFixed(2),
+        row.allowances.toFixed(2),
+        row.grossSalary.toFixed(2),
+        row.deductions.toFixed(2),
+        row.netSalary.toFixed(2),
+        `"${row.paymentMethod}"`,
+        `"${row.status}"`,
+        `"${row.bankName}"`,
+        `"${row.accountNumber}"`,
+      ].join(","));
+
+      const csvContent = "\uFEFF" + [headers.join(","), ...rows].join("\n");
+      const safeMonth = (month || "all-months").replace(/\s+/g, "_");
+      res.setHeader("Content-Type", "text/csv; charset=utf-8");
+      res.setHeader("Content-Disposition", `attachment; filename="Payroll_Report_${safeMonth}.csv"`);
+      return res.status(200).send(csvContent);
+    }
 
     return res.status(200).json({
       success: true,
       reportMonth: month || "All Months",
       totalCount: exportRows.length,
       totalDisbursement: exportRows.reduce((acc, r) => acc + r.netSalary, 0),
+      totalBasic: exportRows.reduce((acc, r) => acc + r.basicSalary, 0),
+      totalAllowances: exportRows.reduce((acc, r) => acc + r.allowances, 0),
+      totalDeductions: exportRows.reduce((acc, r) => acc + r.deductions, 0),
       data: exportRows,
     });
   } catch (error) {

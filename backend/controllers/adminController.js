@@ -485,11 +485,8 @@ export const updateEmployeeStatus = async (req, res) => {
   }
 };
 
-// Admin action: delete employee permanently from database with ACID-compliant cascading purge
+// Admin action: delete employee permanently from database with robust cascading purge
 export const deleteEmployee = async (req, res) => {
-  let session = null;
-  let isTransactionActive = false;
-
   try {
     const { id } = req.params;
 
@@ -504,104 +501,106 @@ export const deleteEmployee = async (req, res) => {
     let targetEmployee = null;
     if (mongoose.Types.ObjectId.isValid(id)) {
       targetEmployee = await Employee.findById(id).lean();
-    } else {
+    }
+    if (!targetEmployee) {
       targetEmployee = await Employee.findOne({
         $or: [{ employeeId: id }, { email: id }],
       }).lean();
     }
 
-    if (!targetEmployee) {
-      return res.status(404).json({
-        success: false,
-        message: "Employee record not found or already deleted from database.",
-      });
+    const empObjectId = targetEmployee?._id || (mongoose.Types.ObjectId.isValid(id) ? new mongoose.Types.ObjectId(id) : null);
+    const empCode = targetEmployee?.employeeId || (typeof id === "string" ? id : "");
+    const empEmail = targetEmployee?.email || (typeof id === "string" && id.includes("@") ? id : "");
+    const empName = targetEmployee?.fullName || empCode || "Employee";
+
+    // 2. Execute cascading purges across all associated collections sequentially
+    // Build comprehensive search criteria matching ObjectId, custom employeeId, and string IDs
+    const buildPurgeFilter = (fieldPrefix = "employee") => {
+      const orClauses = [];
+      if (empObjectId) {
+        orClauses.push({ [fieldPrefix]: empObjectId });
+      }
+      if (empCode) {
+        orClauses.push({ [fieldPrefix]: empCode });
+        orClauses.push({ employeeId: empCode });
+      }
+      if (id && String(id) !== String(empCode)) {
+        orClauses.push({ [fieldPrefix]: String(id) });
+        orClauses.push({ employeeId: String(id) });
+      }
+      return orClauses.length > 0 ? { $or: orClauses } : { employeeId: String(id) };
+    };
+
+    // Attendance records purge
+    const attendanceDeleteResult = await Attendance.deleteMany(buildPurgeFilter("employee")).catch((err) => {
+      console.warn("[Cascading Delete] Attendance purge warning:", err.message);
+      return { deletedCount: 0 };
+    });
+
+    // Payroll / Payslips records purge
+    const payrollDeleteResult = await Payroll.deleteMany(buildPurgeFilter("employee")).catch((err) => {
+      console.warn("[Cascading Delete] Payroll purge warning:", err.message);
+      return { deletedCount: 0 };
+    });
+
+    // Leave Requests records purge
+    const leaveDeleteResult = await Leave.deleteMany(buildPurgeFilter("employee")).catch((err) => {
+      console.warn("[Cascading Delete] Leave purge warning:", err.message);
+      return { deletedCount: 0 };
+    });
+
+    // Notifications purge (recipients, metadata, or references)
+    const notifOrClauses = [];
+    if (empObjectId) {
+      notifOrClauses.push({ recipient_id: String(empObjectId) });
+      notifOrClauses.push({ recipient: empObjectId });
+      notifOrClauses.push({ "metadata.employee_id": String(empObjectId) });
     }
-
-    const empObjectId = targetEmployee._id;
-    const empCode = targetEmployee.employeeId;
-    const empEmail = targetEmployee.email;
-    const empName = targetEmployee.fullName || empCode || "Employee";
-
-    // 2. Attempt MongoDB Client Session & ACID Transaction
-    try {
-      session = await mongoose.startSession();
-      session.startTransaction();
-      isTransactionActive = true;
-    } catch (sessionErr) {
-      // Standalone MongoDB (without replica set) does not support multi-document transactions
-      console.warn(
-        "[Cascading Delete] MongoDB Transaction not supported in current environment; proceeding with sequential atomic cascade:",
-        sessionErr.message
-      );
-      session = null;
-      isTransactionActive = false;
+    if (empCode) {
+      notifOrClauses.push({ recipient_id: empCode });
+      notifOrClauses.push({ "metadata.employeeId": empCode });
     }
+    if (id) {
+      notifOrClauses.push({ recipient_id: String(id) });
+      notifOrClauses.push({ "metadata.employeeId": String(id) });
+    }
+    const notificationDeleteResult = await Notification.deleteMany(
+      notifOrClauses.length > 0 ? { $or: notifOrClauses } : { recipient_id: String(id) }
+    ).catch((err) => {
+      console.warn("[Cascading Delete] Notification purge warning:", err.message);
+      return { deletedCount: 0 };
+    });
 
-    const sessionOptions = session && isTransactionActive ? { session } : {};
-
-    // 3. Execute cascading purges across all associated collections
-    // Attendance
-    const attendanceFilter = {
+    // Primary Employee Document deletion
+    let employeeDeletedCount = 0;
+    if (empObjectId) {
+      const delDoc = await Employee.findByIdAndDelete(empObjectId).catch(() => null);
+      if (delDoc) employeeDeletedCount++;
+    }
+    const empExtraDel = await Employee.deleteMany({
       $or: [
-        { employee: empObjectId },
-        { employeeId: empCode },
-        { employeeId: String(empObjectId) },
+        ...(empObjectId ? [{ _id: empObjectId }] : []),
+        ...(empCode ? [{ employeeId: empCode }] : []),
+        { employeeId: String(id) },
       ],
-    };
-    const attendanceDeleteResult = await Attendance.deleteMany(attendanceFilter, sessionOptions);
+    }).catch(() => ({ deletedCount: 0 }));
+    employeeDeletedCount += (empExtraDel?.deletedCount || 0);
 
-    // Payroll / Payslips
-    const payrollFilter = {
-      $or: [
-        { employee: empObjectId },
-        { employeeId: empCode },
-        { employeeId: String(empObjectId) },
-      ],
-    };
-    const payrollDeleteResult = await Payroll.deleteMany(payrollFilter, sessionOptions);
-
-    // Leave Requests
-    const leaveFilter = {
-      $or: [
-        { employee: empObjectId },
-        { employeeId: empCode },
-        { employeeId: String(empObjectId) },
-      ],
-    };
-    const leaveDeleteResult = await Leave.deleteMany(leaveFilter, sessionOptions);
-
-    // Notifications
-    const notificationFilter = {
-      $or: [
-        { recipient_id: String(empObjectId) },
-        { recipient_id: empCode },
-        { recipient: empObjectId },
-        { "metadata.employeeId": empCode },
-        { "metadata.employee_id": String(empObjectId) },
-      ],
-    };
-    const notificationDeleteResult = await Notification.deleteMany(notificationFilter, sessionOptions);
-
-    // Primary Employee Document
-    const employeeDeleteResult = await Employee.findByIdAndDelete(empObjectId, sessionOptions);
-
-    // User Model (if exists)
+    // User Model deletion (auth credentials if linked)
     if (User) {
-      await User.deleteMany(
-        {
-          $or: [
-            { _id: empObjectId },
-            { email: empEmail },
-          ],
-        },
-        sessionOptions
-      ).catch(() => {});
+      await User.deleteMany({
+        $or: [
+          ...(empObjectId ? [{ _id: empObjectId }] : []),
+          ...(empEmail ? [{ email: empEmail }] : []),
+          { email: String(id) },
+        ],
+      }).catch(() => {});
     }
 
-    // Record Audit Log entry
+    // 3. Record Audit Log entry
     try {
       const adminPerformer = req.admin || req.user || {};
-      const auditEntry = new AuditLog({
+      await AuditLog.create({
         action: "DELETE_EMPLOYEE",
         category: "Employees",
         performedBy: {
@@ -610,59 +609,39 @@ export const deleteEmployee = async (req, res) => {
           email: adminPerformer.email || "admin@system.local",
           role: adminPerformer.role || "admin",
         },
-        target: `${empName} (${empCode || empObjectId})`,
-        summary: `Permanently deleted employee ${empName}. Purged ${attendanceDeleteResult.deletedCount || 0} attendance records, ${payrollDeleteResult.deletedCount || 0} payslips, ${leaveDeleteResult.deletedCount || 0} leave requests, and ${notificationDeleteResult.deletedCount || 0} notifications.`,
+        target: `${empName} (${empCode || empObjectId || id})`,
+        summary: `Permanently deleted employee ${empName}. Purged ${attendanceDeleteResult?.deletedCount || 0} attendance records, ${payrollDeleteResult?.deletedCount || 0} payslips, ${leaveDeleteResult?.deletedCount || 0} leave requests, and ${notificationDeleteResult?.deletedCount || 0} notifications.`,
         metadata: {
-          employeeId: empCode,
-          employeeObjectId: String(empObjectId),
+          employeeId: empCode || id,
+          employeeObjectId: empObjectId ? String(empObjectId) : String(id),
           purgedCounts: {
-            attendance: attendanceDeleteResult.deletedCount || 0,
-            payroll: payrollDeleteResult.deletedCount || 0,
-            leave: leaveDeleteResult.deletedCount || 0,
-            notifications: notificationDeleteResult.deletedCount || 0,
+            attendance: attendanceDeleteResult?.deletedCount || 0,
+            payroll: payrollDeleteResult?.deletedCount || 0,
+            leave: leaveDeleteResult?.deletedCount || 0,
+            notifications: notificationDeleteResult?.deletedCount || 0,
           },
         },
       });
-
-      if (session && isTransactionActive) {
-        await auditEntry.save({ session });
-      } else {
-        await auditEntry.save();
-      }
     } catch (auditErr) {
       console.warn("[Cascading Delete] Audit log creation warning:", auditErr.message);
     }
 
-    // 4. Commit Transaction if active
-    if (session && isTransactionActive) {
-      await session.commitTransaction();
-      await session.endSession();
-    }
-
     return res.status(200).json({
       success: true,
-      message: `Employee "${empName}" and all associated records have been permanently purged from the database.`,
+      message: employeeDeletedCount > 0 || targetEmployee
+        ? `Employee "${empName}" and all associated records have been permanently purged from the database.`
+        : "Employee record already removed or not found.",
       employeeId: empCode || id,
-      deletedId: empObjectId,
+      deletedId: empObjectId || id,
       purgedSummary: {
-        employee: 1,
-        attendance: attendanceDeleteResult.deletedCount || 0,
-        payroll: payrollDeleteResult.deletedCount || 0,
-        leave: leaveDeleteResult.deletedCount || 0,
-        notifications: notificationDeleteResult.deletedCount || 0,
+        employee: employeeDeletedCount > 0 ? 1 : 0,
+        attendance: attendanceDeleteResult?.deletedCount || 0,
+        payroll: payrollDeleteResult?.deletedCount || 0,
+        leave: leaveDeleteResult?.deletedCount || 0,
+        notifications: notificationDeleteResult?.deletedCount || 0,
       },
     });
   } catch (error) {
-    // Abort transaction on failure
-    if (session && isTransactionActive) {
-      try {
-        await session.abortTransaction();
-        await session.endSession();
-      } catch (abortErr) {
-        console.error("[Cascading Delete] Transaction abort error:", abortErr);
-      }
-    }
-
     console.error("Error in cascading deleteEmployee:", error);
     return res.status(500).json({
       success: false,

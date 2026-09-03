@@ -39,7 +39,7 @@ const companySettingsSchema = new mongoose.Schema(
     },
     workEndTime: {
       type: String,
-      default: "17:00",
+      default: "19:00",
       trim: true,
     },
     gracePeriodMinutes: {
@@ -109,7 +109,7 @@ companySettingsSchema.statics.getSingletonSettings = async function () {
   if (!doc) {
     doc = await this.create({
       workStartTime: "08:00",
-      workEndTime: "17:00",
+      workEndTime: "19:00",
       gracePeriodMinutes: 0,
       absenceDeductionRate: 15,
       lateTier1_amount: 10,

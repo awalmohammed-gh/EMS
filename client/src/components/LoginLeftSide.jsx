@@ -10,7 +10,7 @@ const LoginLeftSide = ({title, subtitle}) => {
           <span className="text-[#EFF6FF]">Management</span> System
         </h1>
 
-        <div className="w-16 h-0.5 bg-linear-to-r from-[#F97316] to-[#EA580C] rounded-full mb-5"></div>
+        <div className="w-16 h-0.5 bg-[#F97316] rounded-full mb-5"></div>
 
         <p className="text-[#EFF6FF] text-base lg:text-lg max-w-md leading-relaxed">
           {subtitle || "Welcome to the Eyenit Management System. Please log in to continue."}

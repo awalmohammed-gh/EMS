@@ -294,6 +294,13 @@ export const createManualAttendanceRecord = (data) => {
   return api.post("/attendance/manual-record", data);
 };
 
+export const overrideAttendanceRecord = (data, id = null) => {
+  if (id) {
+    return api.put(`/admin/attendance/${id}/override`, data).catch(() => api.put(`/attendance/record/${id}`, data));
+  }
+  return api.post("/admin/attendance/override", data).catch(() => api.post("/attendance/manual-record", data));
+};
+
 
 export const bulkUploadBiometricAttendance = (data) => {
   return api.post("/attendance/bulk-upload", data);

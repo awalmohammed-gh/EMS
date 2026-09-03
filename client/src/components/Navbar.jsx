@@ -129,7 +129,7 @@ export const Navbar = ({ role: propsRole }) => {
                     className="w-8 h-8 sm:w-9 sm:h-9 shadow-md"
                     fallbackInitials={isAdmin ? adminInitials : employeeInitials}
                   />
-                  <span className="absolute -bottom-0.5 -right-0.5 w-2.5 h-2.5 bg-gradient-to-br from-[#16A34A] to-[#15803D] border-2 border-white dark:border-slate-900 rounded-full shadow-sm"></span>
+                  <span className="absolute -bottom-0.5 -right-0.5 w-2.5 h-2.5 bg-[#16A34A] border-2 border-white dark:border-slate-900 rounded-full shadow-sm"></span>
                 </div>
 
                 {/* Profile Display Text (Right Side) */}
@@ -170,7 +170,7 @@ export const Navbar = ({ role: propsRole }) => {
                   aria-orientation="vertical"
                 >
                   {/* Dropdown Header Card */}
-                  <div className="px-4 py-3.5 border-b border-[#F1F5F9] dark:border-slate-800 bg-gradient-to-r from-[#F8FAFC] to-white dark:from-slate-850 dark:to-slate-900">
+                  <div className="px-4 py-3.5 border-b border-[#F1F5F9] dark:border-slate-800 bg-[#F8FAFC] dark:bg-slate-850">
                     <div className="flex items-center gap-3">
                       <Avatar
                         src={
@@ -197,8 +197,8 @@ export const Navbar = ({ role: propsRole }) => {
                           <span
                             className={`text-[10px] font-bold px-2.5 py-0.5 rounded-full ${
                               isAdmin
-                                ? "bg-gradient-to-r from-[#002185] to-[#001566] text-white shadow-sm"
-                                : "bg-gradient-to-r from-[#ff5500] to-[#e64a00] text-white shadow-sm"
+                                ? "bg-[#002185] text-white shadow-sm"
+                                : "bg-[#ff5500] text-white shadow-sm"
                             }`}
                           >
                             {isAdmin ? "Super Admin" : employeePosition}

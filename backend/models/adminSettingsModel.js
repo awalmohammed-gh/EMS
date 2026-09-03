@@ -91,7 +91,7 @@ const settingsSchema = new mongoose.Schema(
       },
       workEndTime: {
         type: String,
-        default: "17:00",
+        default: "19:00",
       },
       lateAfterMinutes: {
         type: Number,

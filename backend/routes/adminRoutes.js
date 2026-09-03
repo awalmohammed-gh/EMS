@@ -37,6 +37,7 @@ import {
 import { employeeDetails } from "../controllers/employeeController.js";
 import { deleteLeave, updateLeaveStatus, getAllLeaves } from "../controllers/leaveController.js";
 import { deleteAttendanceRecord } from "../controllers/employeeAttendance.js";
+import { overrideAttendanceRecord } from "../controllers/attendanceManagementController.js";
 import { verifyAdmin } from "../middleware/authAdmin.js";
 
 const adminRouter = express.Router();
@@ -101,6 +102,12 @@ adminRouter.get("/recent-activity", verifyAdmin, getRecentActivityFeed);
 // Biometric Attendance Bulk Upload
 adminRouter.post("/attendance/bulk-upload", verifyAdmin, bulkUploadBiometricAttendance);
 adminRouter.post("/attendance/biometric-upload", verifyAdmin, bulkUploadBiometricAttendance);
+
+// Attendance Manual Override & Retroactive Adjustment
+adminRouter.post("/attendance/override", verifyAdmin, overrideAttendanceRecord);
+adminRouter.put("/attendance/:id/override", verifyAdmin, overrideAttendanceRecord);
+adminRouter.post("/attendance/manual-record", verifyAdmin, overrideAttendanceRecord);
+adminRouter.put("/attendance/record/:id", verifyAdmin, overrideAttendanceRecord);
 
 // Admin Announcement Endpoints (POST /api/admin/announcements, GET, DELETE, PUT)
 adminRouter.get("/announcements", verifyAdmin, getAnnouncements);
