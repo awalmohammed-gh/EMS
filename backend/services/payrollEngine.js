@@ -239,25 +239,80 @@ export async function calculateMonthlyPenalties(employeeId, year, monthIndex, op
     }
   });
 
-  // Query approved leaves
+  // Query approved leaves strictly overlapping target month
   let approvedLeaveDays = 0;
   try {
     const leaves = await Leave.find({
       $and: [
         empMatchOr.length > 0 ? { $or: empMatchOr } : {},
         { status: "Approved" },
+        {
+          $or: [
+            { startDate: { $lte: endDate }, endDate: { $gte: startDate } },
+            { startDate: { $gte: startDate, $lte: endDate } },
+          ],
+        },
       ],
     }).lean();
 
     leaves.forEach((l) => {
-      approvedLeaveDays += Number(l.totalDays || l.days || 1);
+      const lStart = new Date(l.startDate);
+      const lEnd = new Date(l.endDate || l.startDate);
+      if (!isNaN(lStart.getTime())) {
+        const effStart = lStart < startDate ? startDate : lStart;
+        const effEnd = lEnd > endDate ? endDate : lEnd;
+        if (effStart <= effEnd) {
+          let cur = new Date(effStart);
+          while (cur <= effEnd) {
+            const dow = cur.getUTCDay();
+            if (dow !== 0 && dow !== 6) {
+              approvedLeaveDays++;
+            }
+            cur.setUTCDate(cur.getUTCDate() + 1);
+          }
+        }
+      }
     });
   } catch (err) {
     console.warn("Leave query notice:", err.message);
   }
 
-  const standardWorkingDays = getWorkingDaysInMonth(currentYear, currentMonthIdx);
-  const absentDays = Math.max(0, standardWorkingDays - attendedDays - approvedLeaveDays);
+  // Workday bounds calculation (strict monthly isolation & mid-month elapsed days)
+  const now = options?.evaluationDate ? new Date(options.evaluationDate) : new Date();
+  const isCurrentMonth = currentYear === now.getFullYear() && currentMonthIdx === now.getMonth();
+  const isPastMonth = currentYear < now.getFullYear() || (currentYear === now.getFullYear() && currentMonthIdx < now.getMonth());
+  const isFutureMonth = currentYear > now.getFullYear() || (currentYear === now.getFullYear() && currentMonthIdx > now.getMonth());
+
+  const daysInMonth = new Date(currentYear, currentMonthIdx + 1, 0).getDate();
+  let cutoffDay = 0;
+  if (isPastMonth) {
+    cutoffDay = daysInMonth;
+  } else if (isCurrentMonth) {
+    cutoffDay = Math.min(now.getDate(), daysInMonth);
+  } else {
+    cutoffDay = 0;
+  }
+
+  let standardWorkingDays = 0;
+  let elapsedWorkingDays = 0;
+  let futureWorkingDays = 0;
+  for (let d = 1; d <= daysInMonth; d++) {
+    const dObj = new Date(currentYear, currentMonthIdx, d);
+    const dow = dObj.getDay();
+    if (dow !== 0 && dow !== 6) {
+      standardWorkingDays++;
+      if (d <= cutoffDay) {
+        elapsedWorkingDays++;
+      } else {
+        futureWorkingDays++;
+      }
+    }
+  }
+
+  // Rule 1: Future / Unelapsed Days Are Never Counted as Absent
+  // If mid-period run, absences are only evaluated against elapsed working days to date.
+  const auditWorkDays = options?.isFullMonthAudit ? standardWorkingDays : (isCurrentMonth ? elapsedWorkingDays : standardWorkingDays);
+  const absentDays = isFutureMonth ? 0 : Math.max(0, auditWorkDays - attendedDays - approvedLeaveDays);
 
   const baseSalary = Number(
     options?.baseSalaryInput !== undefined && !isNaN(Number(options.baseSalaryInput))
@@ -268,8 +323,9 @@ export async function calculateMonthlyPenalties(employeeId, year, monthIndex, op
          2500)
   );
 
-  // Dynamic Daily Salary Rate = Employee Base Salary / Total Working Days in Month
+  // Dynamic Daily Salary Rate = Employee Base Salary / Total Working Days in Month (Rule 3)
   const dailySalaryRate = standardWorkingDays > 0 ? parseFloat((baseSalary / standardWorkingDays).toFixed(2)) : 0;
+  // Realized Absence Deductions = elapsedUnexcusedAbsentDays * dailySalaryRate
   const totalAbsenceDeductions = parseFloat((absentDays * dailySalaryRate).toFixed(2));
 
   return {
@@ -278,6 +334,12 @@ export async function calculateMonthlyPenalties(employeeId, year, monthIndex, op
     year: currentYear,
     monthIndex: currentMonthIdx,
     standardWorkingDays,
+    elapsedWorkingDays,
+    futureWorkingDays,
+    cutoffDay,
+    isCurrentMonth,
+    isPastMonth,
+    isFutureMonth,
     attendedDays,
     lateCount,
     lateDays: lateCount,
@@ -296,7 +358,9 @@ export async function calculateMonthlyPenalties(employeeId, year, monthIndex, op
     netSalary: parseFloat(
       Math.max(0, baseSalary - totalAbsenceDeductions - totalLatePenalties).toFixed(2)
     ),
-    remarks: `Calculated from ${attendedDays} attended days, ${absentDays} absent days, and ${lateCount} late check-in(s) for ${monthName}.`,
+    remarks: isCurrentMonth && futureWorkingDays > 0
+      ? `Mid-month calculation: ${attendedDays} attended day(s), ${absentDays} unexcused absence(s) across ${elapsedWorkingDays} elapsed working days, and ${lateCount} late check-in(s) for ${monthName}. Remaining ${futureWorkingDays} upcoming days are strictly excluded from absences.`
+      : `Calculated from ${attendedDays} attended day(s), ${absentDays} absent day(s), and ${lateCount} late check-in(s) for ${monthName}.`,
   };
 }
 

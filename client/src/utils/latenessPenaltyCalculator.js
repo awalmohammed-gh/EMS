@@ -1,14 +1,7 @@
 /**
- * Centralized Dynamic Lateness Penalty Calculator
- * Single source of truth across Attendance tracking, manual overrides, and Payroll processing.
- *
- * 6 Lateness Tiers:
- * - Tier 1: 1 – 30 mins
- * - Tier 2: 31 – 60 mins (up to 1 hr)
- * - Tier 3: 61 – 120 mins (1 – 2 hrs)
- * - Tier 4: 121 – 180 mins (2 – 3 hrs)
- * - Tier 5: 181 – 240 mins (3 – 4 hrs)
- * - Tier 6: 241 – 300+ mins (4+ hrs)
+ * Client Lateness Penalty Calculator & Preview Helper
+ * Mirrors the backend lateness evaluation service so frontend components,
+ * live preview cards, and modals share identical logic and zero-penalty behavior.
  */
 
 export const DEFAULT_LATENESS_TIERS = [
@@ -21,15 +14,14 @@ export const DEFAULT_LATENESS_TIERS = [
 ];
 
 /**
- * Helper to safely extract numeric tier fine without treating 0 as falsy or fallbacking.
- */
+  * Safely extracts numeric tier fine without treating 0 as falsy.
+  */
 export const getTierConfiguredFine = (tierNum, tierKey, settings, defaultFallback) => {
   if (!settings) return defaultFallback;
 
   const targetSettings = settings.settings || settings.attendance || settings.company || settings;
 
   // 1. Direct explicit key check (e.g. settings.lateTier1_amount)
-  // Ensure we check !== undefined and !== null so 0 is strictly preserved.
   if (targetSettings[tierKey] !== undefined && targetSettings[tierKey] !== null && targetSettings[tierKey] !== "") {
     const num = Number(targetSettings[tierKey]);
     if (!isNaN(num) && num >= 0) {
@@ -74,7 +66,7 @@ export const getTierConfiguredFine = (tierNum, tierKey, settings, defaultFallbac
 };
 
 /**
- * Builds standard 6 tiers array using active settings
+ * Builds standard 6 tiers array using active company settings.
  */
 export const getStandardizedLatenessTiers = (settings = {}) => {
   const t1 = getTierConfiguredFine(1, "lateTier1_amount", settings, 10);
@@ -85,66 +77,17 @@ export const getStandardizedLatenessTiers = (settings = {}) => {
   const t6 = getTierConfiguredFine(6, "lateTier6_amount", settings, 150);
 
   return [
-    {
-      tier: 1,
-      name: "Tier 1: 1–30 mins late",
-      minMinutes: 1,
-      maxMinutes: 30,
-      fine: t1,
-      amount: t1,
-      penalty: t1,
-    },
-    {
-      tier: 2,
-      name: "Tier 2: 31–60 mins late",
-      minMinutes: 31,
-      maxMinutes: 60,
-      fine: t2,
-      amount: t2,
-      penalty: t2,
-    },
-    {
-      tier: 3,
-      name: "Tier 3: 61–120 mins (1–2 hrs)",
-      minMinutes: 61,
-      maxMinutes: 120,
-      fine: t3,
-      amount: t3,
-      penalty: t3,
-    },
-    {
-      tier: 4,
-      name: "Tier 4: 121–180 mins (2–3 hrs)",
-      minMinutes: 121,
-      maxMinutes: 180,
-      fine: t4,
-      amount: t4,
-      penalty: t4,
-    },
-    {
-      tier: 5,
-      name: "Tier 5: 181–240 mins (3–4 hrs)",
-      minMinutes: 181,
-      maxMinutes: 240,
-      fine: t5,
-      amount: t5,
-      penalty: t5,
-    },
-    {
-      tier: 6,
-      name: "Tier 6: 241+ mins (4+ hrs)",
-      minMinutes: 241,
-      maxMinutes: 9999,
-      fine: t6,
-      amount: t6,
-      penalty: t6,
-    },
+    { tier: 1, name: "Tier 1: 1–30 mins late", minMinutes: 1, maxMinutes: 30, fine: t1, amount: t1, penalty: t1 },
+    { tier: 2, name: "Tier 2: 31–60 mins late", minMinutes: 31, maxMinutes: 60, fine: t2, amount: t2, penalty: t2 },
+    { tier: 3, name: "Tier 3: 61–120 mins (1–2 hrs)", minMinutes: 61, maxMinutes: 120, fine: t3, amount: t3, penalty: t3 },
+    { tier: 4, name: "Tier 4: 121–180 mins (2–3 hrs)", minMinutes: 121, maxMinutes: 180, fine: t4, amount: t4, penalty: t4 },
+    { tier: 5, name: "Tier 5: 181–240 mins (3–4 hrs)", minMinutes: 181, maxMinutes: 240, fine: t5, amount: t5, penalty: t5 },
+    { tier: 6, name: "Tier 6: 241+ mins (4+ hrs)", minMinutes: 241, maxMinutes: 9999, fine: t6, amount: t6, penalty: t6 },
   ];
 };
 
 /**
- * Centralized Notification Text Builder
- * Dictates notification titles, messages, and priority according to penalty amount.
+ * Builds notification descriptor based on penalty amount.
  */
 export const buildLatenessNotification = (clockInFormatted, delayMinutes, penaltyAmount) => {
   const penalty = Number(penaltyAmount) || 0;
@@ -183,9 +126,7 @@ export const buildLatenessNotification = (clockInFormatted, delayMinutes, penalt
 };
 
 /**
- * Core function: calculateLatenessPenalty(delayMinutes, settings)
- * Determines exact tier range and returns penalty amount based on configured settings.
- * If configured fine is 0, returns 0.00 without any fallback.
+ * Evaluates penalty for a delay in minutes against settings.
  */
 export const calculateLatenessPenalty = (delayMinutesInput, settings = {}) => {
   const delayMinutes = Math.max(0, Number(delayMinutesInput) || 0);
@@ -216,7 +157,6 @@ export const calculateLatenessPenalty = (delayMinutesInput, settings = {}) => {
     (t) => delayMinutes >= t.minMinutes && delayMinutes <= t.maxMinutes
   );
 
-  // If beyond highest minMinutes, match Tier 6
   if (!matchedTier) {
     matchedTier = tiers[tiers.length - 1];
   }
@@ -251,8 +191,7 @@ export const calculateLatenessPenalty = (delayMinutesInput, settings = {}) => {
 };
 
 /**
- * High-level evaluator: evaluateLatenessPenalty(clockInDate, workStartTime, settings)
- * Parses clock-in time and evaluates against work start time and active tier configuration.
+ * High-level evaluator for client components.
  */
 export const evaluateLatenessPenalty = (
   clockInDate,
@@ -334,7 +273,7 @@ export const evaluateLatenessPenalty = (
 
   const penaltyObj = calculateLatenessPenalty(delayMinutes, settings);
 
-  let formattedTime = "--";
+  let formattedTime;
   try {
     formattedTime = clockIn.toLocaleTimeString("en-US", {
       hour: "2-digit",

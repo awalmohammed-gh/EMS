@@ -1,4 +1,5 @@
 import { useState, useEffect, useMemo } from "react";
+import { motion } from "framer-motion";
 import {
   CheckCircle2,
   AlertTriangle,
@@ -167,44 +168,49 @@ const ShiftStatusCard = ({
     const dbStatus = String(attendanceData.status || "").toLowerCase();
     const dbDelay =
       Number(attendanceData.delayMinutes || attendanceData.lateMinutes || 0);
+    const hasRecordedPenalty =
+      attendanceData.latePenalty !== undefined &&
+      attendanceData.latePenalty !== null &&
+      attendanceData.latePenalty !== "";
     const dbPenalty = Number(attendanceData.latePenalty || 0);
 
     const isLate =
-      dbStatus === "late" ||
+      dbStatus.includes("late") ||
       dbDelay > 0 ||
       delayMins > 0;
 
     const finalDelayMinutes = dbDelay > 0 ? dbDelay : delayMins;
 
-    // Determine penalty fine
-    let calculatedFine = dbPenalty;
+    // Determine penalty fine:
+    // If the database has a recorded penalty (including 0), respect it strictly!
+    let calculatedFine = hasRecordedPenalty ? dbPenalty : -1;
     let matchingTier = attendanceData.penaltyTier || "";
 
-    if (isLate && calculatedFine <= 0 && finalDelayMinutes > 0) {
+    if (isLate && calculatedFine < 0 && finalDelayMinutes > 0) {
       const tierObj = penaltyTiers.find(
         (t) => finalDelayMinutes >= t.minMinutes && finalDelayMinutes <= t.maxMinutes
       );
       if (tierObj) {
-        calculatedFine = tierObj.fine;
+        const fineVal = Number(tierObj.amount !== undefined ? tierObj.amount : (tierObj.fine !== undefined ? tierObj.fine : tierObj.penalty)) || 0;
+        calculatedFine = fineVal;
         matchingTier = tierObj.name;
-      } else if (finalDelayMinutes > 240) {
-        calculatedFine = 150;
-        matchingTier = "Tier 6 (241+ mins)";
       } else {
-        calculatedFine = 10;
-        matchingTier = "Tier 1 (1–30 mins)";
+        calculatedFine = 0;
       }
     }
+    if (calculatedFine < 0) calculatedFine = 0;
 
     if (isLate) {
+      const isZeroPenalty = calculatedFine === 0;
       return {
-        type: "late",
+        type: isZeroPenalty ? "late-grace" : "late",
         isLate: true,
+        isZeroPenalty,
         title: "Shift Attendance Status: Late Arrival",
         badgeText: `Late (+${finalDelayMinutes}m)`,
         delayMinutes: finalDelayMinutes,
         penaltyAmount: calculatedFine,
-        tierName: matchingTier || `Tier (${finalDelayMinutes} min delay)`,
+        tierName: matchingTier || (isZeroPenalty ? "No Deduction Applied" : `Tier (${finalDelayMinutes} min delay)`),
         clockInShort: formatShortTime(attendanceData.clockIn),
       };
     }
@@ -212,6 +218,7 @@ const ShiftStatusCard = ({
     return {
       type: "ontime",
       isLate: false,
+      isZeroPenalty: true,
       title: "Shift Attendance Status: On Time",
       badgeText: "On Time",
       delayMinutes: 0,
@@ -232,21 +239,20 @@ const ShiftStatusCard = ({
   ]);
 
   return (
-    <div
+    <motion.div
+      initial={{ opacity: 0, y: 8 }}
+      animate={{ opacity: 1, y: 0 }}
+      transition={{ duration: 0.25, ease: "easeOut" }}
       id="shift-realtime-status-card"
-      className={`relative overflow-hidden rounded-2xl sm:rounded-3xl border transition-all duration-200 shadow-sm ${
-        statusEvaluation.type === "ontime"
-          ? "bg-emerald-50 dark:bg-slate-900 border-emerald-300 dark:border-emerald-800/80 shadow-emerald-500/5"
-          : statusEvaluation.type === "late"
-          ? "bg-amber-50 dark:bg-slate-900 border-amber-300 dark:border-amber-700/80 shadow-amber-500/5"
-          : "bg-slate-50 dark:bg-slate-900 border-slate-200 dark:border-slate-800"
-      }`}
+      className="bg-white dark:bg-[#111927] border border-slate-200/70 dark:border-slate-800 rounded-2xl shadow-sm overflow-hidden"
     >
-      {/* Decorative top accent bar */}
+      {/* Subtle top indicator bar */}
       <div
-        className={`h-1.5 w-full ${
+        className={`h-1 w-full ${
           statusEvaluation.type === "ontime"
             ? "bg-emerald-500"
+            : statusEvaluation.type === "late-grace"
+            ? "bg-[#002185]"
             : statusEvaluation.type === "late"
             ? "bg-amber-500"
             : "bg-[#002185]"
@@ -259,20 +265,24 @@ const ShiftStatusCard = ({
           <div className="flex items-center gap-3">
             {/* Status Avatar Icon */}
             <div
-              className={`w-10 h-10 sm:w-11 sm:h-11 rounded-xl flex items-center justify-center shrink-0 shadow-xs ${
+              className={`w-10 h-10 sm:w-11 sm:h-11 rounded-xl flex items-center justify-center shrink-0 border ${
                 statusEvaluation.type === "ontime"
-                  ? "bg-emerald-600 text-white dark:bg-emerald-500 shadow-emerald-600/20"
+                  ? "bg-emerald-50 text-emerald-700 dark:bg-emerald-950/40 dark:text-emerald-400 border-emerald-200/70 dark:border-emerald-800/80"
+                  : statusEvaluation.type === "late-grace"
+                  ? "bg-blue-50 text-[#002185] dark:bg-blue-950/40 dark:text-blue-300 border-blue-200/70 dark:border-blue-800/80"
                   : statusEvaluation.type === "late"
-                  ? "bg-amber-600 text-white dark:bg-amber-500 shadow-amber-600/20"
-                  : "bg-[#002185] text-white dark:bg-blue-600 shadow-blue-900/20"
+                  ? "bg-amber-50 text-amber-800 dark:bg-amber-950/40 dark:text-amber-300 border-amber-200/70 dark:border-amber-800/80"
+                  : "bg-slate-50 text-slate-700 dark:bg-slate-800/60 dark:text-slate-300 border-slate-200/70 dark:border-slate-800"
               }`}
             >
               {statusEvaluation.type === "ontime" ? (
-                <CheckCircle2 className="w-5 h-5 sm:w-6 sm:h-6" />
+                <CheckCircle2 className="w-5 h-5 sm:w-5 sm:h-5" />
+              ) : statusEvaluation.type === "late-grace" ? (
+                <Clock className="w-5 h-5 sm:w-5 sm:h-5" />
               ) : statusEvaluation.type === "late" ? (
-                <AlertTriangle className="w-5 h-5 sm:w-6 sm:h-6" />
+                <AlertTriangle className="w-5 h-5 sm:w-5 sm:h-5" />
               ) : (
-                <Clock className="w-5 h-5 sm:w-6 sm:h-6" />
+                <Clock className="w-5 h-5 sm:w-5 sm:h-5" />
               )}
             </div>
 
@@ -281,55 +291,65 @@ const ShiftStatusCard = ({
                 <div className="flex items-center gap-1.5 text-xs font-semibold text-[#002185] dark:text-blue-300 mb-0.5">
                   <span>{greetingTimeOfDay}, <strong className="text-slate-900 dark:text-white font-bold">{resolvedEmployeeName}</strong></span>
                   {user?.employeeId && (
-                    <span className="text-[10px] font-mono px-1.5 py-0.2 bg-blue-100 dark:bg-blue-900/60 text-blue-800 dark:text-blue-200 rounded">
+                    <span className="text-[10px] font-mono px-1.5 py-0.5 bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 border border-slate-200/60 dark:border-slate-700/60 rounded">
                       {user.employeeId}
                     </span>
                   )}
                 </div>
               )}
               <div className="flex flex-wrap items-center gap-2">
-                <h2 className="text-sm sm:text-base font-extrabold tracking-tight text-[#0B1E48] dark:text-blue-100">
+                <h2 className="text-sm sm:text-base font-bold tracking-tight text-slate-900 dark:text-white">
                   {statusEvaluation.title}
                 </h2>
 
-                {/* Primary Pill Badge with subtle color-coded indicator icon */}
+                {/* Primary Pill Badge */}
                 <span
                   id="shift-status-outcome-badge"
-                  className={`inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-xs font-bold tracking-wide uppercase shadow-2xs ${
+                  className={`inline-flex items-center gap-1.5 shadow-none font-semibold text-xs px-2.5 py-0.5 rounded-lg border ${
                     statusEvaluation.type === "ontime"
-                      ? "bg-emerald-100 text-emerald-800 dark:bg-emerald-900/70 dark:text-emerald-300 border border-emerald-300 dark:border-emerald-700"
+                      ? "bg-emerald-50 text-emerald-800 dark:bg-emerald-950/50 dark:text-emerald-300 border-emerald-200 dark:border-emerald-850"
+                      : statusEvaluation.type === "late-grace"
+                      ? "bg-blue-50 text-[#002185] dark:bg-blue-950/50 dark:text-blue-300 border-blue-200 dark:border-blue-800"
                       : statusEvaluation.type === "late"
-                      ? "bg-amber-100 text-amber-900 dark:bg-amber-900/80 dark:text-amber-200 border border-amber-300 dark:border-amber-700 animate-pulse"
-                      : "bg-blue-100 text-blue-900 dark:bg-blue-950/70 dark:text-blue-300 border border-blue-200 dark:border-blue-800"
+                      ? "bg-amber-50 text-amber-900 dark:bg-amber-950/50 dark:text-amber-200 border-amber-200 dark:border-amber-800"
+                      : "bg-slate-100 text-slate-800 dark:bg-slate-800 dark:text-slate-300 border-slate-200 dark:border-slate-700"
                   }`}
                 >
                   {statusEvaluation.type === "ontime" ? (
                     <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600 dark:text-emerald-400 shrink-0" />
+                  ) : statusEvaluation.type === "late-grace" ? (
+                    <Clock className="w-3.5 h-3.5 text-[#002185] dark:text-blue-400 shrink-0" />
                   ) : statusEvaluation.type === "late" ? (
                     <AlertTriangle className="w-3.5 h-3.5 text-amber-600 dark:text-amber-400 shrink-0" />
                   ) : (
-                    <Clock className="w-3.5 h-3.5 text-blue-600 dark:text-blue-400 shrink-0" />
+                    <Clock className="w-3.5 h-3.5 text-slate-500 dark:text-slate-400 shrink-0" />
                   )}
                   {statusEvaluation.badgeText}
                 </span>
               </div>
 
-              <p className="text-xs text-slate-500 dark:text-slate-400 mt-1 flex flex-wrap items-center gap-1.5 font-medium">
+              <p className="text-xs text-slate-500 dark:text-slate-400 mt-1 flex flex-wrap items-center gap-1.5 font-normal">
                 <CalendarDays className="w-3.5 h-3.5 text-slate-400 shrink-0" />
-                <span>Shift Start Threshold:</span>
+                <span>Shift Start:</span>
                 <strong className="text-slate-800 dark:text-slate-200 font-semibold">
                   {formattedStartTime}
                 </strong>
                 {statusEvaluation.type === "ontime" && (
                   <span className="inline-flex items-center gap-1 text-emerald-700 dark:text-emerald-400 font-medium">
                     <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600 dark:text-emerald-400 shrink-0" />
-                    <span>Clocked in at <strong>{statusEvaluation.clockInShort}</strong> (GH₵0.00 fine)</span>
+                    <span>Clocked in at <strong>{statusEvaluation.clockInShort}</strong> (On schedule)</span>
+                  </span>
+                )}
+                {statusEvaluation.type === "late-grace" && (
+                  <span className="inline-flex items-center gap-1 text-[#002185] dark:text-blue-300 font-medium">
+                    <Clock className="w-3.5 h-3.5 text-[#002185] dark:text-blue-400 shrink-0" />
+                    <span>Clocked in at <strong>{statusEvaluation.clockInShort}</strong> · No deduction incurred</span>
                   </span>
                 )}
                 {statusEvaluation.type === "late" && (
                   <span className="inline-flex items-center gap-1 text-amber-800 dark:text-amber-300 font-medium">
                     <AlertTriangle className="w-3.5 h-3.5 text-amber-600 dark:text-amber-400 shrink-0" />
-                    <span>Clocked in at <strong>{statusEvaluation.clockInShort}</strong> · Fine: <strong>GH₵{Number(statusEvaluation.penaltyAmount || 0).toFixed(2)}</strong></span>
+                    <span>Clocked in at <strong>{statusEvaluation.clockInShort}</strong> · -GH₵{Number(statusEvaluation.penaltyAmount || 0).toFixed(2)} deduction</span>
                   </span>
                 )}
                 {statusEvaluation.type === "pending" && (
@@ -360,7 +380,7 @@ const ShiftStatusCard = ({
                 id="btn-status-card-clock-in"
                 onClick={onClockIn}
                 disabled={isLoading}
-                className="flex items-center gap-1.5 px-3.5 py-2 rounded-xl bg-[#002185] hover:bg-[#001760] text-white text-xs font-bold transition shadow-xs cursor-pointer active:scale-98 disabled:opacity-60"
+                className="flex items-center gap-1.5 px-3.5 py-2 rounded-xl bg-[#002185] hover:bg-[#001760] text-white text-xs font-semibold transition border border-transparent shadow-none cursor-pointer active:scale-98 disabled:opacity-60"
               >
                 <LogIn className="w-3.5 h-3.5" />
                 <span>{isLoading ? "Recording..." : "Clock In Now"}</span>
@@ -369,7 +389,7 @@ const ShiftStatusCard = ({
           </div>
         </div>
       </div>
-    </div>
+    </motion.div>
   );
 };
 

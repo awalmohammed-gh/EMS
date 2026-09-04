@@ -247,7 +247,23 @@ export const overrideAttendanceRecord = async (req, res) => {
               priority: "high",
               action_url: "/employee/dashboard/payslips",
               action_label: "View Attendance & Payslips",
-              metadata: { date: targetDate, delayMinutes, latePenalty, tier: penaltyTier },
+              metadata: { date: targetDate, delayMinutes, latePenalty, tier: penaltyTier, deductionApplied: true },
+            });
+          } else if (finalStatus === "Late" && latePenalty === 0) {
+            await createNotificationRecord({
+              recipient_id: empTargetId,
+              recipient_role: "employee",
+              sender_id: adminId,
+              sender_role: "admin",
+              sender_name: adminName,
+              title: "Clock-In Recorded (No Deduction)",
+              message: `Your attendance record for ${targetDate} was adjusted (${delayMinutes} mins late). Company policy applied: No salary deduction for this delay.`,
+              type: "attendance_alert",
+              category: "attendance",
+              priority: "info",
+              action_url: "/employee/dashboard",
+              action_label: "View Attendance",
+              metadata: { date: targetDate, delayMinutes, latePenalty: 0, tier: penaltyTier, deductionApplied: false },
             });
           } else if (finalStatus === "Absent") {
             const absenceRate = settingsDoc?.absenceDeductionRate || 15;

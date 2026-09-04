@@ -1,4 +1,5 @@
 import { useState, useMemo, useEffect, useCallback } from "react";
+import { motion } from "framer-motion";
 import {
   ResponsiveContainer,
   BarChart,
@@ -83,7 +84,7 @@ const AttendanceTooltip = ({ active, payload, label }) => {
     const attendanceRate = totalHeadcount > 0 ? Math.round(((data.present || 0) / totalHeadcount) * 100) : 0;
 
     return (
-      <div className="bg-[#0B1E48] dark:bg-slate-900 text-white p-3 rounded-xl shadow-xl border border-blue-900/40 text-xs min-w-[200px]">
+      <div className="bg-[#0B1E48] dark:bg-slate-900 text-white p-3 rounded-xl shadow-md dark:shadow-none border border-blue-900/40 dark:border-slate-800 text-xs min-w-[200px]">
         <div className="flex items-center justify-between border-b border-white/10 pb-2 mb-2">
           <span className="font-semibold text-xs text-white">
             {data.fullDay || data.fullWeek || label}
@@ -141,7 +142,7 @@ const HoursTooltip = ({ active, payload, label }) => {
     const compliance = target > 0 ? Math.min(150, Math.round((actual / target) * 100)) : (actual > 0 ? 100 : 0);
 
     return (
-      <div className="bg-[#0B1E48] dark:bg-slate-900 text-white p-3 rounded-xl shadow-xl border border-blue-900/40 text-xs min-w-[210px]">
+      <div className="bg-[#0B1E48] dark:bg-slate-900 text-white p-3 rounded-xl shadow-md dark:shadow-none border border-blue-900/40 dark:border-slate-800 text-xs min-w-[210px]">
         <div className="flex items-center justify-between border-b border-white/10 pb-2 mb-2">
           <span className="font-semibold text-xs text-white">
             {data.fullDay || data.fullWeek || label}
@@ -430,18 +431,21 @@ export const WeeklyAttendancePerformance = ({
   const targetReferenceHour = selectedWeek === "all" ? 40 : 8;
 
   return (
-    <div
+    <motion.div
       id="weekly-attendance-trends-chart-container"
-      className="bg-white dark:bg-[#111927] border border-slate-200/80 dark:border-slate-800/80 rounded-2xl p-3.5 sm:p-5 md:p-6 shadow-sm dark:shadow-black/20 space-y-4 sm:space-y-6 max-w-full overflow-hidden"
+      initial={{ opacity: 0, y: 8 }}
+      animate={{ opacity: 1, y: 0 }}
+      transition={{ duration: 0.25, ease: "easeOut" }}
+      className="bg-white dark:bg-[#111927] border border-slate-200/70 dark:border-slate-800 rounded-2xl p-3.5 sm:p-5 md:p-6 shadow-none space-y-4 sm:space-y-6 max-w-full overflow-hidden"
     >
       {/* Header & Controls Bar */}
-      <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-3 sm:gap-4 border-b border-slate-100 dark:border-slate-800 pb-4 sm:pb-5">
+      <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-3 sm:gap-4 border-b border-slate-100 dark:border-slate-800/80 pb-4 sm:pb-5">
         <div>
           <div className="flex items-center gap-2 flex-wrap">
             <h2 className="text-base sm:text-xl font-bold text-[#0B1E48] dark:text-white tracking-tight">
               {title}
             </h2>
-            <span className="px-2 py-0.5 rounded-full text-[11px] sm:text-xs font-semibold bg-blue-50 dark:bg-blue-950/50 text-[#0B1E48] dark:text-blue-300 border border-blue-200 dark:border-blue-800/60">
+            <span className="px-2 py-0.5 rounded-full text-[11px] sm:text-xs font-semibold bg-blue-50 dark:bg-blue-950/50 text-[#0B1E48] dark:text-blue-300 border border-blue-200/70 dark:border-blue-800/60">
               Shift Target: 8h/day (40h/wk)
             </span>
           </div>
@@ -458,7 +462,7 @@ export const WeeklyAttendancePerformance = ({
               id="attendance-performance-month-select"
               value={selectedMonth}
               onChange={(e) => handleMonthChange(e.target.value)}
-              className="w-full sm:w-auto bg-slate-50 dark:bg-[#162033] border border-slate-200 dark:border-slate-700 text-xs font-semibold text-[#0B1E48] dark:text-white rounded-xl px-2.5 sm:px-3 py-2 focus:ring-2 focus:ring-blue-500 focus:outline-none cursor-pointer truncate"
+              className="w-full sm:w-auto bg-slate-50 dark:bg-[#162033] border border-slate-200/70 dark:border-slate-700 text-xs font-semibold text-[#0B1E48] dark:text-white rounded-xl px-2.5 sm:px-3 py-2 focus:ring-2 focus:ring-blue-500 focus:outline-none cursor-pointer truncate shadow-none"
             >
               {monthsList.map((m) => (
                 <option key={m.value} value={m.value}>
@@ -472,7 +476,7 @@ export const WeeklyAttendancePerformance = ({
               id="attendance-performance-week-select"
               value={selectedWeek}
               onChange={(e) => handleWeekChange(e.target.value)}
-              className="w-full sm:w-auto bg-slate-50 dark:bg-[#162033] border border-slate-200 dark:border-slate-700 text-xs font-semibold text-[#0B1E48] dark:text-white rounded-xl px-2.5 sm:px-3 py-2 focus:ring-2 focus:ring-blue-500 focus:outline-none cursor-pointer truncate"
+              className="w-full sm:w-auto bg-slate-50 dark:bg-[#162033] border border-slate-200/70 dark:border-slate-700 text-xs font-semibold text-[#0B1E48] dark:text-white rounded-xl px-2.5 sm:px-3 py-2 focus:ring-2 focus:ring-blue-500 focus:outline-none cursor-pointer truncate shadow-none"
             >
               <option value="all">Full Month (All)</option>
               {weeksInMonth.map((w, index) => (
@@ -484,13 +488,13 @@ export const WeeklyAttendancePerformance = ({
           </div>
 
           {/* Metric Mode Switcher: Hours vs Attendance */}
-          <div className="inline-flex items-center bg-slate-100 dark:bg-[#162033] p-1 rounded-xl text-xs font-semibold w-full sm:w-auto">
+          <div className="inline-flex items-center bg-slate-100 dark:bg-[#162033] p-1 rounded-xl text-xs font-semibold w-full sm:w-auto border border-slate-200/70 dark:border-slate-700/60">
             <button
               type="button"
               onClick={() => setMetricMode("hours")}
               className={`flex-1 sm:flex-initial flex items-center justify-center gap-1.5 px-3 py-1.5 rounded-lg transition-all cursor-pointer text-xs ${
                 metricMode === "hours"
-                  ? "bg-[#0B1E48] dark:bg-blue-600 text-white shadow-xs"
+                  ? "bg-[#0B1E48] dark:bg-blue-600 text-white shadow-none font-bold"
                   : "text-slate-600 dark:text-slate-300 hover:text-slate-900 dark:hover:text-white"
               }`}
             >
@@ -502,7 +506,7 @@ export const WeeklyAttendancePerformance = ({
               onClick={() => setMetricMode("attendance")}
               className={`flex-1 sm:flex-initial flex items-center justify-center gap-1.5 px-3 py-1.5 rounded-lg transition-all cursor-pointer text-xs ${
                 metricMode === "attendance"
-                  ? "bg-[#0B1E48] dark:bg-blue-600 text-white shadow-xs"
+                  ? "bg-[#0B1E48] dark:bg-blue-600 text-white shadow-none font-bold"
                   : "text-slate-600 dark:text-slate-300 hover:text-slate-900 dark:hover:text-white"
               }`}
             >
@@ -516,13 +520,13 @@ export const WeeklyAttendancePerformance = ({
       {/* KPI Performance Highlights Ribbon (4 Dynamic Cards with Vertical Stacking on Mobile) */}
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4">
         {/* Card 1: Hours Worked */}
-        <div className="rounded-2xl border border-slate-200 dark:border-slate-800 bg-slate-50/60 dark:bg-[#162033] p-3.5 sm:p-4 transition">
+        <div className="rounded-xl border border-slate-200/70 dark:border-slate-800/80 bg-slate-50/70 dark:bg-slate-900/50 p-3.5 sm:p-4 transition shadow-none">
           <div className="flex items-center justify-between gap-2">
             <span className="flex items-center gap-1.5 text-xs font-bold text-[#0B1E48] dark:text-blue-400">
               <Clock className="w-3.5 h-3.5" />
               Hours Worked
             </span>
-            <span className="text-[11px] font-semibold px-2 py-0.5 rounded-full bg-white dark:bg-slate-800 text-slate-600 dark:text-slate-300 border border-slate-200 dark:border-slate-700 shadow-2xs whitespace-nowrap">
+            <span className="text-[11px] font-semibold px-2 py-0.5 rounded-full bg-white dark:bg-slate-800 text-slate-600 dark:text-slate-300 border border-slate-200/70 dark:border-slate-700 whitespace-nowrap shadow-none">
               Req: {performanceCardMetrics.requiredHours}h
             </span>
           </div>
@@ -544,17 +548,17 @@ export const WeeklyAttendancePerformance = ({
         </div>
 
         {/* Card 2: Shift Compliance */}
-        <div className="rounded-2xl border border-slate-200 dark:border-slate-800 bg-slate-50/60 dark:bg-[#162033] p-3.5 sm:p-4 transition">
+        <div className="rounded-xl border border-slate-200/70 dark:border-slate-800/80 bg-slate-50/70 dark:bg-slate-900/50 p-3.5 sm:p-4 transition shadow-none">
           <div className="flex items-center justify-between gap-2">
             <span className="flex items-center gap-1.5 text-xs font-bold text-emerald-700 dark:text-emerald-400">
               <Target className="w-3.5 h-3.5" />
               Shift Compliance
             </span>
             <span
-              className={`text-[11px] font-semibold px-2 py-0.5 rounded-full border shadow-2xs whitespace-nowrap ${
+              className={`text-[11px] font-semibold px-2 py-0.5 rounded-full border whitespace-nowrap shadow-none ${
                 performanceCardMetrics.shiftCompliance >= 100
-                  ? "bg-emerald-50 text-emerald-700 dark:bg-emerald-950/60 dark:text-emerald-300 border-emerald-200 dark:border-emerald-800"
-                  : "bg-amber-50 text-amber-700 dark:bg-amber-950/60 dark:text-amber-300 border-amber-200 dark:border-amber-800"
+                  ? "bg-emerald-50 text-emerald-700 dark:bg-emerald-950/60 dark:text-emerald-300 border-emerald-200/70 dark:border-emerald-800"
+                  : "bg-amber-50 text-amber-700 dark:bg-amber-950/60 dark:text-amber-300 border-amber-200/70 dark:border-amber-800"
               }`}
             >
               {performanceCardMetrics.shiftCompliance >= 100 ? "Completed" : "In Progress"}
@@ -569,13 +573,13 @@ export const WeeklyAttendancePerformance = ({
         </div>
 
         {/* Card 3: Punctuality Rate */}
-        <div className="rounded-2xl border border-slate-200 dark:border-slate-800 bg-slate-50/60 dark:bg-[#162033] p-3.5 sm:p-4 transition">
+        <div className="rounded-xl border border-slate-200/70 dark:border-slate-800/80 bg-slate-50/70 dark:bg-slate-900/50 p-3.5 sm:p-4 transition shadow-none">
           <div className="flex items-center justify-between gap-2">
             <span className="flex items-center gap-1.5 text-xs font-bold text-emerald-700 dark:text-emerald-400">
               <CheckCircle2 className="w-3.5 h-3.5" />
               Punctuality Rate
             </span>
-            <span className="text-[11px] font-semibold px-2 py-0.5 rounded-full bg-white dark:bg-slate-800 text-slate-600 dark:text-slate-300 border border-slate-200 dark:border-slate-700 shadow-2xs whitespace-nowrap">
+            <span className="text-[11px] font-semibold px-2 py-0.5 rounded-full bg-white dark:bg-slate-800 text-slate-600 dark:text-slate-300 border border-slate-200/70 dark:border-slate-700 whitespace-nowrap shadow-none">
               {performanceCardMetrics.lateCheckIns} Late
             </span>
           </div>
@@ -588,13 +592,13 @@ export const WeeklyAttendancePerformance = ({
         </div>
 
         {/* Card 4: Active Days */}
-        <div className="rounded-2xl border border-slate-200 dark:border-slate-800 bg-slate-50/60 dark:bg-[#162033] p-3.5 sm:p-4 transition">
+        <div className="rounded-xl border border-slate-200/70 dark:border-slate-800/80 bg-slate-50/70 dark:bg-slate-900/50 p-3.5 sm:p-4 transition shadow-none">
           <div className="flex items-center justify-between gap-2">
             <span className="flex items-center gap-1.5 text-xs font-bold text-slate-600 dark:text-slate-300">
               <Award className="w-3.5 h-3.5 text-[#0B1E48] dark:text-blue-400" />
               Active Days
             </span>
-            <span className="text-[11px] font-semibold px-2 py-0.5 rounded-full bg-white dark:bg-slate-800 text-slate-600 dark:text-slate-300 border border-slate-200 dark:border-slate-700 shadow-2xs whitespace-nowrap">
+            <span className="text-[11px] font-semibold px-2 py-0.5 rounded-full bg-white dark:bg-slate-800 text-slate-600 dark:text-slate-300 border border-slate-200/70 dark:border-slate-700 whitespace-nowrap shadow-none">
               {performanceCardMetrics.absentDays} Absent
             </span>
           </div>
@@ -758,7 +762,7 @@ export const WeeklyAttendancePerformance = ({
           )}
         </div>
       </div>
-    </div>
+    </motion.div>
   );
 };
 

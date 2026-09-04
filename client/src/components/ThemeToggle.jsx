@@ -1,5 +1,6 @@
 import { useState, useRef, useEffect } from "react";
 import { Sun, Moon, Monitor, Check, ChevronDown } from "lucide-react";
+import { motion, AnimatePresence } from "framer-motion";
 import { useTheme } from "../context/ThemeContext";
 import { useManagement } from "../context/ManagementContextProvider";
 
@@ -92,18 +93,42 @@ export const ThemeToggle = ({ className = "" }) => {
             : "border-slate-200 dark:border-slate-700 bg-white/95 dark:bg-slate-800/95 text-slate-700 dark:text-slate-200 hover:bg-slate-50 dark:hover:bg-slate-700/80 hover:border-slate-300 dark:hover:border-slate-600"
         }`}
       >
-        <ActiveIcon
-          className={`w-4 h-4 shrink-0 transition-transform duration-200 group-hover:scale-110 ${
-            theme === "light"
-              ? "text-amber-500"
-              : theme === "dark"
-              ? "text-blue-600 dark:text-blue-400"
-              : "text-slate-600 dark:text-slate-300"
-          }`}
-        />
-        <span className="hidden sm:inline text-xs font-semibold capitalize text-slate-700 dark:text-slate-300">
-          {activeOption.label}
-        </span>
+        <div className="relative w-4 h-4 flex items-center justify-center">
+          <AnimatePresence mode="wait" initial={false}>
+            <motion.div
+              key={theme}
+              initial={{ opacity: 0, scale: 0.8, rotate: -15 }}
+              animate={{ opacity: 1, scale: 1, rotate: 0 }}
+              exit={{ opacity: 0, scale: 0.8, rotate: 15 }}
+              transition={{ duration: 0.22, ease: "easeOut" }}
+              className="flex items-center justify-center"
+            >
+              <ActiveIcon
+                className={`w-4 h-4 shrink-0 transition-transform duration-200 group-hover:scale-110 ${
+                  theme === "light"
+                    ? "text-amber-500"
+                    : theme === "dark"
+                    ? "text-blue-600 dark:text-blue-400"
+                    : "text-slate-600 dark:text-slate-300"
+                }`}
+              />
+            </motion.div>
+          </AnimatePresence>
+        </div>
+
+        <AnimatePresence mode="wait" initial={false}>
+          <motion.span
+            key={activeOption.label}
+            initial={{ opacity: 0, y: -2 }}
+            animate={{ opacity: 1, y: 0 }}
+            exit={{ opacity: 0, y: 2 }}
+            transition={{ duration: 0.18, ease: "easeOut" }}
+            className="hidden sm:inline text-xs font-semibold capitalize text-slate-700 dark:text-slate-300"
+          >
+            {activeOption.label}
+          </motion.span>
+        </AnimatePresence>
+
         <ChevronDown
           className={`w-3.5 h-3.5 text-slate-400 dark:text-slate-500 transition-transform duration-200 ${
             isOpen ? "rotate-180 text-[#002185] dark:text-blue-400" : ""
@@ -181,6 +206,7 @@ export const ThemeToggle = ({ className = "" }) => {
   );
 };
 
+export { ThemePreferenceCard } from "./ThemePreferenceCard";
 export default ThemeToggle;
 
 

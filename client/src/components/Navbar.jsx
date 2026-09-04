@@ -11,7 +11,6 @@ import {
 } from "lucide-react";
 import { useManagement } from "../context/ManagementContextProvider";
 import NotificationBell from "./NotificationBell";
-import ThemeToggle from "./ThemeToggle";
 import Avatar from "./Avatar";
 
 // Helper to extract dynamic initials from full name
@@ -88,11 +87,8 @@ export const Navbar = ({ role: propsRole }) => {
     >
       <div className="w-full max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
         <div className="flex items-center justify-end h-16 w-full">
-          {/* Right Section: Theme Toggle + Notification Bell + User Profile Menu */}
+          {/* Right Section: Notification Bell + User Profile Menu */}
           <div className="flex items-center justify-end ml-auto gap-2 sm:gap-3.5">
-            {/* Theme Toggle Dropdown */}
-            <ThemeToggle />
-
             {/* Notification Bell */}
             <div className="relative shrink-0">
               <NotificationBell

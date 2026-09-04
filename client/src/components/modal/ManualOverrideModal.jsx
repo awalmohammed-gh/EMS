@@ -566,10 +566,16 @@ export const ManualOverrideModal = ({
                     className={`font-bold ${
                       isWaived
                         ? "text-emerald-600 dark:text-emerald-400 line-through"
+                        : latenessCalculation.rawPenalty === 0
+                        ? "text-[#002185] dark:text-blue-400 font-semibold"
                         : "text-rose-600 dark:text-rose-400"
                     }`}
                   >
-                    GH₵{latenessCalculation.rawPenalty.toFixed(2)}
+                    {isWaived
+                      ? `GH₵${latenessCalculation.rawPenalty.toFixed(2)}`
+                      : latenessCalculation.rawPenalty === 0
+                      ? "GH₵0.00 (No deduction applied)"
+                      : `GH₵${latenessCalculation.rawPenalty.toFixed(2)}`}
                   </span>
                 </div>
 

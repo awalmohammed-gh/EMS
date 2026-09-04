@@ -12,9 +12,6 @@ import {
   EyeOff,
   Palette,
   Bell,
-  Sun,
-  Moon,
-  Laptop,
   CheckCircle2,
   Clock,
   Globe,
@@ -25,7 +22,7 @@ import {
   Hash,
 } from "lucide-react";
 import { useManagement } from "../../context/ManagementContextProvider";
-import { useTheme } from "../../context/ThemeContext";
+import ThemePreferenceCard from "../../components/ThemePreferenceCard";
 import {
   getEmployeeMe,
   updateEmployeeMe,
@@ -47,7 +44,6 @@ const NOTIFICATIONS_STORAGE_KEY = "employee_user_notifications";
 
 const EmployeeSettings = () => {
   const { user, setUser, setShowToast } = useManagement();
-  const { theme, setTheme, resolvedTheme } = useTheme();
 
   const [activeTab, setActiveTab] = useState("profile");
 
@@ -838,106 +834,7 @@ const EmployeeSettings = () => {
       {activeTab === "preferences" && (
         <div className="space-y-6">
           {/* Appearance / Theme Selector */}
-          <div className="bg-white dark:bg-[#111927] border border-slate-200 dark:border-slate-800/80 rounded-2xl p-6 shadow-sm">
-            <div className="mb-4">
-              <h3 className="text-base font-bold text-slate-900 dark:text-white flex items-center gap-2">
-                <Palette className="w-4 h-4 text-[#002185] dark:text-blue-400" />
-                Color Theme & Mode
-              </h3>
-              <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">
-                Customize appearance or sync automatically with your system preference.
-              </p>
-            </div>
-
-            <div className="grid grid-cols-1 sm:grid-cols-3 gap-3.5">
-              {/* Light Mode Option */}
-              <button
-                type="button"
-                id="theme-option-light"
-                onClick={() => setTheme("light")}
-                className={`p-4 rounded-xl border text-left transition-all duration-200 cursor-pointer flex flex-col justify-between gap-3 ${
-                  theme === "light"
-                    ? "border-[#002185] dark:border-blue-500 bg-blue-50/60 dark:bg-blue-950/30 ring-2 ring-[#002185]/20 dark:ring-blue-500/20"
-                    : "border-slate-200 dark:border-slate-800/80 bg-slate-50/60 dark:bg-[#162033] hover:border-slate-300 dark:hover:border-slate-700"
-                }`}
-              >
-                <div className="flex items-center justify-between">
-                  <div className="w-8 h-8 rounded-lg bg-amber-100 text-amber-600 flex items-center justify-center">
-                    <Sun className="w-4 h-4" />
-                  </div>
-                  {theme === "light" && (
-                    <span className="w-2.5 h-2.5 rounded-full bg-[#002185] dark:bg-blue-400" />
-                  )}
-                </div>
-                <div>
-                  <h4 className="text-xs font-bold text-slate-900 dark:text-white">
-                    Light Mode
-                  </h4>
-                  <p className="text-[11px] text-slate-500 dark:text-slate-400 mt-0.5">
-                    Clean, high-contrast light surfaces for bright environments
-                  </p>
-                </div>
-              </button>
-
-              {/* Dark Mode Option */}
-              <button
-                type="button"
-                id="theme-option-dark"
-                onClick={() => setTheme("dark")}
-                className={`p-4 rounded-xl border text-left transition-all duration-200 cursor-pointer flex flex-col justify-between gap-3 ${
-                  theme === "dark"
-                    ? "border-[#002185] dark:border-blue-500 bg-blue-50/60 dark:bg-blue-950/30 ring-2 ring-[#002185]/20 dark:ring-blue-500/20"
-                    : "border-slate-200 dark:border-slate-800/80 bg-slate-50/60 dark:bg-[#162033] hover:border-slate-300 dark:hover:border-slate-700"
-                }`}
-              >
-                <div className="flex items-center justify-between">
-                  <div className="w-8 h-8 rounded-lg bg-indigo-100 text-indigo-600 dark:bg-indigo-950 dark:text-indigo-400 flex items-center justify-center">
-                    <Moon className="w-4 h-4" />
-                  </div>
-                  {theme === "dark" && (
-                    <span className="w-2.5 h-2.5 rounded-full bg-[#002185] dark:bg-blue-400" />
-                  )}
-                </div>
-                <div>
-                  <h4 className="text-xs font-bold text-slate-900 dark:text-white">
-                    Dark Mode
-                  </h4>
-                  <p className="text-[11px] text-slate-500 dark:text-slate-400 mt-0.5">
-                    Comfortable dark palette designed to reduce eye strain
-                  </p>
-                </div>
-              </button>
-
-              {/* System Option */}
-              <button
-                type="button"
-                id="theme-option-system"
-                onClick={() => setTheme("system")}
-                className={`p-4 rounded-xl border text-left transition-all duration-200 cursor-pointer flex flex-col justify-between gap-3 ${
-                  theme === "system"
-                    ? "border-[#002185] dark:border-blue-500 bg-blue-50/60 dark:bg-blue-950/30 ring-2 ring-[#002185]/20 dark:ring-blue-500/20"
-                    : "border-slate-200 dark:border-slate-800/80 bg-slate-50/60 dark:bg-[#162033] hover:border-slate-300 dark:hover:border-slate-700"
-                }`}
-              >
-                <div className="flex items-center justify-between">
-                  <div className="w-8 h-8 rounded-lg bg-blue-100 text-blue-600 dark:bg-blue-950 dark:text-blue-400 flex items-center justify-center">
-                    <Laptop className="w-4 h-4" />
-                  </div>
-                  {theme === "system" && (
-                    <span className="w-2.5 h-2.5 rounded-full bg-[#002185] dark:bg-blue-400" />
-                  )}
-                </div>
-                <div>
-                  <h4 className="text-xs font-bold text-slate-900 dark:text-white">
-                    System Sync
-                  </h4>
-                  <p className="text-[11px] text-slate-500 dark:text-slate-400 mt-0.5">
-                    Automatically matches your OS ({resolvedTheme} active)
-                  </p>
-                </div>
-              </button>
-            </div>
-          </div>
+          <ThemePreferenceCard />
 
           {/* Regional & Format Preferences */}
           <div className="bg-white dark:bg-[#111927] border border-slate-200 dark:border-slate-800/80 rounded-2xl p-6 shadow-sm">

@@ -23,9 +23,14 @@ import {
 import { employeeDashboardOverview } from "../controllers/dashboardController.js";
 import { updateEmployeeStatus, deleteEmployee } from "../controllers/adminController.js";
 import { getEmployeeLeave, getLeaveEmployeeStats, applyLeave } from "../controllers/leaveController.js";
+import { getCurrentMonthLatenessAnalytics } from "../controllers/analyticsController.js";
 import { employeeAuth } from "../middleware/employeeAuth.js";
 
 const employeeRouter = express.Router();
+
+// Current Month Lateness Deductions for Employee
+employeeRouter.get("/monthly-lateness-deductions", employeeAuth, getCurrentMonthLatenessAnalytics);
+employeeRouter.get("/analytics/monthly-lateness-deductions", employeeAuth, getCurrentMonthLatenessAnalytics);
 
 // Real-Time Employee Leave History & Balances (GET /api/employee/leave-requests)
 employeeRouter.get("/leave-requests", employeeAuth, getEmployeeLeave);

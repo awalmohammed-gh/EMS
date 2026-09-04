@@ -31,6 +31,7 @@ import EmployeePayslipsModal from "../../components/modal/EmployeePayslipsModal"
 import ClockInOutCard from "../../components/ClockInOutCard";
 import ShiftStatusCard from "../../components/ShiftStatusCard";
 import WeeklyAttendanceChart from "../../components/WeeklyAttendanceChart";
+import LatenessDeductionsLineChart from "../../components/LatenessDeductionsLineChart";
 import { downloadPayslipPDF } from "../../utils/payslipPdfGenerator";
 
 const EmployeeDashboard = () => {
@@ -54,7 +55,7 @@ const EmployeeDashboard = () => {
   const [showApplyLeaveModal, setShowApplyLeaveModal] = useState(false);
   const [showPayslipModal, setShowPayslipModal] = useState(false);
 
-  const { setShowToast, user, setUser } = useManagement();
+  const { setShowToast, user, setUser, settings } = useManagement();
   const navigate = useNavigate();
 
   const fetchEmployeeDashboardData = useCallback(async () => {
@@ -213,9 +214,11 @@ const EmployeeDashboard = () => {
             ? data.delayMinutes
             : data.lateMinutes || 0;
         const latePenalty =
-          clockInData?.latePenalty !== undefined
-            ? clockInData.latePenalty
-            : data.latePenalty || 0;
+          clockInData?.latePenalty !== undefined && clockInData.latePenalty !== null
+            ? Number(clockInData.latePenalty)
+            : data.latePenalty !== undefined && data.latePenalty !== null
+            ? Number(data.latePenalty)
+            : 0;
         const penaltyTier =
           clockInData?.penaltyTier || data.penaltyTier || "";
         const status =
@@ -234,10 +237,20 @@ const EmployeeDashboard = () => {
           penaltyTier: penaltyTier,
         });
 
+        const isLate = delayMins > 0;
+        const isZeroPenalty = isLate && latePenalty === 0;
+        const toastType = isZeroPenalty ? "info" : isLate ? "warning" : "success";
+
         setShowToast({
           show: true,
-          message: data.message || "Clock in successful!",
-          type: "success",
+          message:
+            data.message ||
+            (isLate
+              ? isZeroPenalty
+                ? `Clocked in (${delayMins} mins late). Company policy applied: No salary deduction for this delay.`
+                : `Clocked in (${delayMins} mins late). Lateness penalty of GH₵${latePenalty.toFixed(2)} has been applied as per company policy.`
+              : "Clock in successful!"),
+          type: toastType,
         });
 
         try {
@@ -605,7 +618,7 @@ const EmployeeDashboard = () => {
             type="button"
             onClick={handleSyncAttendance}
             disabled={isSyncingAttendance}
-            className="flex items-center gap-1.5 px-3.5 py-2 rounded-xl text-xs font-semibold text-[#002185] dark:text-blue-400 bg-blue-50 dark:bg-blue-950/40 hover:bg-blue-100 dark:hover:bg-blue-900/50 border border-blue-200 dark:border-blue-800/60 transition-colors cursor-pointer disabled:opacity-60 shadow-xs"
+            className="flex items-center gap-1.5 px-3.5 py-2 rounded-xl text-xs font-semibold text-[#002185] dark:text-blue-400 bg-blue-50 dark:bg-blue-950/40 hover:bg-blue-100 dark:hover:bg-blue-900/50 border border-blue-100 dark:border-blue-800/60 transition-colors cursor-pointer disabled:opacity-60 shadow-sm"
             title="Re-evaluate lateness delay and tiered penalty calculations for current pay period"
           >
             <RefreshCw
@@ -645,6 +658,8 @@ const EmployeeDashboard = () => {
           isLoading={isLoading}
           onClockIn={handleClockIn}
           onClockOut={handleClockOut}
+          workEndTime={settings?.workEndTime || settings?.attendance?.workEndTime || "19:00"}
+          workStartTime={settings?.workStartTime || settings?.attendance?.workStartTime || "08:00"}
           userRole={user?.role}
         />
 
@@ -680,6 +695,13 @@ const EmployeeDashboard = () => {
           attendanceLogs={dashboardData?.attendanceRecords || dashboardData?.attendanceLogs || []}
           title="Weekly Attendance & Shift Performance"
           subtitle="Monitor weekly attendance patterns and total hours worked against shift requirements"
+        />
+
+        {/* Lateness Deductions Recharts Line Chart for Current Payroll Month */}
+        <LatenessDeductionsLineChart
+          employeeId={user?._id || user?.id}
+          title="My Monthly Lateness Deductions"
+          subtitle="Visualize your daily and cumulative lateness penalty deductions over the current payroll month"
         />
 
         {/* Attendance Summary & Leave Balance */}

@@ -36,6 +36,7 @@ import ErrorMessage from "../../ui/ErrorMessage";
 import DepartmentStatusVisualizer from "../../components/DepartmentStatusVisualizer";
 import AnnouncementBoard from "../../components/AnnouncementBoard";
 import DashboardMetricsSkeleton from "../../components/DashboardMetricsSkeleton";
+import LatenessDeductionsLineChart from "../../components/LatenessDeductionsLineChart";
 import PenaltyPayrollImpactChart from "../../components/PenaltyPayrollImpactChart";
 import RecentActivityFeed from "../../components/RecentActivityFeed";
 import DashboardSummaryMetrics from "../../components/DashboardSummaryMetrics";
@@ -899,6 +900,9 @@ const AdminDashboard = () => {
           )}
         </div>
       </div>
+
+      {/* Visualizing Total Lateness Deductions over Current Payroll Month (Recharts Line Chart) */}
+      <LatenessDeductionsLineChart />
 
       {/* 6-Month Attendance Penalty Impact Visualizer */}
       <PenaltyPayrollImpactChart />

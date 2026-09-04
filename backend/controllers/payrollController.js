@@ -8,6 +8,7 @@ import { Attendance } from "../models/attendanceModel.js";
 import { CompanySettings } from "../models/CompanySettings.js";
 import { AuditLog } from "../models/AuditLog.js";
 import { liveAttendanceStore } from "./employeeAttendance.js";
+import { liveLeaveStore } from "./leaveController.js";
 import { createNotificationRecord } from "./notificationController.js";
 import { calculateMonthlyPenalties, computeNetSalary } from "../services/payrollEngine.js";
 import {
@@ -27,17 +28,121 @@ const isValidObjectId = (id) =>
 
 export const livePayrollStore = [];
 
-// Helper: Calculate working days in a month (excluding Sat/Sun)
-const getWorkingDaysInMonth = (year = 2026, monthIndex = 7) => {
-  let count = 0;
-  const daysInMonth = new Date(year, monthIndex + 1, 0).getDate();
-  for (let d = 1; d <= daysInMonth; d++) {
-    const dayOfWeek = new Date(year, monthIndex, d).getDay();
-    if (dayOfWeek !== 0 && dayOfWeek !== 6) {
-      count++;
+/**
+ * Calculates calendar and business day boundaries for a target billing month.
+ * Enforces strict monthly isolation and mid-month elapsed vs future day tracking.
+ *
+ * @param {number|string} year - 4-digit year (e.g. 2026)
+ * @param {number|string} monthIndex - 0-indexed month (0 = Jan, 8 = Sept)
+ * @param {Date|string|null} evaluationDate - Reference cutoff date (defaults to current date)
+ * @returns {Object} Boundaries, standard working days, elapsed working days, future working days, and business days.
+ */
+export const getMonthDateBoundaries = (year = 2026, monthIndex = 7, evaluationDate = null) => {
+  const targetYear = parseInt(year, 10) || new Date().getFullYear();
+  let targetMonthIndex = parseInt(monthIndex, 10);
+  if (isNaN(targetMonthIndex) || targetMonthIndex < 0 || targetMonthIndex > 11) {
+    targetMonthIndex = new Date().getMonth();
+  }
+
+  const evalDate = evaluationDate
+    ? (evaluationDate instanceof Date ? evaluationDate : new Date(evaluationDate))
+    : new Date();
+  const safeEvalDate = !isNaN(evalDate.getTime()) ? evalDate : new Date();
+
+  const evalYear = safeEvalDate.getFullYear();
+  const evalMonthIndex = safeEvalDate.getMonth();
+  const evalDay = safeEvalDate.getDate();
+
+  // Strict start and end of target billing month (local and UTC)
+  const totalDaysInMonth = new Date(targetYear, targetMonthIndex + 1, 0).getDate();
+  const startOfMonth = new Date(targetYear, targetMonthIndex, 1, 0, 0, 0, 0);
+  const endOfMonth = new Date(targetYear, targetMonthIndex, totalDaysInMonth, 23, 59, 59, 999);
+
+  const startOfMonthUTC = new Date(Date.UTC(targetYear, targetMonthIndex, 1, 0, 0, 0, 0));
+  const endOfMonthUTC = new Date(Date.UTC(targetYear, targetMonthIndex + 1, 0, 23, 59, 59, 999));
+
+  const monthString = `${targetYear}-${String(targetMonthIndex + 1).padStart(2, "0")}`;
+
+  const isPastMonth =
+    targetYear < evalYear || (targetYear === evalYear && targetMonthIndex < evalMonthIndex);
+  const isCurrentMonth =
+    targetYear === evalYear && targetMonthIndex === evalMonthIndex;
+  const isFutureMonth =
+    targetYear > evalYear || (targetYear === evalYear && targetMonthIndex > evalMonthIndex);
+
+  // Determine cutoff day:
+  // - Future month: 0 days have elapsed
+  // - Past month: All days of month have elapsed (cutoff = totalDaysInMonth)
+  // - Current month: Only days up to today (evalDay) have elapsed: Math.min(today, monthEnd)
+  let cutoffDay = 0;
+  if (isPastMonth) {
+    cutoffDay = totalDaysInMonth;
+  } else if (isCurrentMonth) {
+    cutoffDay = Math.min(evalDay, totalDaysInMonth);
+  } else {
+    cutoffDay = 0;
+  }
+
+  let totalWorkingDaysInMonth = 0;
+  let elapsedWorkingDays = 0;
+  let futureWorkingDays = 0;
+  const businessDays = [];
+
+  for (let d = 1; d <= totalDaysInMonth; d++) {
+    const dayDate = new Date(targetYear, targetMonthIndex, d);
+    const dayOfWeek = dayDate.getDay(); // 0 = Sunday, 6 = Saturday
+    const isWeekend = dayOfWeek === 0 || dayOfWeek === 6;
+
+    if (!isWeekend) {
+      totalWorkingDaysInMonth++;
+      const isElapsed = isPastMonth ? true : (isCurrentMonth ? d <= cutoffDay : false);
+      if (isElapsed) {
+        elapsedWorkingDays++;
+      } else {
+        futureWorkingDays++;
+      }
+
+      const dateStr = `${targetYear}-${String(targetMonthIndex + 1).padStart(2, "0")}-${String(d).padStart(2, "0")}`;
+      businessDays.push({
+        dayNumber: d,
+        dateStr,
+        date: dayDate,
+        dayOfWeek,
+        isWeekend: false,
+        isElapsed,
+        isFuture: !isElapsed,
+      });
     }
   }
-  return count > 0 ? count : 22;
+
+  const standardWorkingDays = totalWorkingDaysInMonth > 0 ? totalWorkingDaysInMonth : 22;
+
+  return {
+    year: targetYear,
+    monthIndex: targetMonthIndex,
+    monthString,
+    totalDaysInMonth,
+    startOfMonth,
+    endOfMonth,
+    startOfMonthUTC,
+    endOfMonthUTC,
+    totalWorkingDaysInMonth: standardWorkingDays,
+    standardWorkingDays,
+    elapsedWorkingDays,
+    futureWorkingDays,
+    cutoffDay,
+    isCurrentMonth,
+    isPastMonth,
+    isFutureMonth,
+    evaluationDate: safeEvalDate,
+    businessDays,
+  };
+};
+
+// Helper: Calculate working days in a month (excluding Sat/Sun)
+export const getWorkingDaysInMonth = (year = 2026, monthIndex = 7) => {
+  const boundaries = getMonthDateBoundaries(year, monthIndex);
+  return boundaries.standardWorkingDays;
 };
 
 // Calculate monthly salary breakdown based on real attendance (deductions for absence & lateness tiers)
@@ -129,7 +234,20 @@ export const calculateMonthlyPayrollSummary = async (req, res) => {
     }
 
     const formattedTargetMonth = `${targetMonthName} ${targetYear}`;
-    const standardWorkingDays = getWorkingDaysInMonth(targetYear, targetMonthIndex);
+    const boundaries = getMonthDateBoundaries(targetYear, targetMonthIndex);
+    const standardWorkingDays = boundaries.standardWorkingDays;
+    const {
+      startOfMonth,
+      endOfMonth,
+      monthString,
+      elapsedWorkingDays,
+      futureWorkingDays,
+      isCurrentMonth,
+      isPastMonth,
+      isFutureMonth,
+      cutoffDay,
+      businessDays,
+    } = boundaries;
 
     // Fetch active CompanySettings for penalty rules
     let companySettings = {
@@ -217,18 +335,24 @@ export const calculateMonthlyPayrollSummary = async (req, res) => {
           ? Number(targetEmployee.salary)
           : 4000));
 
-    // Dynamic Daily Salary Rate = Employee Base Salary / Total Working Days in Month
+    // Dynamic Daily Salary Rate = Employee Base Salary / Total Working Days in Month (Rule 3)
     const dailySalaryRate = standardWorkingDays > 0 ? parseFloat((baseSalary / standardWorkingDays).toFixed(2)) : 0;
     const dailyRate = dailySalaryRate;
     const hourlyRate = parseFloat((dailySalaryRate / 8).toFixed(2));
     const absenceRate = dailySalaryRate;
 
-    // 1. Gather Attendance Records strictly for the selected month and year
+    // 1. Gather Attendance Records strictly for the selected billing month (Rule 2: Strict Monthly Isolation)
     let attendanceRecords = [];
     if (isTargetValidObjId) {
       try {
         const dbAttendance = await Attendance.find({
           employee: targetEmployee._id,
+          $or: [
+            { date: { $regex: `^${monthString}` } },
+            { date: { $gte: startOfMonth, $lte: endOfMonth } },
+            { clockIn: { $gte: startOfMonth, $lte: endOfMonth } },
+            { clockInTime: { $gte: startOfMonth, $lte: endOfMonth } },
+          ],
         }).lean();
 
         if (dbAttendance && dbAttendance.length > 0) {
@@ -239,21 +363,22 @@ export const calculateMonthlyPayrollSummary = async (req, res) => {
       }
     }
 
-    // Add active live clock-ins from memory
+    // Add active live clock-ins from memory strictly for this target month
     liveAttendanceStore.forEach((liveAtt) => {
       if (String(liveAtt.employee) === String(targetEmployee._id)) {
-        if (!attendanceRecords.some((a) => a.date === liveAtt.date)) {
-          attendanceRecords.push(liveAtt);
+        if (liveAtt.date && String(liveAtt.date).startsWith(monthString)) {
+          if (!attendanceRecords.some((a) => a.date === liveAtt.date)) {
+            attendanceRecords.push(liveAtt);
+          }
         }
       }
     });
 
-    // Filter attendance records to target month and year
-    const targetMonthPrefix = `${targetYear}-${String(targetMonthIndex + 1).padStart(2, "0")}`;
+    // Filter attendance records strictly to target month and year
     const filteredAttendance = attendanceRecords.filter((rec) => {
       if (!rec) return false;
       if (typeof rec.date === "string") {
-        if (rec.date.startsWith(targetMonthPrefix)) return true;
+        if (rec.date.startsWith(monthString)) return true;
         if (
           rec.date.toLowerCase().includes(targetMonthName.toLowerCase()) &&
           rec.date.includes(String(targetYear))
@@ -268,91 +393,17 @@ export const calculateMonthlyPayrollSummary = async (req, res) => {
       return false;
     });
 
-    // Compute attendance metrics directly from database records for this month
-    let presentDays = 0;
-    let explicitAbsentDays = 0;
-    let lateDays = 0;
-    let onTimeDays = 0;
-    let totalWorkHours = 0;
-    let overtimeHours = 0;
-    let totalLatenessDeductions = 0;
-    const latenessDetails = [];
-
-    filteredAttendance.forEach((record) => {
-      const hrs = Number(record.workHours) || (record.status !== "Absent" ? 8 : 0);
-      totalWorkHours += hrs;
-
-      if (record.overtimeHours) {
-        overtimeHours += Number(record.overtimeHours);
-      } else if (hrs > 8) {
-        overtimeHours += hrs - 8;
-      }
-
-      const st = (record.status || "").toLowerCase();
-      if (st === "absent") {
-        explicitAbsentDays++;
-      } else {
-        presentDays++;
-        // Evaluate late check-in
-        const checkInTimeValue = record.clockIn || record.clockInTime;
-        let isLate = st === "late" || (Number(record.lateMinutes || record.delayMinutes || 0) > 0) || (Number(record.latePenalty || 0) > 0);
-        let penaltyResult = null;
-
-        if (checkInTimeValue) {
-          penaltyResult = evaluateLatenessPenalty(checkInTimeValue, companySettings.workStartTime, companySettings);
-          if (penaltyResult.minutesLate > 0) {
-            isLate = true;
-          }
-        }
-
-        if (isLate) {
-          lateDays++;
-          let penaltyAmount = 0;
-          let minutesLate = 0;
-          let tierName = "";
-          let clockInFormatted = "--";
-
-          if (record.latePenalty !== undefined && record.latePenalty !== null && record.latePenalty !== "" && !isNaN(Number(record.latePenalty))) {
-            penaltyAmount = Math.max(0, Number(record.latePenalty));
-            minutesLate = Number(record.lateMinutes || record.delayMinutes || (penaltyResult ? penaltyResult.minutesLate : 0));
-            tierName = record.penaltyTier || (penaltyResult ? penaltyResult.tier : "Late Penalty");
-            clockInFormatted = penaltyResult?.clockInFormatted || (checkInTimeValue ? new Date(checkInTimeValue).toLocaleTimeString("en-GH", { hour: "2-digit", minute: "2-digit" }) : "Late");
-          } else if (penaltyResult && penaltyResult.isLate) {
-            penaltyAmount = penaltyResult.penalty;
-            minutesLate = penaltyResult.minutesLate;
-            tierName = penaltyResult.tier;
-            clockInFormatted = penaltyResult.clockInFormatted;
-          } else {
-            const fallbackCalc = calculateLatenessPenalty(record.lateMinutes || record.delayMinutes || 15, companySettings);
-            penaltyAmount = fallbackCalc.penalty;
-            minutesLate = fallbackCalc.minutesLate;
-            tierName = fallbackCalc.tier;
-            clockInFormatted = checkInTimeValue ? new Date(checkInTimeValue).toLocaleTimeString("en-GH", { hour: "2-digit", minute: "2-digit" }) : "Late";
-          }
-
-          totalLatenessDeductions += penaltyAmount;
-          latenessDetails.push({
-            date: record.date,
-            clockIn: clockInFormatted,
-            minutesLate,
-            delayMinutes: minutesLate,
-            tier: tierName,
-            penalty: penaltyAmount,
-            latePenalty: penaltyAmount,
-          });
-        } else {
-          onTimeDays++;
-        }
-      }
-    });
-
-    // 2. Gather Approved Leave Requests overlapping the selected month
+    // 2. Gather Approved Leave Requests strictly overlapping target month (Rule 2)
     let approvedLeaves = [];
     if (isTargetValidObjId) {
       try {
         const dbLeaves = await Leave.find({
           employee: targetEmployee._id,
           status: "Approved",
+          $or: [
+            { startDate: { $lte: endOfMonth }, endDate: { $gte: startOfMonth } },
+            { startDate: { $gte: startOfMonth, $lte: endOfMonth } },
+          ],
         }).lean();
 
         if (dbLeaves && dbLeaves.length > 0) {
@@ -363,8 +414,19 @@ export const calculateMonthlyPayrollSummary = async (req, res) => {
       }
     }
 
-    const monthStart = new Date(targetYear, targetMonthIndex, 1);
-    const monthEnd = new Date(targetYear, targetMonthIndex + 1, 0, 23, 59, 59, 999);
+    if (Array.isArray(liveLeaveStore) && liveLeaveStore.length > 0) {
+      liveLeaveStore.forEach((liveL) => {
+        if (
+          (String(liveL.employee?._id || liveL.employee) === String(targetEmployee._id) ||
+            liveL.employeeId === targetEmployee.employeeId) &&
+          liveL.status === "Approved"
+        ) {
+          if (!approvedLeaves.some((r) => String(r._id) === String(liveL._id))) {
+            approvedLeaves.push(liveL);
+          }
+        }
+      });
+    }
 
     let approvedPaidLeaveDays = 0;
     let approvedUnpaidLeaveDays = 0;
@@ -375,8 +437,8 @@ export const calculateMonthlyPayrollSummary = async (req, res) => {
       const lEnd = new Date(leave.endDate || leave.startDate);
       if (isNaN(lStart.getTime())) return;
 
-      const effectiveStart = lStart < monthStart ? monthStart : lStart;
-      const effectiveEnd = lEnd > monthEnd ? monthEnd : lEnd;
+      const effectiveStart = lStart < startOfMonth ? startOfMonth : lStart;
+      const effectiveEnd = lEnd > endOfMonth ? endOfMonth : lEnd;
 
       if (effectiveStart <= effectiveEnd) {
         let daysInMonth = 0;
@@ -390,7 +452,7 @@ export const calculateMonthlyPayrollSummary = async (req, res) => {
         }
 
         if (daysInMonth > 0) {
-          if (leave.leaveType === "Unpaid Leave") {
+          if ((leave.leaveType || "").toLowerCase().includes("unpaid")) {
             approvedUnpaidLeaveDays += daysInMonth;
           } else {
             approvedPaidLeaveDays += daysInMonth;
@@ -408,11 +470,186 @@ export const calculateMonthlyPayrollSummary = async (req, res) => {
       }
     });
 
-    // 3. Dynamic Calculation of Payable Days & Unexcused Absences
-    let attendedDays = presentDays;
+    // 3. Perform Day-by-Day Audit across all business days
+    // Rule 1: Future / Unelapsed days are NEVER counted as absent or penalized!
+    // Absences are strictly evaluated against elapsed working days up to cutoffDay.
+    let attendedDays = 0;
+    let explicitAbsentDays = 0;
+    let lateDays = 0;
+    let onTimeDays = 0;
+    let totalWorkHours = 0;
+    let overtimeHours = 0;
+    let totalLatenessDeductions = 0;
+    let elapsedUnexcusedAbsentDays = 0;
+    const latenessDetails = [];
+    const dailyAuditList = [];
+
+    businessDays.forEach((bDay) => {
+      const { dateStr, dayNumber, isElapsed, dayOfWeek } = bDay;
+
+      // Check if covered by approved leave
+      const matchedLeave = approvedLeaves.find((leave) => {
+        const s = new Date(leave.startDate);
+        const e = new Date(leave.endDate || leave.startDate);
+        s.setHours(0, 0, 0, 0);
+        e.setHours(23, 59, 59, 999);
+        const d = new Date(bDay.date);
+        d.setHours(12, 0, 0, 0);
+        return d >= s && d <= e;
+      });
+
+      // Check attendance record for this day
+      const attRecord = filteredAttendance.find((a) => {
+        if (typeof a.date === "string" && a.date.startsWith(dateStr)) return true;
+        const ad = new Date(a.date || a.clockIn);
+        return !isNaN(ad.getTime()) && ad.getDate() === dayNumber && ad.getMonth() === targetMonthIndex && ad.getFullYear() === targetYear;
+      });
+
+      const isExplicitAbsent = attRecord && (attRecord.status || "").toLowerCase() === "absent";
+      const hasClockIn = attRecord && (attRecord.clockIn || attRecord.clockInTime || (attRecord.status && !isExplicitAbsent));
+
+      // RULE 1: Future / unelapsed days are strictly excluded from absences!
+      if (!isElapsed) {
+        dailyAuditList.push({
+          date: dateStr,
+          dayNumber,
+          dayOfWeek,
+          status: "Unelapsed / Future",
+          isElapsed: false,
+          isFuture: true,
+          isAttended: false,
+          isAbsent: false,
+          penalty: 0,
+          reason: "Future day - strictly excluded from absences",
+        });
+        return;
+      }
+
+      // ELAPSED WORKDAY EVALUATION:
+      if (matchedLeave) {
+        dailyAuditList.push({
+          date: dateStr,
+          dayNumber,
+          dayOfWeek,
+          status: "Approved Leave",
+          isElapsed: true,
+          isFuture: false,
+          isAttended: false,
+          isAbsent: false,
+          penalty: 0,
+          reason: `Covered by approved leave: ${matchedLeave.leaveType}`,
+        });
+      } else if (hasClockIn && !isExplicitAbsent) {
+        attendedDays++;
+        const hrs = Number(attRecord.workHours) || 8;
+        totalWorkHours += hrs;
+        if (attRecord.overtimeHours) {
+          overtimeHours += Number(attRecord.overtimeHours);
+        } else if (hrs > 8) {
+          overtimeHours += hrs - 8;
+        }
+
+        const checkInTimeValue = attRecord.clockIn || attRecord.clockInTime;
+        let penaltyResult = null;
+        if (checkInTimeValue) {
+          penaltyResult = evaluateLatenessPenalty(checkInTimeValue, companySettings.workStartTime, companySettings);
+        }
+
+        const st = (attRecord.status || "").toLowerCase();
+        const isLate =
+          st === "late" ||
+          Number(attRecord.lateMinutes || attRecord.delayMinutes || 0) > 0 ||
+          Number(attRecord.latePenalty || 0) > 0 ||
+          (penaltyResult && penaltyResult.isLate);
+
+        if (isLate) {
+          lateDays++;
+          let penaltyAmount = 0;
+          let minutesLate = 0;
+          let tierName = "";
+          let clockInFormatted = "--";
+
+          if (attRecord.latePenalty !== undefined && attRecord.latePenalty !== null && attRecord.latePenalty !== "" && !isNaN(Number(attRecord.latePenalty))) {
+            penaltyAmount = Math.max(0, Number(attRecord.latePenalty));
+            minutesLate = Number(attRecord.lateMinutes || attRecord.delayMinutes || (penaltyResult ? penaltyResult.minutesLate : 0));
+            tierName = attRecord.penaltyTier || (penaltyResult ? penaltyResult.tier : "Late Penalty");
+            clockInFormatted = penaltyResult?.clockInFormatted || (checkInTimeValue ? new Date(checkInTimeValue).toLocaleTimeString("en-GH", { hour: "2-digit", minute: "2-digit" }) : "Late");
+          } else if (penaltyResult && penaltyResult.isLate) {
+            penaltyAmount = penaltyResult.penalty;
+            minutesLate = penaltyResult.minutesLate;
+            tierName = penaltyResult.tier;
+            clockInFormatted = penaltyResult.clockInFormatted;
+          } else {
+            const fallbackCalc = calculateLatenessPenalty(attRecord.lateMinutes || attRecord.delayMinutes || 15, companySettings);
+            penaltyAmount = fallbackCalc.penalty;
+            minutesLate = fallbackCalc.minutesLate;
+            tierName = fallbackCalc.tier;
+            clockInFormatted = checkInTimeValue ? new Date(checkInTimeValue).toLocaleTimeString("en-GH", { hour: "2-digit", minute: "2-digit" }) : "Late";
+          }
+
+          totalLatenessDeductions += penaltyAmount;
+          latenessDetails.push({
+            date: dateStr,
+            clockIn: clockInFormatted,
+            minutesLate,
+            delayMinutes: minutesLate,
+            tier: tierName,
+            penalty: penaltyAmount,
+            latePenalty: penaltyAmount,
+          });
+
+          dailyAuditList.push({
+            date: dateStr,
+            dayNumber,
+            dayOfWeek,
+            status: "Late",
+            isElapsed: true,
+            isFuture: false,
+            isAttended: true,
+            isAbsent: false,
+            lateMinutes: minutesLate,
+            tier: tierName,
+            penalty: penaltyAmount,
+            reason: `Late clock-in (${minutesLate} mins delay)`,
+          });
+        } else {
+          onTimeDays++;
+          dailyAuditList.push({
+            date: dateStr,
+            dayNumber,
+            dayOfWeek,
+            status: "On Time",
+            isElapsed: true,
+            isFuture: false,
+            isAttended: true,
+            isAbsent: false,
+            penalty: 0,
+            reason: "Clocked in on time",
+          });
+        }
+      } else {
+        // Unworked elapsed workday without approved leave -> Realized Unexcused Absence
+        elapsedUnexcusedAbsentDays++;
+        if (isExplicitAbsent) explicitAbsentDays++;
+        dailyAuditList.push({
+          date: dateStr,
+          dayNumber,
+          dayOfWeek,
+          status: "Unexcused Absent",
+          isElapsed: true,
+          isFuture: false,
+          isAttended: false,
+          isAbsent: true,
+          penalty: dailySalaryRate,
+          reason: "Unexcused absence on elapsed workday",
+        });
+      }
+    });
+
+    let presentDays = attendedDays;
+    let absentDaysCount = elapsedUnexcusedAbsentDays;
+    let unexcusedAbsences = elapsedUnexcusedAbsentDays;
     let payableDays = Math.min(standardWorkingDays, attendedDays + approvedPaidLeaveDays);
-    let unexcusedAbsences = Math.max(0, standardWorkingDays - payableDays);
-    let absentDaysCount = unexcusedAbsences;
 
     // Call Unified Single Source of Truth Calculation Engine with dynamic base salary
     try {
@@ -522,12 +759,20 @@ export const calculateMonthlyPayrollSummary = async (req, res) => {
       },
       workingDaysMetric: {
         standardWorkingDays,
+        totalWorkingDaysInMonth: standardWorkingDays,
+        elapsedWorkingDays,
+        futureWorkingDays,
+        cutoffDay,
+        isCurrentMonth,
+        isPastMonth,
+        isFutureMonth,
         presentDays: attendedDays,
         attendedDays,
         onTimeDays,
         lateDays,
         absentDays: absentDaysCount,
         unexcusedAbsences: absentDaysCount,
+        elapsedUnexcusedAbsentDays: absentDaysCount,
         totalWorkHours,
         overtimeHours: parseFloat(overtimeHours.toFixed(1)),
         approvedPaidLeaveDays,
@@ -537,6 +782,18 @@ export const calculateMonthlyPayrollSummary = async (req, res) => {
         dailyRate: dailySalaryRate,
         hourlyRate,
       },
+      calendar: {
+        totalDaysInMonth: boundaries.totalDaysInMonth,
+        totalWorkingDaysInMonth: standardWorkingDays,
+        standardWorkingDays,
+        elapsedWorkingDays,
+        futureWorkingDays,
+        cutoffDay,
+        isCurrentMonth,
+        isPastMonth,
+        isFutureMonth,
+      },
+      dailyAudit: dailyAuditList,
       rates: {
         monthlyBaseSalary: baseSalary,
         dailySalaryRate,
@@ -786,7 +1043,8 @@ export const generatePayroll = async (req, res) => {
       }
     }
 
-    const standardWorkingDays = Number(req.body.standardWorkingDays) || getWorkingDaysInMonth(targetYear, targetMonthIndex);
+    const boundaries = getMonthDateBoundaries(targetYear, targetMonthIndex);
+    const standardWorkingDays = Number(req.body.standardWorkingDays) || boundaries.standardWorkingDays;
     const dailySalaryRate = Number(req.body.dailySalaryRate) || (standardWorkingDays > 0 ? parseFloat((finalBaseSalary / standardWorkingDays).toFixed(2)) : 0);
 
     const resolvedAbsentDays = req.body.absentDays !== undefined && !isNaN(Number(req.body.absentDays))
@@ -3123,8 +3381,11 @@ export const getSalaryProjection = async (req, res) => {
   }
 };
 
-// Retrieve 6-Month Attendance Penalty Impact Analytics on Total Payroll Cost
-export { getPenaltyImpactAnalytics } from "./analyticsController.js";
+// Retrieve 6-Month Attendance Penalty Impact Analytics on Total Payroll Cost & Current Month Lateness Deductions
+export {
+  getPenaltyImpactAnalytics,
+  getCurrentMonthLatenessAnalytics,
+} from "./analyticsController.js";
 
 // Automated Live Monthly Payroll Calculation for Authenticated Employee
 import {

@@ -783,23 +783,36 @@ export const GeneratePayslipModal = ({ onClose, onSuccess, isOpen = true }) => {
 
             {/* Attendance Days Metric Stats */}
             {attendanceMetrics && (
-              <div className="grid grid-cols-4 gap-2 text-[10px] text-center">
-                <div className="p-1.5 rounded-lg bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800">
-                  <span className="text-slate-500 block">Attended</span>
-                  <span className="font-bold text-emerald-600 text-xs">{attendanceMetrics.presentDays || attendanceMetrics.attendedDays || 0}d</span>
+              <div>
+                <div className="grid grid-cols-4 sm:grid-cols-5 gap-2 text-[10px] text-center">
+                  <div className="p-1.5 rounded-lg bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800">
+                    <span className="text-slate-500 block">Attended</span>
+                    <span className="font-bold text-emerald-600 text-xs">{attendanceMetrics.presentDays || attendanceMetrics.attendedDays || 0}d</span>
+                  </div>
+                  <div className="p-1.5 rounded-lg bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800">
+                    <span className="text-slate-500 block">Leaves</span>
+                    <span className="font-bold text-blue-600 text-xs">{attendanceMetrics.approvedPaidLeaveDays || 0}d</span>
+                  </div>
+                  <div className="p-1.5 rounded-lg bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800">
+                    <span className="text-slate-500 block">Absent</span>
+                    <span className="font-bold text-rose-600 text-xs">{absentDaysCount}d</span>
+                  </div>
+                  <div className="p-1.5 rounded-lg bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800">
+                    <span className="text-slate-500 block">Late Days</span>
+                    <span className="font-bold text-amber-600 text-xs">{attendanceMetrics.lateDays || 0}</span>
+                  </div>
+                  <div className="p-1.5 rounded-lg bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 col-span-4 sm:col-span-1">
+                    <span className="text-slate-500 block">Unelapsed</span>
+                    <span className="font-bold text-slate-600 dark:text-slate-400 text-xs">
+                      {attendanceMetrics.futureWorkingDays !== undefined ? `${attendanceMetrics.futureWorkingDays}d (0 penalty)` : "0d"}
+                    </span>
+                  </div>
                 </div>
-                <div className="p-1.5 rounded-lg bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800">
-                  <span className="text-slate-500 block">Leaves</span>
-                  <span className="font-bold text-blue-600 text-xs">{attendanceMetrics.approvedPaidLeaveDays || 0}d</span>
-                </div>
-                <div className="p-1.5 rounded-lg bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800">
-                  <span className="text-slate-500 block">Absent</span>
-                  <span className="font-bold text-rose-600 text-xs">{absentDaysCount}d</span>
-                </div>
-                <div className="p-1.5 rounded-lg bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800">
-                  <span className="text-slate-500 block">Late Days</span>
-                  <span className="font-bold text-amber-600 text-xs">{attendanceMetrics.lateDays || 0}</span>
-                </div>
+                {attendanceMetrics.isCurrentMonth && attendanceMetrics.futureWorkingDays > 0 && (
+                  <p className="text-[10px] text-blue-600 dark:text-blue-400 mt-1.5 font-medium">
+                    ℹ️ Active Mid-Month: Audited up to today ({attendanceMetrics.elapsedWorkingDays || 0} elapsed workdays). {attendanceMetrics.futureWorkingDays} future days are strictly unpenalized.
+                  </p>
+                )}
               </div>
             )}
 

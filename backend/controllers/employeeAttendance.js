@@ -86,9 +86,10 @@ export const clockIn = async (req, res) => {
     const workStartTime = settingsDoc?.workStartTime || "08:00";
     const penaltyEval = evaluateLatenessPenalty(validNow, workStartTime, settingsDoc || {});
     const delayMinutes = penaltyEval.delayMinutes ?? penaltyEval.minutesLate ?? 0;
-    const latePenalty = penaltyEval.latePenalty ?? penaltyEval.penalty ?? 0;
+    const latePenalty = Number(penaltyEval.latePenalty ?? penaltyEval.penalty ?? 0) || 0;
     const penaltyTier = penaltyEval.tier || (delayMinutes > 0 ? "Late" : "On Time");
     const status = delayMinutes > 0 ? "Late" : "On Time";
+    const displayStatus = penaltyEval.status || (delayMinutes > 0 ? "Late" : "On Time");
 
     // 1. Check MongoDB for existing record today
     let existingDoc = null;
@@ -207,30 +208,40 @@ export const clockIn = async (req, res) => {
         },
       });
 
-      // If late, also push an automated in-app notification directly to the employee
+      // If late, push an automated in-app notification directly to the employee
       if (status === "Late") {
         try {
+          const isZeroPenalty = latePenalty === 0;
+          const notifTitle = isZeroPenalty
+            ? "Clock-In Recorded (No Deduction)"
+            : "⚠️ Lateness Penalty Alert: Upcoming Payslip Impact";
+          const notifMessage = isZeroPenalty
+            ? `Clocked in at ${timeStr} (${delayMinutes} mins late). Company policy applied: No salary deduction for this delay.`
+            : `Clocked in at ${timeStr} (${delayMinutes} mins late). Lateness penalty of GH₵${Number(latePenalty).toFixed(
+                2
+              )} has been applied as per company policy.`;
+
           await createNotificationRecord({
             recipient_id: String(employeeId),
             recipient_role: "employee",
             sender_id: "system",
             sender_role: "system",
             sender_name: "Attendance System",
-            title: "⚠️ Lateness Penalty Alert: Upcoming Payslip Impact",
-            message: `You clocked in late today at ${timeStr} (${delayMinutes} min late). A penalty of GH₵${Number(latePenalty).toFixed(
-              2
-            )} (${penaltyTier}) will be deducted from your upcoming payslip.`,
-            type: "penalty_alert",
-            category: "payroll",
-            priority: "high",
-            action_url: "/employee/dashboard/payslips",
-            action_label: "View Payslip Impact",
+            title: notifTitle,
+            message: notifMessage,
+            type: isZeroPenalty ? "attendance_alert" : "penalty_alert",
+            category: isZeroPenalty ? "attendance" : "payroll",
+            priority: isZeroPenalty ? "info" : "high",
+            action_url: isZeroPenalty ? "/employee/dashboard" : "/employee/dashboard/payslips",
+            action_label: isZeroPenalty ? "View Attendance" : "View Payslip Impact",
             metadata: {
               date: today,
               clockIn: validNow.toISOString(),
               minutesLate: delayMinutes,
               penaltyAmount: latePenalty,
+              latePenalty: latePenalty,
               tier: penaltyTier,
+              deductionApplied: !isZeroPenalty,
             },
           });
         } catch (empNotifErr) {
@@ -241,16 +252,30 @@ export const clockIn = async (req, res) => {
       console.error("Failed to push clock-in notification:", notifErr.message);
     }
 
+    const isZeroPenalty = delayMinutes > 0 && latePenalty === 0;
+    const timeFormatted = penaltyEval.clockInFormatted || timeStr;
+    const responseMessage = delayMinutes > 0
+      ? (isZeroPenalty
+          ? `Clocked in at ${timeFormatted} (${delayMinutes} mins late). Company policy applied: No salary deduction for this delay.`
+          : `Clocked in at ${timeFormatted} (${delayMinutes} mins late). Lateness penalty of GH₵${Number(latePenalty).toFixed(
+              2
+            )} has been applied as per company policy.`)
+      : `Clock in successful (${status})!`;
+
     return res.status(201).json({
       success: true,
       alreadyClockedIn: false,
-      message: `Clock in successful (${status})!`,
+      message: responseMessage,
       attendance: savedRecord,
       status: delayMinutes > 0 ? "late" : "on-time",
+      displayStatus,
       delayMinutes,
       lateMinutes: delayMinutes,
       latePenalty,
       penaltyTier,
+      isZeroPenalty,
+      deductionApplied: !isZeroPenalty,
+      notificationMessage: responseMessage,
       hasClockedIn: true,
       hasClockedOut: false,
     });
@@ -714,20 +739,43 @@ export const updateAttendanceRecord = async (req, res) => {
           });
         } else if (status === "Late" && updated.clockIn) {
           const penaltyEval = evaluateLatenessPenalty(new Date(updated.clockIn), settingsDoc?.workStartTime || "08:00", settingsDoc || {});
+          const penaltyVal = updated.latePenalty !== undefined && updated.latePenalty !== null
+            ? Number(updated.latePenalty)
+            : (penaltyEval.penalty || 0);
+          const isZeroPenalty = penaltyVal === 0;
+          const minsLate = penaltyEval.minutesLate || updated.lateMinutes || 0;
+          const clockInTimeStr = penaltyEval.clockInFormatted || new Date(updated.clockIn).toLocaleTimeString();
+          const notifTitle = isZeroPenalty
+            ? "Clock-In Recorded (No Deduction)"
+            : "⚠️ Lateness Penalty Alert: Upcoming Payslip Impact";
+          const notifMessage = isZeroPenalty
+            ? `Clocked in at ${clockInTimeStr} (${minsLate} mins late). Company policy applied: No salary deduction for this delay.`
+            : `Clocked in at ${clockInTimeStr} (${minsLate} mins late). Lateness penalty of GH₵${penaltyVal.toFixed(
+                2
+              )} has been applied as per company policy.`;
+
           await createNotificationRecord({
             recipient_id: targetEmpId,
             recipient_role: "employee",
             sender_id: String(req.admin?.id || "admin"),
             sender_role: "admin",
             sender_name: req.admin?.fullName || "HR Administrator",
-            title: "⚠️ Lateness Penalty Alert: Upcoming Payslip Impact",
-            message: `A late clock-in for ${updated.date} was logged (${penaltyEval.minutesLate} min late). A penalty of GH₵${(penaltyEval.penalty || 0).toFixed(2)} will be deducted from your upcoming payslip.`,
-            type: "penalty_alert",
-            category: "payroll",
-            priority: "high",
-            action_url: "/employee/dashboard/payslips",
-            action_label: "View Payslip Impact",
-            metadata: { date: updated.date, clockIn: updated.clockIn, minutesLate: penaltyEval.minutesLate, penaltyAmount: penaltyEval.penalty, tier: penaltyEval.tier },
+            title: notifTitle,
+            message: notifMessage,
+            type: isZeroPenalty ? "attendance_alert" : "penalty_alert",
+            category: isZeroPenalty ? "attendance" : "payroll",
+            priority: isZeroPenalty ? "info" : "high",
+            action_url: isZeroPenalty ? "/employee/dashboard" : "/employee/dashboard/payslips",
+            action_label: isZeroPenalty ? "View Attendance" : "View Payslip Impact",
+            metadata: {
+              date: updated.date,
+              clockIn: updated.clockIn,
+              minutesLate: minsLate,
+              penaltyAmount: penaltyVal,
+              latePenalty: penaltyVal,
+              tier: penaltyEval.tier,
+              deductionApplied: !isZeroPenalty,
+            },
           });
         }
       } catch (notifErr) {
@@ -1095,20 +1143,43 @@ export const createManualAttendance = async (req, res) => {
           });
         } else if (status === "Late" && clockIn) {
           const penaltyEval = evaluateLatenessPenalty(new Date(clockIn), settingsDoc?.workStartTime || "08:00", settingsDoc || {});
+          const penaltyVal = latePenalty !== undefined && latePenalty !== null
+            ? Number(latePenalty)
+            : (penaltyEval.penalty || 0);
+          const isZeroPenalty = penaltyVal === 0;
+          const minsLate = penaltyEval.minutesLate || lateMinutes || 0;
+          const clockInTimeStr = penaltyEval.clockInFormatted || new Date(clockIn).toLocaleTimeString();
+          const notifTitle = isZeroPenalty
+            ? "Clock-In Recorded (No Deduction)"
+            : "⚠️ Lateness Penalty Alert: Upcoming Payslip Impact";
+          const notifMessage = isZeroPenalty
+            ? `Clocked in at ${clockInTimeStr} (${minsLate} mins late). Company policy applied: No salary deduction for this delay.`
+            : `Clocked in at ${clockInTimeStr} (${minsLate} mins late). Lateness penalty of GH₵${penaltyVal.toFixed(
+                2
+              )} has been applied as per company policy.`;
+
           await createNotificationRecord({
             recipient_id: targetEmpId,
             recipient_role: "employee",
             sender_id: String(req.admin?.id || "admin"),
             sender_role: "admin",
             sender_name: req.admin?.fullName || "HR Administrator",
-            title: "⚠️ Lateness Penalty Alert: Upcoming Payslip Impact",
-            message: `A late clock-in for ${date} was recorded (${penaltyEval.minutesLate} min late). A penalty of GH₵${(penaltyEval.penalty || 0).toFixed(2)} will be deducted from your upcoming payslip.`,
-            type: "penalty_alert",
-            category: "payroll",
-            priority: "high",
-            action_url: "/employee/dashboard/payslips",
-            action_label: "View Payslip Impact",
-            metadata: { date, clockIn, minutesLate: penaltyEval.minutesLate, penaltyAmount: penaltyEval.penalty, tier: penaltyEval.tier },
+            title: notifTitle,
+            message: notifMessage,
+            type: isZeroPenalty ? "attendance_alert" : "penalty_alert",
+            category: isZeroPenalty ? "attendance" : "payroll",
+            priority: isZeroPenalty ? "info" : "high",
+            action_url: isZeroPenalty ? "/employee/dashboard" : "/employee/dashboard/payslips",
+            action_label: isZeroPenalty ? "View Attendance" : "View Payslip Impact",
+            metadata: {
+              date,
+              clockIn,
+              minutesLate: minsLate,
+              penaltyAmount: penaltyVal,
+              latePenalty: penaltyVal,
+              tier: penaltyEval.tier,
+              deductionApplied: !isZeroPenalty,
+            },
           });
         }
       } catch (notifErr) {

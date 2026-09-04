@@ -199,6 +199,13 @@ export const getPenaltyImpactAnalytics = (params) => {
   });
 };
 
+export const getMonthlyLatenessAnalytics = (params) => {
+  return api
+    .get("/admin/analytics/monthly-lateness-deductions", { params })
+    .catch(() => api.get("/pay/monthly-lateness-deductions", { params }))
+    .catch(() => api.get("/employee/monthly-lateness-deductions", { params }));
+};
+
 export const getEmployeeLivePayrollSummary = (params) => {
   return api.get("/pay/live-summary", { params });
 };

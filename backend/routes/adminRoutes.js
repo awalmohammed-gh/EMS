@@ -16,7 +16,10 @@ import {
 import { getSettings, getPenaltySettings, updatePenaltySettings, getAuditLogs } from "../controllers/adminSettingsController.js";
 import { createEmployeeAccount } from "../controllers/employeeAuthentication.js";
 import { bulkUploadBiometricAttendance } from "../controllers/employeeAttendance.js";
-import { getPenaltyImpactAnalytics } from "../controllers/analyticsController.js";
+import {
+  getPenaltyImpactAnalytics,
+  getCurrentMonthLatenessAnalytics,
+} from "../controllers/analyticsController.js";
 import { getRecentActivityFeed } from "../controllers/dashboardController.js";
 import {
   getAnnouncements,
@@ -94,6 +97,10 @@ adminRouter.get("/employees", verifyAdmin, employeeDetails);
 // 6-Month Attendance Penalties & Payroll Cost Impact Analytics
 adminRouter.get("/analytics/penalty-impact", verifyAdmin, getPenaltyImpactAnalytics);
 adminRouter.get("/analytics/penalties-impact", verifyAdmin, getPenaltyImpactAnalytics);
+
+// Current Month Lateness Deductions Recharts Analytics
+adminRouter.get("/analytics/monthly-lateness-deductions", verifyAdmin, getCurrentMonthLatenessAnalytics);
+adminRouter.get("/analytics/lateness-deductions", verifyAdmin, getCurrentMonthLatenessAnalytics);
 
 // Real-time Recent Activity Feed (Attendance & Payroll)
 adminRouter.get("/dashboard/recent-activity", verifyAdmin, getRecentActivityFeed);

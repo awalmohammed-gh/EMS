@@ -93,6 +93,8 @@ export const getMonthlyBusinessDays = (year, monthIndex, auditThroughDate = null
         dayOfWeek,
         dayName: DAY_NAMES[dayOfWeek],
         date: d,
+        isElapsed: day <= maxDay,
+        isFuture: day > maxDay,
       };
 
       allBusinessDays.push(dayObj);
@@ -105,8 +107,10 @@ export const getMonthlyBusinessDays = (year, monthIndex, auditThroughDate = null
   return {
     totalBusinessDaysInMonth: allBusinessDays.length || 22,
     allBusinessDays,
-    elapsedBusinessDays: elapsedBusinessDays.length > 0 ? elapsedBusinessDays : allBusinessDays,
+    elapsedBusinessDays,
     totalElapsedDays: elapsedBusinessDays.length,
+    futureBusinessDays: allBusinessDays.filter((b) => b.dayNumber > maxDay),
+    totalFutureDays: allBusinessDays.filter((b) => b.dayNumber > maxDay).length,
   };
 };
 
@@ -290,14 +294,22 @@ export const calculateEmployeeMonthPayroll = async ({
     });
   }
 
-  // 3. Fetch Approved Leaves for Employee
+  // 3. Fetch Approved Leaves for Employee strictly overlapping target month
   let approvedLeaves = [];
+  const monthStartDate = new Date(parsedYear, monthIndex, 1);
+  const monthEndDate = new Date(parsedYear, monthIndex + 1, 0, 23, 59, 59, 999);
   if (validObjectId || employee._id) {
     try {
       const dbLeaves = await Leave.find({
         $and: [
           { $or: [{ employee: validObjectId }, { employee: employee._id }] },
           { status: "Approved" },
+          {
+            $or: [
+              { startDate: { $lte: monthEndDate }, endDate: { $gte: monthStartDate } },
+              { startDate: { $gte: monthStartDate, $lte: monthEndDate } },
+            ],
+          },
         ],
       }).lean();
       if (dbLeaves && dbLeaves.length > 0) {
@@ -334,10 +346,38 @@ export const calculateEmployeeMonthPayroll = async ({
   let approvedLeaveDays = 0;
   let absentDays = 0;
 
-  const absenceDeductionRate = Number(settings.absenceDeductionRate || 15);
+  // Dynamic Daily Salary Rate = Base Salary / Total Business Days in Month (Rule 3)
+  const dailySalaryRate = totalBusinessDaysInMonth > 0
+    ? parseFloat((baseSalary / totalBusinessDaysInMonth).toFixed(2))
+    : 0;
+  const absenceDeductionRate = dailySalaryRate > 0 ? dailySalaryRate : Number(settings.absenceDeductionRate || 15);
+
+  const todayStart = new Date(now.getFullYear(), now.getMonth(), now.getDate());
 
   daysToAudit.forEach((businessDay) => {
-    const { dateStr, dayName } = businessDay;
+    const { dateStr, dayName, dayNumber } = businessDay;
+    const bDate = new Date(parsedYear, monthIndex, dayNumber);
+    const isFutureDay = isCurrentMonth && bDate > todayStart;
+
+    // RULE 1: Future / Unelapsed Days Are Never Counted as Absent
+    if (!isFullMonthAudit && isFutureDay) {
+      dailyAudit.push({
+        date: dateStr,
+        dayName,
+        status: "Unelapsed / Future",
+        isAttended: false,
+        isOnTime: false,
+        isLate: false,
+        isApprovedLeave: false,
+        isAbsent: false,
+        clockIn: null,
+        lateMinutes: 0,
+        tier: "N/A",
+        penalty: 0,
+        reason: "Future day - strictly excluded from absences",
+      });
+      return;
+    }
 
     // Check Attendance check-in on this date
     const attRecord = attendanceRecords.find((a) => a.date === dateStr);
@@ -347,7 +387,7 @@ export const calculateEmployeeMonthPayroll = async ({
     // Check if covered by Approved Leave
     const isApprovedLeave = approvedLeaves.some((leave) => {
       const s = new Date(leave.startDate);
-      const e = new Date(leave.endDate);
+      const e = new Date(leave.endDate || leave.startDate);
       const d = new Date(dateStr);
       s.setHours(0, 0, 0, 0);
       e.setHours(23, 59, 59, 999);
@@ -497,6 +537,8 @@ export const calculateEmployeeMonthPayroll = async ({
     onTimeDays,
     approvedLeaveDays,
     totalLateMinutes,
+    dailySalaryRate,
+    dailyRate: dailySalaryRate,
     latenessDeductions: finalLatenessDeductions,
     absentDays,
     absenceDeductions: totalAbsenceDeductions,

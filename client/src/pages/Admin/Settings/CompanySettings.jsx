@@ -13,6 +13,7 @@ import {
 } from "lucide-react";
 import { useManagement } from "../../../context/ManagementContextProvider";
 import { getSettings, updateCompanySettings } from "../../../apis/fontApis";
+import ThemePreferenceCard from "../../../components/ThemePreferenceCard";
 
 const defaultCompany = {
   companyName: "EYENIT Technologies",
@@ -262,6 +263,9 @@ const CompanySettings = ({ onSaveSuccess }) => {
           </div>
         </div>
       </div>
+
+      {/* Appearance & Theme Selector Section */}
+      <ThemePreferenceCard />
 
       {/* Notification Toggles */}
       <div className="space-y-3.5 bg-slate-50 dark:bg-slate-800/60 p-4 sm:p-5 rounded-2xl border border-slate-200 dark:border-slate-700">

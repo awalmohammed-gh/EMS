@@ -1,4 +1,5 @@
-import { useState, useMemo } from "react";
+import { useState, useMemo, useEffect } from "react";
+import { motion, AnimatePresence } from "framer-motion";
 import {
   Search,
   Mail,
@@ -37,13 +38,25 @@ import Avatar from "./Avatar";
 import EmployeeDetailModal from "./EmployeeDetailModal";
 
 export const EmployeeDirectory = ({
-  employees = [],
+  employees: propEmployees = [],
+  setEmployees: propSetEmployees,
+  onEmployeeDeleted,
+  onDeleteSuccess,
   isLoading = false,
   onRefresh,
 }) => {
   const { role, setShowEmployeeModal } = useManagement();
   const isAdmin =
     role === "admin" || window.location.pathname.startsWith("/admin");
+
+  // Local employees state for instant UI eviction upon deletion
+  const [localEmployees, setLocalEmployees] = useState(propEmployees);
+
+  useEffect(() => {
+    setLocalEmployees(propEmployees);
+  }, [propEmployees]);
+
+  const employees = localEmployees;
 
   const [search, setSearch] = useState("");
   const [selectedDepartment, setSelectedDepartment] = useState("All");
@@ -383,6 +396,36 @@ export const EmployeeDirectory = ({
       setIsDeleting(true);
       const res = await deleteEmployee(targetId);
       if (res?.data?.success) {
+        const deletedEmployeeId = targetId;
+        // Evict immediately from local component state without requiring a manual refresh
+        setLocalEmployees((prev) =>
+          prev.filter(
+            (emp) =>
+              emp._id !== deletedEmployeeId &&
+              emp.employeeId !== deletedEmployeeId &&
+              String(emp._id) !== String(deletedEmployeeId)
+          )
+        );
+
+        if (typeof propSetEmployees === "function") {
+          propSetEmployees((prev) =>
+            prev.filter(
+              (emp) =>
+                emp._id !== deletedEmployeeId &&
+                emp.employeeId !== deletedEmployeeId &&
+                String(emp._id) !== String(deletedEmployeeId)
+            )
+          );
+        }
+
+        if (typeof onEmployeeDeleted === "function") {
+          onEmployeeDeleted(deletedEmployeeId);
+        }
+
+        if (typeof onDeleteSuccess === "function") {
+          onDeleteSuccess(deletedEmployeeId);
+        }
+
         setActionMessage({
           type: "success",
           text:
@@ -398,13 +441,42 @@ export const EmployeeDirectory = ({
           setSelectedEmployee(null);
         }
         if (typeof onRefresh === "function") {
-          await onRefresh();
+          onRefresh();
         }
       }
     } catch (err) {
       console.error("Delete employee error:", err);
       // If 404 or record already removed, treat gracefully as success
       if (err.response?.status === 404) {
+        const deletedEmployeeId = targetId;
+        setLocalEmployees((prev) =>
+          prev.filter(
+            (emp) =>
+              emp._id !== deletedEmployeeId &&
+              emp.employeeId !== deletedEmployeeId &&
+              String(emp._id) !== String(deletedEmployeeId)
+          )
+        );
+
+        if (typeof propSetEmployees === "function") {
+          propSetEmployees((prev) =>
+            prev.filter(
+              (emp) =>
+                emp._id !== deletedEmployeeId &&
+                emp.employeeId !== deletedEmployeeId &&
+                String(emp._id) !== String(deletedEmployeeId)
+            )
+          );
+        }
+
+        if (typeof onEmployeeDeleted === "function") {
+          onEmployeeDeleted(deletedEmployeeId);
+        }
+
+        if (typeof onDeleteSuccess === "function") {
+          onDeleteSuccess(deletedEmployeeId);
+        }
+
         setActionMessage({
           type: "success",
           text: `Employee record was already removed from database.`,
@@ -418,7 +490,7 @@ export const EmployeeDirectory = ({
           setSelectedEmployee(null);
         }
         if (typeof onRefresh === "function") {
-          await onRefresh();
+          onRefresh();
         }
       } else {
         setActionMessage({
@@ -453,12 +525,18 @@ export const EmployeeDirectory = ({
     selectedEmployeeIds.length === filteredEmployees.length;
 
   return (
-    <div id="employee-directory-component" className="space-y-6">
+    <motion.div
+      initial={{ opacity: 0, y: 8 }}
+      animate={{ opacity: 1, y: 0 }}
+      transition={{ duration: 0.25, ease: "easeOut" }}
+      id="employee-directory-component"
+      className="space-y-6"
+    >
       {/* Top Filter / Search Bar & KPI Stat Chips */}
-      <div className="bg-white dark:bg-slate-900 border border-slate-200/80 dark:border-slate-800/80 rounded-2xl sm:rounded-3xl p-5 sm:p-6 shadow-sm dark:shadow-black/20">
+      <div className="bg-white dark:bg-[#111927] border border-slate-200/70 dark:border-slate-800 rounded-2xl p-5 sm:p-6 shadow-sm">
         <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4">
           <div className="flex items-center gap-3">
-            <div className="p-2 rounded-xl bg-blue-500/10 text-blue-600 dark:text-blue-400 border border-blue-500/20 shrink-0">
+            <div className="p-2 rounded-xl bg-blue-50 dark:bg-blue-950/60 text-[#002185] dark:text-blue-400 border border-blue-200/60 dark:border-blue-800/60 shrink-0">
               <Users className="w-5 h-5" />
             </div>
             <div>
@@ -473,7 +551,7 @@ export const EmployeeDirectory = ({
 
           {/* Quick Metrics Bar */}
           <div className="flex flex-wrap items-center gap-2 sm:gap-2.5">
-            <div className="px-3 py-1.5 rounded-xl bg-slate-50 dark:bg-slate-950/60 border border-slate-200/80 dark:border-slate-800/80 text-center min-w-[60px]">
+            <div className="px-3 py-1.5 rounded-xl bg-slate-50/70 dark:bg-slate-900/60 border border-slate-200/70 dark:border-slate-800 text-center min-w-[60px] shadow-none">
               <div className="text-sm font-bold text-slate-900 dark:text-white">
                 {metrics.total}
               </div>
@@ -481,7 +559,7 @@ export const EmployeeDirectory = ({
                 Total
               </div>
             </div>
-            <div className="px-3 py-1.5 rounded-xl bg-emerald-50/70 dark:bg-emerald-950/40 border border-emerald-200 dark:border-emerald-800/70 text-center min-w-[65px]">
+            <div className="px-3 py-1.5 rounded-xl bg-emerald-50/50 dark:bg-emerald-950/30 border border-emerald-200/60 dark:border-emerald-800/60 text-center min-w-[65px] shadow-none">
               <div className="text-sm font-bold text-emerald-600 dark:text-emerald-400">
                 {metrics.active}
               </div>
@@ -489,7 +567,7 @@ export const EmployeeDirectory = ({
                 Active
               </div>
             </div>
-            <div className="px-3 py-1.5 rounded-xl bg-blue-50/70 dark:bg-blue-950/40 border border-blue-200 dark:border-blue-800/70 text-center min-w-[70px]">
+            <div className="px-3 py-1.5 rounded-xl bg-blue-50/50 dark:bg-blue-950/30 border border-blue-200/60 dark:border-blue-800/60 text-center min-w-[70px] shadow-none">
               <div className="text-sm font-bold text-blue-600 dark:text-blue-400">
                 {metrics.onLeave}
               </div>
@@ -497,7 +575,7 @@ export const EmployeeDirectory = ({
                 On Leave
               </div>
             </div>
-            <div className="px-3 py-1.5 rounded-xl bg-rose-50/70 dark:bg-rose-950/40 border border-rose-200 dark:border-rose-800/70 text-center min-w-[75px]">
+            <div className="px-3 py-1.5 rounded-xl bg-rose-50/50 dark:bg-rose-950/30 border border-rose-200/60 dark:border-rose-800/60 text-center min-w-[75px] shadow-none">
               <div className="text-sm font-bold text-rose-600 dark:text-rose-400">
                 {metrics.terminated}
               </div>
@@ -505,7 +583,7 @@ export const EmployeeDirectory = ({
                 Terminated
               </div>
             </div>
-            <div className="px-3 py-1.5 rounded-xl bg-amber-50/70 dark:bg-amber-950/40 border border-amber-200 dark:border-amber-800/70 text-center min-w-[65px]">
+            <div className="px-3 py-1.5 rounded-xl bg-amber-50/50 dark:bg-amber-950/30 border border-amber-200/60 dark:border-amber-800/60 text-center min-w-[65px] shadow-none">
               <div className="text-sm font-bold text-amber-600 dark:text-amber-400">
                 {metrics.inactive}
               </div>
@@ -513,7 +591,7 @@ export const EmployeeDirectory = ({
                 Inactive
               </div>
             </div>
-            <div className="px-3 py-1.5 rounded-xl bg-slate-50 dark:bg-slate-950/60 border border-slate-200/80 dark:border-slate-800/80 text-center min-w-[55px]">
+            <div className="px-3 py-1.5 rounded-xl bg-slate-50/70 dark:bg-slate-900/60 border border-slate-200/70 dark:border-slate-800 text-center min-w-[55px] shadow-none">
               <div className="text-sm font-bold text-indigo-600 dark:text-indigo-400">
                 {metrics.deptsCount}
               </div>
@@ -527,10 +605,10 @@ export const EmployeeDirectory = ({
         {/* Action Message Feedback Banner */}
         {actionMessage && (
           <div
-            className={`mt-4 p-3 rounded-xl text-xs font-semibold flex items-center justify-between border ${
+            className={`mt-4 p-3 rounded-xl text-xs font-semibold flex items-center justify-between border shadow-none ${
               actionMessage.type === "success"
-                ? "bg-emerald-50 dark:bg-emerald-950/40 text-emerald-700 dark:text-emerald-300 border-emerald-200 dark:border-emerald-800/60"
-                : "bg-rose-50 dark:bg-rose-950/40 text-rose-700 dark:text-rose-300 border-rose-200 dark:border-rose-800/60"
+                ? "bg-emerald-50 dark:bg-emerald-950/40 text-emerald-700 dark:text-emerald-300 border-emerald-200/70 dark:border-emerald-800/60"
+                : "bg-rose-50 dark:bg-rose-950/40 text-rose-700 dark:text-rose-300 border-rose-200/70 dark:border-rose-800/60"
             }`}
           >
             <div className="flex items-center gap-2">
@@ -553,9 +631,9 @@ export const EmployeeDirectory = ({
 
         {/* Bulk Selection Actions Bar */}
         {isAdmin && selectedEmployeeIds.length > 0 && (
-          <div className="mt-4 p-3.5 bg-blue-50 dark:bg-blue-950/50 border border-blue-200 dark:border-blue-800/80 rounded-2xl flex flex-wrap items-center justify-between gap-3 animate-fade-in shadow-xs">
+          <div className="mt-4 p-3.5 bg-blue-50/60 dark:bg-blue-950/40 border border-blue-200/70 dark:border-blue-800/80 rounded-xl flex flex-wrap items-center justify-between gap-3 shadow-none">
             <div className="flex items-center gap-2.5">
-              <div className="w-7 h-7 rounded-lg bg-blue-600 text-white flex items-center justify-center font-bold text-xs shadow-2xs">
+              <div className="w-7 h-7 rounded-lg bg-blue-600 text-white flex items-center justify-center font-bold text-xs shadow-none">
                 {selectedEmployeeIds.length}
               </div>
               <div>
@@ -804,191 +882,207 @@ export const EmployeeDirectory = ({
         )}
       </div>
 
-      {/* Grid Card View with Selection Checkboxes & Lift-on-hover */}
+      {/* Grid Card View with Selection Checkboxes & Framer Motion Transitions */}
       {viewMode === "grid" && (
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 sm:gap-5">
-          {filteredEmployees.map((emp) => {
-            const badge = getStatusBadge(emp.status, emp.isActive, emp);
-            const empId = emp._id || emp.employeeId;
-            const isSelected = selectedEmployeeIds.includes(empId);
-            const initials = (emp.fullName || "E")
-              .split(" ")
-              .map((n) => n[0])
-              .join("")
-              .slice(0, 2)
-              .toUpperCase();
+        <motion.div
+          layout
+          className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 sm:gap-5"
+        >
+          <AnimatePresence mode="popLayout">
+            {filteredEmployees.map((emp) => {
+              const badge = getStatusBadge(emp.status, emp.isActive, emp);
+              const empId = emp._id || emp.employeeId;
+              const isSelected = selectedEmployeeIds.includes(empId);
+              const initials = (emp.fullName || "E")
+                .split(" ")
+                .map((n) => n[0])
+                .join("")
+                .slice(0, 2)
+                .toUpperCase();
 
-            return (
-              <div
-                key={empId}
-                id={`directory-card-${emp.employeeId || empId}`}
-                className={`bg-white dark:bg-slate-900 border rounded-2xl sm:rounded-3xl p-5 sm:p-6 shadow-sm hover:shadow-md dark:shadow-black/20 dark:hover:shadow-black/40 transition-all duration-200 ease-out hover:-translate-y-1 flex flex-col justify-between group cursor-default relative ${
-                  isSelected
-                    ? "border-blue-500 ring-2 ring-blue-500/20 bg-blue-50/20 dark:bg-blue-950/20"
-                    : "border-slate-200/80 dark:border-slate-800/80 hover:border-blue-500/50 dark:hover:border-blue-500/50"
-                }`}
-              >
-                <div>
-                  {/* Top Row: Checkbox, Avatar, Name, ID & Status Badge */}
-                  <div className="flex items-start justify-between gap-3">
-                    <div className="flex items-center gap-3 min-w-0">
-                      {/* Checkbox for Admin bulk action */}
-                      {isAdmin && (
-                        <button
-                          type="button"
-                          onClick={() => handleToggleSelectOne(empId)}
-                          className="shrink-0 text-slate-400 hover:text-blue-600 transition-colors p-0.5 cursor-pointer"
-                          title={isSelected ? "Deselect" : "Select employee"}
-                        >
-                          {isSelected ? (
-                            <CheckSquare className="w-5 h-5 text-blue-600" />
-                          ) : (
-                            <Square className="w-5 h-5 text-slate-300 dark:text-slate-600" />
-                          )}
-                        </button>
-                      )}
+              return (
+                <motion.div
+                  layout
+                  initial={{ opacity: 0, y: 6 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  exit={{ opacity: 0, scale: 0.98 }}
+                  transition={{ duration: 0.2 }}
+                  key={empId}
+                  id={`directory-card-${emp.employeeId || empId}`}
+                  className={`bg-white dark:bg-[#111927] border rounded-2xl p-5 sm:p-6 shadow-none hover:shadow-sm transition-all duration-150 flex flex-col justify-between group cursor-default relative ${
+                    isSelected
+                      ? "border-blue-500/80 ring-1 ring-blue-500/20 bg-blue-50/20 dark:bg-blue-950/20"
+                      : "border-slate-200/70 dark:border-slate-800 hover:border-slate-300 dark:hover:border-slate-700"
+                  }`}
+                >
+                  <div>
+                    {/* Top Row: Checkbox, Avatar, Name, ID & Status Badge */}
+                    <div className="flex items-start justify-between gap-3">
+                      <div className="flex items-center gap-3 min-w-0">
+                        {/* Checkbox for Admin bulk action */}
+                        {isAdmin && (
+                          <button
+                            type="button"
+                            onClick={() => handleToggleSelectOne(empId)}
+                            className="shrink-0 text-slate-400 hover:text-blue-600 transition-colors p-0.5 cursor-pointer"
+                            title={isSelected ? "Deselect" : "Select employee"}
+                          >
+                            {isSelected ? (
+                              <CheckSquare className="w-5 h-5 text-blue-600" />
+                            ) : (
+                              <Square className="w-5 h-5 text-slate-300 dark:text-slate-600" />
+                            )}
+                          </button>
+                        )}
 
-                      <Avatar
-                        src={
-                          emp.profilePicture ||
-                          emp.profile_picture ||
-                          emp.avatar ||
-                          emp.avatar_url ||
-                          emp.profile_image_url
-                        }
-                        name={emp.fullName}
-                        size="lg"
-                        shape="rounded"
-                        className="w-12 h-12 rounded-2xl shrink-0 shadow-2xs"
-                        fallbackInitials={initials}
-                      />
-                      <div className="min-w-0">
-                        <h3 className="text-sm font-bold text-slate-900 dark:text-white truncate group-hover:text-blue-600 dark:group-hover:text-blue-400 transition-colors">
-                          {emp.fullName}
-                        </h3>
-                        <div className="flex items-center gap-1.5 text-xs text-slate-500 dark:text-slate-400 mt-0.5">
-                          <span className="font-mono bg-slate-50 dark:bg-slate-950/60 px-1.5 py-0.5 rounded border border-slate-200/80 dark:border-slate-800/80 text-[10px] font-semibold text-blue-600 dark:text-blue-400">
-                            {emp.employeeId || "EMP"}
-                          </span>
-                          <span className="truncate">{emp.department}</span>
+                        <Avatar
+                          src={
+                            emp.profilePicture ||
+                            emp.profile_picture ||
+                            emp.avatar ||
+                            emp.avatar_url ||
+                            emp.profile_image_url
+                          }
+                          name={emp.fullName}
+                          size="lg"
+                          shape="rounded"
+                          className="w-12 h-12 rounded-xl shrink-0 shadow-none"
+                          fallbackInitials={initials}
+                        />
+                        <div className="min-w-0">
+                          <h3 className="text-sm font-bold text-slate-900 dark:text-white truncate group-hover:text-blue-600 dark:group-hover:text-blue-400 transition-colors">
+                            {emp.fullName}
+                          </h3>
+                          <div className="flex items-center gap-1.5 text-xs text-slate-500 dark:text-slate-400 mt-0.5">
+                            <span className="font-mono bg-slate-50 dark:bg-slate-900 px-1.5 py-0.5 rounded border border-slate-200/70 dark:border-slate-800 text-[10px] font-semibold text-blue-600 dark:text-blue-400">
+                              {emp.employeeId || "EMP"}
+                            </span>
+                            <span className="truncate">{emp.department}</span>
+                          </div>
                         </div>
                       </div>
+
+                      <span
+                        className={`inline-flex items-center gap-1.5 text-[10px] font-semibold px-2 py-0.5 rounded-lg border shrink-0 transition-all shadow-none ${badge.bg}`}
+                      >
+                        <span className={`w-1.5 h-1.5 rounded-full ${badge.dot}`} />
+                        {badge.label}
+                      </span>
                     </div>
 
-                    <span
-                      className={`inline-flex items-center gap-1.5 text-[10px] font-bold px-2.5 py-1 rounded-full border shrink-0 transition-all shadow-2xs ${badge.bg}`}
-                    >
-                      <span className={`w-1.5 h-1.5 rounded-full ${badge.dot}`} />
-                      {badge.label}
-                    </span>
+                    {/* Role Title */}
+                    <div className="mt-3.5 flex items-center gap-1.5 text-xs font-semibold text-slate-800 dark:text-slate-200 bg-slate-50/70 dark:bg-slate-900/60 p-2.5 rounded-xl border border-slate-200/70 dark:border-slate-800">
+                      <Briefcase className="w-3.5 h-3.5 text-blue-600 dark:text-blue-400 shrink-0" />
+                      <span className="truncate">
+                        {emp.position || "Staff Member"}
+                      </span>
+                    </div>
+
+                    {/* Contact Details Info Box */}
+                    <div className="mt-3 space-y-1.5 text-xs">
+                      {/* Email */}
+                      <div className="flex items-center justify-between p-2 rounded-lg hover:bg-slate-50 dark:hover:bg-slate-800/60 transition-colors group/item">
+                        <a
+                          href={`mailto:${emp.email}`}
+                          className="flex items-center gap-2 text-slate-600 dark:text-slate-300 hover:text-blue-600 dark:hover:text-blue-400 truncate"
+                        >
+                          <Mail className="w-3.5 h-3.5 text-slate-400 shrink-0" />
+                          <span className="truncate">
+                            {emp.email || "No email"}
+                          </span>
+                        </a>
+                        <button
+                          type="button"
+                          onClick={() => handleCopy(emp.email, `email_${empId}`)}
+                          title="Copy email"
+                          className="text-slate-400 hover:text-blue-600 p-1 rounded transition-colors cursor-pointer"
+                        >
+                          {copiedField === `email_${empId}` ? (
+                            <Check className="w-3 h-3 text-emerald-600" />
+                          ) : (
+                            <Copy className="w-3 h-3" />
+                          )}
+                        </button>
+                      </div>
+
+                      {/* Phone */}
+                      <div className="flex items-center justify-between p-2 rounded-lg hover:bg-slate-50 dark:hover:bg-slate-800/60 transition-colors group/item">
+                        <a
+                          href={`tel:${emp.phone}`}
+                          className="flex items-center gap-2 text-slate-600 dark:text-slate-300 hover:text-blue-600 dark:hover:text-blue-400 truncate"
+                        >
+                          <Phone className="w-3.5 h-3.5 text-slate-400 shrink-0" />
+                          <span>{emp.phone || "+233 24 000 0000"}</span>
+                        </a>
+                        <button
+                          type="button"
+                          onClick={() => handleCopy(emp.phone, `phone_${empId}`)}
+                          title="Copy phone number"
+                          className="text-slate-400 hover:text-blue-600 p-1 rounded transition-colors cursor-pointer"
+                        >
+                          {copiedField === `phone_${empId}` ? (
+                            <Check className="w-3 h-3 text-emerald-600" />
+                          ) : (
+                            <Copy className="w-3 h-3" />
+                          )}
+                        </button>
+                      </div>
+
+                      {/* Location */}
+                      <div className="flex items-center gap-2 px-2 py-1 text-slate-400 text-[11px]">
+                        <MapPin className="w-3 h-3 text-slate-400 shrink-0" />
+                        <span>{emp.location || "Accra Head Office"}</span>
+                      </div>
+                    </div>
                   </div>
 
-                  {/* Role Title */}
-                  <div className="mt-3.5 flex items-center gap-1.5 text-xs font-semibold text-slate-800 dark:text-slate-200 bg-slate-50 dark:bg-slate-950/60 p-2.5 rounded-xl border border-slate-200/80 dark:border-slate-800/80">
-                    <Briefcase className="w-3.5 h-3.5 text-blue-600 dark:text-blue-400 shrink-0" />
-                    <span className="truncate">
-                      {emp.position || "Staff Member"}
-                    </span>
-                  </div>
-
-                  {/* Contact Details Info Box */}
-                  <div className="mt-3 space-y-1.5 text-xs">
-                    {/* Email */}
-                    <div className="flex items-center justify-between p-2 rounded-lg hover:bg-slate-50 dark:hover:bg-slate-800/60 transition-colors group/item">
-                      <a
-                        href={`mailto:${emp.email}`}
-                        className="flex items-center gap-2 text-slate-600 dark:text-slate-300 hover:text-blue-600 dark:hover:text-blue-400 truncate"
-                      >
-                        <Mail className="w-3.5 h-3.5 text-slate-400 shrink-0" />
-                        <span className="truncate">
-                          {emp.email || "No email"}
-                        </span>
-                      </a>
+                  {/* Footer Action */}
+                  <div className="mt-4 pt-3 border-t border-slate-100 dark:border-slate-800/80 flex items-center justify-between gap-2">
+                    {isAdmin ? (
                       <button
                         type="button"
-                        onClick={() => handleCopy(emp.email, `email_${empId}`)}
-                        title="Copy email"
-                        className="text-slate-400 hover:text-blue-600 p-1 rounded transition-colors cursor-pointer"
+                        onClick={() => setEmployeeToDelete(emp)}
+                        className="px-2.5 py-1.5 rounded-lg border border-rose-200 dark:border-rose-800 text-rose-600 dark:text-rose-400 hover:bg-rose-50 dark:hover:bg-rose-950/30 text-xs font-semibold transition-all flex items-center gap-1.5 cursor-pointer shadow-none"
+                        title="Delete employee permanently"
                       >
-                        {copiedField === `email_${empId}` ? (
-                          <Check className="w-3 h-3 text-emerald-600" />
-                        ) : (
-                          <Copy className="w-3 h-3" />
-                        )}
+                        <Trash2 className="w-3.5 h-3.5" />
+                        <span>Delete</span>
                       </button>
-                    </div>
-
-                    {/* Phone */}
-                    <div className="flex items-center justify-between p-2 rounded-lg hover:bg-slate-50 dark:hover:bg-slate-800/60 transition-colors group/item">
-                      <a
-                        href={`tel:${emp.phone}`}
-                        className="flex items-center gap-2 text-slate-600 dark:text-slate-300 hover:text-blue-600 dark:hover:text-blue-400 truncate"
-                      >
-                        <Phone className="w-3.5 h-3.5 text-slate-400 shrink-0" />
-                        <span>{emp.phone || "+233 24 000 0000"}</span>
-                      </a>
-                      <button
-                        type="button"
-                        onClick={() => handleCopy(emp.phone, `phone_${empId}`)}
-                        title="Copy phone number"
-                        className="text-slate-400 hover:text-blue-600 p-1 rounded transition-colors cursor-pointer"
-                      >
-                        {copiedField === `phone_${empId}` ? (
-                          <Check className="w-3 h-3 text-emerald-600" />
-                        ) : (
-                          <Copy className="w-3 h-3" />
-                        )}
-                      </button>
-                    </div>
-
-                    {/* Location */}
-                    <div className="flex items-center gap-2 px-2 py-1 text-slate-400 text-[11px]">
-                      <MapPin className="w-3 h-3 text-slate-400 shrink-0" />
-                      <span>{emp.location || "Accra Head Office"}</span>
-                    </div>
-                  </div>
-                </div>
-
-                {/* Footer Action */}
-                <div className="mt-4 pt-3 border-t border-slate-100 dark:border-slate-800/80 flex items-center justify-between gap-2">
-                  {isAdmin ? (
+                    ) : (
+                      <span className="text-[10px] text-slate-400 font-medium">
+                        Type: {emp.employmentType || "Full-time"}
+                      </span>
+                    )}
                     <button
                       type="button"
-                      onClick={() => setEmployeeToDelete(emp)}
-                      className="px-2.5 py-1.5 rounded-lg border border-rose-200 dark:border-rose-800 text-rose-600 dark:text-rose-400 hover:bg-rose-50 dark:hover:bg-rose-950/30 text-xs font-semibold transition-all flex items-center gap-1.5 cursor-pointer"
-                      title="Delete employee permanently"
+                      onClick={() => setSelectedEmployee(emp)}
+                      className="px-3 py-1.5 rounded-xl bg-blue-600 hover:bg-blue-700 text-white text-xs font-semibold transition-all shadow-none flex items-center gap-1 cursor-pointer"
                     >
-                      <Trash2 className="w-3.5 h-3.5" />
-                      <span>Delete</span>
+                      <span>View Profile</span>
+                      <ChevronRight className="w-3.5 h-3.5" />
                     </button>
-                  ) : (
-                    <span className="text-[10px] text-slate-400 font-medium">
-                      Type: {emp.employmentType || "Full-time"}
-                    </span>
-                  )}
-                  <button
-                    type="button"
-                    onClick={() => setSelectedEmployee(emp)}
-                    className="px-3 py-1.5 rounded-xl bg-blue-600 hover:bg-blue-700 text-white text-xs font-semibold transition-all shadow-sm flex items-center gap-1 cursor-pointer"
-                  >
-                    <span>View Profile</span>
-                    <ChevronRight className="w-3.5 h-3.5" />
-                  </button>
-                </div>
-              </div>
-            );
-          })}
-        </div>
+                  </div>
+                </motion.div>
+              );
+            })}
+          </AnimatePresence>
+        </motion.div>
       )}
 
       {/* Table / List View - Desktop Table + Mobile Card-View */}
       {viewMode === "table" && (
-        <>
+        <motion.div
+          layout
+          initial={{ opacity: 0, y: 6 }}
+          animate={{ opacity: 1, y: 0 }}
+          exit={{ opacity: 0 }}
+          transition={{ duration: 0.2 }}
+        >
           {/* Mobile Card-View Mode (Visible on small screens: < md) */}
           <div className="block md:hidden space-y-3.5">
             {/* Mobile Bulk Selection Bar (Admin only) */}
             {isAdmin && filteredEmployees.length > 0 && (
-              <div className="flex items-center justify-between p-3 bg-white dark:bg-slate-900 rounded-2xl border border-slate-200/80 dark:border-slate-800/80 shadow-2xs">
+              <div className="flex items-center justify-between p-3 bg-white dark:bg-[#111927] rounded-xl border border-slate-200/70 dark:border-slate-800 shadow-none">
                 <button
                   type="button"
                   onClick={handleToggleSelectAll}
@@ -1011,7 +1105,7 @@ export const EmployeeDirectory = ({
                   <button
                     type="button"
                     onClick={() => setShowBulkModal(true)}
-                    className="px-2.5 py-1 bg-blue-600 text-white rounded-lg text-xs font-bold shadow-2xs"
+                    className="px-2.5 py-1 bg-blue-600 text-white rounded-lg text-xs font-bold shadow-none cursor-pointer"
                   >
                     Bulk Action
                   </button>
@@ -1020,28 +1114,34 @@ export const EmployeeDirectory = ({
             )}
 
             {/* Mobile Cards List */}
-            {filteredEmployees.map((emp) => {
-              const badge = getStatusBadge(emp.status, emp.isActive, emp);
-              const empId = emp._id || emp.employeeId;
-              const isSelected = selectedEmployeeIds.includes(empId);
-              const initials = (emp.fullName || "E")
-                .split(" ")
-                .map((n) => n[0])
-                .join("")
-                .slice(0, 2)
-                .toUpperCase();
-              const isUpdatingThis = statusUpdatingId === empId;
+            <AnimatePresence mode="popLayout">
+              {filteredEmployees.map((emp) => {
+                const badge = getStatusBadge(emp.status, emp.isActive, emp);
+                const empId = emp._id || emp.employeeId;
+                const isSelected = selectedEmployeeIds.includes(empId);
+                const initials = (emp.fullName || "E")
+                  .split(" ")
+                  .map((n) => n[0])
+                  .join("")
+                  .slice(0, 2)
+                  .toUpperCase();
+                const isUpdatingThis = statusUpdatingId === empId;
 
-              return (
-                <div
-                  key={`mobile-card-${empId}`}
-                  id={`mobile-employee-card-${empId}`}
-                  className={`bg-white dark:bg-slate-900 border rounded-2xl p-4 shadow-xs transition-all ${
-                    isSelected
-                      ? "border-blue-500/80 bg-blue-50/20 dark:bg-blue-950/20 shadow-blue-500/5"
-                      : "border-slate-200/80 dark:border-slate-800/80"
-                  }`}
-                >
+                return (
+                  <motion.div
+                    layout
+                    initial={{ opacity: 0, y: 4 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    exit={{ opacity: 0, scale: 0.98 }}
+                    transition={{ duration: 0.15 }}
+                    key={`mobile-card-${empId}`}
+                    id={`mobile-employee-card-${empId}`}
+                    className={`bg-white dark:bg-[#111927] border rounded-xl p-4 shadow-none transition-all ${
+                      isSelected
+                        ? "border-blue-500/80 bg-blue-50/20 dark:bg-blue-950/20"
+                        : "border-slate-200/70 dark:border-slate-800"
+                    }`}
+                  >
                   {/* Card Header: Checkbox + Avatar + Names + Status */}
                   <div className="flex items-start justify-between gap-3">
                     <div className="flex items-center gap-3 min-w-0">
@@ -1225,22 +1325,23 @@ export const EmployeeDirectory = ({
                     <button
                       type="button"
                       onClick={() => setSelectedEmployee(emp)}
-                      className="px-3.5 py-1.5 rounded-xl bg-blue-600 hover:bg-blue-700 text-white text-xs font-semibold transition-all shadow-xs flex items-center gap-1 cursor-pointer"
+                      className="px-3.5 py-1.5 rounded-xl bg-blue-600 hover:bg-blue-700 text-white text-xs font-semibold transition-all shadow-none flex items-center gap-1 cursor-pointer"
                     >
                       <span>View Profile</span>
                       <ChevronRight className="w-3.5 h-3.5" />
                     </button>
                   </div>
-                </div>
+                </motion.div>
               );
             })}
+            </AnimatePresence>
           </div>
 
           {/* Desktop Table View (Visible on md and larger screens) */}
-          <div className="hidden md:block bg-white dark:bg-slate-900 border border-slate-200/80 dark:border-slate-800/80 rounded-2xl sm:rounded-3xl overflow-hidden shadow-sm dark:shadow-black/20">
+          <div className="hidden md:block bg-white dark:bg-[#111927] border border-slate-200/70 dark:border-slate-800 rounded-2xl overflow-hidden shadow-none">
             <div className="overflow-x-auto">
               <table className="w-full text-left text-xs">
-                <thead className="bg-slate-50 dark:bg-slate-800/50 border-b border-slate-200/80 dark:border-slate-800/80 text-slate-400 uppercase font-semibold text-xs tracking-wider">
+                <thead className="bg-slate-50/70 dark:bg-slate-900/60 border-b border-slate-200/70 dark:border-slate-800 text-slate-500 dark:text-slate-400 uppercase font-semibold text-xs tracking-wider">
                   <tr>
                     {isAdmin && (
                       <th className="px-4 py-3.5 w-10">
@@ -1282,10 +1383,14 @@ export const EmployeeDirectory = ({
                     const isUpdatingThis = statusUpdatingId === empId;
 
                     return (
-                      <tr
+                      <motion.tr
+                        layout
+                        initial={{ opacity: 0 }}
+                        animate={{ opacity: 1 }}
+                        transition={{ duration: 0.15 }}
                         key={empId}
-                        className={`hover:bg-slate-50/80 dark:hover:bg-slate-800/40 transition-colors ${
-                          isSelected ? "bg-blue-50/40 dark:bg-blue-950/20" : ""
+                        className={`hover:bg-slate-50/70 dark:hover:bg-slate-800/40 transition-colors ${
+                          isSelected ? "bg-blue-50/30 dark:bg-blue-950/20" : ""
                         }`}
                       >
                         {/* Checkbox for Admin */}
@@ -1319,7 +1424,7 @@ export const EmployeeDirectory = ({
                               name={emp.fullName}
                               size="sm"
                               shape="rounded"
-                              className="w-9 h-9 rounded-xl shrink-0"
+                              className="w-9 h-9 rounded-lg shrink-0 shadow-none"
                               fallbackInitials={initials}
                             />
                             <div>
@@ -1376,7 +1481,7 @@ export const EmployeeDirectory = ({
                         {/* Status Badge */}
                         <td className="px-4 py-3 text-center">
                           <span
-                            className={`inline-flex items-center gap-1.5 text-[10px] font-bold px-2.5 py-1 rounded-full border shadow-2xs ${badge.bg}`}
+                            className={`inline-flex items-center gap-1.5 text-[10px] font-semibold px-2.5 py-0.5 rounded-lg border shadow-none ${badge.bg}`}
                           >
                             <span className={`w-1.5 h-1.5 rounded-full ${badge.dot}`} />
                             {badge.label}
@@ -1386,7 +1491,7 @@ export const EmployeeDirectory = ({
                         {/* Change Status Action (Admin only) */}
                         {isAdmin && (
                           <td className="px-4 py-3 text-center">
-                            <div className="inline-flex items-center gap-1 p-1 bg-slate-100 dark:bg-slate-800 rounded-xl border border-slate-200 dark:border-slate-700">
+                            <div className="inline-flex items-center gap-1 p-0.5 bg-slate-100 dark:bg-slate-800 rounded-lg border border-slate-200/70 dark:border-slate-700">
                               {[
                                 { key: "active", label: "Active", activeClass: "bg-emerald-600 text-white" },
                                 { key: "on leave", label: "On Leave", activeClass: "bg-blue-600 text-white" },
@@ -1402,9 +1507,9 @@ export const EmployeeDirectory = ({
                                     type="button"
                                     disabled={isUpdatingThis || isCurrent}
                                     onClick={() => handleStatusChange(empId, st.key)}
-                                    className={`px-2 py-1 rounded-lg text-[10px] font-semibold transition-all cursor-pointer ${
+                                    className={`px-2 py-0.5 rounded-md text-[10px] font-semibold transition-all cursor-pointer ${
                                       isCurrent
-                                        ? `${st.activeClass} shadow-xs font-bold`
+                                        ? `${st.activeClass} shadow-none font-bold`
                                         : "bg-white dark:bg-slate-900 hover:bg-slate-50 dark:hover:bg-slate-750 text-slate-600 dark:text-slate-400 hover:text-blue-600"
                                     } disabled:opacity-50`}
                                     title={`Set status to ${st.label}`}
@@ -1423,7 +1528,7 @@ export const EmployeeDirectory = ({
                             <button
                               type="button"
                               onClick={() => setSelectedEmployee(emp)}
-                              className="px-3 py-1.5 rounded-xl bg-slate-100 dark:bg-slate-800 hover:bg-blue-600 hover:text-white text-slate-700 dark:text-slate-300 text-xs font-semibold transition-all cursor-pointer"
+                              className="px-3 py-1.5 rounded-lg bg-slate-100 dark:bg-slate-800 hover:bg-blue-600 hover:text-white text-slate-700 dark:text-slate-300 text-xs font-semibold transition-all cursor-pointer shadow-none"
                             >
                               Profile
                             </button>
@@ -1431,7 +1536,7 @@ export const EmployeeDirectory = ({
                               <button
                                 type="button"
                                 onClick={() => setEmployeeToDelete(emp)}
-                                className="p-1.5 rounded-xl border border-rose-200 dark:border-rose-800 text-rose-600 dark:text-rose-400 hover:bg-rose-50 dark:hover:bg-rose-950/30 transition-colors cursor-pointer"
+                                className="p-1.5 rounded-lg border border-rose-200 dark:border-rose-800 text-rose-600 dark:text-rose-400 hover:bg-rose-50 dark:hover:bg-rose-950/30 transition-colors cursor-pointer shadow-none"
                                 title="Delete employee permanently"
                               >
                                 <Trash2 className="w-4 h-4" />
@@ -1439,20 +1544,24 @@ export const EmployeeDirectory = ({
                             )}
                           </div>
                         </td>
-                      </tr>
+                      </motion.tr>
                     );
                   })}
                 </tbody>
               </table>
             </div>
           </div>
-        </>
+        </motion.div>
       )}
 
       {/* Empty State */}
       {filteredEmployees.length === 0 && (
-        <div className="bg-white dark:bg-slate-900 border border-slate-200/80 dark:border-slate-800/80 rounded-2xl sm:rounded-3xl p-12 text-center shadow-sm dark:shadow-black/20">
-          <div className="w-14 h-14 rounded-full bg-slate-50 dark:bg-slate-800 text-slate-400 flex items-center justify-center mx-auto mb-3">
+        <motion.div
+          initial={{ opacity: 0, y: 10 }}
+          animate={{ opacity: 1, y: 0 }}
+          className="bg-white dark:bg-[#111927] border border-slate-200/70 dark:border-slate-800 rounded-2xl p-12 text-center shadow-none"
+        >
+          <div className="w-12 h-12 rounded-xl bg-slate-100 dark:bg-slate-800 text-slate-400 flex items-center justify-center mx-auto mb-3">
             <Users className="w-6 h-6" />
           </div>
           <h3 className="text-base font-bold text-slate-900 dark:text-white">
@@ -1479,203 +1588,215 @@ export const EmployeeDirectory = ({
                 id="btn-empty-new-employee"
                 type="button"
                 onClick={() => setShowEmployeeModal(true)}
-                className="px-4 py-2 bg-blue-600 text-white text-xs font-semibold rounded-xl hover:bg-blue-700 transition-colors cursor-pointer shadow-sm flex items-center gap-1.5"
+                className="px-4 py-2 bg-blue-600 text-white text-xs font-semibold rounded-xl hover:bg-blue-700 transition-colors cursor-pointer shadow-none flex items-center gap-1.5"
               >
                 <UserPlus className="w-3.5 h-3.5" />
                 <span>New Employee</span>
               </button>
             )}
           </div>
-        </div>
+        </motion.div>
       )}
 
       {/* Bulk Action Confirmation Modal */}
-      {showBulkModal && (
-        <div
-          className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-xs p-4 animate-fade-in"
-          onClick={() => !isBulkUpdating && setShowBulkModal(false)}
-        >
+      <AnimatePresence>
+        {showBulkModal && (
           <div
-            className="bg-white dark:bg-slate-900 rounded-3xl max-w-md w-full overflow-hidden shadow-2xl border border-slate-200 dark:border-slate-800 animate-scale-up"
-            onClick={(e) => e.stopPropagation()}
+            className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-xs p-4"
+            onClick={() => !isBulkUpdating && setShowBulkModal(false)}
           >
-            <div className="bg-blue-50 dark:bg-blue-950/60 p-6 border-b border-blue-200 dark:border-blue-800/60 flex items-center gap-4">
-              <div className="w-12 h-12 rounded-2xl bg-blue-600 text-white flex items-center justify-center shadow-xs shrink-0">
-                <Layers className="w-6 h-6" />
+            <motion.div
+              initial={{ opacity: 0, scale: 0.96 }}
+              animate={{ opacity: 1, scale: 1 }}
+              exit={{ opacity: 0, scale: 0.96 }}
+              transition={{ duration: 0.15 }}
+              className="bg-white dark:bg-[#111927] rounded-2xl max-w-md w-full overflow-hidden shadow-md dark:shadow-none border border-slate-200/70 dark:border-slate-800"
+              onClick={(e) => e.stopPropagation()}
+            >
+              <div className="bg-blue-50/70 dark:bg-blue-950/40 p-5 border-b border-blue-200/60 dark:border-blue-800/60 flex items-center gap-3.5">
+                <div className="w-10 h-10 rounded-xl bg-blue-600 text-white flex items-center justify-center shadow-none shrink-0">
+                  <Layers className="w-5 h-5" />
+                </div>
+                <div>
+                  <h3 className="text-base font-bold text-blue-950 dark:text-blue-100">
+                    Batch Update Employees
+                  </h3>
+                  <p className="text-xs text-blue-700 dark:text-blue-300 mt-0.5">
+                    Updating {selectedEmployeeIds.length} selected employee records simultaneously.
+                  </p>
+                </div>
               </div>
-              <div>
-                <h3 className="text-base font-bold text-blue-950 dark:text-blue-100">
-                  Batch Update Employees
-                </h3>
-                <p className="text-xs text-blue-700 dark:text-blue-300 mt-0.5">
-                  Updating {selectedEmployeeIds.length} selected employee records simultaneously.
+
+              <div className="p-5 space-y-4 text-xs">
+                {bulkAction === "department" && (
+                  <div>
+                    <label className="block text-slate-700 dark:text-slate-300 font-semibold mb-1.5">
+                      Select Target Department
+                    </label>
+                    <select
+                      value={bulkTargetDepartment}
+                      onChange={(e) => setBulkTargetDepartment(e.target.value)}
+                      className="w-full p-2.5 bg-slate-50 dark:bg-slate-800 border border-slate-200/70 dark:border-slate-700 rounded-xl text-xs text-slate-900 dark:text-white focus:outline-none focus:border-blue-500 font-medium"
+                    >
+                      {allAvailableDepartments.map((dept) => (
+                        <option key={dept} value={dept}>
+                          {dept}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+                )}
+
+                {bulkAction === "status" && (
+                  <div>
+                    <label className="block text-slate-700 dark:text-slate-300 font-semibold mb-1.5">
+                      Select Target Account Status
+                    </label>
+                    <select
+                      value={bulkTargetStatus}
+                      onChange={(e) => setBulkTargetStatus(e.target.value)}
+                      className="w-full p-2.5 bg-slate-50 dark:bg-slate-800 border border-slate-200/70 dark:border-slate-700 rounded-xl text-xs text-slate-900 dark:text-white focus:outline-none focus:border-blue-500 font-medium"
+                    >
+                      <option value="active">Active</option>
+                      <option value="on leave">On Leave</option>
+                      <option value="terminated">Terminated</option>
+                      <option value="inactive">Inactive</option>
+                      <option value="suspended">Suspended</option>
+                    </select>
+                  </div>
+                )}
+
+                <p className="text-[11px] text-slate-500 dark:text-slate-400 bg-slate-50/70 dark:bg-slate-800/60 p-3 rounded-xl border border-slate-200/70 dark:border-slate-700">
+                  This change will be applied directly to the database and will reflect across payroll, permissions, and reporting modules.
                 </p>
               </div>
-            </div>
 
-            <div className="p-6 space-y-4 text-xs">
-              {bulkAction === "department" && (
-                <div>
-                  <label className="block text-slate-700 dark:text-slate-300 font-semibold mb-1.5">
-                    Select Target Department
-                  </label>
-                  <select
-                    value={bulkTargetDepartment}
-                    onChange={(e) => setBulkTargetDepartment(e.target.value)}
-                    className="w-full p-2.5 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl text-xs text-slate-900 dark:text-white focus:outline-none focus:border-blue-500 font-medium"
-                  >
-                    {allAvailableDepartments.map((dept) => (
-                      <option key={dept} value={dept}>
-                        {dept}
-                      </option>
-                    ))}
-                  </select>
-                </div>
-              )}
-
-              {bulkAction === "status" && (
-                <div>
-                  <label className="block text-slate-700 dark:text-slate-300 font-semibold mb-1.5">
-                    Select Target Account Status
-                  </label>
-                  <select
-                    value={bulkTargetStatus}
-                    onChange={(e) => setBulkTargetStatus(e.target.value)}
-                    className="w-full p-2.5 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl text-xs text-slate-900 dark:text-white focus:outline-none focus:border-blue-500 font-medium"
-                  >
-                    <option value="active">Active</option>
-                    <option value="on leave">On Leave</option>
-                    <option value="terminated">Terminated</option>
-                    <option value="inactive">Inactive</option>
-                    <option value="suspended">Suspended</option>
-                  </select>
-                </div>
-              )}
-
-              <p className="text-[11px] text-slate-500 dark:text-slate-400 bg-slate-50 dark:bg-slate-800/60 p-3 rounded-xl border border-slate-200 dark:border-slate-700">
-                This change will be applied directly to the database and will reflect across payroll, permissions, and reporting modules.
-              </p>
-            </div>
-
-            <div className="p-4 bg-slate-50 dark:bg-slate-800/80 border-t border-slate-200 dark:border-slate-700 flex items-center justify-end gap-3">
-              <button
-                type="button"
-                disabled={isBulkUpdating}
-                onClick={() => setShowBulkModal(false)}
-                className="px-4 py-2 rounded-xl border border-slate-200 dark:border-slate-700 hover:bg-white dark:hover:bg-slate-900 text-xs font-bold text-slate-600 dark:text-slate-300 transition-colors cursor-pointer disabled:opacity-50"
-              >
-                Cancel
-              </button>
-              <button
-                type="button"
-                disabled={isBulkUpdating}
-                onClick={handleExecuteBulkUpdate}
-                className="px-4 py-2 rounded-xl bg-blue-600 hover:bg-blue-700 text-white text-xs font-bold transition-all shadow-xs flex items-center gap-1.5 cursor-pointer disabled:opacity-50"
-              >
-                {isBulkUpdating ? (
-                  <>
-                    <Loader2 className="w-3.5 h-3.5 animate-spin" />
-                    <span>Updating Records...</span>
-                  </>
-                ) : (
-                  <>
-                    <Check className="w-3.5 h-3.5" />
-                    <span>Apply Batch Update</span>
-                  </>
-                )}
-              </button>
-            </div>
+              <div className="p-4 bg-slate-50/70 dark:bg-slate-800/60 border-t border-slate-200/70 dark:border-slate-700 flex items-center justify-end gap-2.5">
+                <button
+                  type="button"
+                  disabled={isBulkUpdating}
+                  onClick={() => setShowBulkModal(false)}
+                  className="px-4 py-2 rounded-xl border border-slate-200/70 dark:border-slate-750 hover:bg-white dark:hover:bg-slate-900 text-xs font-semibold text-slate-600 dark:text-slate-300 transition-colors cursor-pointer disabled:opacity-50"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="button"
+                  disabled={isBulkUpdating}
+                  onClick={handleExecuteBulkUpdate}
+                  className="px-4 py-2 rounded-xl bg-blue-600 hover:bg-blue-700 text-white text-xs font-semibold transition-all shadow-none flex items-center gap-1.5 cursor-pointer disabled:opacity-50"
+                >
+                  {isBulkUpdating ? (
+                    <>
+                      <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                      <span>Updating Records...</span>
+                    </>
+                  ) : (
+                    <>
+                      <Check className="w-3.5 h-3.5" />
+                      <span>Apply Batch Update</span>
+                    </>
+                  )}
+                </button>
+              </div>
+            </motion.div>
           </div>
-        </div>
-      )}
+        )}
+      </AnimatePresence>
 
       {/* Delete Confirmation Modal */}
-      {employeeToDelete && (
-        <div
-          className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-xs p-4 animate-fade-in"
-          onClick={() => !isDeleting && setEmployeeToDelete(null)}
-        >
+      <AnimatePresence>
+        {employeeToDelete && (
           <div
-            className="bg-white dark:bg-slate-900 rounded-3xl max-w-md w-full overflow-hidden shadow-2xl border border-slate-200 dark:border-slate-800 animate-scale-up"
-            onClick={(e) => e.stopPropagation()}
+            className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-xs p-4"
+            onClick={() => !isDeleting && setEmployeeToDelete(null)}
           >
-            <div className="bg-rose-50 dark:bg-rose-950/60 p-6 border-b border-rose-200 dark:border-rose-800/60 flex items-center gap-4">
-              <div className="w-12 h-12 rounded-2xl bg-rose-600 text-white flex items-center justify-center shadow-xs shrink-0">
-                <ShieldAlert className="w-6 h-6" />
+            <motion.div
+              initial={{ opacity: 0, scale: 0.96 }}
+              animate={{ opacity: 1, scale: 1 }}
+              exit={{ opacity: 0, scale: 0.96 }}
+              transition={{ duration: 0.15 }}
+              className="bg-white dark:bg-[#111927] rounded-2xl max-w-md w-full overflow-hidden shadow-md dark:shadow-none border border-slate-200/70 dark:border-slate-800"
+              onClick={(e) => e.stopPropagation()}
+            >
+              <div className="bg-rose-50/70 dark:bg-rose-950/40 p-5 border-b border-rose-200/60 dark:border-rose-800/60 flex items-center gap-3.5">
+                <div className="w-10 h-10 rounded-xl bg-rose-600 text-white flex items-center justify-center shadow-none shrink-0">
+                  <ShieldAlert className="w-5 h-5" />
+                </div>
+                <div>
+                  <h3 className="text-base font-bold text-rose-950 dark:text-rose-100">
+                    Confirm Employee Deletion
+                  </h3>
+                  <p className="text-xs text-rose-700 dark:text-rose-300 mt-0.5">
+                    This action permanently removes the record from the database.
+                  </p>
+                </div>
               </div>
-              <div>
-                <h3 className="text-base font-bold text-rose-950 dark:text-rose-100">
-                  Confirm Employee Deletion
-                </h3>
-                <p className="text-xs text-rose-700 dark:text-rose-300 mt-0.5">
-                  This action permanently removes the record from the database.
+
+              <div className="p-5 space-y-3 text-xs text-slate-600 dark:text-slate-300">
+                <div className="p-3 bg-slate-50/70 dark:bg-slate-800/60 rounded-xl border border-slate-200/70 dark:border-slate-700 space-y-1.5">
+                  <div className="flex justify-between">
+                    <span className="text-slate-400">Staff Name:</span>
+                    <span className="font-bold text-slate-900 dark:text-white">
+                      {employeeToDelete.fullName}
+                    </span>
+                  </div>
+                  <div className="flex justify-between">
+                    <span className="text-slate-400">Employee ID:</span>
+                    <span className="font-mono font-bold text-blue-600 dark:text-blue-400">
+                      {employeeToDelete.employeeId}
+                    </span>
+                  </div>
+                  <div className="flex justify-between">
+                    <span className="text-slate-400">Email Address:</span>
+                    <span className="font-semibold text-slate-900 dark:text-white">
+                      {employeeToDelete.email}
+                    </span>
+                  </div>
+                  <div className="flex justify-between">
+                    <span className="text-slate-400">Department:</span>
+                    <span className="font-semibold text-slate-900 dark:text-white">
+                      {employeeToDelete.department}
+                    </span>
+                  </div>
+                </div>
+                <p className="text-[11px] text-rose-600 dark:text-rose-400 bg-rose-50/60 dark:bg-rose-950/30 p-2.5 rounded-xl border border-rose-200/60 dark:border-rose-800/60">
+                  Warning: Once deleted, this employee will no longer be able to log in, and all associated profile data will be permanently cleared from the active database.
                 </p>
               </div>
-            </div>
 
-            <div className="p-6 space-y-3 text-xs text-slate-600 dark:text-slate-300">
-              <div className="p-3 bg-slate-50 dark:bg-slate-800/60 rounded-2xl border border-slate-200 dark:border-slate-700 space-y-1.5">
-                <div className="flex justify-between">
-                  <span className="text-slate-400">Staff Name:</span>
-                  <span className="font-bold text-slate-900 dark:text-white">
-                    {employeeToDelete.fullName}
-                  </span>
-                </div>
-                <div className="flex justify-between">
-                  <span className="text-slate-400">Employee ID:</span>
-                  <span className="font-mono font-bold text-blue-600 dark:text-blue-400">
-                    {employeeToDelete.employeeId}
-                  </span>
-                </div>
-                <div className="flex justify-between">
-                  <span className="text-slate-400">Email Address:</span>
-                  <span className="font-semibold text-slate-900 dark:text-white">
-                    {employeeToDelete.email}
-                  </span>
-                </div>
-                <div className="flex justify-between">
-                  <span className="text-slate-400">Department:</span>
-                  <span className="font-semibold text-slate-900 dark:text-white">
-                    {employeeToDelete.department}
-                  </span>
-                </div>
+              <div className="p-4 bg-slate-50/70 dark:bg-slate-800/60 border-t border-slate-200/70 dark:border-slate-700 flex items-center justify-end gap-2.5">
+                <button
+                  type="button"
+                  disabled={isDeleting}
+                  onClick={() => setEmployeeToDelete(null)}
+                  className="px-4 py-2 rounded-xl border border-slate-200/70 dark:border-slate-750 hover:bg-white dark:hover:bg-slate-900 text-xs font-semibold text-slate-600 dark:text-slate-300 transition-colors cursor-pointer disabled:opacity-50"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="button"
+                  disabled={isDeleting}
+                  onClick={handleDeleteEmployee}
+                  className="px-4 py-2 rounded-xl bg-rose-600 hover:bg-rose-700 text-white text-xs font-semibold transition-all shadow-none flex items-center gap-1.5 cursor-pointer disabled:opacity-50"
+                >
+                  {isDeleting ? (
+                    <>
+                      <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                      <span>Deleting Record...</span>
+                    </>
+                  ) : (
+                    <>
+                      <Trash2 className="w-3.5 h-3.5" />
+                      <span>Delete Employee</span>
+                    </>
+                  )}
+                </button>
               </div>
-              <p className="text-[11px] text-rose-600 dark:text-rose-400 bg-rose-50 dark:bg-rose-950/40 p-2.5 rounded-xl border border-rose-200 dark:border-rose-800">
-                Warning: Once deleted, this employee will no longer be able to log in, and all associated profile data will be permanently cleared from the active database.
-              </p>
-            </div>
-
-            <div className="p-4 bg-slate-50 dark:bg-slate-800/80 border-t border-slate-200 dark:border-slate-700 flex items-center justify-end gap-3">
-              <button
-                type="button"
-                disabled={isDeleting}
-                onClick={() => setEmployeeToDelete(null)}
-                className="px-4 py-2 rounded-xl border border-slate-200 dark:border-slate-700 hover:bg-white dark:hover:bg-slate-900 text-xs font-bold text-slate-600 dark:text-slate-300 transition-colors cursor-pointer disabled:opacity-50"
-              >
-                Cancel
-              </button>
-              <button
-                type="button"
-                disabled={isDeleting}
-                onClick={handleDeleteEmployee}
-                className="px-4 py-2 rounded-xl bg-rose-600 hover:bg-rose-700 text-white text-xs font-bold transition-all shadow-xs flex items-center gap-1.5 cursor-pointer disabled:opacity-50"
-              >
-                {isDeleting ? (
-                  <>
-                    <Loader2 className="w-3.5 h-3.5 animate-spin" />
-                    <span>Deleting Record...</span>
-                  </>
-                ) : (
-                  <>
-                    <Trash2 className="w-3.5 h-3.5" />
-                    <span>Delete Employee</span>
-                  </>
-                )}
-              </button>
-            </div>
+            </motion.div>
           </div>
-        </div>
-      )}
+        )}
+      </AnimatePresence>
 
       {/* Interactive Employee Profile Detail Modal with Print and Salary Adjustments Tab */}
       <EmployeeDetailModal
@@ -1689,7 +1810,7 @@ export const EmployeeDirectory = ({
         getStatusBadge={getStatusBadge}
         formatDate={formatDate}
       />
-    </div>
+    </motion.div>
   );
 };
 

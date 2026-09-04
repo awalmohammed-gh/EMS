@@ -116,7 +116,7 @@ const CustomWeeklyHoursTooltip = ({ active, payload }) => {
 };
 
 const EmployeesAttendance = () => {
-  const { showToast, setShowToast, user } = useManagement();
+  const { showToast, setShowToast, user, settings } = useManagement();
 
   // Today's attendance state
   const [attendanceData, setAttendanceData] = useState({
@@ -138,9 +138,13 @@ const EmployeesAttendance = () => {
   const [hasClockedIn, setHasClockedIn] = useState(false);
   const [hasClockedOut, setHasClockedOut] = useState(false);
 
-  // Shift Settings & Early Override Guard State
-  const [settingsEndTime, setSettingsEndTime] = useState("17:00");
-  const [settingsStartTime, setSettingsStartTime] = useState("08:00");
+  // Shift Settings & Early Override Guard State (Default to 19:00 / 07:00 PM)
+  const initialEnd = settings?.workEndTime || settings?.attendance?.workEndTime || "19:00";
+  const initialStart = settings?.workStartTime || settings?.attendance?.workStartTime || "08:00";
+  const [settingsEndTime, setSettingsEndTime] = useState(
+    initialEnd && initialEnd !== "17:00" ? initialEnd : "19:00"
+  );
+  const [settingsStartTime, setSettingsStartTime] = useState(initialStart || "08:00");
   const [earlyOverrideActive, setEarlyOverrideActive] = useState(false);
   const [showOverrideModal, setShowOverrideModal] = useState(false);
 
@@ -164,14 +168,14 @@ const EmployeesAttendance = () => {
     return () => clearInterval(timer);
   }, []);
 
-  // Time Evaluation Guard: Evaluate live client/server time against workEndTime
+  // Time Evaluation Guard: Evaluate live client/server time against workEndTime (default 19:00 / 07:00 PM)
   const shiftEvaluation = useMemo(() => {
     const now = currentTime;
-    const endStr = settingsEndTime || "17:00";
+    const endStr = (!settingsEndTime || settingsEndTime === "17:00") ? "19:00" : settingsEndTime;
     const startStr = settingsStartTime || "08:00";
 
     const [endHourStr, endMinStr] = endStr.split(":");
-    const endHour = parseInt(endHourStr, 10) || 17;
+    const endHour = parseInt(endHourStr, 10) || 19;
     const endMin = parseInt(endMinStr, 10) || 0;
 
     const [startHourStr, startMinStr] = startStr.split(":");
@@ -370,11 +374,20 @@ const EmployeesAttendance = () => {
         if (
           settingsRes.status === "fulfilled" &&
           settingsRes.value?.data?.success &&
-          settingsRes.value.data.settings?.attendance
+          settingsRes.value.data.settings
         ) {
-          const { workEndTime, workStartTime } =
-            settingsRes.value.data.settings.attendance;
-          if (workEndTime) setSettingsEndTime(workEndTime);
+          const s = settingsRes.value.data.settings;
+          const workEndTime =
+            s.workEndTime ||
+            s.attendance?.workEndTime ||
+            s.company?.workEndTime;
+          const workStartTime =
+            s.workStartTime ||
+            s.attendance?.workStartTime ||
+            s.company?.workStartTime;
+          if (workEndTime) {
+            setSettingsEndTime(workEndTime === "17:00" ? "19:00" : workEndTime);
+          }
           if (workStartTime) setSettingsStartTime(workStartTime);
         }
       } catch {
@@ -508,13 +521,25 @@ const EmployeesAttendance = () => {
   };
 
   // Status badge styling helper
-  const getStatusBadge = (status, lateMinutes = 0) => {
+  const getStatusBadge = (status, lateMinutes = 0, latePenalty = undefined) => {
     const s = String(status || "").toLowerCase();
     if (s === "on time" || s === "ontime" || s === "present") {
       return (
         <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-xs font-semibold bg-emerald-50 dark:bg-emerald-950/40 text-emerald-700 dark:text-emerald-300 border border-emerald-200 dark:border-emerald-800/60">
           <span className="w-1.5 h-1.5 rounded-full bg-emerald-500" />
           On Time
+        </span>
+      );
+    }
+    if (
+      s.includes("grace") ||
+      s.includes("zero penalty") ||
+      (s === "late" && latePenalty !== undefined && Number(latePenalty) === 0 && lateMinutes > 0)
+    ) {
+      return (
+        <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-xs font-semibold bg-blue-50 dark:bg-blue-950/40 text-[#002185] dark:text-blue-300 border border-blue-200 dark:border-blue-800/60">
+          <span className="w-1.5 h-1.5 rounded-full bg-[#002185] dark:bg-blue-400" />
+          Late (No Deduction)
         </span>
       );
     }
@@ -893,19 +918,30 @@ const EmployeesAttendance = () => {
 
               {/* Dynamic Instant Attendance Status Badge after Clock In */}
               {hasClockedIn && (
-                attendanceData.lateMinutes > 0 || (attendanceData.status || "").toLowerCase() === "late" ? (
-                  <div
-                    id="attendance-status-badge-late"
-                    className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-semibold bg-amber-50 text-amber-800 dark:bg-amber-950/40 dark:text-amber-300 border border-amber-200 dark:border-amber-800/60 shadow-xs"
-                  >
-                    <AlertTriangle className="w-3.5 h-3.5 text-amber-600 dark:text-amber-400 shrink-0" />
-                    <span>Late Arrival ({attendanceData.lateMinutes} min late)</span>
-                    {attendanceData.latePenalty > 0 && (
+                attendanceData.lateMinutes > 0 || (attendanceData.status || "").toLowerCase().includes("late") ? (
+                  Number(attendanceData.latePenalty || 0) > 0 ? (
+                    <div
+                      id="attendance-status-badge-late"
+                      className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-semibold bg-amber-50 text-amber-800 dark:bg-amber-950/40 dark:text-amber-300 border border-amber-200 dark:border-amber-800/60 shadow-xs"
+                    >
+                      <AlertTriangle className="w-3.5 h-3.5 text-amber-600 dark:text-amber-400 shrink-0" />
+                      <span>Late Arrival ({attendanceData.lateMinutes} min late)</span>
                       <span className="font-bold text-rose-700 dark:text-rose-400">
-                        · Fine: GH₵{Number(attendanceData.latePenalty).toFixed(2)}
+                        · -GH₵{Number(attendanceData.latePenalty).toFixed(2)} deduction
                       </span>
-                    )}
-                  </div>
+                    </div>
+                  ) : (
+                    <div
+                      id="attendance-status-badge-late-grace"
+                      className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-semibold bg-blue-50 text-[#002185] dark:bg-blue-950/40 dark:text-blue-300 border border-blue-200 dark:border-blue-800/60 shadow-xs"
+                    >
+                      <Clock className="w-3.5 h-3.5 text-[#002185] dark:text-blue-400 shrink-0" />
+                      <span>Late Arrival ({attendanceData.lateMinutes} min late)</span>
+                      <span className="font-medium text-slate-600 dark:text-slate-400">
+                        · No deduction incurred (GH₵0.00)
+                      </span>
+                    </div>
+                  )
                 ) : (
                   <div
                     id="attendance-status-badge-ontime"
@@ -987,9 +1023,9 @@ const EmployeesAttendance = () => {
                   hasClockedOut
                     ? `Shift Completed (${formatTime(attendanceData.clockOut)})`
                     : !hasClockedIn
-                    ? `Locked until ${shiftEvaluation.formattedEndTime}`
+                    ? `Unlocks at ${shiftEvaluation.formattedEndTime}`
                     : !isClockOutUnlocked
-                    ? `Locked until ${shiftEvaluation.formattedEndTime}`
+                    ? `Unlocks at ${shiftEvaluation.formattedEndTime}`
                     : "Click to clock out and end your shift"
                 }
               >
@@ -998,10 +1034,10 @@ const EmployeesAttendance = () => {
                     <CheckCircle2 className="w-4 h-4 text-emerald-600 dark:text-emerald-400" />
                     <span>Clocked Out ({formatTime(attendanceData.clockOut)})</span>
                   </>
-                ) : !isClockOutUnlocked && hasClockedIn ? (
+                ) : (!isClockOutUnlocked || !hasClockedIn) ? (
                   <>
                     <Lock className="w-4 h-4 text-slate-400" />
-                    <span>Locked until {shiftEvaluation.formattedEndTime}</span>
+                    <span>Unlocks at {shiftEvaluation.formattedEndTime}</span>
                   </>
                 ) : isClocking ? (
                   <>
@@ -1819,7 +1855,7 @@ const EmployeesAttendance = () => {
 
                           {/* Status */}
                           <td className="px-6 py-4">
-                            {getStatusBadge(item.status, lateMins)}
+                            {getStatusBadge(item.status, lateMins, latePenalty)}
                           </td>
 
                           {/* Penalties */}
@@ -1829,9 +1865,13 @@ const EmployeesAttendance = () => {
                                 <span className="font-semibold text-amber-600 dark:text-amber-400">
                                   {lateMins}m late
                                 </span>
-                                {latePenalty > 0 && (
+                                {latePenalty > 0 ? (
                                   <span className="text-[11px] font-bold text-rose-600 dark:text-rose-400 bg-rose-50 dark:bg-rose-950/40 px-2 py-0.5 rounded border border-rose-200 dark:border-rose-800">
                                     -GH₵ {latePenalty.toFixed(2)}
+                                  </span>
+                                ) : (
+                                  <span className="text-[11px] font-medium text-slate-600 dark:text-slate-400 bg-slate-100 dark:bg-slate-800 px-2 py-0.5 rounded">
+                                    GH₵ 0.00 (No deduction)
                                   </span>
                                 )}
                               </div>
@@ -1881,7 +1921,7 @@ const EmployeesAttendance = () => {
                             {item.workHours || 0} hours worked
                           </p>
                         </div>
-                        {getStatusBadge(item.status, lateMins)}
+                        {getStatusBadge(item.status, lateMins, latePenalty)}
                       </div>
 
                       <div className="grid grid-cols-2 gap-2 bg-slate-50 dark:bg-[#162033] p-3 rounded-xl text-xs">
@@ -1904,13 +1944,25 @@ const EmployeesAttendance = () => {
                       </div>
 
                       {lateMins > 0 && (
-                        <div className="flex items-center justify-between text-xs p-2 rounded-lg bg-amber-50 dark:bg-amber-950/40 border border-amber-200 dark:border-amber-800/60">
-                          <span className="text-amber-700 dark:text-amber-300 font-medium">
+                        <div className={`flex items-center justify-between text-xs p-2 rounded-lg border ${
+                          latePenalty > 0
+                            ? "bg-amber-50 dark:bg-amber-950/40 border-amber-200 dark:border-amber-800/60"
+                            : "bg-blue-50/70 dark:bg-blue-950/30 border-blue-200 dark:border-blue-800/50"
+                        }`}>
+                          <span className={`${
+                            latePenalty > 0
+                              ? "text-amber-700 dark:text-amber-300 font-medium"
+                              : "text-[#002185] dark:text-blue-300 font-medium"
+                          }`}>
                             {lateMins} minutes late
                           </span>
-                          {latePenalty > 0 && (
+                          {latePenalty > 0 ? (
                             <span className="font-bold text-rose-600 dark:text-rose-400">
                               Deduction: GH₵ {latePenalty.toFixed(2)}
+                            </span>
+                          ) : (
+                            <span className="font-medium text-slate-600 dark:text-slate-400">
+                              No deduction incurred (GH₵ 0.00)
                             </span>
                           )}
                         </div>

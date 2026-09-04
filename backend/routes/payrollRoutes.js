@@ -14,12 +14,14 @@ import {
   getPayrollAnalytics,
   getPayrollCycles,
   getPenaltyImpactAnalytics,
+  getCurrentMonthLatenessAnalytics,
   getSalaryProjection,
   getEmployeeLivePayrollSummary,
   getMonthlyPayrollRun,
 } from "../controllers/payrollController.js";
 import { getAdminPayrollSummary } from "../controllers/payrollAdminController.js";
 import { employeeAuth } from "../middleware/employeeAuth.js";
+import { protect } from "../middleware/authMiddleware.js";
 
 const payrollRouter = express.Router();
 
@@ -69,6 +71,10 @@ payrollRouter.get("/history", verifyAdmin, getPayrollCycles);
 // 6-Month attendance penalty impact on payroll cost
 payrollRouter.get("/penalty-impact", verifyAdmin, getPenaltyImpactAnalytics);
 payrollRouter.get("/penalties/impact", verifyAdmin, getPenaltyImpactAnalytics);
+
+// Current Month Lateness Deductions Analytics
+payrollRouter.get("/monthly-lateness-deductions", protect, getCurrentMonthLatenessAnalytics);
+payrollRouter.get("/penalties/monthly-lateness", protect, getCurrentMonthLatenessAnalytics);
 
 // Payroll export reports
 payrollRouter.get("/export", verifyAdmin, exportPayrollReport);
