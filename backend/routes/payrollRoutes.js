@@ -23,7 +23,19 @@ import { getAdminPayrollSummary } from "../controllers/payrollAdminController.js
 import { employeeAuth } from "../middleware/employeeAuth.js";
 import { protect } from "../middleware/authMiddleware.js";
 
+import {
+  getPayrollForecasting,
+  getEmployeeForecasting,
+  exportForecastingCSV,
+} from "../controllers/payrollForecastingController.js";
+
 const payrollRouter = express.Router();
+
+// Payroll Forecasting Tool (End-of-Month Lateness Deductions Projections)
+payrollRouter.get("/forecasting", protect, getPayrollForecasting);
+payrollRouter.get("/forecasting/export", protect, exportForecastingCSV);
+payrollRouter.get("/forecasting/me", protect, getEmployeeForecasting);
+payrollRouter.get("/forecasting/employee/:id", protect, getEmployeeForecasting);
 
 // Dynamic KPI Summary Metrics Aggregation (Admin)
 payrollRouter.get("/summary", verifyAdmin, getAdminPayrollSummary);

@@ -73,6 +73,12 @@ const attendanceSchema = new mongoose.Schema(
       default: "",
     },
 
+    lateReason: {
+      type: String,
+      trim: true,
+      default: "",
+    },
+
     notes: {
       type: String,
       trim: true,

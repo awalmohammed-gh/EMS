@@ -428,55 +428,72 @@ const EmployeeSettings = () => {
         })}
       </div>
 
-      {/* Top Identity & Avatar Card */}
-      <div className="w-full flex flex-col sm:flex-row items-center sm:items-start justify-between gap-6 p-6 rounded-2xl bg-white dark:bg-[#111927] border border-slate-200 dark:border-slate-800/80 shadow-sm">
-        <ProfilePictureUploader
-          currentAvatarUrl={
-            profile.avatar || user?.profilePicture || user?.avatar
-          }
-          userName={profile.fullName || user?.fullName}
-          userRole="Employee"
-          onAvatarUpdated={(newUrl) => {
-            setProfile((prev) => ({
-              ...prev,
-              avatar: newUrl,
-              profilePicture: newUrl,
-              profile_image_url: newUrl,
-            }));
-          }}
-          size="lg"
-        />
-
-        {/* Identity & Status Badges */}
-        <div className="text-center sm:text-right border-t sm:border-t-0 pt-4 sm:pt-0 border-slate-200 dark:border-slate-800/80 w-full sm:w-auto">
-          <div className="flex flex-wrap justify-center sm:justify-end items-center gap-2">
-            <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-semibold bg-emerald-50 dark:bg-emerald-950/40 text-emerald-700 dark:text-emerald-300 border border-emerald-200 dark:border-emerald-800/60">
-              <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse" />
-              Active Account
-            </span>
-            <span className="inline-flex items-center gap-1 px-3 py-1 rounded-full text-xs font-semibold bg-blue-50 dark:bg-blue-950/40 text-blue-700 dark:text-blue-300 border border-blue-200 dark:border-blue-800/60">
-              <Shield className="w-3.5 h-3.5" />
-              {profile.role ? profile.role.toUpperCase() : "EMPLOYEE"}
-            </span>
-            {(profile.employeeId || user?.employeeId) && (
-              <span className="font-mono text-[#002185] dark:text-blue-300 bg-slate-50 dark:bg-[#162033] px-3 py-1 rounded-full border border-slate-200 dark:border-slate-700/60 text-xs font-semibold">
-                ID: {profile.employeeId || user?.employeeId}
-              </span>
-            )}
+      {/* Dedicated Profile Avatar & Appearance Card */}
+      <div
+        id="profile-avatar-appearance-card"
+        className="w-full bg-white dark:bg-[#111927] border border-slate-200/70 dark:border-slate-800 rounded-2xl p-6 shadow-sm space-y-5"
+      >
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 border-b border-slate-200/70 dark:border-slate-800/80 pb-4">
+          <div>
+            <h3 className="text-base font-bold text-slate-900 dark:text-white flex items-center gap-2">
+              <Palette className="w-4 h-4 text-blue-600 dark:text-blue-400" />
+              Profile Avatar & Appearance
+            </h3>
+            <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">
+              Customize your dashboard avatar illustration or upload an official executive portrait photo.
+            </p>
           </div>
+          <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-semibold bg-emerald-50 dark:bg-emerald-950/40 text-emerald-700 dark:text-emerald-300 border border-emerald-200 dark:border-emerald-800/60 w-fit">
+            <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse" />
+            Active Account
+          </span>
+        </div>
 
-          <div className="flex flex-wrap justify-center sm:justify-end items-center gap-3 mt-3 text-xs text-slate-500 dark:text-slate-400">
-            {(profile.department || user?.department) && (
-              <span className="flex items-center gap-1.5">
-                <Building2 className="w-3.5 h-3.5 text-[#002185] dark:text-blue-400" />
-                {profile.department || user?.department}
+        <div className="flex flex-col sm:flex-row items-center sm:items-start justify-between gap-6">
+          <ProfilePictureUploader
+            currentAvatarUrl={
+              profile.avatar || user?.profilePicture || user?.avatar
+            }
+            userName={profile.fullName || user?.fullName}
+            userRole="Employee"
+            onAvatarUpdated={(newUrl) => {
+              setProfile((prev) => ({
+                ...prev,
+                avatar: newUrl,
+                profilePicture: newUrl,
+                profile_image_url: newUrl,
+              }));
+            }}
+            size="lg"
+          />
+
+          {/* Identity & Status Badges */}
+          <div className="text-center sm:text-right border-t sm:border-t-0 pt-4 sm:pt-0 border-slate-200/70 dark:border-slate-800/80 w-full sm:w-auto self-center sm:self-start">
+            <div className="flex flex-wrap justify-center sm:justify-end items-center gap-2">
+              <span className="inline-flex items-center gap-1 px-3 py-1 rounded-full text-xs font-semibold bg-blue-50 dark:bg-blue-950/40 text-blue-700 dark:text-blue-300 border border-blue-200 dark:border-blue-800/60">
+                <Shield className="w-3.5 h-3.5" />
+                {profile.role ? profile.role.toUpperCase() : "EMPLOYEE"}
               </span>
-            )}
-            <span>•</span>
-            <span className="flex items-center gap-1.5">
-              <Mail className="w-3.5 h-3.5 text-[#002185] dark:text-blue-400" />
-              {profile.email || user?.email}
-            </span>
+              {(profile.employeeId || user?.employeeId) && (
+                <span className="font-mono text-slate-700 dark:text-slate-200 bg-slate-50 dark:bg-[#162033] px-3 py-1 rounded-full border border-slate-200/70 dark:border-slate-700/60 text-xs font-semibold">
+                  ID: {profile.employeeId || user?.employeeId}
+                </span>
+              )}
+            </div>
+
+            <div className="flex flex-wrap justify-center sm:justify-end items-center gap-3 mt-3 text-xs text-slate-500 dark:text-slate-400">
+              {(profile.department || user?.department) && (
+                <span className="flex items-center gap-1.5">
+                  <Building2 className="w-3.5 h-3.5 text-blue-600 dark:text-blue-400" />
+                  {profile.department || user?.department}
+                </span>
+              )}
+              <span>•</span>
+              <span className="flex items-center gap-1.5">
+                <Mail className="w-3.5 h-3.5 text-blue-600 dark:text-blue-400" />
+                {profile.email || user?.email}
+              </span>
+            </div>
           </div>
         </div>
       </div>

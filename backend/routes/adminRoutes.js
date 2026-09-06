@@ -38,6 +38,7 @@ import {
   getPayrollCycles,
 } from "../controllers/payrollController.js";
 import { employeeDetails } from "../controllers/employeeController.js";
+import { getPayrollForecasting, exportForecastingCSV } from "../controllers/payrollForecastingController.js";
 import { deleteLeave, updateLeaveStatus, getAllLeaves } from "../controllers/leaveController.js";
 import { deleteAttendanceRecord } from "../controllers/employeeAttendance.js";
 import { overrideAttendanceRecord } from "../controllers/attendanceManagementController.js";
@@ -93,6 +94,10 @@ adminRouter.get("/payroll/calculate-employee", verifyAdmin, calculateMonthlyPayr
 adminRouter.get("/payroll/calculate-summary", verifyAdmin, calculateMonthlyPayrollSummary);
 adminRouter.get("/payroll/employees", verifyAdmin, employeeDetails);
 adminRouter.get("/employees", verifyAdmin, employeeDetails);
+
+// Payroll Forecasting Tool (End-of-Month Lateness Deductions Projections)
+adminRouter.get("/payroll/forecasting", verifyAdmin, getPayrollForecasting);
+adminRouter.get("/payroll/forecasting/export", verifyAdmin, exportForecastingCSV);
 
 // 6-Month Attendance Penalties & Payroll Cost Impact Analytics
 adminRouter.get("/analytics/penalty-impact", verifyAdmin, getPenaltyImpactAnalytics);

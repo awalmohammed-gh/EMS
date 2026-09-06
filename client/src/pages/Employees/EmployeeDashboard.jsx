@@ -32,6 +32,8 @@ import ClockInOutCard from "../../components/ClockInOutCard";
 import ShiftStatusCard from "../../components/ShiftStatusCard";
 import WeeklyAttendanceChart from "../../components/WeeklyAttendanceChart";
 import LatenessDeductionsLineChart from "../../components/LatenessDeductionsLineChart";
+import MonthlyAttendanceCalendarCard from "../../components/MonthlyAttendanceCalendarCard";
+import EmployeeProfileIdentityBanner from "../../components/EmployeeProfileIdentityBanner";
 import { downloadPayslipPDF } from "../../utils/payslipPdfGenerator";
 
 const EmployeeDashboard = () => {
@@ -54,6 +56,8 @@ const EmployeeDashboard = () => {
   // Modals State
   const [showApplyLeaveModal, setShowApplyLeaveModal] = useState(false);
   const [showPayslipModal, setShowPayslipModal] = useState(false);
+  const [analyticsRefreshKey, setAnalyticsRefreshKey] = useState(0);
+  const [latenessThresholdAlert, setLatenessThresholdAlert] = useState(null);
 
   const { setShowToast, user, setUser, settings } = useManagement();
   const navigate = useNavigate();
@@ -81,9 +85,28 @@ const EmployeeDashboard = () => {
         }
 
         if (resolvedEmployee) {
-          localStorage.setItem("employeeData", JSON.stringify(resolvedEmployee));
+          const mergedEmployee = {
+            ...(user || {}),
+            ...resolvedEmployee,
+            avatar:
+              resolvedEmployee.avatar ||
+              resolvedEmployee.avatarUrl ||
+              resolvedEmployee.profilePicture ||
+              resolvedEmployee.profile_image_url ||
+              user?.avatar ||
+              user?.avatarUrl ||
+              user?.profilePicture ||
+              "",
+            profilePicture:
+              resolvedEmployee.profilePicture ||
+              resolvedEmployee.avatar ||
+              user?.profilePicture ||
+              user?.avatar ||
+              "",
+          };
+          localStorage.setItem("employeeData", JSON.stringify(mergedEmployee));
           if (typeof setUser === "function") {
-            setUser(resolvedEmployee);
+            setUser(mergedEmployee);
           }
         }
 
@@ -182,11 +205,15 @@ const EmployeeDashboard = () => {
   };
 
   // Clock In Function
-  const handleClockIn = async () => {
+  const handleClockIn = async (reasonParam = "") => {
     try {
       setIsLoading(true);
       setIsError(null);
-      const { data } = await attendanceClockIn();
+      const reasonToSend = typeof reasonParam === "string" ? reasonParam.trim() : "";
+      const { data } = await attendanceClockIn({
+        lateReason: reasonToSend,
+        notes: reasonToSend,
+      });
 
       if (data.success) {
         let clockInData = null;
@@ -224,6 +251,8 @@ const EmployeeDashboard = () => {
         const status =
           clockInData?.status ||
           (data.status ? (String(data.status).toLowerCase() === "late" ? "Late" : "On Time") : delayMins > 0 ? "Late" : "On Time");
+        const recordedLateReason =
+          clockInData?.lateReason || clockInData?.notes || data.lateReason || reasonToSend || "";
 
         setAttendanceData({
           date: attendanceDate,
@@ -235,6 +264,8 @@ const EmployeeDashboard = () => {
           lateMinutes: delayMins,
           latePenalty: latePenalty,
           penaltyTier: penaltyTier,
+          lateReason: recordedLateReason,
+          notes: recordedLateReason,
         });
 
         const isLate = delayMins > 0;
@@ -260,6 +291,19 @@ const EmployeeDashboard = () => {
         } catch {
           // Fallback
         }
+
+        // Real-Time Revalidation: Invalidate and refetch lateness analytics & attendance
+        window.dispatchEvent(
+          new CustomEvent("attendance-updated", {
+            detail: { action: "clock_in", data: clockInData },
+          })
+        );
+        window.dispatchEvent(
+          new CustomEvent("lateness-analytics-invalidate", {
+            detail: { action: "clock_in", data: clockInData },
+          })
+        );
+        setAnalyticsRefreshKey((prev) => prev + 1);
 
         await fetchEmployeeDashboardData();
       } else {
@@ -326,6 +370,18 @@ const EmployeeDashboard = () => {
         } catch {
           // Fallback
         }
+
+        window.dispatchEvent(
+          new CustomEvent("attendance-updated", {
+            detail: { action: "clock_out", data: clockOutData },
+          })
+        );
+        window.dispatchEvent(
+          new CustomEvent("lateness-analytics-invalidate", {
+            detail: { action: "clock_out", data: clockOutData },
+          })
+        );
+        setAnalyticsRefreshKey((prev) => prev + 1);
 
         await fetchEmployeeDashboardData();
       } else {
@@ -601,43 +657,83 @@ const EmployeeDashboard = () => {
 
   return (
     <div className="w-full max-w-7xl mx-auto p-4 sm:p-6 lg:p-8 space-y-6 overflow-x-hidden">
-      {/* Top Header Row with Actions */}
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-        <div>
-          <h1 className="text-2xl sm:text-3xl font-extrabold tracking-tight text-[#0B1E48] dark:text-white">
-            Employee Dashboard
-          </h1>
-          <p className="text-sm font-medium text-slate-500 dark:text-slate-400 mt-1">
-            Real-time shift clocking, attendance telemetry, and monthly balance metrics
-          </p>
-        </div>
-
-        <div className="flex items-center gap-3">
-          <button
-            id="btn-sync-attendance"
-            type="button"
-            onClick={handleSyncAttendance}
-            disabled={isSyncingAttendance}
-            className="flex items-center gap-1.5 px-3.5 py-2 rounded-xl text-xs font-semibold text-[#002185] dark:text-blue-400 bg-blue-50 dark:bg-blue-950/40 hover:bg-blue-100 dark:hover:bg-blue-900/50 border border-blue-100 dark:border-blue-800/60 transition-colors cursor-pointer disabled:opacity-60 shadow-sm"
-            title="Re-evaluate lateness delay and tiered penalty calculations for current pay period"
-          >
-            <RefreshCw
-              className={`w-3.5 h-3.5 ${
-                isSyncingAttendance ? "animate-spin text-[#002185] dark:text-blue-400" : "text-[#002185] dark:text-blue-400"
-              }`}
-            />
-            <span>{isSyncingAttendance ? "Updating..." : "Refresh Attendance"}</span>
-          </button>
-          <span
-            className={`px-3 py-1.5 rounded-xl text-xs font-medium ${accountBadge.className}`}
-          >
-            {accountBadge.label}
-          </span>
-        </div>
-      </div>
 
       {/* Main Dashboard Overview Body */}
       <div className="space-y-6">
+        {/* Employee Profile Visual Identity & Attendance Status Header Banner */}
+        <EmployeeProfileIdentityBanner
+          employeeData={dashboardData?.employee || user}
+          todayAttendance={attendanceData}
+        />
+
+        {/* Visual Threshold Warning Banner for Employee Dashboard */}
+        {latenessThresholdAlert &&
+          (latenessThresholdAlert.isWarningExceeded ||
+            latenessThresholdAlert.isLimitExceeded) && (
+            <div
+              className={`p-4 rounded-2xl border flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3.5 transition-all shadow-none ${
+                latenessThresholdAlert.isLimitExceeded
+                  ? "bg-rose-50/90 dark:bg-rose-950/40 border-rose-300 dark:border-rose-800 text-rose-900 dark:text-rose-200"
+                  : "bg-amber-50/90 dark:bg-amber-950/40 border-amber-300 dark:border-amber-800 text-amber-900 dark:text-amber-200"
+              }`}
+            >
+              <div className="flex items-start gap-3">
+                <div
+                  className={`p-2 rounded-xl shrink-0 mt-0.5 ${
+                    latenessThresholdAlert.isLimitExceeded
+                      ? "bg-rose-500/15 text-rose-600 dark:text-rose-400 border border-rose-500/30"
+                      : "bg-amber-500/15 text-amber-600 dark:text-amber-400 border border-amber-500/30"
+                  }`}
+                >
+                  <AlertTriangle className="w-5 h-5 animate-pulse" />
+                </div>
+                <div className="space-y-0.5">
+                  <div className="flex items-center gap-2 flex-wrap">
+                    <h4 className="text-xs sm:text-sm font-bold tracking-tight">
+                      {latenessThresholdAlert.isLimitExceeded
+                        ? "Monthly Lateness Penalty Limit Exceeded"
+                        : "Monthly Lateness Penalty Threshold Warning"}
+                    </h4>
+                    <span
+                      className={`text-[10px] font-black uppercase px-2 py-0.5 rounded-full border ${
+                        latenessThresholdAlert.isLimitExceeded
+                          ? "bg-rose-100 text-rose-800 border-rose-300 dark:bg-rose-900/60 dark:text-rose-200 dark:border-rose-700"
+                          : "bg-amber-100 text-amber-800 border-amber-300 dark:bg-amber-900/60 dark:text-amber-200 dark:border-amber-700"
+                      }`}
+                    >
+                      {latenessThresholdAlert.usagePercent}% Of Cap
+                    </span>
+                  </div>
+                  <p className="text-xs opacity-90 leading-relaxed">
+                    Accumulated lateness penalties for this month have reached{" "}
+                    <strong>
+                      GH₵{Number(latenessThresholdAlert.currentDeductions || 0).toFixed(2)}
+                    </strong>
+                    , reaching the predefined company policy threshold (
+                    <strong>{latenessThresholdAlert.warningThresholdPercent}%</strong> warning limit at{" "}
+                    <strong>
+                      GH₵{Number(latenessThresholdAlert.warningThresholdAmount || 0).toFixed(2)}
+                    </strong>
+                    {latenessThresholdAlert.hasBaseSalary
+                      ? ` of the ${latenessThresholdAlert.maxPenaltyPercent}% basic salary cap of GH₵${Number(latenessThresholdAlert.penaltyLimit || 0).toFixed(2)}`
+                      : ` of GH₵${Number(latenessThresholdAlert.penaltyLimit || 0).toFixed(2)}`}
+                    ).
+                  </p>
+                </div>
+              </div>
+              <a
+                href="#lateness-deductions-line-chart-card"
+                className={`text-xs font-semibold px-3 py-1.5 rounded-xl border whitespace-nowrap self-end sm:self-auto transition cursor-pointer ${
+                  latenessThresholdAlert.isLimitExceeded
+                    ? "bg-rose-600 hover:bg-rose-700 text-white border-rose-600"
+                    : "bg-amber-600 hover:bg-amber-700 text-white border-amber-600"
+                }`}
+              >
+                View Audit
+              </a>
+            </div>
+          )}
+
         {/* Real-time Dynamic Shift Attendance Status Card */}
         <ShiftStatusCard
           attendanceData={attendanceData}
@@ -697,11 +793,23 @@ const EmployeeDashboard = () => {
           subtitle="Monitor weekly attendance patterns and total hours worked against shift requirements"
         />
 
+        {/* Visual Monthly Attendance Calendar Component (Present, Late, Absent at a glance) */}
+        <MonthlyAttendanceCalendarCard
+          attendanceLogs={dashboardData?.attendanceRecords || dashboardData?.attendanceLogs || []}
+          employeeId={user?._id || user?.id}
+          role="employee"
+          title="My Monthly Attendance Calendar"
+          subtitle="Visual monthly attendance status (Present, Late, Absent) at a glance with daily shift details"
+          refreshKey={analyticsRefreshKey}
+        />
+
         {/* Lateness Deductions Recharts Line Chart for Current Payroll Month */}
         <LatenessDeductionsLineChart
           employeeId={user?._id || user?.id}
           title="My Monthly Lateness Deductions"
           subtitle="Visualize your daily and cumulative lateness penalty deductions over the current payroll month"
+          refreshKey={analyticsRefreshKey}
+          onThresholdChange={setLatenessThresholdAlert}
         />
 
         {/* Attendance Summary & Leave Balance */}

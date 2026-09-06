@@ -4,24 +4,17 @@ import { motion, AnimatePresence } from "framer-motion";
 import {
   Bell,
   CheckCheck,
-  CalendarCheck,
-  Info,
-  Clock,
-  Sparkles,
   X,
   ArrowRight,
   RefreshCw,
   Check,
-  DollarSign,
-  Megaphone,
   Trash2,
   AlertCircle,
-  Eye,
-  EyeOff,
   CheckCircle2,
 } from "lucide-react";
 import { useNotificationManager } from "../services/notificationService";
 import { AnnouncementModal } from "./modal/AnnouncementModal";
+import { NotificationItem } from "./NotificationItem";
 
 export const NotificationBell = ({ role = "admin", className = "", userId }) => {
   const navigate = useNavigate();
@@ -121,45 +114,6 @@ export const NotificationBell = ({ role = "admin", className = "", userId }) => 
       return past.toLocaleDateString("en-GH", { month: "short", day: "numeric" });
     } catch {
       return "Recently";
-    }
-  };
-
-  // Get icon for notification category
-  const getNotificationIcon = (item) => {
-    if (item.type === "announcement" || item.category === "announcement") {
-      return <Megaphone className="w-4 h-4 text-[#ff5500]" />;
-    }
-    switch (item.category) {
-      case "leave":
-        return <CalendarCheck className="w-4 h-4 text-[#ff5500]" />;
-      case "payroll":
-      case "payslip":
-        return <DollarSign className="w-4 h-4 text-[#16A34A]" />;
-      case "attendance":
-        return <Clock className="w-4 h-4 text-[#002185] dark:text-blue-400" />;
-      case "system":
-        return <Sparkles className="w-4 h-4 text-[#002185] dark:text-blue-400" />;
-      default:
-        return <Info className="w-4 h-4 text-[#002185] dark:text-blue-400" />;
-    }
-  };
-
-  const getIconBg = (item) => {
-    if (item.type === "announcement" || item.category === "announcement") {
-      return "bg-[#ff5500]/10 border-[#ff5500]/20";
-    }
-    switch (item.category) {
-      case "leave":
-        return "bg-[#ff5500]/10 border-[#ff5500]/20";
-      case "payroll":
-      case "payslip":
-        return "bg-[#16A34A]/10 border-[#16A34A]/20";
-      case "attendance":
-        return "bg-[#002185]/10 border-[#002185]/20 dark:bg-blue-500/20 dark:border-blue-500/30";
-      case "system":
-        return "bg-[#002185]/10 border-[#002185]/20 dark:bg-blue-500/20 dark:border-blue-500/30";
-      default:
-        return "bg-[#F1F5F9] dark:bg-slate-800 border-[#E2E8F0] dark:border-slate-700";
     }
   };
 
@@ -487,146 +441,17 @@ export const NotificationBell = ({ role = "admin", className = "", userId }) => 
                   </div>
                 ) : (
                   <AnimatePresence mode="popLayout">
-                    {filteredList.map((item) => {
-                      const itemId = item._id || item.id;
-                      const isItemRead = Boolean(item.is_read || item.unread === false);
-                      const isPayroll =
-                        item.category === "payroll" || item.type === "payroll_alert" || item.category === "payslip";
-                      const actionTargetUrl =
-                        item.action_url ||
-                        item.actionUrl ||
-                        (isPayroll ? (role === "admin" ? "/admin/dashboard/payslips" : "/employee/dashboard/payslips") : "");
-                      const actionBtnLabel = item.action_label || item.actionLabel || (isPayroll ? "View Payslip" : "View Details");
-
-                      return (
-                        <motion.div
-                          layout
-                          key={itemId}
-                          initial={{ opacity: 0, y: 6 }}
-                          animate={{ opacity: 1, y: 0 }}
-                          exit={{ opacity: 0, scale: 0.95, height: 0, marginBottom: 0, padding: 0 }}
-                          transition={{ duration: 0.18, ease: "easeOut" }}
-                          onClick={() => handleItemClick(item)}
-                          className={`p-4 transition-colors cursor-pointer flex gap-3 group relative ${
-                            isPayroll
-                              ? !isItemRead
-                                ? "bg-emerald-50/50 dark:bg-emerald-950/25 border-l-3 border-emerald-500 hover:bg-emerald-50/80 dark:hover:bg-emerald-950/40"
-                                : "bg-white dark:bg-slate-900 opacity-90 hover:bg-[#F8FAFC] dark:hover:bg-slate-800/60"
-                              : !isItemRead
-                              ? "bg-[#002185]/[0.03] dark:bg-blue-500/[0.06] border-l-3 border-[#002185] dark:border-blue-500 hover:bg-[#002185]/[0.06]"
-                              : "bg-white dark:bg-slate-900 opacity-80 hover:opacity-100 hover:bg-[#F8FAFC] dark:hover:bg-slate-800/60"
-                          }`}
-                        >
-                          {/* Category Icon */}
-                          <div
-                            className={`w-9 h-9 rounded-xl border flex items-center justify-center shrink-0 mt-0.5 ${getIconBg(
-                              item
-                            )}`}
-                          >
-                            {getNotificationIcon(item)}
-                          </div>
-
-                          {/* Content */}
-                          <div className="flex-1 min-w-0 pr-8">
-                            <div className="flex items-center gap-1.5 mb-1 flex-wrap">
-                              <h4
-                                className={`text-xs truncate ${
-                                  !isItemRead
-                                    ? "font-bold text-[#002185] dark:text-blue-400"
-                                    : "font-semibold text-[#0F172A] dark:text-slate-200"
-                                }`}
-                              >
-                                {item.title}
-                              </h4>
-
-                              {/* Category Badges */}
-                              {isPayroll && (
-                                <span className="inline-flex items-center px-1.5 py-0.2 rounded text-[10px] font-bold bg-emerald-100 dark:bg-emerald-950/80 text-emerald-800 dark:text-emerald-300 border border-emerald-200 dark:border-emerald-800">
-                                  Payslip
-                                </span>
-                              )}
-
-                              {/* Read/Unread Status Tag */}
-                              {!isItemRead ? (
-                                <span className="inline-flex items-center gap-1 px-1.5 py-0.2 rounded text-[10px] font-bold bg-[#ff5500]/10 text-[#ff5500] border border-[#ff5500]/20">
-                                  <span className="w-1.5 h-1.5 rounded-full bg-[#ff5500] animate-pulse" />
-                                  Unread
-                                </span>
-                              ) : (
-                                <span className="inline-flex items-center gap-0.5 px-1.5 py-0.2 rounded text-[10px] font-medium bg-slate-100 dark:bg-slate-800 text-slate-500 dark:text-slate-400">
-                                  <Check className="w-2.5 h-2.5" />
-                                  Read
-                                </span>
-                              )}
-                            </div>
-
-                            <p className="text-xs text-[#64748B] dark:text-slate-400 leading-relaxed line-clamp-2">
-                              {item.message}
-                            </p>
-
-                            {/* Action Row */}
-                            <div className="flex items-center justify-between gap-2 mt-2 pt-1 border-t border-slate-100 dark:border-slate-800/60">
-                              <span className="text-[10px] text-[#94A3B8] dark:text-slate-500 font-medium">
-                                {getRelativeTime(item.created_at || item.createdAt || item.timestamp)}
-                              </span>
-
-                              <div className="flex items-center gap-2">
-                                {/* Explicit Mark Read / Unread Status Toggle Button */}
-                                <button
-                                  type="button"
-                                  onClick={(e) => handleToggleRead(e, item)}
-                                  className="inline-flex items-center gap-1 px-2 py-0.5 rounded text-[10px] font-semibold text-slate-600 dark:text-slate-300 bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 dark:hover:bg-slate-700 transition-colors cursor-pointer"
-                                  title={isItemRead ? "Mark as unread" : "Mark as read"}
-                                >
-                                  {isItemRead ? (
-                                    <>
-                                      <EyeOff className="w-3 h-3 text-slate-400" />
-                                      <span>Mark unread</span>
-                                    </>
-                                  ) : (
-                                    <>
-                                      <Eye className="w-3 h-3 text-emerald-600 dark:text-emerald-400" />
-                                      <span>Mark read</span>
-                                    </>
-                                  )}
-                                </button>
-
-                                {/* Primary Action Target (View Payslip / Announcement) */}
-                                {(actionTargetUrl || item.type === "announcement" || item.category === "announcement" || isPayroll) && (
-                                  <button
-                                    type="button"
-                                    onClick={(e) => {
-                                      e.stopPropagation();
-                                      handleItemClick(item);
-                                    }}
-                                    className={`inline-flex items-center gap-1 text-[11px] font-bold transition-colors ${
-                                      isPayroll
-                                        ? "text-emerald-600 dark:text-emerald-400 hover:text-emerald-700 dark:hover:text-emerald-300"
-                                        : "text-[#002185] dark:text-blue-400 hover:text-[#ff5500] dark:hover:text-[#ff5500]"
-                                    }`}
-                                  >
-                                    <span>{actionBtnLabel}</span>
-                                    <ArrowRight className="w-3 h-3" />
-                                  </button>
-                                )}
-                              </div>
-                            </div>
-                          </div>
-
-                          {/* Quick Dismiss / Close Button (Top Right) */}
-                          <div className="absolute top-2.5 right-2.5 flex items-center gap-1">
-                            <button
-                              type="button"
-                              onClick={(e) => handleDismiss(e, item)}
-                              title={isPayroll ? "Dismiss payslip alert" : "Dismiss notification"}
-                              className="p-1 rounded-lg text-[#94A3B8] dark:text-slate-500 hover:text-[#DC2626] dark:hover:text-red-400 hover:bg-[#FEF2F2] dark:hover:bg-red-950/30 transition-colors opacity-70 group-hover:opacity-100 cursor-pointer"
-                            >
-                              <X className="w-3.5 h-3.5" />
-                            </button>
-                          </div>
-                        </motion.div>
-                      );
-                    })}
+                    {filteredList.map((item) => (
+                      <NotificationItem
+                        key={item._id || item.id}
+                        item={item}
+                        role={role}
+                        onItemClick={handleItemClick}
+                        onToggleRead={handleToggleRead}
+                        onDismiss={handleDismiss}
+                        formatRelativeTime={getRelativeTime}
+                      />
+                    ))}
                   </AnimatePresence>
                 )}
               </div>

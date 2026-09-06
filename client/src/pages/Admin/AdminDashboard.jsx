@@ -37,6 +37,7 @@ import DepartmentStatusVisualizer from "../../components/DepartmentStatusVisuali
 import AnnouncementBoard from "../../components/AnnouncementBoard";
 import DashboardMetricsSkeleton from "../../components/DashboardMetricsSkeleton";
 import LatenessDeductionsLineChart from "../../components/LatenessDeductionsLineChart";
+import MonthlyAttendanceCalendarCard from "../../components/MonthlyAttendanceCalendarCard";
 import PenaltyPayrollImpactChart from "../../components/PenaltyPayrollImpactChart";
 import RecentActivityFeed from "../../components/RecentActivityFeed";
 import DashboardSummaryMetrics from "../../components/DashboardSummaryMetrics";
@@ -45,6 +46,7 @@ import AddEmployee from "../../components/modal/AddEmployee";
 import RecordAttendanceModal from "../../components/modal/RecordAttendanceModal";
 import PayslipsModal from "../../components/modal/PayslipsModal";
 import DashboardDataSummarySection from "../../components/DashboardDataSummarySection";
+import Avatar from "../../components/Avatar";
 import { useManagement } from "../../context/ManagementContextProvider";
 
 const AdminDashboard = () => {
@@ -784,9 +786,13 @@ const AdminDashboard = () => {
                     className="p-4 rounded-xl border border-slate-200/80 dark:border-slate-800/80 bg-slate-50/50 dark:bg-slate-950/40 hover:border-blue-500/40 dark:hover:border-blue-500/40 transition-all flex flex-col sm:flex-row sm:items-center justify-between gap-3"
                   >
                     <div className="flex items-start sm:items-center gap-3">
-                      <div className="w-10 h-10 rounded-xl bg-blue-500/10 text-blue-600 dark:text-blue-400 font-bold text-sm flex items-center justify-center shrink-0 border border-blue-500/20">
-                        {emp.fullName ? emp.fullName.charAt(0) : "E"}
-                      </div>
+                      <Avatar
+                        src={emp.avatar || emp.avatarUrl || emp.profilePicture || emp.profile_image_url}
+                        name={emp.fullName || "Employee"}
+                        size="md"
+                        shape="rounded"
+                        className="w-10 h-10 shrink-0 shadow-sm"
+                      />
                       <div>
                         <div className="flex items-center gap-2">
                           <h4 className="text-xs sm:text-sm font-bold text-slate-900 dark:text-white">
@@ -903,6 +909,13 @@ const AdminDashboard = () => {
 
       {/* Visualizing Total Lateness Deductions over Current Payroll Month (Recharts Line Chart) */}
       <LatenessDeductionsLineChart />
+
+      {/* Visual Monthly Attendance Status Calendar (Present, Late, Absent at a glance) */}
+      <MonthlyAttendanceCalendarCard
+        role="admin"
+        title="Workforce Monthly Attendance Calendar"
+        subtitle="Visual monthly attendance status calendar tracking workforce presence, delays, and absences at a glance"
+      />
 
       {/* 6-Month Attendance Penalty Impact Visualizer */}
       <PenaltyPayrollImpactChart />

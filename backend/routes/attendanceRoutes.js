@@ -7,6 +7,7 @@ import {
   getAllAttendance,
   getCurrentEmployee,
   getEmployeeAttendance,
+  getMonthlyAttendanceCalendar,
   getTodayAttendance,
   updateAttendanceRecord,
   excuseAttendanceRecord,
@@ -29,6 +30,8 @@ attendanceRouter.post("/clock-in", employeeAuth, clockIn);
 attendanceRouter.post("/clock-out", employeeAuth, clockOut);
 attendanceRouter.get("/today", employeeAuth, getCurrentEmployee);
 attendanceRouter.get("/attendance", employeeAuth, getEmployeeAttendance);
+attendanceRouter.get("/monthly-calendar", employeeAuth, getMonthlyAttendanceCalendar);
+attendanceRouter.get("/calendar", employeeAuth, getMonthlyAttendanceCalendar);
 attendanceRouter.get("/now", employeeAuth, getTodayAttendance);
 attendanceRouter.post("/sync", employeeAuth, syncAttendancePenalties);
 attendanceRouter.post("/sync-penalties", employeeAuth, syncAttendancePenalties);

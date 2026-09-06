@@ -5,6 +5,9 @@ import { Employee } from "../models/employeeModel.js";
 import { User } from "../models/userModel.js";
 import { Admin } from "../models/Admin.js";
 
+const isValidObjectId = (id) =>
+  id && mongoose.Types.ObjectId.isValid(id) && String(new mongoose.Types.ObjectId(id)) === String(id);
+
 // Create Employee / Staff User Account with Role Assignment (Admin-Restricted)
 export const createEmployeeAccount = async (req, res) => {
   try {

@@ -509,6 +509,13 @@ export const employeeDashboardOverview = async (req, res) => {
     if (!employee && isValidObjectId(rawEmployeeId)) {
       const userDoc = await User.findById(rawEmployeeId).lean();
       if (userDoc) {
+        const userAvatar =
+          userDoc.avatar ||
+          userDoc.avatarUrl ||
+          userDoc.profilePicture ||
+          userDoc.profile_picture ||
+          userDoc.profile_image_url ||
+          "";
         employee = {
           _id: userDoc._id,
           fullName: userDoc.fullName,
@@ -521,6 +528,11 @@ export const employeeDashboardOverview = async (req, res) => {
           department: userDoc.department || "Engineering",
           position: userDoc.position || "Staff",
           employeeId: userDoc.employeeId || "EMP-001",
+          avatar: userAvatar,
+          avatarUrl: userAvatar,
+          profilePicture: userAvatar,
+          profile_picture: userAvatar,
+          profile_image_url: userAvatar,
         };
         validObjectId = userDoc._id.toString();
       }
@@ -537,6 +549,13 @@ export const employeeDashboardOverview = async (req, res) => {
     if (!employee) {
       const anyUser = await User.findOne({ role: "employee" }).lean();
       if (anyUser) {
+        const anyAvatar =
+          anyUser.avatar ||
+          anyUser.avatarUrl ||
+          anyUser.profilePicture ||
+          anyUser.profile_picture ||
+          anyUser.profile_image_url ||
+          "";
         employee = {
           _id: anyUser._id,
           fullName: anyUser.fullName,
@@ -549,12 +568,18 @@ export const employeeDashboardOverview = async (req, res) => {
           department: anyUser.department || "Engineering",
           position: anyUser.position || "Staff",
           employeeId: anyUser.employeeId || "EMP-001",
+          avatar: anyAvatar,
+          avatarUrl: anyAvatar,
+          profilePicture: anyAvatar,
+          profile_picture: anyAvatar,
+          profile_image_url: anyAvatar,
         };
         validObjectId = anyUser._id.toString();
       }
     }
 
     if (!employee) {
+      const defaultAvatar = "https://api.dicebear.com/7.x/micah/svg?seed=Mohammed%20Awal&backgroundColor=002185";
       employee = {
         _id: rawEmployeeId || "emp_demo_001",
         employeeId: "EMP-001",
@@ -567,6 +592,11 @@ export const employeeDashboardOverview = async (req, res) => {
         status: "active",
         isActive: true,
         baseSalary: 2500,
+        avatar: defaultAvatar,
+        avatarUrl: defaultAvatar,
+        profilePicture: defaultAvatar,
+        profile_picture: defaultAvatar,
+        profile_image_url: defaultAvatar,
       };
     }
 
@@ -597,17 +627,40 @@ export const employeeDashboardOverview = async (req, res) => {
 
     // 3. Query Attendance Records (MongoDB + live store sync)
     let allAttendanceRecords = [];
-    if (validObjectId) {
-      try {
-        const dbAtt = await Attendance.find({
-          $or: [{ employee: validObjectId }, { employee: String(rawEmployeeId) }],
-        }).lean();
-        if (dbAtt && dbAtt.length > 0) {
-          allAttendanceRecords = dbAtt;
-        }
-      } catch (attErr) {
-        console.warn("DB attendance query in employee dashboard:", attErr.message);
+    const idList = [validObjectId, rawEmployeeId, employee?._id].filter(Boolean);
+    const codeList = [employee?.employeeId, "EMP00845"].filter(Boolean);
+
+    try {
+      const filterConditions = [
+        { employee: { $in: idList } },
+        { employeeId: { $in: [...codeList, ...idList.map(String)] } },
+        { userId: { $in: idList } },
+      ];
+
+      const dbAtt = await Attendance.find({
+        $or: filterConditions,
+      })
+        .sort({ date: -1, createdAt: -1 })
+        .lean();
+
+      if (dbAtt && dbAtt.length > 0) {
+        allAttendanceRecords = dbAtt.map((rec) => ({
+          ...rec,
+          employee: {
+            _id: employee?._id || validObjectId,
+            id: employee?._id || validObjectId,
+            fullName: employee?.fullName || "Employee",
+            employeeId: employee?.employeeId || rec.employeeId || "EMP-001",
+            department: employee?.department || "General",
+            position: employee?.position || "Staff",
+            email: employee?.email || "",
+            avatar: employee?.avatar || employee?.profilePicture || "",
+          },
+          employeeId: rec.employeeId || employee?.employeeId,
+        }));
       }
+    } catch (attErr) {
+      console.warn("DB attendance query in employee dashboard:", attErr.message);
     }
 
     // Merge in-memory live attendance store records
@@ -669,7 +722,8 @@ export const employeeDashboardOverview = async (req, res) => {
       workHours: todayWorkHours,
       delayMinutes: todayAttendance?.delayMinutes || todayAttendance?.lateMinutes || 0,
       latePenalty: todayAttendance?.latePenalty || 0,
-      notes: todayAttendance?.notes || "",
+      lateReason: todayAttendance?.lateReason || todayAttendance?.notes || "",
+      notes: todayAttendance?.notes || todayAttendance?.lateReason || "",
     };
 
     // 5. Month-to-Date (MTD) Attendance Calculations
@@ -912,6 +966,33 @@ export const employeeDashboardOverview = async (req, res) => {
         role: employee.role || "employee",
         status: employee.status || "active",
         isActive: employee.isActive !== false,
+        avatar:
+          employee.avatar ||
+          employee.avatarUrl ||
+          employee.profilePicture ||
+          employee.profile_picture ||
+          employee.profile_image_url ||
+          "",
+        avatarUrl:
+          employee.avatarUrl ||
+          employee.avatar ||
+          employee.profilePicture ||
+          "",
+        profilePicture:
+          employee.profilePicture ||
+          employee.avatar ||
+          employee.profile_picture ||
+          "",
+        profile_picture:
+          employee.profile_picture ||
+          employee.avatar ||
+          employee.profilePicture ||
+          "",
+        profile_image_url:
+          employee.profile_image_url ||
+          employee.avatar ||
+          employee.profilePicture ||
+          "",
       },
       overview: {
         presentDays,

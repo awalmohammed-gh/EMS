@@ -82,6 +82,23 @@ const companySettingsSchema = new mongoose.Schema(
       default: 150,
       min: 0,
     },
+    maxLatenessPenaltyDeductionPercent: {
+      type: Number,
+      default: 15,
+      min: 1,
+      max: 100,
+    },
+    latenessWarningThresholdPercent: {
+      type: Number,
+      default: 80,
+      min: 1,
+      max: 100,
+    },
+    defaultMonthlyPenaltyCap: {
+      type: Number,
+      default: 200,
+      min: 0,
+    },
     latenessTiers: {
       type: [latenessTierSchema],
       default: () => [
@@ -118,6 +135,9 @@ companySettingsSchema.statics.getSingletonSettings = async function () {
       lateTier4_amount: 75,
       lateTier5_amount: 100,
       lateTier6_amount: 150,
+      maxLatenessPenaltyDeductionPercent: 15,
+      latenessWarningThresholdPercent: 80,
+      defaultMonthlyPenaltyCap: 200,
       latenessTiers: [
         { tier: 1, name: "Tier 1 (1–30 mins)", minMinutes: 1, maxMinutes: 30, fine: 10 },
         { tier: 2, name: "Tier 2 (31–60 mins)", minMinutes: 31, maxMinutes: 60, fine: 30 },

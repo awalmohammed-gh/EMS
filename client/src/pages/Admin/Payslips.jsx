@@ -28,6 +28,7 @@ import PayrollSummaryCalculator from "../../components/PayrollSummaryCalculator"
 import MonthlyPayrollRunTable from "../../components/MonthlyPayrollRunTable";
 import PayrollCycleHistory from "../../components/PayrollCycleHistory";
 import PenaltyPayrollImpactChart from "../../components/PenaltyPayrollImpactChart";
+import PayrollForecastingTool from "../../components/PayrollForecastingTool";
 import GlobalDateRangePicker from "../../components/GlobalDateRangePicker";
 import { getAllPayslips, updatePayrollStatus, deletePayroll, getAdminPayrollSummary, namesList } from "../../apis/fontApis";
 import { downloadPayslipPDF } from "../../utils/payslipPdfGenerator";
@@ -533,6 +534,20 @@ const Payslips = () => {
         </button>
 
         <button
+          id="tab-btn-forecasting"
+          type="button"
+          onClick={() => setActiveViewTab("forecasting")}
+          className={`flex items-center gap-2 px-3.5 py-2 rounded-xl text-xs font-semibold transition-all cursor-pointer ${
+            activeViewTab === "forecasting"
+              ? "bg-white dark:bg-slate-900 text-amber-600 dark:text-amber-400 shadow-xs"
+              : "text-slate-600 hover:text-slate-900 dark:text-slate-400 dark:hover:text-slate-200"
+          }`}
+        >
+          <TrendingDown className="w-3.5 h-3.5" />
+          <span>Lateness Deduction Forecasting</span>
+        </button>
+
+        <button
           id="tab-btn-calculator"
           type="button"
           onClick={() => setActiveViewTab("calculator")}
@@ -546,6 +561,15 @@ const Payslips = () => {
           <span>Attendance & Salary Calculator</span>
         </button>
       </div>
+
+      {/* Lateness Deduction Forecasting Tool */}
+      {activeViewTab === "forecasting" && (
+        <div className="animate-in fade-in duration-200">
+          <PayrollForecastingTool
+            initialMonth={filterMonth !== "All Months" ? filterMonth : undefined}
+          />
+        </div>
+      )}
 
       {/* Automated Monthly Payroll Run & Calendar Audit */}
       {activeViewTab === "monthly-run" && (
