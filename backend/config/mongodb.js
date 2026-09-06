@@ -1,14 +1,10 @@
 import mongoose from "mongoose";
-import dns from "dns"
-
 
 let isListenersAttached = false;
 
-dns.setServers(["1.1.1.1","8.8.8.8"]);
-
 export const connectMongodb = async () => {
-  if (mongoose.connection.readyState >= 1) {
-    return mongoose.connection;
+  if (cached.conn && mongoose.connection.readyState >= 1) {
+    return cached.conn;
   }
 
   // Prevent Mongoose from buffering queries indefinitely when offline
@@ -23,28 +19,46 @@ export const connectMongodb = async () => {
     });
     mongoose.connection.on("disconnected", () => {
       console.warn("[MongoDB] Connection disconnected.");
+      if (cached) {
+        cached.conn = null;
+      }
     });
     isListenersAttached = true;
   }
 
-  const mongoUri = process.env.MONGODB_URI;
+  const mongoUri = process.env.MONGO_URI || process.env.MONGODB_URI;
   if (!mongoUri) {
-    console.warn("[MongoDB] MONGODB_URI environment variable not set. Running with database offline fallback.");
+    console.warn("[MongoDB] MONGO_URI / MONGODB_URI environment variable not set. Running with database offline fallback.");
     return null;
   }
 
-  try {
+  if (!cached.promise) {
     const baseUri = mongoUri.endsWith("/") ? mongoUri.slice(0, -1) : mongoUri;
     const uri = baseUri.includes("?") ? baseUri : `${baseUri}/employee-system`;
 
-    await mongoose.connect(uri, {
-      serverSelectionTimeoutMS: 5000,
-      connectTimeoutMS: 5000,
-      socketTimeoutMS: 45000,
-    });
-    console.log("[MongoDB] Connected to database.");
-    return mongoose.connection;
+    cached.promise = mongoose
+      .connect(uri, {
+        bufferCommands: false,
+        serverSelectionTimeoutMS: 5000,
+        connectTimeoutMS: 5000,
+        socketTimeoutMS: 45000,
+      })
+      .then((m) => {
+        console.log("[MongoDB] Connected to database.");
+        return m.connection || mongoose.connection;
+      })
+      .catch((error) => {
+        cached.promise = null;
+        console.warn("[MongoDB] Connection Error:", error.message);
+        return null;
+      });
+  }
+
+  try {
+    cached.conn = await cached.promise;
+    return cached.conn;
   } catch (error) {
+    cached.promise = null;
     console.warn("[MongoDB] Connection Error:", error.message);
     return null;
   }
@@ -54,6 +68,10 @@ export const closeMongodb = async () => {
   try {
     if (mongoose.connection.readyState !== 0) {
       await mongoose.connection.close(false);
+      if (cached) {
+        cached.conn = null;
+        cached.promise = null;
+      }
       console.log("[MongoDB] Connection gracefully closed.");
     }
   } catch (err) {

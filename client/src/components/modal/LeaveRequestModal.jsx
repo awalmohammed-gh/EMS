@@ -121,36 +121,33 @@ export const LeaveRequestModal = ({ onClose, onSuccess, initialLeaveType = "Annu
   };
 
   return (
-    <div id="leave-request-modal" className="fixed inset-0 z-50 flex items-center justify-center p-4">
-      {/* Backdrop */}
-      <div
-        id="leave-request-backdrop"
-        onClick={onClose}
-        className="absolute inset-0 bg-[#0F172A]/50 backdrop-blur-xs transition-opacity"
-      />
-
+    <div
+      id="leave-request-modal"
+      onClick={onClose}
+      className="fixed inset-0 z-50 flex items-end sm:items-center justify-center p-0 sm:p-4 bg-slate-950/60 backdrop-blur-sm animate-fade-in"
+    >
       {/* Modal Card */}
       <div
         id="leave-request-dialog"
         onClick={(e) => e.stopPropagation()}
-        className="relative z-10 w-full max-w-lg max-h-[90vh] overflow-y-auto rounded-2xl bg-[#FFFFFF] shadow-2xl border border-[#002185]/20 animate-fade-in p-6"
+        className="relative z-10 w-full max-h-[90vh] overflow-y-auto rounded-t-[28px] sm:rounded-3xl sm:max-w-lg bg-white dark:bg-slate-900 shadow-2xl border border-[#002185]/20 dark:border-slate-800 animate-fade-in p-5 sm:p-6 flex flex-col"
       >
         {/* Header */}
-        <div className="flex items-center justify-between border-b border-[#E2E8F0] pb-4 mb-5">
+        <div className="flex items-center justify-between border-b border-[#E2E8F0] dark:border-slate-800 pb-4 mb-5">
           <div className="flex items-center gap-3">
-            <div className="p-2.5 rounded-xl bg-[#002185]/5 text-[#002185] shrink-0">
+            <div className="p-2.5 rounded-xl bg-[#002185]/5 dark:bg-blue-950/50 text-[#002185] dark:text-blue-400 shrink-0">
               <CalendarDays className="w-5 h-5" />
             </div>
             <div>
-              <h2 className="text-lg font-bold text-[#0F172A]">Request Leave</h2>
-              <p className="text-xs text-[#64748B]">Submit your time-off request with dates and justification</p>
+              <h2 className="text-base sm:text-lg font-bold text-[#0F172A] dark:text-white">Request Leave</h2>
+              <p className="text-[11px] sm:text-xs text-[#64748B] dark:text-slate-400">Submit your time-off request with dates and justification</p>
             </div>
           </div>
           <button
             id="close-leave-modal-btn"
             type="button"
             onClick={onClose}
-            className="p-1.5 rounded-lg text-[#64748B] hover:text-[#ff5500] hover:bg-[#F8FAFC] transition-colors cursor-pointer"
+            className="p-1.5 rounded-lg text-[#64748B] hover:text-[#ff5500] hover:bg-[#F8FAFC] dark:hover:bg-slate-800 transition-colors cursor-pointer"
           >
             <X className="w-5 h-5" />
           </button>
@@ -267,12 +264,12 @@ export const LeaveRequestModal = ({ onClose, onSuccess, initialLeaveType = "Annu
           </div>
 
           {/* Actions */}
-          <div className="flex items-center justify-end gap-3 pt-3 border-t border-[#E2E8F0]">
+          <div className="flex flex-col-reverse sm:flex-row sm:items-center sm:justify-end gap-2.5 sm:gap-3 pt-3 border-t border-[#E2E8F0] dark:border-slate-800">
             <button
               id="modal-cancel-leave-btn"
               type="button"
               onClick={onClose}
-              className="px-4 py-2 text-xs font-bold text-[#64748B] hover:text-[#0F172A] hover:bg-[#F8FAFC] rounded-xl transition-colors cursor-pointer"
+              className="w-full sm:w-auto px-4 py-2.5 text-xs font-bold text-[#64748B] hover:text-[#0F172A] dark:hover:text-white hover:bg-[#F8FAFC] dark:hover:bg-slate-800 rounded-xl transition-colors cursor-pointer text-center"
             >
               Cancel
             </button>
@@ -280,7 +277,7 @@ export const LeaveRequestModal = ({ onClose, onSuccess, initialLeaveType = "Annu
               id="modal-submit-leave-btn"
               type="submit"
               disabled={isLoading}
-              className="px-5 py-2 text-xs font-bold text-white bg-[#002185] hover:bg-[#ff5500] rounded-xl shadow-xs transition-all duration-200 flex items-center gap-2 cursor-pointer disabled:opacity-50"
+              className="w-full sm:w-auto px-5 py-2.5 text-xs font-bold text-white bg-[#002185] hover:bg-[#ff5500] rounded-xl shadow-xs transition-all duration-200 flex items-center justify-center gap-2 cursor-pointer disabled:opacity-50"
             >
               {isLoading ? (
                 <>

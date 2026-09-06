@@ -7,6 +7,7 @@ import {
   getAllAttendance,
   getCurrentEmployee,
   getEmployeeAttendance,
+  getMonthlyAttendanceCalendar,
   getTodayAttendance,
   updateAttendanceRecord,
   excuseAttendanceRecord,
@@ -19,6 +20,7 @@ import {
   syncAttendancePenalties,
   getPerformanceMetrics,
 } from "../controllers/employeeAttendance.js";
+import { overrideAttendanceRecord } from "../controllers/attendanceManagementController.js";
 import { verifyAdmin } from "../middleware/authAdmin.js";
 
 const attendanceRouter = express.Router();
@@ -28,6 +30,8 @@ attendanceRouter.post("/clock-in", employeeAuth, clockIn);
 attendanceRouter.post("/clock-out", employeeAuth, clockOut);
 attendanceRouter.get("/today", employeeAuth, getCurrentEmployee);
 attendanceRouter.get("/attendance", employeeAuth, getEmployeeAttendance);
+attendanceRouter.get("/monthly-calendar", employeeAuth, getMonthlyAttendanceCalendar);
+attendanceRouter.get("/calendar", employeeAuth, getMonthlyAttendanceCalendar);
 attendanceRouter.get("/now", employeeAuth, getTodayAttendance);
 attendanceRouter.post("/sync", employeeAuth, syncAttendancePenalties);
 attendanceRouter.post("/sync-penalties", employeeAuth, syncAttendancePenalties);
@@ -36,6 +40,9 @@ attendanceRouter.post("/sync-penalties", employeeAuth, syncAttendancePenalties);
 attendanceRouter.get("/all", verifyAdmin, getAllAttendance);
 attendanceRouter.post("/admin/sync", verifyAdmin, syncAttendancePenalties);
 attendanceRouter.post("/admin/sync-penalties", verifyAdmin, syncAttendancePenalties);
+attendanceRouter.post("/override", verifyAdmin, overrideAttendanceRecord);
+attendanceRouter.put("/override/:id", verifyAdmin, overrideAttendanceRecord);
+attendanceRouter.put("/:id/override", verifyAdmin, overrideAttendanceRecord);
 attendanceRouter.put("/record/:id", verifyAdmin, updateAttendanceRecord);
 attendanceRouter.put("/record/:id/excuse", verifyAdmin, excuseAttendanceRecord);
 attendanceRouter.put("/record/:id/flag", verifyAdmin, flagAttendanceRecord);

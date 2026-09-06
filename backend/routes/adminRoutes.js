@@ -16,7 +16,10 @@ import {
 import { getSettings, getPenaltySettings, updatePenaltySettings, getAuditLogs } from "../controllers/adminSettingsController.js";
 import { createEmployeeAccount } from "../controllers/employeeAuthentication.js";
 import { bulkUploadBiometricAttendance } from "../controllers/employeeAttendance.js";
-import { getPenaltyImpactAnalytics } from "../controllers/analyticsController.js";
+import {
+  getPenaltyImpactAnalytics,
+  getCurrentMonthLatenessAnalytics,
+} from "../controllers/analyticsController.js";
 import { getRecentActivityFeed } from "../controllers/dashboardController.js";
 import {
   getAnnouncements,
@@ -35,8 +38,10 @@ import {
   getPayrollCycles,
 } from "../controllers/payrollController.js";
 import { employeeDetails } from "../controllers/employeeController.js";
+import { getPayrollForecasting, exportForecastingCSV } from "../controllers/payrollForecastingController.js";
 import { deleteLeave, updateLeaveStatus, getAllLeaves } from "../controllers/leaveController.js";
 import { deleteAttendanceRecord } from "../controllers/employeeAttendance.js";
+import { overrideAttendanceRecord } from "../controllers/attendanceManagementController.js";
 import { verifyAdmin } from "../middleware/authAdmin.js";
 
 const adminRouter = express.Router();
@@ -90,9 +95,17 @@ adminRouter.get("/payroll/calculate-summary", verifyAdmin, calculateMonthlyPayro
 adminRouter.get("/payroll/employees", verifyAdmin, employeeDetails);
 adminRouter.get("/employees", verifyAdmin, employeeDetails);
 
+// Payroll Forecasting Tool (End-of-Month Lateness Deductions Projections)
+adminRouter.get("/payroll/forecasting", verifyAdmin, getPayrollForecasting);
+adminRouter.get("/payroll/forecasting/export", verifyAdmin, exportForecastingCSV);
+
 // 6-Month Attendance Penalties & Payroll Cost Impact Analytics
 adminRouter.get("/analytics/penalty-impact", verifyAdmin, getPenaltyImpactAnalytics);
 adminRouter.get("/analytics/penalties-impact", verifyAdmin, getPenaltyImpactAnalytics);
+
+// Current Month Lateness Deductions Recharts Analytics
+adminRouter.get("/analytics/monthly-lateness-deductions", verifyAdmin, getCurrentMonthLatenessAnalytics);
+adminRouter.get("/analytics/lateness-deductions", verifyAdmin, getCurrentMonthLatenessAnalytics);
 
 // Real-time Recent Activity Feed (Attendance & Payroll)
 adminRouter.get("/dashboard/recent-activity", verifyAdmin, getRecentActivityFeed);
@@ -101,6 +114,12 @@ adminRouter.get("/recent-activity", verifyAdmin, getRecentActivityFeed);
 // Biometric Attendance Bulk Upload
 adminRouter.post("/attendance/bulk-upload", verifyAdmin, bulkUploadBiometricAttendance);
 adminRouter.post("/attendance/biometric-upload", verifyAdmin, bulkUploadBiometricAttendance);
+
+// Attendance Manual Override & Retroactive Adjustment
+adminRouter.post("/attendance/override", verifyAdmin, overrideAttendanceRecord);
+adminRouter.put("/attendance/:id/override", verifyAdmin, overrideAttendanceRecord);
+adminRouter.post("/attendance/manual-record", verifyAdmin, overrideAttendanceRecord);
+adminRouter.put("/attendance/record/:id", verifyAdmin, overrideAttendanceRecord);
 
 // Admin Announcement Endpoints (POST /api/admin/announcements, GET, DELETE, PUT)
 adminRouter.get("/announcements", verifyAdmin, getAnnouncements);

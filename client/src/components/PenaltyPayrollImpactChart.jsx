@@ -1,4 +1,5 @@
 import { useState, useEffect, useCallback, useMemo } from "react";
+import { motion } from "framer-motion";
 import {
   ResponsiveContainer,
   ComposedChart,
@@ -37,7 +38,7 @@ const CustomPenaltyTooltip = ({ active, payload, label }) => {
   return (
     <div
       id="penalty-chart-tooltip"
-      className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 p-4 rounded-xl shadow-xl text-xs space-y-2.5 min-w-[240px]"
+      className="bg-white dark:bg-slate-900 border border-slate-200/70 dark:border-slate-800 p-4 rounded-xl shadow-md dark:shadow-none text-xs space-y-2.5 min-w-[240px]"
     >
       <div className="border-b border-slate-100 dark:border-slate-800 pb-2 flex items-center justify-between">
         <span className="font-bold text-sm text-[#002185] dark:text-blue-400">
@@ -207,12 +208,15 @@ export const PenaltyPayrollImpactChart = ({ className = "", startDate = "", endD
   const avgImpactRate = summary?.avgImpactRate ?? summary?.avgPenaltyImpactRate ?? 0;
 
   return (
-    <div
+    <motion.div
       id="attendance-penalty-impact-container"
-      className={`bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl p-4 sm:p-5 shadow-xs space-y-5 overflow-hidden w-full ${className}`}
+      initial={{ opacity: 0, y: 8 }}
+      animate={{ opacity: 1, y: 0 }}
+      transition={{ duration: 0.25, ease: "easeOut" }}
+      className={`bg-white dark:bg-[#111927] border border-slate-200/70 dark:border-slate-800 rounded-2xl p-4 sm:p-5 shadow-none space-y-5 overflow-hidden w-full ${className}`}
     >
       {/* Header & Controls */}
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-b border-slate-100 dark:border-slate-800 pb-4">
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-b border-slate-100 dark:border-slate-800/80 pb-4">
         <div>
           <div className="flex items-center gap-2">
             <div className="p-2 rounded-xl bg-amber-50 dark:bg-amber-950/40 text-amber-600 dark:text-amber-400 shrink-0">
@@ -231,13 +235,13 @@ export const PenaltyPayrollImpactChart = ({ className = "", startDate = "", endD
 
         {/* View Mode Controls */}
         <div className="flex items-center gap-2 self-start sm:self-auto flex-wrap max-w-full overflow-x-auto pb-1 sm:pb-0">
-          <div className="flex items-center bg-slate-100 dark:bg-slate-800 p-1 rounded-xl text-xs font-semibold shrink-0">
+          <div className="flex items-center bg-slate-100 dark:bg-slate-800 p-1 rounded-xl text-xs font-semibold shrink-0 border border-slate-200/70 dark:border-slate-700/60">
             <button
               id="btn-view-penalties-breakdown"
               onClick={() => setViewMode("penalties_breakdown")}
               className={`px-2.5 sm:px-3 py-1.5 rounded-lg transition-all cursor-pointer whitespace-nowrap ${
                 viewMode === "penalties_breakdown"
-                  ? "bg-white dark:bg-slate-700 text-[#002185] dark:text-blue-400 shadow-xs"
+                  ? "bg-white dark:bg-slate-700 text-[#002185] dark:text-blue-400 shadow-none font-bold"
                   : "text-slate-600 dark:text-slate-400 hover:text-slate-900"
               }`}
             >
@@ -248,7 +252,7 @@ export const PenaltyPayrollImpactChart = ({ className = "", startDate = "", endD
               onClick={() => setViewMode("gross_vs_net")}
               className={`px-2.5 sm:px-3 py-1.5 rounded-lg transition-all cursor-pointer whitespace-nowrap ${
                 viewMode === "gross_vs_net"
-                  ? "bg-white dark:bg-slate-700 text-[#002185] dark:text-blue-400 shadow-xs"
+                  ? "bg-white dark:bg-slate-700 text-[#002185] dark:text-blue-400 shadow-none font-bold"
                   : "text-slate-600 dark:text-slate-400 hover:text-slate-900"
               }`}
             >
@@ -259,7 +263,7 @@ export const PenaltyPayrollImpactChart = ({ className = "", startDate = "", endD
               onClick={() => setViewMode("impact_ratio")}
               className={`px-2.5 sm:px-3 py-1.5 rounded-lg transition-all cursor-pointer whitespace-nowrap ${
                 viewMode === "impact_ratio"
-                  ? "bg-white dark:bg-slate-700 text-[#002185] dark:text-blue-400 shadow-xs"
+                  ? "bg-white dark:bg-slate-700 text-[#002185] dark:text-blue-400 shadow-none font-bold"
                   : "text-slate-600 dark:text-slate-400 hover:text-slate-900"
               }`}
             >
@@ -272,7 +276,7 @@ export const PenaltyPayrollImpactChart = ({ className = "", startDate = "", endD
       {/* 5 Dynamic KPI Metric Cards */}
       <div className="grid grid-cols-1 xs:grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-2.5 sm:gap-3 overflow-hidden">
         {/* Card 1: 6-MO TOTAL PENALTIES */}
-        <div id="kpi-card-total-penalties" className="bg-rose-50/70 dark:bg-rose-950/20 border border-rose-100 dark:border-rose-900/30 rounded-xl p-3 sm:p-3.5 overflow-hidden">
+        <div id="kpi-card-total-penalties" className="bg-rose-50/70 dark:bg-rose-950/20 border border-rose-200/70 dark:border-rose-900/30 rounded-xl p-3 sm:p-3.5 overflow-hidden shadow-none">
           <div className="flex items-center justify-between mb-1">
             <span className="text-[10px] sm:text-[11px] font-semibold text-rose-700 dark:text-rose-400 uppercase tracking-wider truncate">
               6-Mo Total Penalties
@@ -288,7 +292,7 @@ export const PenaltyPayrollImpactChart = ({ className = "", startDate = "", endD
         </div>
 
         {/* Card 2: UNEXCUSED ABSENCES */}
-        <div id="kpi-card-unexcused-absences" className="bg-amber-50/70 dark:bg-amber-950/20 border border-amber-100 dark:border-amber-900/30 rounded-xl p-3 sm:p-3.5 overflow-hidden">
+        <div id="kpi-card-unexcused-absences" className="bg-amber-50/70 dark:bg-amber-950/20 border border-amber-200/70 dark:border-amber-900/30 rounded-xl p-3 sm:p-3.5 overflow-hidden shadow-none">
           <div className="flex items-center justify-between mb-1">
             <span className="text-[10px] sm:text-[11px] font-semibold text-amber-700 dark:text-amber-400 uppercase tracking-wider truncate">
               Unexcused Absences
@@ -304,7 +308,7 @@ export const PenaltyPayrollImpactChart = ({ className = "", startDate = "", endD
         </div>
 
         {/* Card 3: LATENESS TIERS */}
-        <div id="kpi-card-lateness-tiers" className="bg-blue-50/70 dark:bg-blue-950/20 border border-blue-100 dark:border-blue-900/30 rounded-xl p-3 sm:p-3.5 overflow-hidden">
+        <div id="kpi-card-lateness-tiers" className="bg-blue-50/70 dark:bg-blue-950/20 border border-blue-200/70 dark:border-blue-900/30 rounded-xl p-3 sm:p-3.5 overflow-hidden shadow-none">
           <div className="flex items-center justify-between mb-1">
             <span className="text-[10px] sm:text-[11px] font-semibold text-blue-700 dark:text-blue-400 uppercase tracking-wider truncate">
               Lateness Tiers
@@ -320,7 +324,7 @@ export const PenaltyPayrollImpactChart = ({ className = "", startDate = "", endD
         </div>
 
         {/* Card 4: PENALTIES WAIVED */}
-        <div id="kpi-card-penalties-waived" className="bg-emerald-50/70 dark:bg-emerald-950/20 border border-emerald-100 dark:border-emerald-900/30 rounded-xl p-3 sm:p-3.5 overflow-hidden">
+        <div id="kpi-card-penalties-waived" className="bg-emerald-50/70 dark:bg-emerald-950/20 border border-emerald-200/70 dark:border-emerald-900/30 rounded-xl p-3 sm:p-3.5 overflow-hidden shadow-none">
           <div className="flex items-center justify-between mb-1">
             <span className="text-[10px] sm:text-[11px] font-semibold text-emerald-700 dark:text-emerald-400 uppercase tracking-wider truncate">
               Penalties Waived
@@ -336,7 +340,7 @@ export const PenaltyPayrollImpactChart = ({ className = "", startDate = "", endD
         </div>
 
         {/* Card 5: AVG IMPACT RATE % */}
-        <div id="kpi-card-avg-impact-rate" className="col-span-1 xs:col-span-2 sm:col-span-1 bg-slate-50 dark:bg-slate-800/40 border border-slate-200 dark:border-slate-800 rounded-xl p-3 sm:p-3.5 overflow-hidden">
+        <div id="kpi-card-avg-impact-rate" className="col-span-1 xs:col-span-2 sm:col-span-1 bg-slate-50 dark:bg-slate-800/40 border border-slate-200/70 dark:border-slate-800 rounded-xl p-3 sm:p-3.5 overflow-hidden shadow-none">
           <div className="flex items-center justify-between mb-1">
             <span className="text-[10px] sm:text-[11px] font-semibold text-slate-700 dark:text-slate-300 uppercase tracking-wider truncate">
               Avg Impact Rate
@@ -522,7 +526,7 @@ export const PenaltyPayrollImpactChart = ({ className = "", startDate = "", endD
           </span>
         </div>
       </div>
-    </div>
+    </motion.div>
   );
 };
 

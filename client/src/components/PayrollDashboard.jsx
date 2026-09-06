@@ -222,7 +222,7 @@ export const PayrollDashboard = ({
   return (
     <div id="payroll-analytics-dashboard" className="space-y-6 animate-fade-in">
       {/* Top Banner & Header Toolbar */}
-      <div className="bg-gradient-to-r from-[#002185] via-[#0A2E9E] to-[#002185] rounded-2xl p-6 text-white shadow-md flex flex-col lg:flex-row lg:items-center justify-between gap-5">
+      <div className="bg-[#002185] rounded-2xl p-6 text-white shadow-md flex flex-col lg:flex-row lg:items-center justify-between gap-5">
         <div>
           <div className="flex items-center gap-2 mb-1.5">
             <span className="px-2.5 py-0.5 rounded-full text-[10px] font-bold bg-[#ff5500] text-white uppercase tracking-wider">

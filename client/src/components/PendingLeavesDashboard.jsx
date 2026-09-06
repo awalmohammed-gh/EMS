@@ -92,7 +92,7 @@ export const PendingLeavesDashboard = ({
   return (
     <div id="pending-leave-dashboard" className="space-y-4">
       {/* Top Banner with Summary & Batch Action */}
-      <div className="bg-gradient-to-r from-[#002185] to-[#0A2E9E] rounded-2xl p-5 text-white shadow-md flex flex-col md:flex-row md:items-center justify-between gap-4">
+      <div className="bg-[#002185] rounded-2xl p-5 text-white shadow-md flex flex-col md:flex-row md:items-center justify-between gap-4">
         <div>
           <div className="flex items-center gap-2">
             <span className="px-2.5 py-0.5 rounded-full text-[10px] font-bold bg-[#ff5500] text-white uppercase tracking-wider">

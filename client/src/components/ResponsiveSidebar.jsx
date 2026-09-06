@@ -13,12 +13,9 @@ import {
   X,
   ShieldCheck,
   User,
-  Sun,
-  Moon,
 } from "lucide-react";
 import eyenitLogo from "../assets/eyenit_logo.png";
 import { useManagement } from "../context/ManagementContextProvider";
-import { useTheme } from "../context/ThemeContext";
 
 /**
  * ResponsiveSidebar Component
@@ -35,7 +32,6 @@ export const ResponsiveSidebar = ({
   const { pathname } = useLocation();
   const navigate = useNavigate();
   const { user, role: contextRole, logout } = useManagement();
-  const { isDark, toggleTheme } = useTheme();
   const [internalMobileOpen, setInternalMobileOpen] = useState(false);
 
   const effectiveMobileOpen = onMobileClose !== undefined ? isMobileOpen : internalMobileOpen;
@@ -161,21 +157,7 @@ export const ResponsiveSidebar = ({
         </nav>
 
         {/* Footer Actions */}
-        <div className="px-3 pb-5 pt-3 border-t border-[#E2E8F0] dark:border-slate-800 bg-[#F8FAFC] dark:bg-slate-900/50 space-y-2">
-          <button
-            type="button"
-            onClick={toggleTheme}
-            className="flex items-center justify-between w-full px-3 py-2 rounded-xl text-xs font-semibold text-slate-700 dark:text-slate-300 hover:bg-slate-200/60 dark:hover:bg-slate-800 transition-colors"
-          >
-            <span className="flex items-center gap-2">
-              {isDark ? <Sun className="w-4 h-4 text-amber-400" /> : <Moon className="w-4 h-4 text-[#002185]" />}
-              <span>{isDark ? "Light Mode" : "Dark Mode"}</span>
-            </span>
-            <span className="text-[10px] px-1.5 py-0.5 rounded bg-slate-200 dark:bg-slate-700 font-mono">
-              {isDark ? "Dark" : "Light"}
-            </span>
-          </button>
-
+        <div className="px-3 pb-5 pt-3 border-t border-[#E2E8F0] dark:border-slate-800 bg-[#F8FAFC] dark:bg-slate-900/50">
           <button
             type="button"
             onClick={handleLogout}
@@ -249,17 +231,7 @@ export const ResponsiveSidebar = ({
             </div>
 
             {/* Bottom Actions */}
-            <div className="pt-3 border-t border-gray-200 dark:border-slate-800 space-y-2">
-              <button
-                type="button"
-                onClick={toggleTheme}
-                className="flex items-center justify-between w-full px-2.5 py-2 rounded-xl text-xs font-semibold text-gray-700 dark:text-slate-200 hover:bg-gray-100 dark:hover:bg-slate-800"
-              >
-                <span className="flex items-center gap-2">
-                  {isDark ? <Sun className="w-4 h-4 text-amber-400" /> : <Moon className="w-4 h-4 text-[#002185]" />}
-                  <span>{isDark ? "Light Mode" : "Dark Mode"}</span>
-                </span>
-              </button>
+            <div className="pt-3 border-t border-gray-200 dark:border-slate-800">
               <button
                 type="button"
                 onClick={handleLogout}

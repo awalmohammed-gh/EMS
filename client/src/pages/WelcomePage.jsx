@@ -94,8 +94,8 @@ const WelcomePage = () => {
 
   return (
     <div className="min-h-screen flex flex-col items-center justify-center p-6 relative overflow-hidden">
-      {/* Soft Blue and White Gradient Background */}
-      <div className="absolute inset-0 bg-linear-to-br from-[#eef2f7] via-[#f8f9fc] to-[#e3e9f2]" />
+      {/* Clean Solid Background */}
+      <div className="absolute inset-0 bg-[#f8fafc] dark:bg-slate-900" />
 
       {/* Subtle blue accents with motion */}
       <motion.div

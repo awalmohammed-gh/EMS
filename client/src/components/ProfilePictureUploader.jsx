@@ -1,7 +1,7 @@
 import { useState, useRef } from "react";
 import {
   Camera,
-  UploadCloud,
+  Upload,
   Trash2,
   Check,
   X,
@@ -10,10 +10,12 @@ import {
   RotateCw,
   Image as ImageIcon,
   AlertCircle,
+  Palette,
 } from "lucide-react";
 import { uploadProfilePicture, removeProfilePicture } from "../apis/fontApis";
 import { useManagement } from "../context/ManagementContextProvider";
 import Avatar from "./Avatar";
+import AvatarGeneratorModal from "./AvatarGeneratorModal";
 
 export const ProfilePictureUploader = ({
   currentAvatarUrl = "",
@@ -30,6 +32,7 @@ export const ProfilePictureUploader = ({
   const [previewUrl, setPreviewUrl] = useState(null);
   const [selectedFile, setSelectedFile] = useState(null);
   const [isModalOpen, setIsModalOpen] = useState(false);
+  const [isGeneratorModalOpen, setIsGeneratorModalOpen] = useState(false);
   const [dragOver, setDragOver] = useState(false);
   const [errorMessage, setErrorMessage] = useState("");
 
@@ -142,9 +145,15 @@ export const ProfilePictureUploader = ({
         if (typeof setAdmin === "function") setAdmin(updatedAdmin);
         if (typeof setUser === "function") setUser(updatedUser);
 
-        localStorage.setItem("adminData", JSON.stringify(updatedAdmin));
-        localStorage.setItem("employeeData", JSON.stringify(updatedUser));
-        localStorage.setItem("userData", JSON.stringify(updatedUser));
+        try {
+          const storedAppUser = JSON.parse(localStorage.getItem("app_user") || "{}");
+          localStorage.setItem("app_user", JSON.stringify({ ...storedAppUser, avatar: newUrl, profilePicture: newUrl, profile_image_url: newUrl }));
+          localStorage.setItem("adminData", JSON.stringify(updatedAdmin));
+          localStorage.setItem("employeeData", JSON.stringify(updatedUser));
+          localStorage.setItem("userData", JSON.stringify(updatedUser));
+        } catch {
+          // Ignore localStorage quota warnings
+        }
 
         // Dispatch events for across-the-board instant UI update
         if (typeof window !== "undefined") {
@@ -212,9 +221,15 @@ export const ProfilePictureUploader = ({
         if (typeof setAdmin === "function") setAdmin(updatedAdmin);
         if (typeof setUser === "function") setUser(updatedUser);
 
-        localStorage.setItem("adminData", JSON.stringify(updatedAdmin));
-        localStorage.setItem("employeeData", JSON.stringify(updatedUser));
-        localStorage.setItem("userData", JSON.stringify(updatedUser));
+        try {
+          const storedAppUser = JSON.parse(localStorage.getItem("app_user") || "{}");
+          localStorage.setItem("app_user", JSON.stringify({ ...storedAppUser, avatar: "", profilePicture: "", profile_image_url: "" }));
+          localStorage.setItem("adminData", JSON.stringify(updatedAdmin));
+          localStorage.setItem("employeeData", JSON.stringify(updatedUser));
+          localStorage.setItem("userData", JSON.stringify(updatedUser));
+        } catch {
+          // Ignore localStorage quota warnings
+        }
 
         if (typeof window !== "undefined") {
           window.dispatchEvent(new CustomEvent("avatarUpdated", { detail: { avatarUrl: "" } }));
@@ -314,14 +329,25 @@ export const ProfilePictureUploader = ({
 
       {/* Controls & Guideline details */}
       <div className="flex-1 text-center sm:text-left space-y-2">
-        <div className="flex flex-wrap items-center gap-2 justify-center sm:justify-start">
+        <div className="flex flex-wrap items-center gap-2.5 justify-center sm:justify-start">
           <button
             type="button"
-            onClick={() => fileInputRef.current?.click()}
-            className="px-4 py-2 rounded-xl bg-[#002185] hover:bg-[#001861] text-white text-xs font-bold transition-all shadow-xs flex items-center gap-2 cursor-pointer"
+            id="btn-open-avatar-studio-generator"
+            onClick={() => setIsGeneratorModalOpen(true)}
+            className="px-4 py-2.5 rounded-xl bg-slate-900 hover:bg-slate-800 dark:bg-slate-100 dark:hover:bg-white text-white dark:text-slate-900 text-xs font-semibold transition-all shadow-xs flex items-center gap-2 cursor-pointer border border-transparent"
           >
-            <UploadCloud className="w-4 h-4" />
-            <span>Upload New Avatar</span>
+            <Palette className="w-4 h-4" />
+            <span>Customize Avatar</span>
+          </button>
+
+          <button
+            type="button"
+            id="btn-upload-avatar-file"
+            onClick={() => fileInputRef.current?.click()}
+            className="px-4 py-2.5 rounded-xl bg-white dark:bg-slate-800 hover:bg-slate-50 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-200 border border-slate-200/80 dark:border-slate-700 text-xs font-semibold transition-all shadow-2xs flex items-center gap-2 cursor-pointer"
+          >
+            <Upload className="w-4 h-4 text-slate-500 dark:text-slate-400" />
+            <span>Upload Photo</span>
           </button>
 
           {activeAvatar && (
@@ -473,6 +499,20 @@ export const ProfilePictureUploader = ({
           </div>
         </div>
       )}
+      {/* Avatar Studio / Generator Modal */}
+      <AvatarGeneratorModal
+        isOpen={isGeneratorModalOpen}
+        onClose={() => setIsGeneratorModalOpen(false)}
+        initialAvatarUrl={activeAvatar}
+        userName={userName || admin?.fullName || user?.fullName}
+        userRole={userRole}
+        onAvatarSaved={(newUrl) => {
+          setPreviewUrl(newUrl);
+          if (typeof onAvatarUpdated === "function") {
+            onAvatarUpdated(newUrl);
+          }
+        }}
+      />
     </div>
   );
 };

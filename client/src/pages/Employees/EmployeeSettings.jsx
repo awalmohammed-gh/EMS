@@ -12,9 +12,6 @@ import {
   EyeOff,
   Palette,
   Bell,
-  Sun,
-  Moon,
-  Laptop,
   CheckCircle2,
   Clock,
   Globe,
@@ -25,7 +22,7 @@ import {
   Hash,
 } from "lucide-react";
 import { useManagement } from "../../context/ManagementContextProvider";
-import { useTheme } from "../../context/ThemeContext";
+import ThemePreferenceCard from "../../components/ThemePreferenceCard";
 import {
   getEmployeeMe,
   updateEmployeeMe,
@@ -47,7 +44,6 @@ const NOTIFICATIONS_STORAGE_KEY = "employee_user_notifications";
 
 const EmployeeSettings = () => {
   const { user, setUser, setShowToast } = useManagement();
-  const { theme, setTheme, resolvedTheme } = useTheme();
 
   const [activeTab, setActiveTab] = useState("profile");
 
@@ -399,7 +395,7 @@ const EmployeeSettings = () => {
       {/* Page Header */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <div>
-          <h1 className="text-2xl sm:text-3xl font-extrabold tracking-tight text-[#0B1E48] dark:text-blue-100">
+          <h1 className="text-2xl sm:text-3xl font-extrabold tracking-tight text-slate-900 dark:text-white">
             Account & Profile Settings
           </h1>
           <p className="text-sm font-medium text-slate-500 dark:text-slate-400 mt-1">
@@ -409,7 +405,7 @@ const EmployeeSettings = () => {
       </div>
 
       {/* Modern Responsive Segmented Tabs Header */}
-      <div className="flex items-center gap-2 overflow-x-auto no-scrollbar pb-1 border-b border-slate-200 dark:border-slate-800">
+      <div className="flex items-center gap-2 overflow-x-auto no-scrollbar pb-1 border-b border-slate-200 dark:border-slate-800/80">
         {TABS.map((tab) => {
           const Icon = tab.icon;
           const isActive = activeTab === tab.id;
@@ -422,7 +418,7 @@ const EmployeeSettings = () => {
               className={`flex items-center gap-2 px-4 py-2.5 rounded-xl text-xs sm:text-sm font-semibold whitespace-nowrap transition-all duration-200 cursor-pointer ${
                 isActive
                   ? "bg-[#002185] dark:bg-blue-600 text-white shadow-sm"
-                  : "bg-white dark:bg-slate-900 text-slate-600 dark:text-slate-400 border border-slate-200 dark:border-slate-800 hover:text-slate-900 dark:hover:text-slate-100 hover:bg-slate-50 dark:hover:bg-slate-800"
+                  : "bg-white dark:bg-[#111927] text-slate-600 dark:text-slate-400 border border-slate-200 dark:border-slate-800/80 hover:text-slate-900 dark:hover:text-slate-100 hover:bg-slate-50 dark:hover:bg-[#162033]"
               }`}
             >
               <Icon className={`w-4 h-4 ${isActive ? "text-white" : "text-slate-500 dark:text-slate-400"}`} />
@@ -432,65 +428,82 @@ const EmployeeSettings = () => {
         })}
       </div>
 
-      {/* Top Identity & Avatar Card */}
-      <div className="w-full flex flex-col sm:flex-row items-center sm:items-start justify-between gap-6 p-6 rounded-2xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 shadow-sm">
-        <ProfilePictureUploader
-          currentAvatarUrl={
-            profile.avatar || user?.profilePicture || user?.avatar
-          }
-          userName={profile.fullName || user?.fullName}
-          userRole="Employee"
-          onAvatarUpdated={(newUrl) => {
-            setProfile((prev) => ({
-              ...prev,
-              avatar: newUrl,
-              profilePicture: newUrl,
-              profile_image_url: newUrl,
-            }));
-          }}
-          size="lg"
-        />
-
-        {/* Identity & Status Badges */}
-        <div className="text-center sm:text-right border-t sm:border-t-0 pt-4 sm:pt-0 border-slate-200 dark:border-slate-800 w-full sm:w-auto">
-          <div className="flex flex-wrap justify-center sm:justify-end items-center gap-2">
-            <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-semibold bg-emerald-50 dark:bg-emerald-950/40 text-emerald-700 dark:text-emerald-300 border border-emerald-200 dark:border-emerald-800/60">
-              <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse" />
-              Active Account
-            </span>
-            <span className="inline-flex items-center gap-1 px-3 py-1 rounded-full text-xs font-semibold bg-blue-50 dark:bg-blue-950/40 text-blue-700 dark:text-blue-300 border border-blue-200 dark:border-blue-800/60">
-              <Shield className="w-3.5 h-3.5" />
-              {profile.role ? profile.role.toUpperCase() : "EMPLOYEE"}
-            </span>
-            {(profile.employeeId || user?.employeeId) && (
-              <span className="font-mono text-[#002185] dark:text-blue-300 bg-slate-50 dark:bg-slate-800 px-3 py-1 rounded-full border border-slate-200 dark:border-slate-700 text-xs font-semibold">
-                ID: {profile.employeeId || user?.employeeId}
-              </span>
-            )}
+      {/* Dedicated Profile Avatar & Appearance Card */}
+      <div
+        id="profile-avatar-appearance-card"
+        className="w-full bg-white dark:bg-[#111927] border border-slate-200/70 dark:border-slate-800 rounded-2xl p-6 shadow-sm space-y-5"
+      >
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 border-b border-slate-200/70 dark:border-slate-800/80 pb-4">
+          <div>
+            <h3 className="text-base font-bold text-slate-900 dark:text-white flex items-center gap-2">
+              <Palette className="w-4 h-4 text-blue-600 dark:text-blue-400" />
+              Profile Avatar & Appearance
+            </h3>
+            <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">
+              Customize your dashboard avatar illustration or upload an official executive portrait photo.
+            </p>
           </div>
+          <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-semibold bg-emerald-50 dark:bg-emerald-950/40 text-emerald-700 dark:text-emerald-300 border border-emerald-200 dark:border-emerald-800/60 w-fit">
+            <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse" />
+            Active Account
+          </span>
+        </div>
 
-          <div className="flex flex-wrap justify-center sm:justify-end items-center gap-3 mt-3 text-xs text-slate-500 dark:text-slate-400">
-            {(profile.department || user?.department) && (
-              <span className="flex items-center gap-1.5">
-                <Building2 className="w-3.5 h-3.5 text-[#002185] dark:text-blue-400" />
-                {profile.department || user?.department}
+        <div className="flex flex-col sm:flex-row items-center sm:items-start justify-between gap-6">
+          <ProfilePictureUploader
+            currentAvatarUrl={
+              profile.avatar || user?.profilePicture || user?.avatar
+            }
+            userName={profile.fullName || user?.fullName}
+            userRole="Employee"
+            onAvatarUpdated={(newUrl) => {
+              setProfile((prev) => ({
+                ...prev,
+                avatar: newUrl,
+                profilePicture: newUrl,
+                profile_image_url: newUrl,
+              }));
+            }}
+            size="lg"
+          />
+
+          {/* Identity & Status Badges */}
+          <div className="text-center sm:text-right border-t sm:border-t-0 pt-4 sm:pt-0 border-slate-200/70 dark:border-slate-800/80 w-full sm:w-auto self-center sm:self-start">
+            <div className="flex flex-wrap justify-center sm:justify-end items-center gap-2">
+              <span className="inline-flex items-center gap-1 px-3 py-1 rounded-full text-xs font-semibold bg-blue-50 dark:bg-blue-950/40 text-blue-700 dark:text-blue-300 border border-blue-200 dark:border-blue-800/60">
+                <Shield className="w-3.5 h-3.5" />
+                {profile.role ? profile.role.toUpperCase() : "EMPLOYEE"}
               </span>
-            )}
-            <span>•</span>
-            <span className="flex items-center gap-1.5">
-              <Mail className="w-3.5 h-3.5 text-[#002185] dark:text-blue-400" />
-              {profile.email || user?.email}
-            </span>
+              {(profile.employeeId || user?.employeeId) && (
+                <span className="font-mono text-slate-700 dark:text-slate-200 bg-slate-50 dark:bg-[#162033] px-3 py-1 rounded-full border border-slate-200/70 dark:border-slate-700/60 text-xs font-semibold">
+                  ID: {profile.employeeId || user?.employeeId}
+                </span>
+              )}
+            </div>
+
+            <div className="flex flex-wrap justify-center sm:justify-end items-center gap-3 mt-3 text-xs text-slate-500 dark:text-slate-400">
+              {(profile.department || user?.department) && (
+                <span className="flex items-center gap-1.5">
+                  <Building2 className="w-3.5 h-3.5 text-blue-600 dark:text-blue-400" />
+                  {profile.department || user?.department}
+                </span>
+              )}
+              <span>•</span>
+              <span className="flex items-center gap-1.5">
+                <Mail className="w-3.5 h-3.5 text-blue-600 dark:text-blue-400" />
+                {profile.email || user?.email}
+              </span>
+            </div>
           </div>
         </div>
       </div>
 
       {/* TAB 1: Profile & Avatar Details Form */}
       {activeTab === "profile" && (
-        <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl p-6 shadow-sm space-y-6">
+        <div className="bg-white dark:bg-[#111927] border border-slate-200 dark:border-slate-800/80 rounded-2xl p-6 shadow-sm space-y-6">
           <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
             <div>
-              <h3 className="text-base font-bold text-slate-900 dark:text-slate-100 flex items-center gap-2">
+              <h3 className="text-base font-bold text-slate-900 dark:text-white flex items-center gap-2">
                 <User className="w-4 h-4 text-[#002185] dark:text-blue-400" />
                 Personal & Employment Details
               </h3>
@@ -498,7 +511,7 @@ const EmployeeSettings = () => {
                 View your official credentials and update your direct contact phone number.
               </p>
             </div>
-            <span className="inline-flex items-center gap-1 text-[11px] font-medium text-slate-500 dark:text-slate-400 bg-slate-50 dark:bg-slate-800 px-2.5 py-1 rounded-lg border border-slate-200 dark:border-slate-700 w-fit">
+            <span className="inline-flex items-center gap-1 text-[11px] font-medium text-slate-500 dark:text-slate-400 bg-slate-50 dark:bg-[#162033] px-2.5 py-1 rounded-lg border border-slate-200 dark:border-slate-700/60 w-fit">
               <Lock className="w-3 h-3 text-slate-400" />
               Protected Fields Locked by HR
             </span>
@@ -520,7 +533,7 @@ const EmployeeSettings = () => {
                     type="text"
                     value={profile.fullName}
                     disabled
-                    className="w-full pl-9 pr-9 py-2.5 bg-slate-100 dark:bg-slate-800/60 border border-slate-200 dark:border-slate-700 rounded-xl text-sm text-slate-600 dark:text-slate-300 font-medium cursor-not-allowed select-all"
+                    className="w-full pl-9 pr-9 py-2.5 bg-slate-100 dark:bg-[#162033]/80 border border-slate-200 dark:border-slate-700/60 rounded-xl text-sm text-slate-600 dark:text-slate-300 font-medium cursor-not-allowed select-all"
                   />
                   <Lock className="w-3.5 h-3.5 text-slate-400 absolute right-3 top-3" />
                 </div>
@@ -540,7 +553,7 @@ const EmployeeSettings = () => {
                     type="email"
                     value={profile.email}
                     disabled
-                    className="w-full pl-9 pr-9 py-2.5 bg-slate-100 dark:bg-slate-800/60 border border-slate-200 dark:border-slate-700 rounded-xl text-sm text-slate-600 dark:text-slate-300 font-medium cursor-not-allowed select-all"
+                    className="w-full pl-9 pr-9 py-2.5 bg-slate-100 dark:bg-[#162033]/80 border border-slate-200 dark:border-slate-700/60 rounded-xl text-sm text-slate-600 dark:text-slate-300 font-medium cursor-not-allowed select-all"
                   />
                   <Lock className="w-3.5 h-3.5 text-slate-400 absolute right-3 top-3" />
                 </div>
@@ -553,7 +566,7 @@ const EmployeeSettings = () => {
                     Direct Phone Contact
                     <span className="text-rose-500">*</span>
                   </label>
-                  <span className="text-[10px] text-emerald-600 dark:text-emerald-400 font-semibold bg-emerald-50 dark:bg-emerald-950/40 px-2 py-0.5 rounded border border-emerald-200 dark:border-emerald-800">
+                  <span className="text-[10px] text-emerald-600 dark:text-emerald-400 font-semibold bg-emerald-50 dark:bg-emerald-950/40 px-2 py-0.5 rounded border border-emerald-200 dark:border-emerald-800/60">
                     Editable
                   </span>
                 </div>
@@ -565,7 +578,7 @@ const EmployeeSettings = () => {
                     onChange={(e) =>
                       setProfile({ ...profile, phone: e.target.value })
                     }
-                    className="w-full pl-9 pr-4 py-2.5 bg-white dark:bg-slate-900 border border-slate-300 dark:border-slate-700 rounded-xl text-sm text-slate-900 dark:text-slate-100 focus:outline-none focus:border-[#002185] dark:focus:border-blue-500 focus:ring-2 focus:ring-[#002185]/15 transition-all font-medium"
+                    className="w-full pl-9 pr-4 py-2.5 bg-white dark:bg-[#162033] border border-slate-300 dark:border-slate-700/80 rounded-xl text-sm text-slate-900 dark:text-slate-100 focus:outline-none focus:border-[#002185] dark:focus:border-blue-500 focus:ring-2 focus:ring-[#002185]/15 transition-all font-medium"
                     placeholder="+233 XX XXX XXXX"
                   />
                 </div>
@@ -585,7 +598,7 @@ const EmployeeSettings = () => {
                     type="text"
                     value={profile.department}
                     disabled
-                    className="w-full pl-9 pr-9 py-2.5 bg-slate-100 dark:bg-slate-800/60 border border-slate-200 dark:border-slate-700 rounded-xl text-sm text-slate-600 dark:text-slate-300 font-medium cursor-not-allowed"
+                    className="w-full pl-9 pr-9 py-2.5 bg-slate-100 dark:bg-[#162033]/80 border border-slate-200 dark:border-slate-700/60 rounded-xl text-sm text-slate-600 dark:text-slate-300 font-medium cursor-not-allowed"
                   />
                   <Lock className="w-3.5 h-3.5 text-slate-400 absolute right-3 top-3" />
                 </div>
@@ -605,7 +618,7 @@ const EmployeeSettings = () => {
                     type="text"
                     value={profile.position}
                     disabled
-                    className="w-full pl-9 pr-9 py-2.5 bg-slate-100 dark:bg-slate-800/60 border border-slate-200 dark:border-slate-700 rounded-xl text-sm text-slate-600 dark:text-slate-300 font-medium cursor-not-allowed"
+                    className="w-full pl-9 pr-9 py-2.5 bg-slate-100 dark:bg-[#162033]/80 border border-slate-200 dark:border-slate-700/60 rounded-xl text-sm text-slate-600 dark:text-slate-300 font-medium cursor-not-allowed"
                   />
                   <Lock className="w-3.5 h-3.5 text-slate-400 absolute right-3 top-3" />
                 </div>
@@ -625,16 +638,16 @@ const EmployeeSettings = () => {
                     type="text"
                     value={profile.employeeId}
                     disabled
-                    className="w-full pl-9 pr-9 py-2.5 bg-slate-100 dark:bg-slate-800/60 border border-slate-200 dark:border-slate-700 rounded-xl text-sm text-slate-600 dark:text-slate-300 font-mono font-medium cursor-not-allowed"
+                    className="w-full pl-9 pr-9 py-2.5 bg-slate-100 dark:bg-[#162033]/80 border border-slate-200 dark:border-slate-700/60 rounded-xl text-sm text-slate-600 dark:text-slate-300 font-mono font-medium cursor-not-allowed"
                   />
                   <Lock className="w-3.5 h-3.5 text-slate-400 absolute right-3 top-3" />
                 </div>
               </div>
             </div>
 
-            <div className="flex flex-col sm:flex-row items-center justify-between gap-4 pt-4 border-t border-slate-200 dark:border-slate-800">
+            <div className="flex flex-col sm:flex-row items-center justify-between gap-4 pt-4 border-t border-slate-200 dark:border-slate-800/80">
               <span className="text-xs text-slate-500 dark:text-slate-400 flex items-center gap-1.5">
-                <ShieldCheck className="w-4 h-4 text-emerald-600" />
+                <ShieldCheck className="w-4 h-4 text-emerald-600 dark:text-emerald-400" />
                 Changes take effect immediately across all employee services
               </span>
               <button
@@ -656,9 +669,9 @@ const EmployeeSettings = () => {
 
       {/* TAB 2: Security & Password */}
       {activeTab === "security" && (
-        <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl p-6 shadow-sm space-y-6">
+        <div className="bg-white dark:bg-[#111927] border border-slate-200 dark:border-slate-800/80 rounded-2xl p-6 shadow-sm space-y-6">
           <div>
-            <h3 className="text-base font-bold text-slate-900 dark:text-slate-100 flex items-center gap-2">
+            <h3 className="text-base font-bold text-slate-900 dark:text-white flex items-center gap-2">
               <Lock className="w-4 h-4 text-[#002185] dark:text-blue-400" />
               Change Account Password
             </h3>
@@ -684,7 +697,7 @@ const EmployeeSettings = () => {
                         currentPassword: e.target.value,
                       })
                     }
-                    className="w-full pl-3.5 pr-10 py-2.5 bg-slate-50 dark:bg-slate-800/60 border border-slate-200 dark:border-slate-700 rounded-xl text-sm text-slate-900 dark:text-slate-100 focus:outline-none focus:border-[#002185] dark:focus:border-blue-500 focus:bg-white dark:focus:bg-slate-900 transition-all font-medium"
+                    className="w-full pl-3.5 pr-10 py-2.5 bg-slate-50 dark:bg-[#162033] border border-slate-200 dark:border-slate-700/60 rounded-xl text-sm text-slate-900 dark:text-slate-100 focus:outline-none focus:border-[#002185] dark:focus:border-blue-500 focus:bg-white dark:focus:bg-[#111927] transition-all font-medium"
                     placeholder="••••••••"
                     autoComplete="current-password"
                   />
@@ -718,7 +731,7 @@ const EmployeeSettings = () => {
                         newPassword: e.target.value,
                       })
                     }
-                    className="w-full pl-3.5 pr-10 py-2.5 bg-slate-50 dark:bg-slate-800/60 border border-slate-200 dark:border-slate-700 rounded-xl text-sm text-slate-900 dark:text-slate-100 focus:outline-none focus:border-[#002185] dark:focus:border-blue-500 focus:bg-white dark:focus:bg-slate-900 transition-all font-medium"
+                    className="w-full pl-3.5 pr-10 py-2.5 bg-slate-50 dark:bg-[#162033] border border-slate-200 dark:border-slate-700/60 rounded-xl text-sm text-slate-900 dark:text-slate-100 focus:outline-none focus:border-[#002185] dark:focus:border-blue-500 focus:bg-white dark:focus:bg-[#111927] transition-all font-medium"
                     placeholder="••••••••"
                     autoComplete="new-password"
                   />
@@ -752,7 +765,7 @@ const EmployeeSettings = () => {
                         confirmPassword: e.target.value,
                       })
                     }
-                    className="w-full pl-3.5 pr-10 py-2.5 bg-slate-50 dark:bg-slate-800/60 border border-slate-200 dark:border-slate-700 rounded-xl text-sm text-slate-900 dark:text-slate-100 focus:outline-none focus:border-[#002185] dark:focus:border-blue-500 focus:bg-white dark:focus:bg-slate-900 transition-all font-medium"
+                    className="w-full pl-3.5 pr-10 py-2.5 bg-slate-50 dark:bg-[#162033] border border-slate-200 dark:border-slate-700/60 rounded-xl text-sm text-slate-900 dark:text-slate-100 focus:outline-none focus:border-[#002185] dark:focus:border-blue-500 focus:bg-white dark:focus:bg-[#111927] transition-all font-medium"
                     placeholder="••••••••"
                     autoComplete="new-password"
                   />
@@ -774,7 +787,7 @@ const EmployeeSettings = () => {
 
             {/* Dynamic Password Strength Indicator */}
             {passwordForm.newPassword && (
-              <div className="p-3.5 bg-slate-50 dark:bg-slate-800/40 border border-slate-200 dark:border-slate-700/60 rounded-xl space-y-2">
+              <div className="p-3.5 bg-slate-50 dark:bg-[#162033] border border-slate-200 dark:border-slate-700/60 rounded-xl space-y-2">
                 <div className="flex items-center justify-between text-xs">
                   <span className="text-slate-500 dark:text-slate-400 font-medium">
                     Password Strength:
@@ -812,9 +825,9 @@ const EmployeeSettings = () => {
               </div>
             )}
 
-            <div className="flex flex-col sm:flex-row items-center justify-between gap-4 pt-4 border-t border-slate-200 dark:border-slate-800">
+            <div className="flex flex-col sm:flex-row items-center justify-between gap-4 pt-4 border-t border-slate-200 dark:border-slate-800/80">
               <span className="text-xs text-slate-500 dark:text-slate-400 flex items-center gap-1">
-                <ShieldCheck className="w-4 h-4 text-emerald-600" />
+                <ShieldCheck className="w-4 h-4 text-emerald-600 dark:text-emerald-400" />
                 Password is encrypted with secure salted hashing
               </span>
               <button
@@ -838,111 +851,12 @@ const EmployeeSettings = () => {
       {activeTab === "preferences" && (
         <div className="space-y-6">
           {/* Appearance / Theme Selector */}
-          <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl p-6 shadow-sm">
-            <div className="mb-4">
-              <h3 className="text-base font-bold text-slate-900 dark:text-slate-100 flex items-center gap-2">
-                <Palette className="w-4 h-4 text-[#002185] dark:text-blue-400" />
-                Color Theme & Mode
-              </h3>
-              <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">
-                Customize appearance or sync automatically with your system preference.
-              </p>
-            </div>
-
-            <div className="grid grid-cols-1 sm:grid-cols-3 gap-3.5">
-              {/* Light Mode Option */}
-              <button
-                type="button"
-                id="theme-option-light"
-                onClick={() => setTheme("light")}
-                className={`p-4 rounded-xl border text-left transition-all duration-200 cursor-pointer flex flex-col justify-between gap-3 ${
-                  theme === "light"
-                    ? "border-[#002185] dark:border-blue-500 bg-blue-50/60 dark:bg-blue-950/30 ring-2 ring-[#002185]/20 dark:ring-blue-500/20"
-                    : "border-slate-200 dark:border-slate-800 bg-slate-50/60 dark:bg-slate-800/40 hover:border-slate-300 dark:hover:border-slate-700"
-                }`}
-              >
-                <div className="flex items-center justify-between">
-                  <div className="w-8 h-8 rounded-lg bg-amber-100 text-amber-600 flex items-center justify-center">
-                    <Sun className="w-4 h-4" />
-                  </div>
-                  {theme === "light" && (
-                    <span className="w-2.5 h-2.5 rounded-full bg-[#002185] dark:bg-blue-400" />
-                  )}
-                </div>
-                <div>
-                  <h4 className="text-xs font-bold text-slate-900 dark:text-slate-100">
-                    Light Mode
-                  </h4>
-                  <p className="text-[11px] text-slate-500 dark:text-slate-400 mt-0.5">
-                    Clean, high-contrast light surfaces for bright environments
-                  </p>
-                </div>
-              </button>
-
-              {/* Dark Mode Option */}
-              <button
-                type="button"
-                id="theme-option-dark"
-                onClick={() => setTheme("dark")}
-                className={`p-4 rounded-xl border text-left transition-all duration-200 cursor-pointer flex flex-col justify-between gap-3 ${
-                  theme === "dark"
-                    ? "border-[#002185] dark:border-blue-500 bg-blue-50/60 dark:bg-blue-950/30 ring-2 ring-[#002185]/20 dark:ring-blue-500/20"
-                    : "border-slate-200 dark:border-slate-800 bg-slate-50/60 dark:bg-slate-800/40 hover:border-slate-300 dark:hover:border-slate-700"
-                }`}
-              >
-                <div className="flex items-center justify-between">
-                  <div className="w-8 h-8 rounded-lg bg-indigo-100 text-indigo-600 dark:bg-indigo-950 dark:text-indigo-400 flex items-center justify-center">
-                    <Moon className="w-4 h-4" />
-                  </div>
-                  {theme === "dark" && (
-                    <span className="w-2.5 h-2.5 rounded-full bg-[#002185] dark:bg-blue-400" />
-                  )}
-                </div>
-                <div>
-                  <h4 className="text-xs font-bold text-slate-900 dark:text-slate-100">
-                    Dark Mode
-                  </h4>
-                  <p className="text-[11px] text-slate-500 dark:text-slate-400 mt-0.5">
-                    Comfortable dark palette designed to reduce eye strain
-                  </p>
-                </div>
-              </button>
-
-              {/* System Option */}
-              <button
-                type="button"
-                id="theme-option-system"
-                onClick={() => setTheme("system")}
-                className={`p-4 rounded-xl border text-left transition-all duration-200 cursor-pointer flex flex-col justify-between gap-3 ${
-                  theme === "system"
-                    ? "border-[#002185] dark:border-blue-500 bg-blue-50/60 dark:bg-blue-950/30 ring-2 ring-[#002185]/20 dark:ring-blue-500/20"
-                    : "border-slate-200 dark:border-slate-800 bg-slate-50/60 dark:bg-slate-800/40 hover:border-slate-300 dark:hover:border-slate-700"
-                }`}
-              >
-                <div className="flex items-center justify-between">
-                  <div className="w-8 h-8 rounded-lg bg-blue-100 text-blue-600 dark:bg-blue-950 dark:text-blue-400 flex items-center justify-center">
-                    <Laptop className="w-4 h-4" />
-                  </div>
-                  {theme === "system" && (
-                    <span className="w-2.5 h-2.5 rounded-full bg-[#002185] dark:bg-blue-400" />
-                  )}
-                </div>
-                <div>
-                  <h4 className="text-xs font-bold text-slate-900 dark:text-slate-100">
-                    System Sync
-                  </h4>
-                  <p className="text-[11px] text-slate-500 dark:text-slate-400 mt-0.5">
-                    Automatically matches your OS ({resolvedTheme} active)
-                  </p>
-                </div>
-              </button>
-            </div>
-          </div>
+          <ThemePreferenceCard />
 
           {/* Regional & Format Preferences */}
-          <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl p-6 shadow-sm">
+          <div className="bg-white dark:bg-[#111927] border border-slate-200 dark:border-slate-800/80 rounded-2xl p-6 shadow-sm">
             <div className="mb-5">
-              <h3 className="text-base font-bold text-slate-900 dark:text-slate-100 flex items-center gap-2">
+              <h3 className="text-base font-bold text-slate-900 dark:text-white flex items-center gap-2">
                 <Globe className="w-4 h-4 text-[#002185] dark:text-blue-400" />
                 Regional & Localization Settings
               </h3>
@@ -964,7 +878,7 @@ const EmployeeSettings = () => {
                     onChange={(e) =>
                       setPreferences({ ...preferences, currency: e.target.value })
                     }
-                    className="w-full px-3.5 py-2.5 bg-slate-50 dark:bg-slate-800/60 border border-slate-200 dark:border-slate-700 rounded-xl text-sm text-slate-900 dark:text-slate-100 focus:outline-none focus:border-[#002185] dark:focus:border-blue-500 transition-colors"
+                    className="w-full px-3.5 py-2.5 bg-slate-50 dark:bg-[#162033] border border-slate-200 dark:border-slate-700/60 rounded-xl text-sm text-slate-900 dark:text-slate-100 focus:outline-none focus:border-[#002185] dark:focus:border-blue-500 transition-colors"
                   >
                     <option value="GHS">GHS (GH₵) - Ghanaian Cedi</option>
                     <option value="USD">USD ($) - US Dollar</option>
@@ -984,7 +898,7 @@ const EmployeeSettings = () => {
                     onChange={(e) =>
                       setPreferences({ ...preferences, timeFormat: e.target.value })
                     }
-                    className="w-full px-3.5 py-2.5 bg-slate-50 dark:bg-slate-800/60 border border-slate-200 dark:border-slate-700 rounded-xl text-sm text-slate-900 dark:text-slate-100 focus:outline-none focus:border-[#002185] dark:focus:border-blue-500 transition-colors"
+                    className="w-full px-3.5 py-2.5 bg-slate-50 dark:bg-[#162033] border border-slate-200 dark:border-slate-700/60 rounded-xl text-sm text-slate-900 dark:text-slate-100 focus:outline-none focus:border-[#002185] dark:focus:border-blue-500 transition-colors"
                   >
                     <option value="12h">12-Hour Format (09:30 AM / 05:00 PM)</option>
                     <option value="24h">24-Hour Format (09:30 / 17:00)</option>
@@ -1002,7 +916,7 @@ const EmployeeSettings = () => {
                     onChange={(e) =>
                       setPreferences({ ...preferences, dateFormat: e.target.value })
                     }
-                    className="w-full px-3.5 py-2.5 bg-slate-50 dark:bg-slate-800/60 border border-slate-200 dark:border-slate-700 rounded-xl text-sm text-slate-900 dark:text-slate-100 focus:outline-none focus:border-[#002185] dark:focus:border-blue-500 transition-colors"
+                    className="w-full px-3.5 py-2.5 bg-slate-50 dark:bg-[#162033] border border-slate-200 dark:border-slate-700/60 rounded-xl text-sm text-slate-900 dark:text-slate-100 focus:outline-none focus:border-[#002185] dark:focus:border-blue-500 transition-colors"
                   >
                     <option value="DD/MM/YYYY">DD/MM/YYYY (e.g. 28/08/2026)</option>
                     <option value="MM/DD/YYYY">MM/DD/YYYY (e.g. 08/28/2026)</option>
@@ -1021,7 +935,7 @@ const EmployeeSettings = () => {
                     onChange={(e) =>
                       setPreferences({ ...preferences, language: e.target.value })
                     }
-                    className="w-full px-3.5 py-2.5 bg-slate-50 dark:bg-slate-800/60 border border-slate-200 dark:border-slate-700 rounded-xl text-sm text-slate-900 dark:text-slate-100 focus:outline-none focus:border-[#002185] dark:focus:border-blue-500 transition-colors"
+                    className="w-full px-3.5 py-2.5 bg-slate-50 dark:bg-[#162033] border border-slate-200 dark:border-slate-700/60 rounded-xl text-sm text-slate-900 dark:text-slate-100 focus:outline-none focus:border-[#002185] dark:focus:border-blue-500 transition-colors"
                   >
                     <option value="en-US">English (United States)</option>
                     <option value="en-GB">English (United Kingdom)</option>
@@ -1030,7 +944,7 @@ const EmployeeSettings = () => {
                 </div>
               </div>
 
-              <div className="flex items-center justify-end pt-4 border-t border-slate-200 dark:border-slate-800">
+              <div className="flex items-center justify-end pt-4 border-t border-slate-200 dark:border-slate-800/80">
                 <button
                   type="submit"
                   disabled={isSavingPreferences}
@@ -1051,9 +965,9 @@ const EmployeeSettings = () => {
 
       {/* TAB 4: Notification Preferences */}
       {activeTab === "notifications" && (
-        <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl p-6 shadow-sm space-y-6">
+        <div className="bg-white dark:bg-[#111927] border border-slate-200 dark:border-slate-800/80 rounded-2xl p-6 shadow-sm space-y-6">
           <div>
-            <h3 className="text-base font-bold text-slate-900 dark:text-slate-100 flex items-center gap-2">
+            <h3 className="text-base font-bold text-slate-900 dark:text-white flex items-center gap-2">
               <Bell className="w-4 h-4 text-[#002185] dark:text-blue-400" />
               Notification & Alert Delivery
             </h3>
@@ -1070,11 +984,11 @@ const EmployeeSettings = () => {
                 Email Notifications
               </h4>
 
-              <div className="divide-y divide-slate-200 dark:divide-slate-800 border border-slate-200 dark:border-slate-800 rounded-xl overflow-hidden">
+              <div className="divide-y divide-slate-200 dark:divide-slate-800/80 border border-slate-200 dark:border-slate-800/80 rounded-xl overflow-hidden">
                 {/* Payslip published */}
-                <div className="p-4 flex items-center justify-between gap-4 bg-slate-50/50 dark:bg-slate-800/30">
+                <div className="p-4 flex items-center justify-between gap-4 bg-slate-50/50 dark:bg-[#162033]/60">
                   <div>
-                    <h5 className="text-xs font-bold text-slate-900 dark:text-slate-100">
+                    <h5 className="text-xs font-bold text-slate-900 dark:text-white">
                       Monthly Payslip Published
                     </h5>
                     <p className="text-[11px] text-slate-500 dark:text-slate-400 mt-0.5">
@@ -1098,9 +1012,9 @@ const EmployeeSettings = () => {
                 </div>
 
                 {/* Leave status update */}
-                <div className="p-4 flex items-center justify-between gap-4 bg-slate-50/50 dark:bg-slate-800/30">
+                <div className="p-4 flex items-center justify-between gap-4 bg-slate-50/50 dark:bg-[#162033]/60">
                   <div>
-                    <h5 className="text-xs font-bold text-slate-900 dark:text-slate-100">
+                    <h5 className="text-xs font-bold text-slate-900 dark:text-white">
                       Leave Request Decisions
                     </h5>
                     <p className="text-[11px] text-slate-500 dark:text-slate-400 mt-0.5">
@@ -1124,9 +1038,9 @@ const EmployeeSettings = () => {
                 </div>
 
                 {/* Announcements */}
-                <div className="p-4 flex items-center justify-between gap-4 bg-slate-50/50 dark:bg-slate-800/30">
+                <div className="p-4 flex items-center justify-between gap-4 bg-slate-50/50 dark:bg-[#162033]/60">
                   <div>
-                    <h5 className="text-xs font-bold text-slate-900 dark:text-slate-100">
+                    <h5 className="text-xs font-bold text-slate-900 dark:text-white">
                       Company Bulletins & Announcements
                     </h5>
                     <p className="text-[11px] text-slate-500 dark:text-slate-400 mt-0.5">
@@ -1150,9 +1064,9 @@ const EmployeeSettings = () => {
                 </div>
 
                 {/* Attendance reminders */}
-                <div className="p-4 flex items-center justify-between gap-4 bg-slate-50/50 dark:bg-slate-800/30">
+                <div className="p-4 flex items-center justify-between gap-4 bg-slate-50/50 dark:bg-[#162033]/60">
                   <div>
-                    <h5 className="text-xs font-bold text-slate-900 dark:text-slate-100">
+                    <h5 className="text-xs font-bold text-slate-900 dark:text-white">
                       Daily Attendance Reminders
                     </h5>
                     <p className="text-[11px] text-slate-500 dark:text-slate-400 mt-0.5">
@@ -1184,11 +1098,11 @@ const EmployeeSettings = () => {
                 In-App Audio & Visual Alerts
               </h4>
 
-              <div className="divide-y divide-slate-200 dark:divide-slate-800 border border-slate-200 dark:border-slate-800 rounded-xl overflow-hidden">
+              <div className="divide-y divide-slate-200 dark:divide-slate-800/80 border border-slate-200 dark:border-slate-800/80 rounded-xl overflow-hidden">
                 {/* Urgent Bell Alerts */}
-                <div className="p-4 flex items-center justify-between gap-4 bg-slate-50/50 dark:bg-slate-800/30">
+                <div className="p-4 flex items-center justify-between gap-4 bg-slate-50/50 dark:bg-[#162033]/60">
                   <div>
-                    <h5 className="text-xs font-bold text-slate-900 dark:text-slate-100">
+                    <h5 className="text-xs font-bold text-slate-900 dark:text-white">
                       Top Navigation Bell Badges
                     </h5>
                     <p className="text-[11px] text-slate-500 dark:text-slate-400 mt-0.5">
@@ -1212,9 +1126,9 @@ const EmployeeSettings = () => {
                 </div>
 
                 {/* Subtle Sound Effects */}
-                <div className="p-4 flex items-center justify-between gap-4 bg-slate-50/50 dark:bg-slate-800/30">
+                <div className="p-4 flex items-center justify-between gap-4 bg-slate-50/50 dark:bg-[#162033]/60">
                   <div>
-                    <h5 className="text-xs font-bold text-slate-900 dark:text-slate-100">
+                    <h5 className="text-xs font-bold text-slate-900 dark:text-white">
                       Audible Cue on Clock In & Out
                     </h5>
                     <p className="text-[11px] text-slate-500 dark:text-slate-400 mt-0.5">
@@ -1239,7 +1153,7 @@ const EmployeeSettings = () => {
               </div>
             </div>
 
-            <div className="flex items-center justify-end pt-4 border-t border-slate-200 dark:border-slate-800">
+            <div className="flex items-center justify-end pt-4 border-t border-slate-200 dark:border-slate-800/80">
               <button
                 type="submit"
                 disabled={isSavingNotifications}

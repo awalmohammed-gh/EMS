@@ -45,6 +45,17 @@ const Employees = () => {
     }
   };
 
+  const handleEmployeeDeleted = (deletedEmployeeId) => {
+    setEmployees((prev) =>
+      prev.filter(
+        (emp) =>
+          emp._id !== deletedEmployeeId &&
+          emp.employeeId !== deletedEmployeeId &&
+          String(emp._id) !== String(deletedEmployeeId)
+      )
+    );
+  };
+
   const handleDownloadAllCSV = () => {
     if (!employees || employees.length === 0) return;
     try {
@@ -153,6 +164,9 @@ const Employees = () => {
         /* Searchable Employee Directory Component */
         <EmployeeDirectory
           employees={employees}
+          setEmployees={setEmployees}
+          onEmployeeDeleted={handleEmployeeDeleted}
+          onDeleteSuccess={handleEmployeeDeleted}
           isLoading={isLoading}
           onRefresh={fetchEmployees}
         />

@@ -1,5 +1,13 @@
 {
   "name": "Employee Management System",
+<<<<<<< HEAD
   "description": "Comprehensive employee management system featuring automated attendance penalty & deduction alerts, payroll cycle tracking, leave workflows, and staff administration.",
   "requestFramePermissions": []
+=======
+  "description": "Comprehensive employee management system featuring automated attendance penalty & deduction alerts, payroll cycle tracking, interactive Recharts workforce health trends, leave workflows, and staff administration.",
+  "requestFramePermissions": [],
+  "majorCapabilities": [
+    "MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"
+  ]
+>>>>>>> d9a9837f112686b8986596a36d67e73b7a2f1475
 }

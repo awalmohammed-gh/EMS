@@ -1,20 +1,20 @@
-import { createContext, useContext, useState, useEffect, useCallback } from "react";
+import { createContext, useContext, useState, useEffect, useCallback, useMemo } from "react";
 
-const THEME_STORAGE_KEY = "theme_preference";
-const LEGACY_THEME_KEY = "eyenit_theme";
-const STANDARD_THEME_KEY = "theme";
+const PRIMARY_THEME_KEY = "app_theme";
+const LEGACY_THEME_KEYS = ["theme_preference", "eyenit_theme", "theme"];
 
 const ThemeContext = createContext();
 
-export const ThemeContextProvider = ({ children }) => {
+export const ThemeProvider = ({ children }) => {
   // 1. Initial preference: 'light' | 'dark' | 'system'
   const [theme, setThemeState] = useState(() => {
     if (typeof window !== "undefined") {
       try {
         const stored =
-          localStorage.getItem(THEME_STORAGE_KEY) ||
-          localStorage.getItem(LEGACY_THEME_KEY) ||
-          localStorage.getItem(STANDARD_THEME_KEY);
+          localStorage.getItem(PRIMARY_THEME_KEY) ||
+          localStorage.getItem(LEGACY_THEME_KEYS[0]) ||
+          localStorage.getItem(LEGACY_THEME_KEYS[1]) ||
+          localStorage.getItem(LEGACY_THEME_KEYS[2]);
         if (stored === "dark" || stored === "light" || stored === "system") {
           return stored;
         }
@@ -25,21 +25,43 @@ export const ThemeContextProvider = ({ children }) => {
     return "system";
   });
 
-  // 2. Track OS system preference
-  const [systemIsDark, setSystemIsDark] = useState(() => {
-    if (typeof window !== "undefined" && window.matchMedia) {
-      return window.matchMedia("(prefers-color-scheme: dark)").matches;
-    }
-    return false;
-  });
-
-  // 3. Listen to OS system color scheme changes in real-time
+  // 2. Dynamic theme application to root element and matchMedia system listener
   useEffect(() => {
-    if (typeof window === "undefined" || !window.matchMedia) return;
+    if (typeof window === "undefined" || typeof document === "undefined") return;
 
+    const root = document.documentElement;
+    const body = document.body;
     const mediaQuery = window.matchMedia("(prefers-color-scheme: dark)");
-    const handleChange = (e) => {
-      setSystemIsDark(e.matches);
+
+    const applyTheme = () => {
+      const isDark =
+        theme === "dark" || (theme === "system" && mediaQuery.matches);
+      if (isDark) {
+        root.classList.add("dark");
+        if (body) body.classList.add("dark");
+      } else {
+        root.classList.remove("dark");
+        if (body) body.classList.remove("dark");
+      }
+    };
+
+    applyTheme();
+
+    try {
+      localStorage.setItem(PRIMARY_THEME_KEY, theme);
+      LEGACY_THEME_KEYS.forEach((k) => {
+        try {
+          localStorage.setItem(k, theme);
+        } catch {
+          // ignore
+        }
+      });
+    } catch (e) {
+      console.warn("Failed to save theme to storage:", e);
+    }
+
+    const handleChange = () => {
+      if (theme === "system") applyTheme();
     };
 
     if (mediaQuery.addEventListener) {
@@ -55,17 +77,16 @@ export const ThemeContextProvider = ({ children }) => {
         mediaQuery.removeListener(handleChange);
       }
     };
-  }, []);
+  }, [theme]);
 
-  // 4. Synchronize across tabs and Admin/Employee portals via storage event
+  // 3. Multi-tab synchronization
   useEffect(() => {
     if (typeof window === "undefined") return;
 
     const handleStorageChange = (e) => {
       if (
-        e.key === THEME_STORAGE_KEY ||
-        e.key === LEGACY_THEME_KEY ||
-        e.key === STANDARD_THEME_KEY
+        e.key === PRIMARY_THEME_KEY ||
+        LEGACY_THEME_KEYS.includes(e.key)
       ) {
         const newTheme = e.newValue;
         if (newTheme === "dark" || newTheme === "light" || newTheme === "system") {
@@ -78,58 +99,12 @@ export const ThemeContextProvider = ({ children }) => {
     return () => window.removeEventListener("storage", handleStorageChange);
   }, []);
 
-  // 5. Determine resolved active theme ('light' or 'dark')
-  const resolvedTheme = theme === "system" ? (systemIsDark ? "dark" : "light") : theme;
-  const isDark = resolvedTheme === "dark";
-
-  // 6. Update DOM <html> and <body> elements with transition-none anti-flicker and persist preference
-  useEffect(() => {
-    if (typeof document === "undefined") return;
-
-    const root = document.documentElement;
-    const body = document.body;
-
-    // Temporarily add transition-none to body and root to prevent flickering during toggles
-    if (body) body.classList.add("transition-none");
-    root.classList.add("transition-none");
-
-    if (resolvedTheme === "dark") {
-      root.classList.add("dark");
-      if (body) body.classList.add("dark");
-    } else {
-      root.classList.remove("dark");
-      if (body) body.classList.remove("dark");
-    }
-
-    // Force a DOM layout reflow so class changes apply instantly without CSS transitions
-    void root.offsetHeight;
-
-    // Remove transition-none cleanly on next frame
-    const timer = setTimeout(() => {
-      if (body) body.classList.remove("transition-none");
-      root.classList.remove("transition-none");
-    }, 50);
-
-    // Ensure all localStorage keys are consistently synced across Admin & Employee portals
-    try {
-      localStorage.setItem(THEME_STORAGE_KEY, theme);
-      localStorage.setItem(LEGACY_THEME_KEY, resolvedTheme);
-      localStorage.setItem(STANDARD_THEME_KEY, resolvedTheme);
-    } catch (e) {
-      console.warn("Failed to save theme to storage:", e);
-    }
-
-    return () => clearTimeout(timer);
-  }, [theme, resolvedTheme]);
-
-  // Set specific mode ('light' | 'dark' | 'system')
   const setTheme = useCallback((newTheme) => {
     if (newTheme === "dark" || newTheme === "light" || newTheme === "system") {
       setThemeState(newTheme);
     }
   }, []);
 
-  // Toggle between light, dark, and system or cycle
   const toggleTheme = useCallback(() => {
     setThemeState((prev) => {
       if (prev === "light") return "dark";
@@ -138,22 +113,42 @@ export const ThemeContextProvider = ({ children }) => {
     });
   }, []);
 
-  const value = {
-    theme, // 'light' | 'dark' | 'system'
-    resolvedTheme, // 'light' | 'dark'
-    isDark, // boolean
-    systemTheme: systemIsDark ? "dark" : "light",
-    setTheme,
-    toggleTheme,
-  };
+  const isDark = useMemo(() => {
+    if (typeof window === "undefined") return theme === "dark";
+    if (theme === "dark") return true;
+    if (theme === "light") return false;
+    return window.matchMedia("(prefers-color-scheme: dark)").matches;
+  }, [theme]);
 
-  return <ThemeContext.Provider value={value}>{children}</ThemeContext.Provider>;
+  const resolvedTheme = isDark ? "dark" : "light";
+
+  const contextValue = useMemo(
+    () => ({
+      theme,
+      setTheme,
+      resolvedTheme,
+      isDark,
+      systemTheme: typeof window !== "undefined" && window.matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light",
+      toggleTheme,
+    }),
+    [theme, setTheme, resolvedTheme, isDark, toggleTheme]
+  );
+
+  return (
+    <ThemeContext.Provider value={contextValue}>
+      {children}
+    </ThemeContext.Provider>
+  );
 };
+
+export const ThemeContextProvider = ThemeProvider;
 
 export const useTheme = () => {
   const context = useContext(ThemeContext);
   if (!context) {
-    const isDark = typeof document !== "undefined" && document.documentElement.classList.contains("dark");
+    const isDark =
+      typeof document !== "undefined" &&
+      document.documentElement.classList.contains("dark");
     return {
       theme: "system",
       resolvedTheme: isDark ? "dark" : "light",
@@ -170,4 +165,5 @@ export const useTheme = () => {
   return context;
 };
 
-export default ThemeContextProvider;
+export default ThemeProvider;
+

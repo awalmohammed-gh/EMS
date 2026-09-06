@@ -115,50 +115,107 @@ body.dark,
   animation: fadeIn 0.2s ease-out forwards;
 }
 
-/* Print-ready profile and document styles */
+/* Print-ready profile, payslip, and attendance document styles */
+@page {
+  size: A4 portrait;
+  margin: 10mm 12mm 10mm 12mm;
+}
+
 @media print {
+  html,
   body {
     background: #ffffff !important;
-    color: #000000 !important;
-    -webkit-print-color-adjust: exact;
-    print-color-adjust: exact;
+    color: #0f172a !important;
+    -webkit-print-color-adjust: exact !important;
+    print-color-adjust: exact !important;
+    width: 100% !important;
+    height: auto !important;
+    min-height: 100% !important;
+    overflow: visible !important;
   }
 
-  /* Hide headers, sidebars, buttons, navigation, and other non-printable elements */
+  /* Reset any modal backdrops, overlays, or dark containers */
+  .fixed,
+  .backdrop-blur-sm,
+  .backdrop-blur-xs,
+  .bg-black\/60,
+  .bg-black\/70,
+  .bg-slate-950\/60,
+  .bg-slate-950\/70 {
+    position: static !important;
+    background: transparent !important;
+    backdrop-filter: none !important;
+    padding: 0 !important;
+    margin: 0 !important;
+    box-shadow: none !important;
+  }
+
+  /* Hide headers, sidebars, navigation, search filters, interactive buttons */
   nav,
   header,
   aside,
   #sidebar,
   #mobile-sidebar,
   .no-print,
+  .print-hidden,
   button:not(.print-include),
   input,
-  select,
-  .print-hidden {
+  select {
     display: none !important;
   }
 
-  /* Optimize print container */
+  /* Display elements intended exclusively for print */
+  .print-only,
+  .print-visible {
+    display: block !important;
+  }
+
+  /* Optimize print container to take full paper width */
   .print-container {
     display: block !important;
     position: static !important;
     width: 100% !important;
     max-width: 100% !important;
     margin: 0 !important;
-    padding: 20px !important;
+    padding: 0 !important;
     box-shadow: none !important;
     border: none !important;
     background: #ffffff !important;
   }
 
-  /* Prevent page breaks inside cards or tables */
+  /* Document Cards in Print Mode */
+  .print-card,
+  #corporate-payslip-canvas,
+  #corporate-attendance-canvas,
+  #print-employee-profile-card {
+    display: block !important;
+    width: 100% !important;
+    max-width: 100% !important;
+    margin: 0 !important;
+    padding: 0 !important;
+    border: none !important;
+    box-shadow: none !important;
+    background: #ffffff !important;
+    color: #0f172a !important;
+  }
+
+  /* Prevent awkward page breaks inside rows or tables */
   .print-card,
   table,
   tr,
   td,
-  th {
-    page-break-inside: avoid;
-    break-inside: avoid;
+  th,
+  .print-break-inside-avoid {
+    page-break-inside: avoid !important;
+    break-inside: avoid !important;
+  }
+
+  thead {
+    display: table-header-group !important;
+  }
+
+  tfoot {
+    display: table-footer-group !important;
   }
 }
 

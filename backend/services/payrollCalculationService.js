@@ -7,6 +7,15 @@ import { CompanySettings } from "../models/CompanySettings.js";
 import { Payroll } from "../models/payrollModel.js";
 import { liveAttendanceStore } from "../controllers/employeeAttendance.js";
 import { liveLeaveStore } from "../controllers/leaveController.js";
+import {
+  evaluateLatenessPenalty,
+  calculateLatenessPenalty,
+  getStandardizedLatenessTiers,
+  getTierConfiguredFine,
+} from "../utils/latenessPenaltyCalculator.js";
+
+export { evaluateLatenessPenalty, calculateLatenessPenalty, getStandardizedLatenessTiers, getTierConfiguredFine };
+export const evaluateLateness = evaluateLatenessPenalty;
 
 const isValidObjectId = (id) =>
   id &&
@@ -84,6 +93,8 @@ export const getMonthlyBusinessDays = (year, monthIndex, auditThroughDate = null
         dayOfWeek,
         dayName: DAY_NAMES[dayOfWeek],
         date: d,
+        isElapsed: day <= maxDay,
+        isFuture: day > maxDay,
       };
 
       allBusinessDays.push(dayObj);
@@ -96,8 +107,10 @@ export const getMonthlyBusinessDays = (year, monthIndex, auditThroughDate = null
   return {
     totalBusinessDaysInMonth: allBusinessDays.length || 22,
     allBusinessDays,
-    elapsedBusinessDays: elapsedBusinessDays.length > 0 ? elapsedBusinessDays : allBusinessDays,
+    elapsedBusinessDays,
     totalElapsedDays: elapsedBusinessDays.length,
+    futureBusinessDays: allBusinessDays.filter((b) => b.dayNumber > maxDay),
+    totalFutureDays: allBusinessDays.filter((b) => b.dayNumber > maxDay).length,
   };
 };
 
@@ -142,165 +155,6 @@ export const getActiveCompanySettings = async () => {
   if (!settings.absenceDeductionRate) settings.absenceDeductionRate = 15;
 
   return settings;
-};
-
-/**
- * Evaluates lateness delay and tiered monetary fine.
- */
-export const evaluateLateness = (clockInInput, workStartTime = "08:00", settings = {}) => {
-  if (!clockInInput) {
-    return {
-      isLate: false,
-      status: "on-time",
-      minutesLate: 0,
-      lateMinutes: 0,
-      delayMinutes: 0,
-      penalty: 0,
-      latePenalty: 0,
-      tier: "On Time",
-      clockInFormatted: "--",
-    };
-  }
-
-  let startHour = 8;
-  let startMinute = 0;
-
-  if (typeof workStartTime === "string" && workStartTime.trim()) {
-    const clean = workStartTime.trim();
-    const isPM = /pm/i.test(clean);
-    const isAM = /am/i.test(clean);
-    const match = clean.match(/(\d{1,2}):(\d{2})/);
-    if (match) {
-      let h = parseInt(match[1], 10);
-      const m = parseInt(match[2], 10);
-      if (isPM && h < 12) h += 12;
-      if (isAM && h === 12) h = 0;
-      startHour = h;
-      startMinute = m;
-    }
-  }
-
-  let clockInDate = null;
-  if (clockInInput instanceof Date) {
-    clockInDate = clockInInput;
-  } else if (typeof clockInInput === "string") {
-    // Check if ISO or standard time
-    const parsed = new Date(clockInInput);
-    if (!isNaN(parsed.getTime())) {
-      clockInDate = parsed;
-    } else {
-      // Time string like "08:35" or "08:35 AM"
-      const timeMatch = clockInInput.match(/(\d{1,2}):(\d{2})/);
-      if (timeMatch) {
-        const dummy = new Date();
-        let h = parseInt(timeMatch[1], 10);
-        const m = parseInt(timeMatch[2], 10);
-        if (/pm/i.test(clockInInput) && h < 12) h += 12;
-        if (/am/i.test(clockInInput) && h === 12) h = 0;
-        dummy.setHours(h, m, 0, 0);
-        clockInDate = dummy;
-      }
-    }
-  }
-
-  if (!clockInDate || isNaN(clockInDate.getTime())) {
-    return {
-      isLate: false,
-      status: "on-time",
-      minutesLate: 0,
-      lateMinutes: 0,
-      delayMinutes: 0,
-      penalty: 0,
-      latePenalty: 0,
-      tier: "On Time",
-      clockInFormatted: "--",
-    };
-  }
-
-  const clockInHour = clockInDate.getHours();
-  const clockInMinute = clockInDate.getMinutes();
-
-  const startTotalMinutes = startHour * 60 + startMinute;
-  const clockInTotalMinutes = clockInHour * 60 + clockInMinute;
-  const delayMinutes = Math.max(0, clockInTotalMinutes - startTotalMinutes);
-
-  if (delayMinutes === 0) {
-    return {
-      isLate: false,
-      status: "on-time",
-      minutesLate: 0,
-      lateMinutes: 0,
-      delayMinutes: 0,
-      penalty: 0,
-      latePenalty: 0,
-      tier: "On Time",
-      clockInFormatted: clockInDate.toLocaleTimeString("en-GH", { hour: "2-digit", minute: "2-digit" }),
-    };
-  }
-
-  // Check if custom latenessTiers array is configured in CompanySettings
-  if (Array.isArray(settings.latenessTiers) && settings.latenessTiers.length > 0) {
-    const matchedTier = settings.latenessTiers.find(
-      (t) => delayMinutes >= t.minMinutes && delayMinutes <= t.maxMinutes
-    );
-    if (matchedTier) {
-      const fineAmount = Number(matchedTier.fine || 0);
-      const tierName = matchedTier.name || `Tier ${matchedTier.tier}`;
-      return {
-        isLate: true,
-        status: "late",
-        minutesLate: delayMinutes,
-        lateMinutes: delayMinutes,
-        delayMinutes,
-        penalty: fineAmount,
-        latePenalty: fineAmount,
-        tier: tierName,
-        clockInFormatted: clockInDate.toLocaleTimeString("en-GH", { hour: "2-digit", minute: "2-digit" }),
-      };
-    }
-  }
-
-  const t1 = settings.lateTier1_amount !== undefined && settings.lateTier1_amount !== null && Number(settings.lateTier1_amount) >= 0 ? Number(settings.lateTier1_amount) : 10;
-  const t2 = settings.lateTier2_amount !== undefined && settings.lateTier2_amount !== null && Number(settings.lateTier2_amount) >= 0 ? Number(settings.lateTier2_amount) : 30;
-  const t3 = settings.lateTier3_amount !== undefined && settings.lateTier3_amount !== null && Number(settings.lateTier3_amount) >= 0 ? Number(settings.lateTier3_amount) : 50;
-  const t4 = settings.lateTier4_amount !== undefined && settings.lateTier4_amount !== null && Number(settings.lateTier4_amount) >= 0 ? Number(settings.lateTier4_amount) : 75;
-  const t5 = settings.lateTier5_amount !== undefined && settings.lateTier5_amount !== null && Number(settings.lateTier5_amount) >= 0 ? Number(settings.lateTier5_amount) : 100;
-  const t6 = settings.lateTier6_amount !== undefined && settings.lateTier6_amount !== null && Number(settings.lateTier6_amount) >= 0 ? Number(settings.lateTier6_amount) : 150;
-
-  let penalty = 0;
-  let tier = "";
-
-  if (delayMinutes >= 1 && delayMinutes <= 30) {
-    penalty = t1;
-    tier = "1–30 mins late (Tier 1)";
-  } else if (delayMinutes >= 31 && delayMinutes <= 60) {
-    penalty = t2;
-    tier = "31–60 mins late (Tier 2)";
-  } else if (delayMinutes >= 61 && delayMinutes <= 120) {
-    penalty = t3;
-    tier = "61–120 mins / 1–2 hrs (Tier 3)";
-  } else if (delayMinutes >= 121 && delayMinutes <= 180) {
-    penalty = t4;
-    tier = "121–180 mins / 2–3 hrs (Tier 4)";
-  } else if (delayMinutes >= 181 && delayMinutes <= 240) {
-    penalty = t5;
-    tier = "181–240 mins / 3–4 hrs (Tier 5)";
-  } else {
-    penalty = t6;
-    tier = "241+ mins / 4+ hrs (Tier 6)";
-  }
-
-  return {
-    isLate: true,
-    status: "late",
-    minutesLate: delayMinutes,
-    lateMinutes: delayMinutes,
-    delayMinutes,
-    penalty,
-    latePenalty: penalty,
-    tier,
-    clockInFormatted: clockInDate.toLocaleTimeString("en-GH", { hour: "2-digit", minute: "2-digit" }),
-  };
 };
 
 /**
@@ -440,14 +294,22 @@ export const calculateEmployeeMonthPayroll = async ({
     });
   }
 
-  // 3. Fetch Approved Leaves for Employee
+  // 3. Fetch Approved Leaves for Employee strictly overlapping target month
   let approvedLeaves = [];
+  const monthStartDate = new Date(parsedYear, monthIndex, 1);
+  const monthEndDate = new Date(parsedYear, monthIndex + 1, 0, 23, 59, 59, 999);
   if (validObjectId || employee._id) {
     try {
       const dbLeaves = await Leave.find({
         $and: [
           { $or: [{ employee: validObjectId }, { employee: employee._id }] },
           { status: "Approved" },
+          {
+            $or: [
+              { startDate: { $lte: monthEndDate }, endDate: { $gte: monthStartDate } },
+              { startDate: { $gte: monthStartDate, $lte: monthEndDate } },
+            ],
+          },
         ],
       }).lean();
       if (dbLeaves && dbLeaves.length > 0) {
@@ -484,10 +346,38 @@ export const calculateEmployeeMonthPayroll = async ({
   let approvedLeaveDays = 0;
   let absentDays = 0;
 
-  const absenceDeductionRate = Number(settings.absenceDeductionRate || 15);
+  // Dynamic Daily Salary Rate = Base Salary / Total Business Days in Month (Rule 3)
+  const dailySalaryRate = totalBusinessDaysInMonth > 0
+    ? parseFloat((baseSalary / totalBusinessDaysInMonth).toFixed(2))
+    : 0;
+  const absenceDeductionRate = dailySalaryRate > 0 ? dailySalaryRate : Number(settings.absenceDeductionRate || 15);
+
+  const todayStart = new Date(now.getFullYear(), now.getMonth(), now.getDate());
 
   daysToAudit.forEach((businessDay) => {
-    const { dateStr, dayName } = businessDay;
+    const { dateStr, dayName, dayNumber } = businessDay;
+    const bDate = new Date(parsedYear, monthIndex, dayNumber);
+    const isFutureDay = isCurrentMonth && bDate > todayStart;
+
+    // RULE 1: Future / Unelapsed Days Are Never Counted as Absent
+    if (!isFullMonthAudit && isFutureDay) {
+      dailyAudit.push({
+        date: dateStr,
+        dayName,
+        status: "Unelapsed / Future",
+        isAttended: false,
+        isOnTime: false,
+        isLate: false,
+        isApprovedLeave: false,
+        isAbsent: false,
+        clockIn: null,
+        lateMinutes: 0,
+        tier: "N/A",
+        penalty: 0,
+        reason: "Future day - strictly excluded from absences",
+      });
+      return;
+    }
 
     // Check Attendance check-in on this date
     const attRecord = attendanceRecords.find((a) => a.date === dateStr);
@@ -497,7 +387,7 @@ export const calculateEmployeeMonthPayroll = async ({
     // Check if covered by Approved Leave
     const isApprovedLeave = approvedLeaves.some((leave) => {
       const s = new Date(leave.startDate);
-      const e = new Date(leave.endDate);
+      const e = new Date(leave.endDate || leave.startDate);
       const d = new Date(dateStr);
       s.setHours(0, 0, 0, 0);
       e.setHours(23, 59, 59, 999);
@@ -647,6 +537,8 @@ export const calculateEmployeeMonthPayroll = async ({
     onTimeDays,
     approvedLeaveDays,
     totalLateMinutes,
+    dailySalaryRate,
+    dailyRate: dailySalaryRate,
     latenessDeductions: finalLatenessDeductions,
     absentDays,
     absenceDeductions: totalAbsenceDeductions,

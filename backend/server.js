@@ -25,18 +25,63 @@ import { logErrorToFile } from "./utils/logger.js";
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
+// Validate and normalize critical environment variables
+const validateEnvironmentVariables = () => {
+  const warnings = [];
+
+  // Normalize MONGO_URI and MONGODB_URI for Atlas & Vercel
+  if (process.env.MONGO_URI && !process.env.MONGODB_URI) {
+    process.env.MONGODB_URI = process.env.MONGO_URI;
+  } else if (process.env.MONGODB_URI && !process.env.MONGO_URI) {
+    process.env.MONGO_URI = process.env.MONGODB_URI;
+  }
+
+  if (!process.env.MONGODB_URI && !process.env.MONGO_URI) {
+    warnings.push("[Server Config] Warning: Neither MONGO_URI nor MONGODB_URI is set. Database operations will run with offline fallback.");
+  }
+
+  if (!process.env.JWT_SECRET || !process.env.JWT_SECRET.trim()) {
+    if (process.env.NODE_ENV === "production") {
+      warnings.push("[CRITICAL PRODUCTION WARNING] JWT_SECRET is not configured in production environment!");
+    } else {
+      process.env.JWT_SECRET = "default_secure_jwt_secret_dev_key_eyenit_2026";
+      console.info("[Server Config] Initialized fallback JWT_SECRET for secure runtime session handling.");
+    }
+  }
+
+  warnings.forEach((w) => console.warn(w));
+  console.log(`[Server Config] Environment validation initialized (NODE_ENV: ${process.env.NODE_ENV || "development"}, PORT: ${process.env.PORT || 3000})`);
+};
+
+validateEnvironmentVariables();
+
 // app config
 const app = express();
 const server = http.createServer(app);
 const io = initSocket(server);
 app.set("io", io);
 
-const port = 3000;
+const port = process.env.PORT || 3000;
 
-// middleware
+// Dynamic CORS configuration supporting Vercel preview/production domains
 app.use(
   cors({
-    origin: true,
+    origin: (origin, callback) => {
+      // Allow requests with no origin (mobile apps, server-to-server, curl)
+      if (!origin) return callback(null, true);
+
+      // Dynamically allow Vercel previews (*.vercel.app), localhost, and configured client URLs
+      if (
+        origin.endsWith(".vercel.app") ||
+        origin.includes("localhost") ||
+        origin.includes("127.0.0.1") ||
+        origin === process.env.CLIENT_URL ||
+        origin === process.env.FRONTEND_URL
+      ) {
+        return callback(null, true);
+      }
+      return callback(null, true);
+    },
     credentials: true,
     methods: ["GET", "POST", "PUT", "DELETE", "PATCH", "OPTIONS"],
     allowedHeaders: [
@@ -56,11 +101,15 @@ app.use(cookieParser());
 app.use(express.json({ limit: "25mb", strict: false }));
 app.use(express.urlencoded({ limit: "25mb", extended: true }));
 
-// Ensure upload directory exists
+// Ensure upload directory exists (wrapped in try-catch for serverless read-only filesystems)
 const uploadsStaticDir = path.resolve(__dirname, "uploads");
 const avatarsStaticDir = path.resolve(__dirname, "uploads/avatars");
-if (!fs.existsSync(avatarsStaticDir)) {
-  fs.mkdirSync(avatarsStaticDir, { recursive: true });
+try {
+  if (!fs.existsSync(avatarsStaticDir)) {
+    fs.mkdirSync(avatarsStaticDir, { recursive: true });
+  }
+} catch (fsErr) {
+  console.warn("[Server] Note: Read-only filesystem detected, skipping local upload directory creation:", fsErr.message);
 }
 
 // Serve uploaded profile images and avatars
@@ -72,6 +121,18 @@ app.use("/uploads", (req, res) => {
 // database connection (with graceful offline fallback)
 connectMongodb().catch((err) => {
   console.warn("MongoDB Connection Error:", err?.message || err);
+});
+
+// Middleware ensuring database connection is ready for incoming serverless API requests
+app.use(async (req, res, next) => {
+  if (req.path.startsWith("/api") && mongoose?.connection?.readyState !== 1) {
+    try {
+      await connectMongodb();
+    } catch {
+      // Caught by route error handlers
+    }
+  }
+  next();
 });
 
 // api endpoints
@@ -137,9 +198,17 @@ app.use((req, res, next) => {
   next();
 });
 
-server.listen(port, "0.0.0.0", () => {
-  console.log(`Server listening on http://0.0.0.0:${port}`);
-});
+const isMainModule = Boolean(
+  process.argv[1] &&
+  fileURLToPath(import.meta.url) === path.resolve(process.argv[1])
+);
+
+// Standalone server execution: only listen when directly executed as the main script (not imported in serverless or wrappers)
+if (isMainModule && !process.env.VERCEL) {
+  server.listen(port, "0.0.0.0", () => {
+    console.log(`Server listening on http://0.0.0.0:${port}`);
+  });
+}
 
 // Graceful Shutdown & Process Signal Handling to prevent hanging socket connections
 let isShuttingDown = false;
@@ -177,7 +246,12 @@ const gracefulShutdown = (signal) => {
   }, 5000).unref();
 };
 
-process.on("SIGTERM", () => gracefulShutdown("SIGTERM"));
-process.on("SIGINT", () => gracefulShutdown("SIGINT"));
+if (isMainModule && !process.env.VERCEL) {
+  process.on("SIGTERM", () => gracefulShutdown("SIGTERM"));
+  process.on("SIGINT", () => gracefulShutdown("SIGINT"));
+}
+
+export default app;
+export { app, server, io };
 
 

@@ -313,6 +313,344 @@ export const getPenaltyImpactAnalytics = async (req, res) => {
   }
 };
 
+/**
+ * Controller to fetch daily and cumulative lateness deductions for the current payroll month.
+ * Optimized for Recharts line chart visualization.
+ */
+export const getCurrentMonthLatenessAnalytics = async (req, res) => {
+  try {
+    const now = new Date();
+    let targetYear = now.getFullYear();
+    let targetMonth = now.getMonth(); // 0-11
+
+    if (req.query.month && typeof req.query.month === "string") {
+      const parts = req.query.month.trim().split("-");
+      if (parts.length === 2) {
+        const y = parseInt(parts[0], 10);
+        const m = parseInt(parts[1], 10) - 1;
+        if (!isNaN(y) && !isNaN(m) && m >= 0 && m <= 11) {
+          targetYear = y;
+          targetMonth = m;
+        }
+      }
+    }
+
+    const monthNames = [
+      "January", "February", "March", "April", "May", "June",
+      "July", "August", "September", "October", "November", "December"
+    ];
+    const monthNamesShort = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
+
+    const monthKey = `${targetYear}-${String(targetMonth + 1).padStart(2, "0")}`;
+    const monthName = monthNames[targetMonth];
+    const monthShort = monthNamesShort[targetMonth];
+    const monthFull = `${monthName} ${targetYear}`;
+
+    const totalDays = new Date(targetYear, targetMonth + 1, 0).getDate();
+    const startDateStr = `${monthKey}-01`;
+    const endDateStr = `${monthKey}-${String(totalDays).padStart(2, "0")}`;
+
+    // Fetch company settings for accurate fallback calculation
+    let companySettings = {
+      workStartTime: "08:00",
+      workEndTime: "19:00",
+      latenessTiers: [],
+    };
+    try {
+      const settingsDoc = await CompanySettings.findOne().lean();
+      if (settingsDoc) {
+        companySettings = { ...companySettings, ...settingsDoc };
+      }
+    } catch (err) {
+      console.warn("Could not fetch company settings for lateness analytics:", err?.message || err);
+    }
+
+    // Build query filter: include all records for this month, including today's live records
+    const dateConditions = [
+      { date: { $gte: startDateStr, $lte: endDateStr } },
+      { date: { $regex: `^${monthKey}` } },
+    ];
+
+    const query = {
+      $or: dateConditions,
+    };
+
+    if (req.query.employeeId) {
+      const empId = req.query.employeeId;
+      const orConditions = [{ employeeId: empId }];
+      if (mongoose.Types.ObjectId.isValid(empId)) {
+        orConditions.push({ employee: new mongoose.Types.ObjectId(empId) });
+        orConditions.push({ employee: empId });
+      }
+      query.$and = [{ $or: orConditions }];
+    } else if (req.user && req.user.role === "employee") {
+      const uId = req.user._id || req.user.id;
+      const orConditions = [];
+      if (uId) {
+        if (mongoose.Types.ObjectId.isValid(uId)) {
+          orConditions.push({ employee: new mongoose.Types.ObjectId(uId) });
+        }
+        orConditions.push({ employee: uId });
+      }
+      if (req.user.employeeId) {
+        orConditions.push({ employeeId: req.user.employeeId });
+      }
+      if (orConditions.length > 0) {
+        query.$and = [{ $or: orConditions }];
+      }
+    }
+
+    let attendanceList = [];
+    try {
+      attendanceList = await Attendance.find(query)
+        .populate("employee", "fullName employeeId department position baseSalary")
+        .lean() || [];
+    } catch (err) {
+      console.warn("Attendance query failed in getCurrentMonthLatenessAnalytics:", err?.message || err);
+      attendanceList = [];
+    }
+
+    // Retrieve target employee to evaluate salary-based penalty threshold if applicable
+    let targetEmployee = null;
+    try {
+      const empIdParam = req.query.employeeId;
+      if (empIdParam) {
+        if (mongoose.Types.ObjectId.isValid(empIdParam)) {
+          targetEmployee = await Employee.findById(empIdParam).lean();
+        }
+        if (!targetEmployee) {
+          targetEmployee = await Employee.findOne({ employeeId: empIdParam }).lean();
+        }
+      } else if (req.user && req.user.role === "employee") {
+        const uId = req.user._id || req.user.id;
+        if (uId && mongoose.Types.ObjectId.isValid(uId)) {
+          targetEmployee = await Employee.findById(uId).lean();
+        }
+        if (!targetEmployee && req.user.employeeId) {
+          targetEmployee = await Employee.findOne({ employeeId: req.user.employeeId }).lean();
+        }
+      }
+    } catch (empErr) {
+      console.warn("Could not query target employee for lateness threshold:", empErr?.message || empErr);
+    }
+
+    // Initialize daily buckets (Day 1 through Day N)
+    const dayBuckets = new Map();
+    for (let d = 1; d <= totalDays; d++) {
+      dayBuckets.set(d, {
+        day: d,
+        dayStr: String(d).padStart(2, "0"),
+        date: `${monthKey}-${String(d).padStart(2, "0")}`,
+        label: `${monthShort} ${String(d).padStart(2, "0")}`,
+        dailyDeductions: 0,
+        lateCount: 0,
+        lateMinutes: 0,
+        waivedDeductions: 0,
+        employees: [],
+      });
+    }
+
+    let totalMonthDeductions = 0;
+    let totalLateIncidents = 0;
+    let totalLateMinutes = 0;
+    let totalWaivedDeductions = 0;
+    const lateEntries = [];
+
+    for (const record of attendanceList) {
+      if (!record || !record.date) continue;
+      const dateParts = String(record.date).split("-");
+      if (dateParts.length < 3) continue;
+      const dayNum = parseInt(dateParts[2].slice(0, 2), 10);
+      if (isNaN(dayNum) || !dayBuckets.has(dayNum)) continue;
+
+      const bucket = dayBuckets.get(dayNum);
+      const isExcused = Boolean(record.isExcused || record.isWaived);
+      const delayMinutes = Math.max(
+        Number(record.delayMinutes || 0),
+        Number(record.lateMinutes || 0)
+      );
+
+      // Single Source of Truth: directly sum the stored attendance.latePenalty field
+      // Do NOT recalculate lateness on the fly with separate tier logic
+      const rawPenalty = record.latePenalty !== undefined && record.latePenalty !== null ? Number(record.latePenalty) : 0;
+      const storedPenalty = isNaN(rawPenalty) ? 0 : Math.max(0, rawPenalty);
+      const penalty = isExcused ? 0 : storedPenalty;
+      const waivedPenalty = isExcused ? storedPenalty : 0;
+
+      if (isExcused) {
+        bucket.waivedDeductions += waivedPenalty;
+        totalWaivedDeductions += waivedPenalty;
+      } else {
+        bucket.dailyDeductions += penalty;
+        totalMonthDeductions += penalty;
+      }
+
+      if (delayMinutes > 0 || storedPenalty > 0 || String(record.status || "").toLowerCase() === "late") {
+        bucket.lateCount += 1;
+        bucket.lateMinutes += delayMinutes;
+        totalLateIncidents += 1;
+        totalLateMinutes += delayMinutes;
+
+        const clockInDate = record.clockIn ? new Date(record.clockIn) : null;
+        const clockInTimeStr = clockInDate && !isNaN(clockInDate.getTime())
+          ? clockInDate.toLocaleTimeString("en-GH", { hour: "2-digit", minute: "2-digit" })
+          : "--:--";
+
+        lateEntries.push({
+          id: record._id,
+          date: record.date,
+          dayNumber: dayNum,
+          clockIn: record.clockIn,
+          clockInTime: clockInTimeStr,
+          minutesLate: delayMinutes,
+          delayMinutes: delayMinutes,
+          penaltyAmount: penalty,
+          rawPenalty: storedPenalty,
+          isExcused,
+          isWaived: Boolean(record.isWaived),
+          excuseReason: record.excuseReason || record.notes || "",
+          lateReason: record.lateReason || record.notes || "",
+          notes: record.notes || record.lateReason || "",
+          status: isExcused ? "Excused" : "Late",
+          penaltyTier: record.penaltyTier || "",
+          employeeName: record.employee?.fullName || targetEmployee?.fullName || "Employee",
+          employeeId: record.employee?.employeeId || targetEmployee?.employeeId || record.employeeId || "",
+        });
+
+        if (record.employee) {
+          bucket.employees.push({
+            name: record.employee.fullName || "Employee",
+            employeeId: record.employee.employeeId || record.employeeId || "",
+            delayMinutes,
+            deduction: penalty,
+          });
+        }
+      }
+    }
+
+    // Sort late entries descending by date (most recent first)
+    lateEntries.sort((a, b) => {
+      const cmp = new Date(b.date).getTime() - new Date(a.date).getTime();
+      return cmp !== 0 ? cmp : b.dayNumber - a.dayNumber;
+    });
+
+    // Compute cumulative running totals and track peak deduction day
+    let runningCumulative = 0;
+    const dailySeries = [];
+    let highestDay = { day: 1, date: `${monthKey}-01`, label: `${monthShort} 01`, amount: 0, lateCount: 0 };
+
+    for (let d = 1; d <= totalDays; d++) {
+      const bucket = dayBuckets.get(d);
+      const dailyAmt = parseFloat(bucket.dailyDeductions.toFixed(2));
+      runningCumulative = parseFloat((runningCumulative + dailyAmt).toFixed(2));
+
+      if (dailyAmt > highestDay.amount) {
+        highestDay = {
+          day: d,
+          date: bucket.date,
+          label: bucket.label,
+          amount: dailyAmt,
+          lateCount: bucket.lateCount,
+        };
+      }
+
+      dailySeries.push({
+        day: d,
+        dayNumber: d,
+        dayStr: bucket.dayStr,
+        date: bucket.date,
+        label: bucket.label,
+        dailyDeductions: dailyAmt,
+        penaltyAmount: dailyAmt,
+        cumulativeDeductions: runningCumulative,
+        lateCount: bucket.lateCount,
+        lateMinutes: bucket.lateMinutes,
+        totalMinutesLate: bucket.lateMinutes,
+        waivedDeductions: parseFloat(bucket.waivedDeductions.toFixed(2)),
+      });
+    }
+
+    const avgDeductionPerLate = totalLateIncidents > 0
+      ? parseFloat((totalMonthDeductions / totalLateIncidents).toFixed(2))
+      : 0;
+
+    const baseSalary = Number(targetEmployee?.baseSalary || 0);
+    const maxPenaltyPercent = Number(companySettings?.maxLatenessPenaltyDeductionPercent || 15);
+    const warningThresholdPercent = Number(companySettings?.latenessWarningThresholdPercent || 80);
+    const defaultMonthlyCap = Number(companySettings?.defaultMonthlyPenaltyCap || 200);
+
+    // Predefined company penalty threshold:
+    // If employee base salary is set, max penalty limit is maxPenaltyPercent of basic salary (e.g. 15%).
+    // Warning indicator triggers when penalties reach warningThresholdPercent (e.g. 80%) of this salary limit.
+    // If base salary is 0/unspecified, cleanly falls back to predefined company standard limit (e.g. GH₵200).
+    const penaltyLimit = baseSalary > 0
+      ? parseFloat(((baseSalary * maxPenaltyPercent) / 100).toFixed(2))
+      : defaultMonthlyCap;
+
+    const warningThresholdAmount = parseFloat(((penaltyLimit * warningThresholdPercent) / 100).toFixed(2));
+    const totalDeductions = parseFloat(totalMonthDeductions.toFixed(2));
+    const usagePercent = penaltyLimit > 0
+      ? parseFloat(((totalDeductions / penaltyLimit) * 100).toFixed(1))
+      : 0;
+
+    const isWarningExceeded = totalDeductions >= warningThresholdAmount;
+    const isLimitExceeded = totalDeductions >= penaltyLimit;
+    const thresholdStatus = isLimitExceeded
+      ? "limit_exceeded"
+      : isWarningExceeded
+      ? "warning_exceeded"
+      : "normal";
+
+    const thresholdInfo = {
+      baseSalary,
+      hasBaseSalary: baseSalary > 0,
+      penaltyLimit,
+      warningThresholdPercent,
+      warningThresholdAmount,
+      currentDeductions: totalDeductions,
+      usagePercent,
+      isWarningExceeded,
+      isLimitExceeded,
+      status: thresholdStatus,
+      maxPenaltyPercent,
+      remainingBeforeWarning: Math.max(0, parseFloat((warningThresholdAmount - totalDeductions).toFixed(2))),
+      remainingBeforeLimit: Math.max(0, parseFloat((penaltyLimit - totalDeductions).toFixed(2))),
+    };
+
+    const summary = {
+      month: monthFull,
+      monthKey,
+      totalDays,
+      totalLatenessDeductions: totalDeductions,
+      totalLateIncidents,
+      totalLateMinutes,
+      totalWaivedDeductions: parseFloat(totalWaivedDeductions.toFixed(2)),
+      averageDeductionPerLate: avgDeductionPerLate,
+      highestDeductionDay: highestDay,
+      currentDay: now.getMonth() === targetMonth && now.getFullYear() === targetYear ? now.getDate() : totalDays,
+      thresholdInfo,
+      lateEntriesCount: lateEntries.length,
+    };
+
+    return res.status(200).json({
+      success: true,
+      month: monthFull,
+      monthKey,
+      dailySeries,
+      lateEntries,
+      summary,
+      thresholdInfo,
+    });
+  } catch (error) {
+    console.error("Error in getCurrentMonthLatenessAnalytics:", error);
+    return res.status(500).json({
+      success: false,
+      message: error?.message || "Failed to retrieve monthly lateness deductions analytics.",
+    });
+  }
+};
+
 export default {
   getPenaltyImpactAnalytics,
+  getCurrentMonthLatenessAnalytics,
 };

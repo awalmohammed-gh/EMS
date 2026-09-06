@@ -209,29 +209,29 @@ export const PayrollDetailsModal = ({ payrollId, initialData, onClose, onRefresh
   return (
     <div
       id="payroll-details-modal-overlay"
-      className="fixed inset-0 bg-black/60 backdrop-blur-xs flex items-center justify-center p-3 sm:p-4 z-50 animate-in fade-in duration-200"
+      className="fixed inset-0 z-50 flex items-end sm:items-center justify-center p-0 sm:p-4 bg-slate-950/60 backdrop-blur-sm animate-fade-in"
       onClick={onClose}
     >
       <div
         id="payroll-details-modal-container"
-        className="bg-white rounded-2xl max-w-3xl w-full max-h-[92vh] flex flex-col shadow-2xl border border-[#E2E8F0] overflow-hidden"
+        className="bg-white dark:bg-slate-900 rounded-t-[28px] sm:rounded-3xl max-w-3xl w-full max-h-[90vh] flex flex-col shadow-2xl border border-[#E2E8F0] dark:border-slate-800 overflow-hidden animate-fade-in"
         onClick={(e) => e.stopPropagation()}
       >
         {/* Modal Header */}
-        <div className="p-5 sm:p-6 border-b border-[#E2E8F0] bg-white flex items-start justify-between gap-4">
-          <div className="flex items-center gap-3.5">
-            <div className="w-12 h-12 rounded-xl bg-[#002185] text-white flex items-center justify-center text-lg font-bold shadow-md shadow-[#002185]/20 shrink-0">
+        <div className="p-4 sm:p-6 border-b border-[#E2E8F0] dark:border-slate-800 bg-white dark:bg-slate-900 flex items-start justify-between gap-3 shrink-0">
+          <div className="flex items-center gap-3">
+            <div className="w-10 h-10 sm:w-12 sm:h-12 rounded-xl bg-[#002185] text-white flex items-center justify-center text-base sm:text-lg font-bold shadow-md shadow-[#002185]/20 shrink-0">
               {employee?.fullName ? employee.fullName.charAt(0).toUpperCase() : "E"}
             </div>
             <div>
               <div className="flex items-center gap-2 flex-wrap">
-                <h2 className="text-lg sm:text-xl font-bold text-[#002185]">
+                <h2 className="text-base sm:text-xl font-bold text-[#002185] dark:text-blue-300">
                   {employee?.fullName || "Employee Payroll Details"}
                 </h2>
                 {getStatusBadge(payroll?.status)}
               </div>
-              <div className="flex items-center gap-3 text-xs text-[#64748B] mt-1 flex-wrap">
-                <span className="font-semibold text-[#002185]">
+              <div className="flex items-center gap-2 sm:gap-3 text-[11px] sm:text-xs text-[#64748B] dark:text-slate-400 mt-1 flex-wrap">
+                <span className="font-semibold text-[#002185] dark:text-blue-400">
                   ID: {employee?.employeeId || payroll?.employeeId || "N/A"}
                 </span>
                 <span>•</span>
@@ -561,11 +561,11 @@ export const PayrollDetailsModal = ({ payrollId, initialData, onClose, onRefresh
         </div>
 
         {/* Modal Footer Controls */}
-        <div className="p-4 sm:p-5 bg-[#F8FAFC] border-t border-[#E2E8F0] flex flex-col sm:flex-row items-center justify-between gap-3">
+        <div className="p-4 sm:p-5 bg-[#F8FAFC] dark:bg-slate-900 border-t border-[#E2E8F0] dark:border-slate-800 flex flex-col sm:flex-row items-center justify-between gap-3 shrink-0">
           {/* Status Changer Buttons */}
-          <div className="flex items-center gap-2 w-full sm:w-auto">
-            <span className="text-xs text-[#64748B] font-medium hidden sm:inline">Change Status:</span>
-            <div className="flex items-center gap-1.5">
+          <div className="flex items-center gap-2 w-full sm:w-auto overflow-x-auto">
+            <span className="text-xs text-[#64748B] dark:text-slate-400 font-medium shrink-0">Status:</span>
+            <div className="flex items-center gap-1.5 flex-wrap">
               <button
                 type="button"
                 onClick={() => handleStatusChange("Paid")}
@@ -573,7 +573,7 @@ export const PayrollDetailsModal = ({ payrollId, initialData, onClose, onRefresh
                 className={`px-2.5 py-1.5 rounded-lg text-xs font-bold transition cursor-pointer flex items-center gap-1 ${
                   payroll?.status === "Paid"
                     ? "bg-[#16A34A] text-white shadow-xs"
-                    : "bg-white border border-[#E2E8F0] text-[#16A34A] hover:bg-[#F0FDF4]"
+                    : "bg-white dark:bg-slate-800 border border-[#E2E8F0] dark:border-slate-700 text-[#16A34A] hover:bg-[#F0FDF4] dark:hover:bg-emerald-950/40"
                 }`}
               >
                 <Check className="w-3 h-3" />
@@ -587,7 +587,7 @@ export const PayrollDetailsModal = ({ payrollId, initialData, onClose, onRefresh
                 className={`px-2.5 py-1.5 rounded-lg text-xs font-bold transition cursor-pointer flex items-center gap-1 ${
                   payroll?.status === "Pending"
                     ? "bg-[#F59E0B] text-white shadow-xs"
-                    : "bg-white border border-[#E2E8F0] text-[#F59E0B] hover:bg-[#FFFBEB]"
+                    : "bg-white dark:bg-slate-800 border border-[#E2E8F0] dark:border-slate-700 text-[#F59E0B] hover:bg-[#FFFBEB] dark:hover:bg-amber-950/40"
                 }`}
               >
                 <Clock className="w-3 h-3" />
@@ -601,7 +601,7 @@ export const PayrollDetailsModal = ({ payrollId, initialData, onClose, onRefresh
                 className={`px-2.5 py-1.5 rounded-lg text-xs font-bold transition cursor-pointer flex items-center gap-1 ${
                   payroll?.status === "Failed"
                     ? "bg-[#DC2626] text-white shadow-xs"
-                    : "bg-white border border-[#E2E8F0] text-[#DC2626] hover:bg-[#FEF2F2]"
+                    : "bg-white dark:bg-slate-800 border border-[#E2E8F0] dark:border-slate-700 text-[#DC2626] hover:bg-[#FEF2F2] dark:hover:bg-rose-950/40"
                 }`}
               >
                 <AlertTriangle className="w-3 h-3" />
@@ -617,28 +617,28 @@ export const PayrollDetailsModal = ({ payrollId, initialData, onClose, onRefresh
               type="button"
               onClick={() => setShowDeleteConfirm(true)}
               disabled={isDeleting}
-              className="px-3 py-2 border border-[#FECACA] text-[#DC2626] hover:bg-[#FEF2F2] rounded-xl text-xs font-semibold flex items-center gap-1.5 transition cursor-pointer disabled:opacity-50"
+              className="flex-1 sm:flex-none justify-center px-3 py-2 border border-[#FECACA] dark:border-rose-900/50 text-[#DC2626] dark:text-rose-400 hover:bg-[#FEF2F2] dark:hover:bg-rose-950/40 rounded-xl text-xs font-semibold flex items-center gap-1.5 transition cursor-pointer disabled:opacity-50"
               title="Delete payroll entry"
             >
               <Trash2 className="w-3.5 h-3.5" />
-              <span className="hidden sm:inline">Delete Record</span>
+              <span>Delete</span>
             </button>
 
             <button
               id="btn-modal-download-pdf"
               type="button"
               onClick={() => downloadPayslipPDF(payroll)}
-              className="px-3.5 py-2 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl text-xs font-bold flex items-center gap-1.5 shadow-xs transition cursor-pointer"
+              className="flex-1 sm:flex-none justify-center px-3.5 py-2 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl text-xs font-bold flex items-center gap-1.5 shadow-xs transition cursor-pointer"
             >
               <Download className="w-3.5 h-3.5" />
-              <span>Download PDF</span>
+              <span>PDF</span>
             </button>
 
             <button
               id="btn-modal-print-payslip"
               type="button"
               onClick={() => printPayslipDocument(payroll)}
-              className="px-3.5 py-2 bg-[#002185] hover:bg-[#ff5500] text-white rounded-xl text-xs font-bold flex items-center gap-1.5 shadow-xs transition cursor-pointer"
+              className="flex-1 sm:flex-none justify-center px-3.5 py-2 bg-[#002185] hover:bg-[#ff5500] text-white rounded-xl text-xs font-bold flex items-center gap-1.5 shadow-xs transition cursor-pointer"
             >
               <Printer className="w-3.5 h-3.5" />
               <span>Print</span>
@@ -648,7 +648,7 @@ export const PayrollDetailsModal = ({ payrollId, initialData, onClose, onRefresh
               id="btn-modal-close"
               type="button"
               onClick={onClose}
-              className="px-4 py-2 bg-white border border-[#E2E8F0] hover:bg-[#F1F5F9] text-[#64748B] rounded-xl text-xs font-semibold transition cursor-pointer"
+              className="flex-1 sm:flex-none justify-center px-4 py-2 bg-white dark:bg-slate-800 border border-[#E2E8F0] dark:border-slate-700 hover:bg-[#F1F5F9] dark:hover:bg-slate-700 text-[#64748B] dark:text-slate-300 rounded-xl text-xs font-semibold transition cursor-pointer text-center"
             >
               Close
             </button>

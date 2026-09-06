@@ -52,7 +52,7 @@ const seedRealData = async () => {
           attendance: {
             workingDays: ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday"],
             workStartTime: "08:00",
-            workEndTime: "17:00",
+            workEndTime: "19:00",
             lateAfterMinutes: 15,
             overtimeEnabled: true,
           },

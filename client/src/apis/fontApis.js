@@ -199,6 +199,13 @@ export const getPenaltyImpactAnalytics = (params) => {
   });
 };
 
+export const getMonthlyLatenessAnalytics = (params) => {
+  return api
+    .get("/admin/analytics/monthly-lateness-deductions", { params })
+    .catch(() => api.get("/pay/monthly-lateness-deductions", { params }))
+    .catch(() => api.get("/employee/monthly-lateness-deductions", { params }));
+};
+
 export const getEmployeeLivePayrollSummary = (params) => {
   return api.get("/pay/live-summary", { params });
 };
@@ -242,8 +249,8 @@ export const syncAttendancePenalties = (data = {}) => {
 };
 
 //attendance
-export const attendanceClockIn = () => {
-  return api.post("/attendance/clock-in");
+export const attendanceClockIn = (data = {}) => {
+  return api.post("/attendance/clock-in", data);
 };
 
 export const attendanceClockOut = () => {
@@ -292,6 +299,13 @@ export const deleteAttendanceRecord = (id) => {
 
 export const createManualAttendanceRecord = (data) => {
   return api.post("/attendance/manual-record", data);
+};
+
+export const overrideAttendanceRecord = (data, id = null) => {
+  if (id) {
+    return api.put(`/admin/attendance/${id}/override`, data).catch(() => api.put(`/attendance/record/${id}`, data));
+  }
+  return api.post("/admin/attendance/override", data).catch(() => api.post("/attendance/manual-record", data));
 };
 
 
@@ -494,12 +508,15 @@ export const getAuditLogs = (params) => {
 };
 
 // Profile Picture & Avatar Management
-export const uploadProfilePicture = (formData) => {
-  return api.patch("/users/profile-picture", formData, {
-    headers: {
-      "Content-Type": "multipart/form-data",
-    },
-  });
+export const uploadProfilePicture = (payload) => {
+  if (typeof FormData !== "undefined" && payload instanceof FormData) {
+    return api.patch("/users/profile-picture", payload, {
+      headers: {
+        "Content-Type": "multipart/form-data",
+      },
+    });
+  }
+  return api.patch("/users/profile-picture", payload);
 };
 
 export const removeProfilePicture = () => {
@@ -516,6 +533,26 @@ export const getRecentActivity = (params) => {
 };
 
 export const getRecentActivityFeed = getRecentActivity;
+
+// Payroll Forecasting Tool APIs (End-of-Month Lateness Deductions Projections)
+export const getPayrollForecasting = (params = {}) => {
+  return api.get("/payroll/forecasting", { params });
+};
+
+export const getEmployeeForecasting = (employeeId, params = {}) => {
+  return api.get(`/payroll/forecasting/employee/${employeeId}`, { params });
+};
+
+export const getMyPayrollForecasting = (params = {}) => {
+  return api.get("/payroll/forecasting/me", { params });
+};
+
+export const exportPayrollForecastingCSV = (params = {}) => {
+  return api.get("/payroll/forecasting/export", {
+    params,
+    responseType: "blob",
+  });
+};
 
 
 

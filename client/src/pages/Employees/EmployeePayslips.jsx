@@ -103,9 +103,9 @@ const EmployeePayslips = () => {
   const getStatusBadge = (status) => {
     const s = (status || "Paid").toLowerCase();
     if (s === "paid" || s === "published") {
-      return "bg-[#F0FDF4] text-[#16A34A] border border-[#16A34A]/20";
+      return "bg-emerald-50 dark:bg-emerald-950/40 text-emerald-700 dark:text-emerald-300 border border-emerald-200 dark:border-emerald-800/60";
     }
-    return "bg-[#F8FAFC] text-[#64748B] border border-[#E2E8F0]";
+    return "bg-slate-50 dark:bg-[#162033] text-slate-600 dark:text-slate-400 border border-slate-200 dark:border-slate-700/60";
   };
 
   const handleDownloadPDF = (payslip) => {
@@ -200,7 +200,7 @@ const EmployeePayslips = () => {
         {/* Header */}
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
           <div>
-            <h1 className="text-2xl sm:text-3xl font-extrabold tracking-tight text-[#0B1E48] dark:text-blue-100">
+            <h1 className="text-2xl sm:text-3xl font-extrabold tracking-tight text-slate-900 dark:text-white">
               My Payslips &amp; History
             </h1>
             <p className="text-sm font-medium text-slate-500 dark:text-slate-400 mt-1">
@@ -212,12 +212,12 @@ const EmployeePayslips = () => {
               type="button"
               onClick={fetchEmployeePayslips}
               disabled={isLoading}
-              className="inline-flex items-center gap-1.5 px-3 py-2 text-xs font-semibold text-[#002185] bg-white border border-[#E2E8F0] rounded-xl hover:bg-slate-50 transition shadow-xs cursor-pointer disabled:opacity-60"
+              className="inline-flex items-center gap-1.5 px-3.5 py-2 text-xs font-semibold text-[#002185] dark:text-blue-400 bg-white dark:bg-[#111927] border border-slate-200 dark:border-slate-800/80 rounded-xl hover:bg-slate-50 dark:hover:bg-[#162033] transition shadow-xs cursor-pointer disabled:opacity-60"
             >
               <RefreshCw className={`w-3.5 h-3.5 ${isLoading ? "animate-spin text-blue-600" : ""}`} />
               <span>Refresh</span>
             </button>
-            <div className="text-xs text-[#64748B] bg-white px-3.5 py-2 rounded-xl border border-[#E2E8F0] shadow-xs font-semibold">
+            <div className="text-xs text-slate-600 dark:text-slate-300 bg-white dark:bg-[#111927] px-3.5 py-2 rounded-xl border border-slate-200 dark:border-slate-800/80 shadow-xs font-semibold">
               {filteredPayslips.length} Released Payslip{filteredPayslips.length !== 1 ? "s" : ""}
             </div>
           </div>
@@ -226,9 +226,9 @@ const EmployeePayslips = () => {
         {/* Clean, Streamlined Monthly Billing Cycle Filter */}
         <div
           id="payslip-monthly-filter-bar"
-          className="flex flex-wrap items-center justify-between gap-3 p-4 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl shadow-xs"
+          className="flex flex-wrap items-center justify-between gap-3 p-4 bg-white dark:bg-[#111927] border border-slate-200 dark:border-slate-800/80 rounded-2xl shadow-sm"
         >
-          <div className="flex items-center gap-2 text-xs font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400">
+          <div className="flex items-center gap-2 text-xs font-bold uppercase tracking-wider text-slate-600 dark:text-slate-300">
             <Filter className="w-4 h-4 text-[#002185] dark:text-blue-400" />
             <span>Billing Cycle Filter</span>
           </div>
@@ -239,7 +239,7 @@ const EmployeePayslips = () => {
               id="payslip-filter-year-select"
               value={selectedYear}
               onChange={(e) => setSelectedYear(e.target.value)}
-              className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 text-sm font-medium text-[#0B1E48] dark:text-blue-100 rounded-xl px-3.5 py-2.5 shadow-sm focus:outline-none focus:ring-2 focus:ring-blue-500 cursor-pointer"
+              className="bg-slate-50 dark:bg-[#162033] border border-slate-200 dark:border-slate-700/60 text-sm font-medium text-slate-900 dark:text-slate-100 rounded-xl px-3.5 py-2.5 shadow-sm focus:outline-none focus:ring-2 focus:ring-blue-500 cursor-pointer"
             >
               <option value="all">All Years</option>
               {availableYears.map((yr) => (
@@ -254,7 +254,7 @@ const EmployeePayslips = () => {
               id="payslip-filter-month-select"
               value={selectedMonth}
               onChange={(e) => setSelectedMonth(e.target.value)}
-              className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 text-sm font-medium text-[#0B1E48] dark:text-blue-100 rounded-xl px-3.5 py-2.5 shadow-sm focus:outline-none focus:ring-2 focus:ring-blue-500 cursor-pointer"
+              className="bg-slate-50 dark:bg-[#162033] border border-slate-200 dark:border-slate-700/60 text-sm font-medium text-slate-900 dark:text-slate-100 rounded-xl px-3.5 py-2.5 shadow-sm focus:outline-none focus:ring-2 focus:ring-blue-500 cursor-pointer"
             >
               <option value="all">All Months</option>
               <option value="01">January</option>
@@ -278,7 +278,7 @@ const EmployeePayslips = () => {
                   setSelectedYear("all");
                   setSelectedMonth("all");
                 }}
-                className="text-xs font-semibold text-slate-500 hover:text-[#002185] dark:hover:text-blue-400 px-2.5 py-2 rounded-lg hover:bg-slate-100 dark:hover:bg-slate-800 transition cursor-pointer"
+                className="text-xs font-semibold text-slate-500 hover:text-[#002185] dark:hover:text-blue-400 px-2.5 py-2 rounded-lg hover:bg-slate-100 dark:hover:bg-[#162033] transition cursor-pointer"
               >
                 Reset Filter
               </button>
@@ -347,28 +347,28 @@ const EmployeePayslips = () => {
               return (
                 <div
                   key={payslip.id || payslip._id || payslip.payslipNumber || Math.random()}
-                  className="rounded-2xl border border-[#E2E8F0] bg-white p-6 shadow-xs hover:shadow-md transition-all duration-300"
+                  className="rounded-2xl border border-slate-200 dark:border-slate-800/80 bg-white dark:bg-[#111927] p-6 shadow-sm hover:shadow-md transition-all duration-300"
                 >
                   {/* Top Section */}
                   <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
                     <div className="flex items-center gap-3">
-                      <div className="w-10 h-10 rounded-xl bg-[#002185]/10 flex items-center justify-center shrink-0 text-[#002185]">
+                      <div className="w-10 h-10 rounded-xl bg-blue-50 dark:bg-blue-950/40 flex items-center justify-center shrink-0 text-[#002185] dark:text-blue-400">
                         <FileText className="w-5 h-5" />
                       </div>
 
                       <div>
-                        <h3 className="font-bold text-[#002185] text-base">
+                        <h3 className="font-bold text-slate-900 dark:text-white text-base">
                           {payslip.month || payslip.payMonth || "Monthly Payslip"}
                         </h3>
-                        <p className="text-xs text-[#64748B] flex items-center gap-1.5 mt-0.5">
-                          <Calendar className="w-3.5 h-3.5 text-[#002185]" />
+                        <p className="text-xs text-slate-500 dark:text-slate-400 flex items-center gap-1.5 mt-0.5">
+                          <Calendar className="w-3.5 h-3.5 text-[#002185] dark:text-blue-400" />
                           <span>Disbursement: {formatDate(payslip.paymentDate)}</span>
                         </p>
                       </div>
                     </div>
 
                     <div className="flex items-center gap-3">
-                      <span className="text-xs font-semibold text-slate-700 bg-slate-100 px-3 py-1 rounded-lg">
+                      <span className="text-xs font-semibold text-slate-700 dark:text-slate-300 bg-slate-100 dark:bg-[#162033] px-3 py-1 rounded-lg border border-slate-200 dark:border-slate-700/60">
                         {payslip.month || payslip.payMonth || "Pay Period"}
                       </span>
                       <span
@@ -380,38 +380,38 @@ const EmployeePayslips = () => {
                   </div>
 
                   {/* Summary Metric Strip */}
-                  <div className="mt-5 grid grid-cols-1 gap-3 border-t border-[#E2E8F0] pt-4 sm:grid-cols-3">
+                  <div className="mt-5 grid grid-cols-1 gap-3 border-t border-slate-100 dark:border-slate-800/80 pt-4 sm:grid-cols-3">
                     <div className="flex items-center gap-3">
-                      <div className="w-8 h-8 rounded-lg bg-slate-50 flex items-center justify-center shrink-0 border border-slate-200">
-                        <Calendar className="h-4 w-4 text-[#002185]" />
+                      <div className="w-8 h-8 rounded-lg bg-slate-50 dark:bg-[#162033] flex items-center justify-center shrink-0 border border-slate-200 dark:border-slate-700/60">
+                        <Calendar className="h-4 w-4 text-[#002185] dark:text-blue-400" />
                       </div>
                       <div>
-                        <p className="text-[11px] text-[#64748B] font-medium">Payment Date</p>
-                        <p className="text-xs font-bold text-[#0F172A]">
+                        <p className="text-[11px] text-slate-500 dark:text-slate-400 font-medium">Payment Date</p>
+                        <p className="text-xs font-bold text-slate-900 dark:text-white">
                           {formatDate(payslip.paymentDate)}
                         </p>
                       </div>
                     </div>
 
                     <div className="flex items-center gap-3">
-                      <div className="w-8 h-8 rounded-lg bg-emerald-50 flex items-center justify-center shrink-0 border border-emerald-200">
-                        <BanknoteIcon className="h-4 w-4 text-emerald-700" />
+                      <div className="w-8 h-8 rounded-lg bg-emerald-50 dark:bg-emerald-950/40 flex items-center justify-center shrink-0 border border-emerald-200 dark:border-emerald-800/60">
+                        <BanknoteIcon className="h-4 w-4 text-emerald-600 dark:text-emerald-400" />
                       </div>
                       <div>
-                        <p className="text-[11px] text-[#64748B] font-medium">Net Take-Home Salary</p>
-                        <p className="text-sm font-black text-[#002185]">
+                        <p className="text-[11px] text-slate-500 dark:text-slate-400 font-medium">Net Take-Home Salary</p>
+                        <p className="text-sm font-black text-emerald-600 dark:text-emerald-400">
                           {formatCurrency(cardNetSalary)}
                         </p>
                       </div>
                     </div>
 
                     <div className="flex items-center gap-3">
-                      <div className="w-8 h-8 rounded-lg bg-slate-50 flex items-center justify-center shrink-0 border border-slate-200">
-                        <Clock className="h-4 w-4 text-[#64748B]" />
+                      <div className="w-8 h-8 rounded-lg bg-slate-50 dark:bg-[#162033] flex items-center justify-center shrink-0 border border-slate-200 dark:border-slate-700/60">
+                        <Clock className="h-4 w-4 text-slate-400" />
                       </div>
                       <div>
-                        <p className="text-[11px] text-[#64748B] font-medium">Payslip Number</p>
-                        <p className="text-xs font-mono font-bold text-[#0F172A]">
+                        <p className="text-[11px] text-slate-500 dark:text-slate-400 font-medium">Payslip Number</p>
+                        <p className="text-xs font-mono font-bold text-slate-900 dark:text-white">
                           {payslip.payslipNumber || payslip.id || "N/A"}
                         </p>
                       </div>
@@ -419,41 +419,41 @@ const EmployeePayslips = () => {
                   </div>
 
                   {/* Transparent Itemized Salary Breakdown Box */}
-                  <div className="mt-4 rounded-xl border border-[#E2E8F0] overflow-hidden">
-                    <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 bg-[#F8FAFC] p-3.5 border-b border-[#E2E8F0]">
+                  <div className="mt-4 rounded-xl border border-slate-200 dark:border-slate-800/80 overflow-hidden">
+                    <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 bg-slate-50 dark:bg-[#162033] p-3.5 border-b border-slate-200 dark:border-slate-800/80">
                       <div>
-                        <p className="text-[11px] text-[#64748B]">Base Monthly Salary</p>
-                        <p className="text-xs sm:text-sm font-bold text-[#002185]">
+                        <p className="text-[11px] text-slate-500 dark:text-slate-400">Base Monthly Salary</p>
+                        <p className="text-xs sm:text-sm font-bold text-slate-900 dark:text-white">
                           {formatCurrency(cardBaseSalary)}
                         </p>
                       </div>
                       <div>
-                        <p className="text-[11px] text-[#64748B]">Allowances &amp; Additions</p>
-                        <p className="text-xs sm:text-sm font-bold text-[#16A34A]">
+                        <p className="text-[11px] text-slate-500 dark:text-slate-400">Allowances &amp; Additions</p>
+                        <p className="text-xs sm:text-sm font-bold text-emerald-600 dark:text-emerald-400">
                           +{formatCurrency(cardAllowances)}
                         </p>
                       </div>
                       <div>
-                        <p className="text-[11px] text-[#64748B]">Total Deductions</p>
-                        <p className="text-xs sm:text-sm font-bold text-[#DC2626]">
+                        <p className="text-[11px] text-slate-500 dark:text-slate-400">Total Deductions</p>
+                        <p className="text-xs sm:text-sm font-bold text-rose-600 dark:text-rose-400">
                           -{formatCurrency(cardTotalDeductions)}
                         </p>
                       </div>
                       <div>
-                        <p className="text-[11px] text-[#64748B]">Final Net Pay</p>
-                        <p className="text-xs sm:text-sm font-black text-[#002185]">
+                        <p className="text-[11px] text-slate-500 dark:text-slate-400">Final Net Pay</p>
+                        <p className="text-xs sm:text-sm font-black text-emerald-600 dark:text-emerald-400">
                           {formatCurrency(cardNetSalary)}
                         </p>
                       </div>
                     </div>
 
                     {/* Itemized Line Items Breakdown */}
-                    <div className="bg-white p-3 text-xs flex flex-wrap items-center gap-2">
-                      <span className="text-[11px] font-bold text-[#64748B]">Itemized Details:</span>
+                    <div className="bg-white dark:bg-[#111927] p-3 text-xs flex flex-wrap items-center gap-2">
+                      <span className="text-[11px] font-bold text-slate-500 dark:text-slate-400">Itemized Details:</span>
 
                       {/* Absence Penalty Pill */}
                       {cardAbsenceAmount > 0 ? (
-                        <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg bg-[#FEF2F2] text-[#991B1B] border border-[#FECACA] text-[11px] font-semibold">
+                        <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg bg-rose-50 dark:bg-rose-950/40 text-rose-700 dark:text-rose-300 border border-rose-200 dark:border-rose-800/60 text-[11px] font-semibold">
                           <span>Absenteeism ({cardAbsence.daysCount || payslip.absentDays || 1} unexcused day(s) @ {formatCurrency(cardAbsence.ratePerDay || 10)}):</span>
                           <span className="font-black">-{formatCurrency(cardAbsenceAmount)}</span>
                         </span>
@@ -461,7 +461,7 @@ const EmployeePayslips = () => {
 
                       {/* Lateness Penalty Pill */}
                       {cardLatenessAmount > 0 ? (
-                        <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg bg-[#FFF7ED] text-[#C2410C] border border-[#FFEDD5] text-[11px] font-semibold">
+                        <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg bg-orange-50 dark:bg-orange-950/40 text-orange-700 dark:text-orange-300 border border-orange-200 dark:border-orange-800/60 text-[11px] font-semibold">
                           <span>Lateness ({cardLateness.lateDaysCount || 1} day(s), {cardLateness.totalLateMinutes || 0} min(s)):</span>
                           <span className="font-black">-{formatCurrency(cardLatenessAmount)}</span>
                         </span>
@@ -469,8 +469,8 @@ const EmployeePayslips = () => {
 
                       {/* Perfect Attendance Standing */}
                       {cardAbsenceAmount === 0 && cardLatenessAmount === 0 ? (
-                        <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg bg-[#F0FDF4] text-[#166534] border border-[#BBF7D0] text-[11px] font-semibold">
-                          <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600" />
+                        <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg bg-emerald-50 dark:bg-emerald-950/40 text-emerald-700 dark:text-emerald-300 border border-emerald-200 dark:border-emerald-800/60 text-[11px] font-semibold">
+                          <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600 dark:text-emerald-400" />
                           <span>100% Attendance (Zero Penalties)</span>
                         </span>
                       ) : null}
@@ -480,7 +480,7 @@ const EmployeePayslips = () => {
                         payslip.breakdown.allowances.map((item, idx) => (
                           <span
                             key={`earn-${idx}`}
-                            className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg bg-[#F0FDF4] text-[#166534] border border-[#BBF7D0] text-[11px]"
+                            className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg bg-emerald-50 dark:bg-emerald-950/40 text-emerald-700 dark:text-emerald-300 border border-emerald-200 dark:border-emerald-800/60 text-[11px]"
                           >
                             <span>{item.title}</span>
                             <span className="font-bold">+{formatCurrency(item.amount)}</span>
@@ -492,7 +492,7 @@ const EmployeePayslips = () => {
                         payslip.breakdown.customDeductions.map((item, idx) => (
                           <span
                             key={`ded-${idx}`}
-                            className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg bg-[#FEF2F2] text-[#991B1B] border border-[#FECACA] text-[11px]"
+                            className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg bg-rose-50 dark:bg-rose-950/40 text-rose-700 dark:text-rose-300 border border-rose-200 dark:border-rose-800/60 text-[11px]"
                           >
                             <span>{item.title}</span>
                             <span className="font-bold">-{formatCurrency(item.amount)}</span>
@@ -502,11 +502,11 @@ const EmployeePayslips = () => {
                   </div>
 
                   {/* Actions */}
-                  <div className="mt-5 flex flex-wrap justify-end gap-2.5 border-t border-[#E2E8F0] pt-4">
+                  <div className="mt-5 flex flex-wrap justify-end gap-2.5 border-t border-slate-100 dark:border-slate-800/80 pt-4">
                     <button
                       type="button"
                       onClick={() => setSelectedPayslip(payslip)}
-                      className="flex items-center gap-1.5 rounded-xl border border-[#E2E8F0] px-3.5 py-2 text-xs font-semibold text-[#334155] hover:bg-[#F8FAFC] hover:text-[#002185] hover:border-[#002185] transition cursor-pointer"
+                      className="flex items-center gap-1.5 rounded-xl border border-slate-200 dark:border-slate-700/60 px-3.5 py-2 text-xs font-semibold text-slate-700 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-[#162033] hover:text-[#002185] dark:hover:text-white transition cursor-pointer"
                     >
                       <Eye className="h-3.5 w-3.5" />
                       <span>View Breakdown</span>
@@ -515,7 +515,7 @@ const EmployeePayslips = () => {
                     <button
                       type="button"
                       onClick={() => handlePrint(payslip)}
-                      className="flex items-center gap-1.5 rounded-xl border border-[#E2E8F0] px-3.5 py-2 text-xs font-semibold text-[#334155] hover:bg-[#F8FAFC] hover:text-[#002185] transition cursor-pointer"
+                      className="flex items-center gap-1.5 rounded-xl border border-slate-200 dark:border-slate-700/60 px-3.5 py-2 text-xs font-semibold text-slate-700 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-[#162033] hover:text-[#002185] dark:hover:text-white transition cursor-pointer"
                     >
                       <FileText className="h-3.5 w-3.5" />
                       <span>Print</span>
@@ -524,7 +524,7 @@ const EmployeePayslips = () => {
                     <button
                       type="button"
                       onClick={() => handleDownloadPDF(payslip)}
-                      className="flex items-center gap-1.5 rounded-xl bg-[#002185] hover:bg-[#ff5500] px-4 py-2 text-xs font-bold text-white transition shadow-xs cursor-pointer"
+                      className="flex items-center gap-1.5 rounded-xl bg-[#002185] hover:bg-[#001760] dark:bg-blue-600 dark:hover:bg-blue-700 px-4 py-2 text-xs font-bold text-white transition shadow-xs cursor-pointer"
                     >
                       <Download className="h-3.5 w-3.5" />
                       <span>Download PDF</span>
@@ -536,19 +536,19 @@ const EmployeePayslips = () => {
           </div>
         ) : (
           /* Locked / Unpublished State Banner */
-          <div id="locked-payslip-banner" className="rounded-2xl border border-amber-200 bg-amber-50/70 p-8 sm:p-12 text-center shadow-xs">
+          <div id="locked-payslip-banner" className="rounded-2xl border border-amber-200 dark:border-amber-800/60 bg-amber-50/70 dark:bg-amber-950/30 p-8 sm:p-12 text-center shadow-xs">
             <div className="flex justify-center mb-4">
-              <div className="w-16 h-16 rounded-2xl bg-amber-100 border border-amber-300 flex items-center justify-center text-amber-800">
+              <div className="w-16 h-16 rounded-2xl bg-amber-100 dark:bg-amber-900/50 border border-amber-300 dark:border-amber-700/60 flex items-center justify-center text-amber-800 dark:text-amber-300">
                 <Lock className="w-8 h-8" />
               </div>
             </div>
-            <span className="inline-block px-3.5 py-1 text-xs font-bold uppercase tracking-wider bg-amber-200/80 text-amber-900 rounded-full mb-3">
+            <span className="inline-block px-3.5 py-1 text-xs font-bold uppercase tracking-wider bg-amber-200/80 dark:bg-amber-900/60 text-amber-900 dark:text-amber-200 rounded-full mb-3">
               Official Payslip Pending Release
             </span>
-            <h3 className="text-lg font-bold text-slate-900">
+            <h3 className="text-lg font-bold text-slate-900 dark:text-white">
               No published payslip for this period. Payslips are released by Management upon payment.
             </h3>
-            <p className="text-sm text-slate-700 max-w-lg mx-auto mt-2 leading-relaxed font-medium">
+            <p className="text-sm text-slate-700 dark:text-slate-300 max-w-lg mx-auto mt-2 leading-relaxed font-medium">
               Your official payslip for this period has not been released yet. Once generated and verified by management upon payment, your complete itemized breakdown and downloadable official PDF will be unlocked here.
             </p>
           </div>

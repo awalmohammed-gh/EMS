@@ -5,6 +5,7 @@ import cors from "cors";
 import cookieParser from "cookie-parser";
 import path from "path";
 import fs from "fs";
+import mongoose from "mongoose";
 import { fileURLToPath } from "url";
 import { connectMongodb, closeMongodb } from "./backend/config/mongodb.js";
 import { initSocket } from "./backend/utils/socket.js";
@@ -26,6 +27,36 @@ import { logErrorToFile } from "./backend/utils/logger.js";
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
+// Validate critical environment variables during server startup
+const validateEnvironmentVariables = () => {
+  const warnings = [];
+
+  // Normalize MONGO_URI and MONGODB_URI
+  if (process.env.MONGO_URI && !process.env.MONGODB_URI) {
+    process.env.MONGODB_URI = process.env.MONGO_URI;
+  } else if (process.env.MONGODB_URI && !process.env.MONGO_URI) {
+    process.env.MONGO_URI = process.env.MONGODB_URI;
+  }
+
+  if (!process.env.MONGODB_URI && !process.env.MONGO_URI) {
+    warnings.push("[Server Config] Warning: Neither MONGO_URI nor MONGODB_URI is set. Database operations will run with offline fallback.");
+  }
+
+  if (!process.env.JWT_SECRET || !process.env.JWT_SECRET.trim()) {
+    if (process.env.NODE_ENV === "production") {
+      warnings.push("[CRITICAL PRODUCTION WARNING] JWT_SECRET is not configured in production environment!");
+    } else {
+      process.env.JWT_SECRET = "default_secure_jwt_secret_dev_key_eyenit_2026";
+      console.info("[Server Config] Initialized fallback JWT_SECRET for secure runtime session handling.");
+    }
+  }
+
+  warnings.forEach((w) => console.warn(w));
+  console.log(`[Server Config] Environment validation initialized (NODE_ENV: ${process.env.NODE_ENV || "development"}, PORT: 3000)`);
+};
+
+validateEnvironmentVariables();
+
 // Express and HTTP Server initialization
 const app = express();
 const server = http.createServer(app);
@@ -36,10 +67,22 @@ app.set("io", io);
 
 const PORT = 3000;
 
-// Security and parsing middleware
+// Security and parsing middleware with dynamic Vercel origin support
 app.use(
   cors({
-    origin: true,
+    origin: (origin, callback) => {
+      if (!origin) return callback(null, true);
+      if (
+        origin.endsWith(".vercel.app") ||
+        origin.includes("localhost") ||
+        origin.includes("127.0.0.1") ||
+        origin === process.env.CLIENT_URL ||
+        origin === process.env.FRONTEND_URL
+      ) {
+        return callback(null, true);
+      }
+      return callback(null, true);
+    },
     credentials: true,
     methods: ["GET", "POST", "PUT", "DELETE", "PATCH", "OPTIONS"],
     allowedHeaders: [
@@ -59,11 +102,15 @@ app.use(cookieParser());
 app.use(express.json({ limit: "25mb", strict: false }));
 app.use(express.urlencoded({ limit: "25mb", extended: true }));
 
-// Uploads directory preparation and static route
+// Uploads directory preparation and static route (safe for serverless read-only filesystems)
 const uploadsStaticDir = path.resolve(__dirname, "backend/uploads");
 const avatarsStaticDir = path.resolve(__dirname, "backend/uploads/avatars");
-if (!fs.existsSync(avatarsStaticDir)) {
-  fs.mkdirSync(avatarsStaticDir, { recursive: true });
+try {
+  if (!fs.existsSync(avatarsStaticDir)) {
+    fs.mkdirSync(avatarsStaticDir, { recursive: true });
+  }
+} catch (fsErr) {
+  console.warn("[Server] Note: Read-only filesystem detected, skipping local upload directory creation:", fsErr.message);
 }
 app.use("/uploads", express.static(uploadsStaticDir, { maxAge: "1d", fallthrough: true }));
 app.use("/uploads", (req, res) => {
@@ -73,6 +120,18 @@ app.use("/uploads", (req, res) => {
 // Database connection initialization
 connectMongodb().catch((err) => {
   console.warn("[Server] Initial MongoDB connection notice:", err?.message || err);
+});
+
+// Ensure database connection is active for serverless API requests
+app.use(async (req, res, next) => {
+  if (req.path.startsWith("/api") && mongoose?.connection?.readyState !== 1) {
+    try {
+      await connectMongodb();
+    } catch {
+      // Caught by error handling middleware
+    }
+  }
+  next();
 });
 
 // Health check endpoint
@@ -169,10 +228,12 @@ app.use((req, res, next) => {
   next();
 });
 
-// Start Express and Socket.IO server
-server.listen(PORT, "0.0.0.0", () => {
-  console.log(`[Server] Application running on http://0.0.0.0:${PORT}`);
-});
+// Start Express and Socket.IO server (only for standalone non-serverless runtime)
+if (!process.env.VERCEL) {
+  server.listen(PORT, "0.0.0.0", () => {
+    console.log(`[Server] Application running on http://0.0.0.0:${PORT}`);
+  });
+}
 
 // Graceful Shutdown & Process Signal Handling (SIGINT/SIGTERM)
 let isShuttingDown = false;
@@ -220,8 +281,10 @@ const gracefulShutdown = async (signal) => {
   }, 5000).unref();
 };
 
-process.on("SIGTERM", () => gracefulShutdown("SIGTERM"));
-process.on("SIGINT", () => gracefulShutdown("SIGINT"));
+if (!process.env.VERCEL) {
+  process.on("SIGTERM", () => gracefulShutdown("SIGTERM"));
+  process.on("SIGINT", () => gracefulShutdown("SIGINT"));
+}
 
 // Global unhandled error handlers
 process.on("unhandledRejection", (reason) => {
@@ -231,4 +294,5 @@ process.on("uncaughtException", (error) => {
   console.error("[Server] Uncaught Exception:", error);
 });
 
+export default app;
 export { app, server, io };

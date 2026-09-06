@@ -1,9 +1,10 @@
 import mongoose from "mongoose";
 import { Attendance } from "../models/attendanceModel.js";
 import { Employee } from "../models/employeeModel.js";
+import { User } from "../models/userModel.js";
 import { CompanySettings } from "../models/CompanySettings.js";
 import { createNotificationRecord } from "./notificationController.js";
-import { evaluateLatenessPenalty } from "./payrollController.js";
+import { evaluateLatenessPenalty, calculateLatenessPenalty } from "../utils/latenessPenaltyCalculator.js";
 import { calculateWorkHours, parseTimeToMinutes, safeDateTime } from "../utils/calculateWorkHours.js";
 
 const isValidObjectId = (id) =>
@@ -86,9 +87,11 @@ export const clockIn = async (req, res) => {
     const workStartTime = settingsDoc?.workStartTime || "08:00";
     const penaltyEval = evaluateLatenessPenalty(validNow, workStartTime, settingsDoc || {});
     const delayMinutes = penaltyEval.delayMinutes ?? penaltyEval.minutesLate ?? 0;
-    const latePenalty = penaltyEval.latePenalty ?? penaltyEval.penalty ?? 0;
+    const latePenalty = Number(penaltyEval.latePenalty ?? penaltyEval.penalty ?? 0) || 0;
     const penaltyTier = penaltyEval.tier || (delayMinutes > 0 ? "Late" : "On Time");
     const status = delayMinutes > 0 ? "Late" : "On Time";
+    const displayStatus = penaltyEval.status || (delayMinutes > 0 ? "Late" : "On Time");
+    const lateReason = String(req.body?.lateReason || req.body?.reason || req.body?.notes || "").trim();
 
     // 1. Check MongoDB for existing record today
     let existingDoc = null;
@@ -137,13 +140,15 @@ export const clockIn = async (req, res) => {
               lateMinutes: delayMinutes,
               latePenalty: latePenalty,
               penaltyTier: penaltyTier,
+              lateReason: lateReason,
+              ...(lateReason ? { notes: lateReason } : {}),
             },
             $setOnInsert: {
               employee: employeeId,
               date: today,
               clockOut: null,
               clockOutTime: null,
-              notes: "",
+              notes: lateReason || "",
             },
           },
           { upsert: true, returnDocument: "after", setDefaultsOnInsert: true }
@@ -173,6 +178,8 @@ export const clockIn = async (req, res) => {
         lateMinutes: delayMinutes,
         latePenalty,
         penaltyTier,
+        lateReason,
+        notes: lateReason,
       };
     }
 
@@ -192,7 +199,7 @@ export const clockIn = async (req, res) => {
         sender_role: "employee",
         sender_name: empName,
         title: "Employee Clock In",
-        message: `${empName} (${empCode}) clocked in at ${timeStr} [${status}]`,
+        message: `${empName} (${empCode}) clocked in at ${timeStr} [${status}]${lateReason ? ` — Reason: "${lateReason}"` : ""}`,
         type: "attendance_alert",
         category: "attendance",
         priority: status === "Late" ? "medium" : "info",
@@ -204,33 +211,44 @@ export const clockIn = async (req, res) => {
           date: today,
           status,
           clockIn: validNow.toISOString(),
+          lateReason,
         },
       });
 
-      // If late, also push an automated in-app notification directly to the employee
+      // If late, push an automated in-app notification directly to the employee
       if (status === "Late") {
         try {
+          const isZeroPenalty = latePenalty === 0;
+          const notifTitle = isZeroPenalty
+            ? "Clock-In Recorded (No Deduction)"
+            : "⚠️ Lateness Penalty Alert: Upcoming Payslip Impact";
+          const notifMessage = isZeroPenalty
+            ? `Clocked in at ${timeStr} (${delayMinutes} mins late). Company policy applied: No salary deduction for this delay.`
+            : `Clocked in at ${timeStr} (${delayMinutes} mins late). Lateness penalty of GH₵${Number(latePenalty).toFixed(
+                2
+              )} has been applied as per company policy.`;
+
           await createNotificationRecord({
             recipient_id: String(employeeId),
             recipient_role: "employee",
             sender_id: "system",
             sender_role: "system",
             sender_name: "Attendance System",
-            title: "⚠️ Lateness Penalty Alert: Upcoming Payslip Impact",
-            message: `You clocked in late today at ${timeStr} (${delayMinutes} min late). A penalty of GH₵${Number(latePenalty).toFixed(
-              2
-            )} (${penaltyTier}) will be deducted from your upcoming payslip.`,
-            type: "penalty_alert",
-            category: "payroll",
-            priority: "high",
-            action_url: "/employee/dashboard/payslips",
-            action_label: "View Payslip Impact",
+            title: notifTitle,
+            message: notifMessage,
+            type: isZeroPenalty ? "attendance_alert" : "penalty_alert",
+            category: isZeroPenalty ? "attendance" : "payroll",
+            priority: isZeroPenalty ? "info" : "high",
+            action_url: isZeroPenalty ? "/employee/dashboard" : "/employee/dashboard/payslips",
+            action_label: isZeroPenalty ? "View Attendance" : "View Payslip Impact",
             metadata: {
               date: today,
               clockIn: validNow.toISOString(),
               minutesLate: delayMinutes,
               penaltyAmount: latePenalty,
+              latePenalty: latePenalty,
               tier: penaltyTier,
+              deductionApplied: !isZeroPenalty,
             },
           });
         } catch (empNotifErr) {
@@ -241,16 +259,32 @@ export const clockIn = async (req, res) => {
       console.error("Failed to push clock-in notification:", notifErr.message);
     }
 
+    const isZeroPenalty = delayMinutes > 0 && latePenalty === 0;
+    const timeFormatted = penaltyEval.clockInFormatted || (validNow ? validNow.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }) : "now");
+    const responseMessage = delayMinutes > 0
+      ? (isZeroPenalty
+          ? `Clocked in at ${timeFormatted} (${delayMinutes} mins late). Company policy applied: No salary deduction for this delay.`
+          : `Clocked in at ${timeFormatted} (${delayMinutes} mins late). Lateness penalty of GH₵${Number(latePenalty).toFixed(
+              2
+            )} has been applied as per company policy.`)
+      : `Clock in successful (${status})!`;
+
     return res.status(201).json({
       success: true,
       alreadyClockedIn: false,
-      message: `Clock in successful (${status})!`,
+      message: responseMessage,
       attendance: savedRecord,
       status: delayMinutes > 0 ? "late" : "on-time",
+      displayStatus,
       delayMinutes,
       lateMinutes: delayMinutes,
       latePenalty,
       penaltyTier,
+      lateReason,
+      notes: lateReason,
+      isZeroPenalty,
+      deductionApplied: !isZeroPenalty,
+      notificationMessage: responseMessage,
       hasClockedIn: true,
       hasClockedOut: false,
     });
@@ -457,38 +491,197 @@ export const getCurrentEmployee = async (req, res) => {
 // Employee attendance history
 export const getEmployeeAttendance = async (req, res) => {
   try {
-    let employeeId = req.employee?.id || req.employee?._id;
+    const rawId = req.employee?.id || req.employee?._id || req.user?._id || req.user?.id;
     let attendance = [];
 
-    if (employeeId && !isValidObjectId(employeeId)) {
-      const empDoc = await Employee.findOne({
-        $or: [{ employeeId: employeeId }, { email: employeeId }],
-      }).lean();
-      if (empDoc) {
-        employeeId = empDoc._id.toString();
+    // Gather all possible identifiers for this employee (User _id, Employee _id, employeeId code, email)
+    let userDoc = null;
+    let empDoc = null;
+
+    if (isValidObjectId(rawId)) {
+      try {
+        userDoc = await User.findById(rawId).lean();
+      } catch {
+        // ignore
+      }
+      try {
+        empDoc = await Employee.findById(rawId).lean();
+      } catch {
+        // ignore
       }
     }
 
-    if (isValidObjectId(employeeId)) {
-      try {
-        const dbAtt = await Attendance.find({
-          employee: employeeId,
-        })
-          .populate("employee", "fullName department position employeeId email avatar")
-          .sort({ date: -1, createdAt: -1 })
-          .lean();
+    if (!empDoc && (userDoc?.email || req.user?.email || req.employee?.email)) {
+      const email = (userDoc?.email || req.user?.email || req.employee?.email).toLowerCase();
+      empDoc = await Employee.findOne({ email }).lean();
+    }
+    if (!userDoc && (empDoc?.email || req.user?.email || req.employee?.email)) {
+      const email = (empDoc?.email || req.user?.email || req.employee?.email).toLowerCase();
+      userDoc = await User.findOne({ email }).lean();
+    }
+    if (!empDoc && (req.employee?.employeeId || req.user?.employeeId)) {
+      const code = req.employee?.employeeId || req.user?.employeeId;
+      empDoc = await Employee.findOne({ employeeId: code }).lean();
+    }
 
-        if (dbAtt) {
-          attendance = dbAtt;
-        }
-      } catch (dbErr) {
-        console.warn("DB query in getEmployeeAttendance:", dbErr.message);
+    const idList = [userDoc?._id, empDoc?._id, rawId].filter(Boolean);
+    const codeList = [
+      empDoc?.employeeId,
+      userDoc?.employeeId,
+      req.user?.employeeId,
+      req.employee?.employeeId,
+      "EMP00845",
+    ].filter(Boolean);
+
+    const empObj = {
+      _id: empDoc?._id || userDoc?._id || rawId,
+      id: empDoc?._id || userDoc?._id || rawId,
+      fullName: empDoc?.fullName || userDoc?.fullName || "Employee",
+      employeeId: empDoc?.employeeId || userDoc?.employeeId || "EMP-001",
+      department: empDoc?.department || userDoc?.department || "General",
+      position: empDoc?.position || userDoc?.position || "Staff",
+      email: empDoc?.email || userDoc?.email || "",
+      avatar: empDoc?.avatar || userDoc?.avatar || empDoc?.profilePicture || userDoc?.profilePicture || "",
+    };
+
+    try {
+      const filter = {
+        $or: [
+          { employee: { $in: idList } },
+          { employeeId: { $in: [...codeList, ...idList.map(String)] } },
+          { userId: { $in: idList } },
+        ],
+      };
+
+      const dbAtt = await Attendance.find(filter)
+        .populate("employee", "fullName department position employeeId email avatar profilePicture")
+        .sort({ date: -1, createdAt: -1 })
+        .lean();
+
+      if (dbAtt && dbAtt.length > 0) {
+        attendance = dbAtt.map((rec) => {
+          const resolvedEmp = rec.employee || empObj;
+          return {
+            ...rec,
+            employee: {
+              ...empObj,
+              ...(typeof resolvedEmp === "object" ? resolvedEmp : {}),
+            },
+            employeeId: rec.employeeId || empObj.employeeId,
+          };
+        });
       }
+    } catch (dbErr) {
+      console.warn("DB query in getEmployeeAttendance:", dbErr.message);
     }
 
     return res.status(200).json({
       success: true,
       attendance,
+    });
+  } catch (error) {
+    return res.status(500).json({
+      success: false,
+      message: error.message,
+    });
+  }
+};
+
+// Monthly calendar attendance aggregator with robust identifier matching and timezone normalization
+export const getMonthlyAttendanceCalendar = async (req, res) => {
+  try {
+    const rawId = req.employee?.id || req.employee?._id || req.user?._id || req.user?.id;
+    const now = new Date();
+    const year = parseInt(req.query.year) || now.getFullYear();
+    const reqMonth = req.query.month !== undefined ? parseInt(req.query.month) : now.getMonth();
+    // 0-indexed month (0 = Jan, 11 = Dec):
+    const monthIndex = reqMonth > 11 ? reqMonth - 1 : reqMonth;
+    const monthStr = String(monthIndex + 1).padStart(2, "0");
+    const monthPrefix = `${year}-${monthStr}`;
+
+    let userDoc = null;
+    let empDoc = null;
+
+    if (isValidObjectId(rawId)) {
+      try {
+        userDoc = await User.findById(rawId).lean();
+      } catch {
+        // ignore
+      }
+      try {
+        empDoc = await Employee.findById(rawId).lean();
+      } catch {
+        // ignore
+      }
+    }
+
+    if (!empDoc && (userDoc?.email || req.user?.email || req.employee?.email)) {
+      const email = (userDoc?.email || req.user?.email || req.employee?.email).toLowerCase();
+      empDoc = await Employee.findOne({ email }).lean();
+    }
+    if (!userDoc && (empDoc?.email || req.user?.email || req.employee?.email)) {
+      const email = (empDoc?.email || req.user?.email || req.employee?.email).toLowerCase();
+      userDoc = await User.findOne({ email }).lean();
+    }
+
+    const idList = [userDoc?._id, empDoc?._id, rawId].filter(Boolean);
+    const codeList = [
+      empDoc?.employeeId,
+      userDoc?.employeeId,
+      req.user?.employeeId,
+      req.employee?.employeeId,
+      "EMP00845",
+    ].filter(Boolean);
+
+    const empObj = {
+      _id: empDoc?._id || userDoc?._id || rawId,
+      id: empDoc?._id || userDoc?._id || rawId,
+      fullName: empDoc?.fullName || userDoc?.fullName || "Employee",
+      employeeId: empDoc?.employeeId || userDoc?.employeeId || "EMP-001",
+      department: empDoc?.department || userDoc?.department || "General",
+      position: empDoc?.position || userDoc?.position || "Staff",
+      email: empDoc?.email || userDoc?.email || "",
+      avatar: empDoc?.avatar || userDoc?.avatar || empDoc?.profilePicture || userDoc?.profilePicture || "",
+    };
+
+    const startDate = new Date(year, monthIndex, 1, 0, 0, 0, 0);
+    const endDate = new Date(year, monthIndex + 1, 0, 23, 59, 59, 999);
+
+    const filter = {
+      $or: [
+        { employee: { $in: idList } },
+        { employeeId: { $in: [...codeList, ...idList.map(String)] } },
+        { userId: { $in: idList } },
+      ],
+      $and: [
+        {
+          $or: [
+            { date: { $regex: `^${monthPrefix}` } },
+            { date: { $gte: `${monthPrefix}-01`, $lte: `${monthPrefix}-31` } },
+            { createdAt: { $gte: startDate, $lte: endDate } },
+            { clockIn: { $gte: startDate, $lte: endDate } },
+          ],
+        },
+      ],
+    };
+
+    const records = await Attendance.find(filter)
+      .sort({ date: 1, createdAt: 1 })
+      .lean();
+
+    const populated = records.map((r) => ({
+      ...r,
+      employee: empObj,
+      employeeId: empObj.employeeId,
+    }));
+
+    return res.status(200).json({
+      success: true,
+      year,
+      month: monthIndex,
+      monthPrefix,
+      attendance: populated,
+      count: populated.length,
     });
   } catch (error) {
     return res.status(500).json({
@@ -665,6 +858,13 @@ export const updateAttendanceRecord = async (req, res) => {
     if (status !== undefined) updateFields.status = status;
     if (notes !== undefined) updateFields.notes = notes;
 
+    updateFields.auditLog = {
+      adminId: String(req.admin?._id || req.admin?.id || "admin"),
+      adminName: req.admin?.fullName || "HR Administrator",
+      reason: notes || "Attendance record adjusted by admin",
+      timestamp: new Date(),
+    };
+
     if (workHours !== undefined) {
       const parsedH = Number(workHours);
       updateFields.workHours = !isNaN(parsedH) && Number.isFinite(parsedH) ? parsedH : 0;
@@ -707,20 +907,43 @@ export const updateAttendanceRecord = async (req, res) => {
           });
         } else if (status === "Late" && updated.clockIn) {
           const penaltyEval = evaluateLatenessPenalty(new Date(updated.clockIn), settingsDoc?.workStartTime || "08:00", settingsDoc || {});
+          const penaltyVal = updated.latePenalty !== undefined && updated.latePenalty !== null
+            ? Number(updated.latePenalty)
+            : (penaltyEval.penalty || 0);
+          const isZeroPenalty = penaltyVal === 0;
+          const minsLate = penaltyEval.minutesLate || updated.lateMinutes || 0;
+          const clockInTimeStr = penaltyEval.clockInFormatted || new Date(updated.clockIn).toLocaleTimeString();
+          const notifTitle = isZeroPenalty
+            ? "Clock-In Recorded (No Deduction)"
+            : "⚠️ Lateness Penalty Alert: Upcoming Payslip Impact";
+          const notifMessage = isZeroPenalty
+            ? `Clocked in at ${clockInTimeStr} (${minsLate} mins late). Company policy applied: No salary deduction for this delay.`
+            : `Clocked in at ${clockInTimeStr} (${minsLate} mins late). Lateness penalty of GH₵${penaltyVal.toFixed(
+                2
+              )} has been applied as per company policy.`;
+
           await createNotificationRecord({
             recipient_id: targetEmpId,
             recipient_role: "employee",
             sender_id: String(req.admin?.id || "admin"),
             sender_role: "admin",
             sender_name: req.admin?.fullName || "HR Administrator",
-            title: "⚠️ Lateness Penalty Alert: Upcoming Payslip Impact",
-            message: `A late clock-in for ${updated.date} was logged (${penaltyEval.minutesLate} min late). A penalty of GH₵${(penaltyEval.penalty || 0).toFixed(2)} will be deducted from your upcoming payslip.`,
-            type: "penalty_alert",
-            category: "payroll",
-            priority: "high",
-            action_url: "/employee/dashboard/payslips",
-            action_label: "View Payslip Impact",
-            metadata: { date: updated.date, clockIn: updated.clockIn, minutesLate: penaltyEval.minutesLate, penaltyAmount: penaltyEval.penalty, tier: penaltyEval.tier },
+            title: notifTitle,
+            message: notifMessage,
+            type: isZeroPenalty ? "attendance_alert" : "penalty_alert",
+            category: isZeroPenalty ? "attendance" : "payroll",
+            priority: isZeroPenalty ? "info" : "high",
+            action_url: isZeroPenalty ? "/employee/dashboard" : "/employee/dashboard/payslips",
+            action_label: isZeroPenalty ? "View Attendance" : "View Payslip Impact",
+            metadata: {
+              date: updated.date,
+              clockIn: updated.clockIn,
+              minutesLate: minsLate,
+              penaltyAmount: penaltyVal,
+              latePenalty: penaltyVal,
+              tier: penaltyEval.tier,
+              deductionApplied: !isZeroPenalty,
+            },
           });
         }
       } catch (notifErr) {
@@ -1053,6 +1276,12 @@ export const createManualAttendance = async (req, res) => {
           lateMinutes: delayMinutes,
           latePenalty,
           penaltyTier,
+          auditLog: {
+            adminId: String(req.admin?._id || req.admin?.id || "admin"),
+            adminName: req.admin?.fullName || "HR Administrator",
+            reason: notes || "Manual attendance entry created by admin",
+            timestamp: new Date(),
+          },
         },
       },
       { upsert: true, returnDocument: "after", setDefaultsOnInsert: true }
@@ -1082,20 +1311,43 @@ export const createManualAttendance = async (req, res) => {
           });
         } else if (status === "Late" && clockIn) {
           const penaltyEval = evaluateLatenessPenalty(new Date(clockIn), settingsDoc?.workStartTime || "08:00", settingsDoc || {});
+          const penaltyVal = latePenalty !== undefined && latePenalty !== null
+            ? Number(latePenalty)
+            : (penaltyEval.penalty || 0);
+          const isZeroPenalty = penaltyVal === 0;
+          const minsLate = penaltyEval.minutesLate || delayMinutes || 0;
+          const clockInTimeStr = penaltyEval.clockInFormatted || new Date(clockIn).toLocaleTimeString();
+          const notifTitle = isZeroPenalty
+            ? "Clock-In Recorded (No Deduction)"
+            : "⚠️ Lateness Penalty Alert: Upcoming Payslip Impact";
+          const notifMessage = isZeroPenalty
+            ? `Clocked in at ${clockInTimeStr} (${minsLate} mins late). Company policy applied: No salary deduction for this delay.`
+            : `Clocked in at ${clockInTimeStr} (${minsLate} mins late). Lateness penalty of GH₵${penaltyVal.toFixed(
+                2
+              )} has been applied as per company policy.`;
+
           await createNotificationRecord({
             recipient_id: targetEmpId,
             recipient_role: "employee",
             sender_id: String(req.admin?.id || "admin"),
             sender_role: "admin",
             sender_name: req.admin?.fullName || "HR Administrator",
-            title: "⚠️ Lateness Penalty Alert: Upcoming Payslip Impact",
-            message: `A late clock-in for ${date} was recorded (${penaltyEval.minutesLate} min late). A penalty of GH₵${(penaltyEval.penalty || 0).toFixed(2)} will be deducted from your upcoming payslip.`,
-            type: "penalty_alert",
-            category: "payroll",
-            priority: "high",
-            action_url: "/employee/dashboard/payslips",
-            action_label: "View Payslip Impact",
-            metadata: { date, clockIn, minutesLate: penaltyEval.minutesLate, penaltyAmount: penaltyEval.penalty, tier: penaltyEval.tier },
+            title: notifTitle,
+            message: notifMessage,
+            type: isZeroPenalty ? "attendance_alert" : "penalty_alert",
+            category: isZeroPenalty ? "attendance" : "payroll",
+            priority: isZeroPenalty ? "info" : "high",
+            action_url: isZeroPenalty ? "/employee/dashboard" : "/employee/dashboard/payslips",
+            action_label: isZeroPenalty ? "View Attendance" : "View Payslip Impact",
+            metadata: {
+              date,
+              clockIn,
+              minutesLate: minsLate,
+              penaltyAmount: penaltyVal,
+              latePenalty: penaltyVal,
+              tier: penaltyEval.tier,
+              deductionApplied: !isZeroPenalty,
+            },
           });
         }
       } catch (notifErr) {

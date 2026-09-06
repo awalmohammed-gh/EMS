@@ -29,7 +29,7 @@ import AuditLogView from "../../components/AuditLogView";
 const TABS = [
   { id: "profile", label: "Profile Info", icon: User, desc: "Personal & admin account credentials" },
   { id: "security", label: "Security", icon: Shield, desc: "2FA, session policies & login defense" },
-  { id: "company", label: "Company", icon: Building2, desc: "Organization profile, hours & currency" },
+  { id: "company", label: "Company", icon: Building2, desc: "Organization profile, appearance, hours & currency" },
   { id: "payroll", label: "Payroll", icon: CreditCard, desc: "Payment cycles, taxes & disbursement" },
   { id: "attendance", label: "Attendance", icon: Clock, desc: "Work schedules, grace periods & overtime" },
   { id: "penalties", label: "Penalties & Deductions", icon: AlertTriangle, desc: "Absence deductions & lateness penalty tiers" },

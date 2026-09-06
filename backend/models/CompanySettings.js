@@ -39,7 +39,7 @@ const companySettingsSchema = new mongoose.Schema(
     },
     workEndTime: {
       type: String,
-      default: "17:00",
+      default: "19:00",
       trim: true,
     },
     gracePeriodMinutes: {
@@ -82,6 +82,23 @@ const companySettingsSchema = new mongoose.Schema(
       default: 150,
       min: 0,
     },
+    maxLatenessPenaltyDeductionPercent: {
+      type: Number,
+      default: 15,
+      min: 1,
+      max: 100,
+    },
+    latenessWarningThresholdPercent: {
+      type: Number,
+      default: 80,
+      min: 1,
+      max: 100,
+    },
+    defaultMonthlyPenaltyCap: {
+      type: Number,
+      default: 200,
+      min: 0,
+    },
     latenessTiers: {
       type: [latenessTierSchema],
       default: () => [
@@ -109,7 +126,7 @@ companySettingsSchema.statics.getSingletonSettings = async function () {
   if (!doc) {
     doc = await this.create({
       workStartTime: "08:00",
-      workEndTime: "17:00",
+      workEndTime: "19:00",
       gracePeriodMinutes: 0,
       absenceDeductionRate: 15,
       lateTier1_amount: 10,
@@ -118,6 +135,9 @@ companySettingsSchema.statics.getSingletonSettings = async function () {
       lateTier4_amount: 75,
       lateTier5_amount: 100,
       lateTier6_amount: 150,
+      maxLatenessPenaltyDeductionPercent: 15,
+      latenessWarningThresholdPercent: 80,
+      defaultMonthlyPenaltyCap: 200,
       latenessTiers: [
         { tier: 1, name: "Tier 1 (1–30 mins)", minMinutes: 1, maxMinutes: 30, fine: 10 },
         { tier: 2, name: "Tier 2 (31–60 mins)", minMinutes: 31, maxMinutes: 60, fine: 30 },

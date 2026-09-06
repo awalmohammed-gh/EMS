@@ -129,15 +129,24 @@ export const PayrollSummaryCalculator = ({
 
   // Dynamic / Live Calculation based on Attendance & Actual Database Records
   const dailyRate = standardWorkingDays > 0 ? baseSalary / standardWorkingDays : 0;
+  const elapsedWorkingDays = summaryData?.workingDaysMetric?.elapsedWorkingDays ?? standardWorkingDays;
+  const isCurrentMonth = summaryData?.workingDaysMetric?.isCurrentMonth ?? false;
+
   const payableDays = Math.min(standardWorkingDays, attendedDays + approvedLeaveDays);
-  const unexcusedAbsences = Math.max(0, standardWorkingDays - payableDays);
+  // RULE 1: Future / unelapsed days are NEVER counted as absent
+  const unexcusedAbsences = customAttendanceDays !== null
+    ? Math.max(0, (isCurrentMonth ? elapsedWorkingDays : standardWorkingDays) - payableDays)
+    : (summaryData?.workingDaysMetric?.absentDays ?? summaryData?.workingDaysMetric?.unexcusedAbsences ?? 0);
   const attendanceRate = standardWorkingDays > 0 ? Math.min(100, Math.round((payableDays / standardWorkingDays) * 100)) : 100;
 
-  // Dynamic Absenteeism Deduction Rule from CompanySettings (default GH₵10.00/day)
+  // Dynamic Absenteeism Deduction Rule: absentDays * dailySalaryRate (Rule 3)
   const absenceDeductionRate = Number(
     summaryData?.rates?.absenceDeductionRate ||
-    summaryData?.rates?.fixedAbsenceRate ||
-    10
+    summaryData?.rates?.dailySalaryRate ||
+    summaryData?.dailySalaryRate ||
+    summaryData?.dailyRate ||
+    dailyRate ||
+    15
   );
   const absentDaysDeduction = Number((unexcusedAbsences * absenceDeductionRate).toFixed(2));
 
@@ -245,6 +254,16 @@ export const PayrollSummaryCalculator = ({
           </button>
         </div>
       </div>
+
+      {/* Mid-Month Audit Notice */}
+      {summaryData?.calendar?.isCurrentMonth && summaryData?.calendar?.futureWorkingDays > 0 && (
+        <div className="flex items-center gap-2 px-3 py-2 rounded-xl bg-[#EFF6FF] border border-[#BFDBFE] text-xs text-[#1E40AF]">
+          <Clock className="w-4 h-4 shrink-0 text-[#2563EB]" />
+          <span>
+            <strong>Mid-Month Active Period:</strong> Audited through day {summaryData.calendar.cutoffDay} ({summaryData.calendar.elapsedWorkingDays} elapsed working days). {summaryData.calendar.futureWorkingDays} unelapsed days are strictly protected and never counted as absent.
+          </span>
+        </div>
+      )}
 
       {/* KPI Foundation Summary Cards */}
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">

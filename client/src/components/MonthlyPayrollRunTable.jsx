@@ -13,12 +13,15 @@ import {
   Filter,
   ArrowUpDown,
   FileSpreadsheet,
+  FileText,
+  Loader2,
   Building2,
   Info,
   DollarSign,
   ShieldCheck,
 } from "lucide-react";
 import { getMonthlyPayrollRun } from "../apis/fontApis";
+import { exportPayrollToPDF } from "../utils/payrollReportExport";
 
 export const MonthlyPayrollRunTable = () => {
   const now = new Date();
@@ -205,6 +208,41 @@ export const MonthlyPayrollRunTable = () => {
     document.body.removeChild(link);
   };
 
+  const [isExportingPDF, setIsExportingPDF] = useState(false);
+
+  // Export PDF functionality for accounting
+  const handleExportPDF = async () => {
+    if (!processedEmployees.length) return;
+    try {
+      setIsExportingPDF(true);
+      const activeMonthStr = runData?.month || selectedMonth;
+      await exportPayrollToPDF({
+        records: processedEmployees.map((e) => ({
+          employeeId: e.employeeCode || e.employeeId,
+          employeeName: e.fullName,
+          department: e.department,
+          position: e.position,
+          payMonth: activeMonthStr,
+          basicSalary: e.baseSalary,
+          allowances: e.allowances,
+          deductions: e.totalAttendanceDeductions || ((e.absenceDeductions || 0) + (e.latenessDeductions || 0) + (e.otherDeductions || 0)),
+          netSalary: e.netTakeHomePay,
+          paymentMethod: e.paymentMethod || "Bank Transfer",
+          status: "Processed",
+          bankName: e.bankName || "Ghana Commercial Bank",
+          accountNumber: e.accountNumber || "N/A",
+        })),
+        month: activeMonthStr,
+        year: currentYear,
+        title: `MONTHLY PROCESSED PAYROLL RUN - ${activeMonthStr.toUpperCase()} ${currentYear}`,
+      });
+    } catch (err) {
+      console.error("Failed to export PDF report:", err);
+    } finally {
+      setIsExportingPDF(false);
+    }
+  };
+
   const monthOptions = [];
   const monthNames = [
     "January", "February", "March", "April", "May", "June",
@@ -266,6 +304,22 @@ export const MonthlyPayrollRunTable = () => {
             >
               <FileSpreadsheet className="w-3.5 h-3.5" />
               <span>Export CSV</span>
+            </button>
+
+            <button
+              id="monthly-run-btn-export-pdf"
+              type="button"
+              onClick={handleExportPDF}
+              disabled={!processedEmployees.length || isExportingPDF}
+              className="px-3.5 py-2 bg-rose-600 hover:bg-rose-700 text-white rounded-xl text-xs font-bold flex items-center gap-1.5 transition-all shadow-xs cursor-pointer disabled:opacity-40"
+              title="Export official accounting report to PDF"
+            >
+              {isExportingPDF ? (
+                <Loader2 className="w-3.5 h-3.5 animate-spin" />
+              ) : (
+                <FileText className="w-3.5 h-3.5" />
+              )}
+              <span>{isExportingPDF ? "Exporting..." : "Export PDF"}</span>
             </button>
 
             <button

@@ -6,6 +6,14 @@ import Employee from "../models/Employee.js";
 import Leave from "../models/Leave.js";
 import { liveAttendanceStore } from "../controllers/employeeAttendance.js";
 import { liveLeaveStore } from "../controllers/leaveController.js";
+import {
+  evaluateLatenessPenalty,
+  calculateLatenessPenalty,
+  getStandardizedLatenessTiers,
+  getTierConfiguredFine,
+} from "../utils/latenessPenaltyCalculator.js";
+
+export { evaluateLatenessPenalty, calculateLatenessPenalty, getStandardizedLatenessTiers, getTierConfiguredFine };
 
 const isValidObjectId = (id) =>
   id &&
@@ -35,122 +43,10 @@ export function getWorkingDaysInMonth(year, monthIndex) {
 }
 
 /**
- * Evaluates lateness penalty for a given clock-in time and company settings.
- */
-export function evaluateLatenessPenalty(clockInInput, workStartTime = "08:00", settings = {}) {
-  if (!clockInInput) {
-    return { isLate: false, minutesLate: 0, penalty: 0, tier: "On Time" };
-  }
-
-  let startHour = 8;
-  let startMinute = 0;
-  if (typeof workStartTime === "string" && workStartTime.trim()) {
-    const clean = workStartTime.trim();
-    const isPM = /pm/i.test(clean);
-    const isAM = /am/i.test(clean);
-    const match = clean.match(/(\d{1,2}):(\d{2})/);
-    if (match) {
-      let h = parseInt(match[1], 10);
-      const m = parseInt(match[2], 10);
-      if (isPM && h < 12) h += 12;
-      if (isAM && h === 12) h = 0;
-      startHour = h;
-      startMinute = m;
-    }
-  }
-
-  let clockInDate = null;
-  if (clockInInput instanceof Date) {
-    clockInDate = clockInInput;
-  } else if (typeof clockInInput === "string") {
-    const parsed = new Date(clockInInput);
-    if (!isNaN(parsed.getTime())) {
-      clockInDate = parsed;
-    } else {
-      const timeMatch = clockInInput.match(/(\d{1,2}):(\d{2})/);
-      if (timeMatch) {
-        const dummy = new Date();
-        let h = parseInt(timeMatch[1], 10);
-        const m = parseInt(timeMatch[2], 10);
-        if (/pm/i.test(clockInInput) && h < 12) h += 12;
-        if (/am/i.test(clockInInput) && h === 12) h = 0;
-        dummy.setHours(h, m, 0, 0);
-        clockInDate = dummy;
-      }
-    }
-  }
-
-  if (!clockInDate || isNaN(clockInDate.getTime())) {
-    return { isLate: false, minutesLate: 0, penalty: 0, tier: "On Time" };
-  }
-
-  const clockInHour = clockInDate.getHours();
-  const clockInMinute = clockInDate.getMinutes();
-  const startTotalMinutes = startHour * 60 + startMinute;
-  const clockInTotalMinutes = clockInHour * 60 + clockInMinute;
-  const delayMinutes = Math.max(0, clockInTotalMinutes - startTotalMinutes);
-
-  if (delayMinutes === 0) {
-    return { isLate: false, minutesLate: 0, penalty: 0, tier: "On Time" };
-  }
-
-  // Check custom latenessTiers if provided
-  if (Array.isArray(settings.latenessTiers) && settings.latenessTiers.length > 0) {
-    const matched = settings.latenessTiers.find(
-      (t) => delayMinutes <= (t.maxMinutes || 9999) && delayMinutes >= (t.minMinutes || 1)
-    );
-    if (matched) {
-      return {
-        isLate: true,
-        minutesLate: delayMinutes,
-        penalty: Number(matched.penalty || matched.fine || 0),
-        tier: matched.name || `Tier ${matched.tier || ""}`,
-      };
-    }
-  }
-
-  const t1 = settings.lateTier1_amount !== undefined && Number(settings.lateTier1_amount) >= 0 ? Number(settings.lateTier1_amount) : 10;
-  const t2 = settings.lateTier2_amount !== undefined && Number(settings.lateTier2_amount) >= 0 ? Number(settings.lateTier2_amount) : 30;
-  const t3 = settings.lateTier3_amount !== undefined && Number(settings.lateTier3_amount) >= 0 ? Number(settings.lateTier3_amount) : 50;
-  const t4 = settings.lateTier4_amount !== undefined && Number(settings.lateTier4_amount) >= 0 ? Number(settings.lateTier4_amount) : 75;
-  const t5 = settings.lateTier5_amount !== undefined && Number(settings.lateTier5_amount) >= 0 ? Number(settings.lateTier5_amount) : 100;
-  const t6 = settings.lateTier6_amount !== undefined && Number(settings.lateTier6_amount) >= 0 ? Number(settings.lateTier6_amount) : 150;
-
-  let penalty = 0;
-  let tier = "";
-  if (delayMinutes >= 1 && delayMinutes <= 30) {
-    penalty = t1;
-    tier = "1–30 mins late (Tier 1)";
-  } else if (delayMinutes >= 31 && delayMinutes <= 60) {
-    penalty = t2;
-    tier = "31–60 mins late (Tier 2)";
-  } else if (delayMinutes >= 61 && delayMinutes <= 120) {
-    penalty = t3;
-    tier = "61–120 mins (Tier 3)";
-  } else if (delayMinutes >= 121 && delayMinutes <= 180) {
-    penalty = t4;
-    tier = "121–180 mins (Tier 4)";
-  } else if (delayMinutes >= 181 && delayMinutes <= 240) {
-    penalty = t5;
-    tier = "181–240 mins (Tier 5)";
-  } else {
-    penalty = t6;
-    tier = "241+ mins (Tier 6)";
-  }
-
-  return {
-    isLate: true,
-    minutesLate: delayMinutes,
-    penalty,
-    tier,
-  };
-}
-
-/**
  * Unified Single Source of Truth for Monthly Penalties & Attendance Breakdown.
  * Accurately queries attendance logs across date formats and computes exact penalties.
  */
-export async function calculateMonthlyPenalties(employeeId, year, monthIndex) {
+export async function calculateMonthlyPenalties(employeeId, year, monthIndex, options = {}) {
   const currentYear = year || new Date().getFullYear();
   const currentMonthIdx = monthIndex !== undefined ? monthIndex : new Date().getMonth();
 
@@ -316,58 +212,121 @@ export async function calculateMonthlyPenalties(employeeId, year, monthIndex) {
     if (isLate && !isExplicitAbsent) {
       lateCount += 1;
       let fine = 0;
-      if (log.latePenalty !== undefined && Number(log.latePenalty) > 0) {
-        fine = Number(log.latePenalty);
-      } else if (evalResult && evalResult.penalty > 0) {
+      let lateMins = Number(log.lateMinutes || log.delayMinutes || (evalResult ? evalResult.minutesLate : 0));
+      let tierName = log.penaltyTier || (evalResult ? evalResult.tier : "Late Penalty");
+
+      if (log.latePenalty !== undefined && log.latePenalty !== null && log.latePenalty !== "" && !isNaN(Number(log.latePenalty))) {
+        fine = Math.max(0, Number(log.latePenalty));
+      } else if (evalResult && evalResult.isLate) {
         fine = evalResult.penalty;
-      } else if (Number(log.lateMinutes || log.delayMinutes || 0) > 0) {
-        const mins = Number(log.lateMinutes || log.delayMinutes);
-        if (mins <= 30) fine = settings.lateTier1_amount || 10;
-        else if (mins <= 60) fine = settings.lateTier2_amount || 30;
-        else fine = settings.lateTier6_amount || 150;
+        tierName = evalResult.tier;
+        lateMins = evalResult.minutesLate;
       } else {
-        fine = settings.lateTier1_amount || 10;
+        const fallbackCalc = calculateLatenessPenalty(lateMins || 15, settings);
+        fine = fallbackCalc.penalty;
+        tierName = fallbackCalc.tier;
+        lateMins = fallbackCalc.minutesLate;
       }
 
       totalLatePenalties += fine;
       lateLogs.push({
         date: log.date,
         clockInTime: hasClockIn,
-        lateMinutes: log.lateMinutes || log.delayMinutes || evalResult?.minutesLate || 15,
+        lateMinutes: lateMins,
         penalty: fine,
-        tier: log.penaltyTier || evalResult?.tier || "Late Penalty",
+        tier: tierName,
       });
     }
   });
 
-  // Query approved leaves
+  // Query approved leaves strictly overlapping target month
   let approvedLeaveDays = 0;
   try {
     const leaves = await Leave.find({
       $and: [
         empMatchOr.length > 0 ? { $or: empMatchOr } : {},
         { status: "Approved" },
+        {
+          $or: [
+            { startDate: { $lte: endDate }, endDate: { $gte: startDate } },
+            { startDate: { $gte: startDate, $lte: endDate } },
+          ],
+        },
       ],
     }).lean();
 
     leaves.forEach((l) => {
-      approvedLeaveDays += Number(l.totalDays || l.days || 1);
+      const lStart = new Date(l.startDate);
+      const lEnd = new Date(l.endDate || l.startDate);
+      if (!isNaN(lStart.getTime())) {
+        const effStart = lStart < startDate ? startDate : lStart;
+        const effEnd = lEnd > endDate ? endDate : lEnd;
+        if (effStart <= effEnd) {
+          let cur = new Date(effStart);
+          while (cur <= effEnd) {
+            const dow = cur.getUTCDay();
+            if (dow !== 0 && dow !== 6) {
+              approvedLeaveDays++;
+            }
+            cur.setUTCDate(cur.getUTCDate() + 1);
+          }
+        }
+      }
     });
   } catch (err) {
     console.warn("Leave query notice:", err.message);
   }
 
-  const standardWorkingDays = getWorkingDaysInMonth(currentYear, currentMonthIdx);
-  const absentDays = Math.max(0, standardWorkingDays - attendedDays - approvedLeaveDays);
-  const absenceRate = Number(settings.absenceRate || settings.absenceDeductionRate || 15.00);
-  const totalAbsenceDeductions = parseFloat((absentDays * absenceRate).toFixed(2));
+  // Workday bounds calculation (strict monthly isolation & mid-month elapsed days)
+  const now = options?.evaluationDate ? new Date(options.evaluationDate) : new Date();
+  const isCurrentMonth = currentYear === now.getFullYear() && currentMonthIdx === now.getMonth();
+  const isPastMonth = currentYear < now.getFullYear() || (currentYear === now.getFullYear() && currentMonthIdx < now.getMonth());
+  const isFutureMonth = currentYear > now.getFullYear() || (currentYear === now.getFullYear() && currentMonthIdx > now.getMonth());
+
+  const daysInMonth = new Date(currentYear, currentMonthIdx + 1, 0).getDate();
+  let cutoffDay = 0;
+  if (isPastMonth) {
+    cutoffDay = daysInMonth;
+  } else if (isCurrentMonth) {
+    cutoffDay = Math.min(now.getDate(), daysInMonth);
+  } else {
+    cutoffDay = 0;
+  }
+
+  let standardWorkingDays = 0;
+  let elapsedWorkingDays = 0;
+  let futureWorkingDays = 0;
+  for (let d = 1; d <= daysInMonth; d++) {
+    const dObj = new Date(currentYear, currentMonthIdx, d);
+    const dow = dObj.getDay();
+    if (dow !== 0 && dow !== 6) {
+      standardWorkingDays++;
+      if (d <= cutoffDay) {
+        elapsedWorkingDays++;
+      } else {
+        futureWorkingDays++;
+      }
+    }
+  }
+
+  // Rule 1: Future / Unelapsed Days Are Never Counted as Absent
+  // If mid-period run, absences are only evaluated against elapsed working days to date.
+  const auditWorkDays = options?.isFullMonthAudit ? standardWorkingDays : (isCurrentMonth ? elapsedWorkingDays : standardWorkingDays);
+  const absentDays = isFutureMonth ? 0 : Math.max(0, auditWorkDays - attendedDays - approvedLeaveDays);
 
   const baseSalary = Number(
-    targetEmployee?.baseSalary ??
-    targetEmployee?.basicSalary ??
-    targetEmployee?.salary ??
-    2500
+    options?.baseSalaryInput !== undefined && !isNaN(Number(options.baseSalaryInput))
+      ? Number(options.baseSalaryInput)
+      : (targetEmployee?.baseSalary ??
+         targetEmployee?.basicSalary ??
+         targetEmployee?.salary ??
+         2500)
   );
+
+  // Dynamic Daily Salary Rate = Employee Base Salary / Total Working Days in Month (Rule 3)
+  const dailySalaryRate = standardWorkingDays > 0 ? parseFloat((baseSalary / standardWorkingDays).toFixed(2)) : 0;
+  // Realized Absence Deductions = elapsedUnexcusedAbsentDays * dailySalaryRate
+  const totalAbsenceDeductions = parseFloat((absentDays * dailySalaryRate).toFixed(2));
 
   return {
     targetEmployee,
@@ -375,6 +334,12 @@ export async function calculateMonthlyPenalties(employeeId, year, monthIndex) {
     year: currentYear,
     monthIndex: currentMonthIdx,
     standardWorkingDays,
+    elapsedWorkingDays,
+    futureWorkingDays,
+    cutoffDay,
+    isCurrentMonth,
+    isPastMonth,
+    isFutureMonth,
     attendedDays,
     lateCount,
     lateDays: lateCount,
@@ -383,14 +348,19 @@ export async function calculateMonthlyPenalties(employeeId, year, monthIndex) {
     latenessPenalties: parseFloat(totalLatePenalties.toFixed(2)),
     approvedLeaveDays,
     absentDays,
-    absenceRate,
+    dailySalaryRate,
+    dailyRate: dailySalaryRate,
+    absenceRate: dailySalaryRate,
+    absenceDeductionRate: dailySalaryRate,
     absenceDeductions: totalAbsenceDeductions,
     baseSalary,
     allowances: 0,
     netSalary: parseFloat(
       Math.max(0, baseSalary - totalAbsenceDeductions - totalLatePenalties).toFixed(2)
     ),
-    remarks: `Calculated from ${attendedDays} attended days, ${absentDays} absent days, and ${lateCount} late check-in(s) for ${monthName}.`,
+    remarks: isCurrentMonth && futureWorkingDays > 0
+      ? `Mid-month calculation: ${attendedDays} attended day(s), ${absentDays} unexcused absence(s) across ${elapsedWorkingDays} elapsed working days, and ${lateCount} late check-in(s) for ${monthName}. Remaining ${futureWorkingDays} upcoming days are strictly excluded from absences.`
+      : `Calculated from ${attendedDays} attended day(s), ${absentDays} absent day(s), and ${lateCount} late check-in(s) for ${monthName}.`,
   };
 }
 
@@ -398,14 +368,18 @@ export async function calculateMonthlyPenalties(employeeId, year, monthIndex) {
  * Calculates complete employee payroll with allowance, waiver, and custom deduction support.
  */
 export async function calculateEmployeePayrollEngine(employeeId, year, monthIndex, options = {}) {
-  const penaltySummary = await calculateMonthlyPenalties(employeeId, year, monthIndex);
+  const penaltySummary = await calculateMonthlyPenalties(employeeId, year, monthIndex, options);
   const baseSalary = options.baseSalaryInput !== undefined && !isNaN(Number(options.baseSalaryInput))
     ? Number(options.baseSalaryInput)
     : penaltySummary.baseSalary;
 
+  const standardWorkingDays = penaltySummary.standardWorkingDays || 22;
+  const dailySalaryRate = standardWorkingDays > 0 ? parseFloat((baseSalary / standardWorkingDays).toFixed(2)) : 0;
+  const absentDays = penaltySummary.absentDays || 0;
+  const absenceDeductions = parseFloat((absentDays * dailySalaryRate).toFixed(2));
+
   const allowances = Number(options.allowances || 0);
   const customDeductions = Number(options.customDeductions || options.deductions || 0);
-  const absenceDeductions = penaltySummary.absenceDeductions;
   const latenessPenalties = penaltySummary.latenessPenalties;
 
   const totalDeductions = parseFloat(
@@ -419,6 +393,11 @@ export async function calculateEmployeePayrollEngine(employeeId, year, monthInde
     ...penaltySummary,
     baseSalary,
     basicSalary: baseSalary,
+    standardWorkingDays,
+    dailySalaryRate,
+    dailyRate: dailySalaryRate,
+    absenceRate: dailySalaryRate,
+    absenceDeductions,
     allowances,
     customDeductions,
     totalDeductions,
@@ -429,35 +408,48 @@ export async function calculateEmployeePayrollEngine(employeeId, year, monthInde
 
 /**
  * Enforces single source of truth for net salary and deduction calculations.
+ * Supports employee-specific dynamic daily salary rate deduction.
  */
 export function computeNetSalary({
   baseSalary = 0,
   allowances = 0,
   absentDays = 0,
-  dailyAbsenceRate = 15.00,
+  dailyAbsenceRate = null,
+  standardWorkingDays = 22,
   latenessFines = 0,
   otherDeductions = 0
 } = {}) {
-  const numBase = Number(baseSalary) || 0;
-  const numAllowances = Number(allowances) || 0;
-  const numAbsentDays = Number(absentDays) || 0;
-  const numDailyAbsenceRate = Number(dailyAbsenceRate) || 15.00;
-  const numLatenessFines = Number(latenessFines) || 0;
-  const numOtherDeductions = Number(otherDeductions) || 0;
+  const numBase = Math.max(0, Number(baseSalary) || 0);
+  const numAllowances = Math.max(0, Number(allowances) || 0);
+  const numAbsentDays = Math.max(0, Number(absentDays) || 0);
+  const numWorkingDays = Number(standardWorkingDays) > 0 ? Number(standardWorkingDays) : 22;
+
+  // Daily Salary Rate = Employee Base Salary / Total Working Days in Month
+  const computedRate = dailyAbsenceRate !== null && dailyAbsenceRate !== undefined && !isNaN(Number(dailyAbsenceRate)) && Number(dailyAbsenceRate) >= 0
+    ? Number(dailyAbsenceRate)
+    : (numWorkingDays > 0 ? numBase / numWorkingDays : 0);
+
+  const numDailySalaryRate = Math.max(0, Number(computedRate.toFixed(2)) || 0);
+  const numLatenessFines = Math.max(0, Number(latenessFines) || 0);
+  const numOtherDeductions = Math.max(0, Number(otherDeductions) || 0);
 
   const totalEarnings = numBase + numAllowances;
-  const totalAbsenceDeduction = numAbsentDays * numDailyAbsenceRate;
-  const totalDeductions = totalAbsenceDeduction + numLatenessFines + numOtherDeductions;
-  const netSalary = Math.max(0, totalEarnings - totalDeductions);
+  const totalAbsenceDeduction = Number((numAbsentDays * numDailySalaryRate).toFixed(2));
+  const totalDeductions = Number((totalAbsenceDeduction + numLatenessFines + numOtherDeductions).toFixed(2));
+  const netSalary = Math.max(0, Number((totalEarnings - totalDeductions).toFixed(2)));
 
   return {
-    baseSalary: Number(numBase),
-    allowances: Number(numAllowances),
+    baseSalary: Number(numBase.toFixed(2)),
+    allowances: Number(numAllowances.toFixed(2)),
+    standardWorkingDays: numWorkingDays,
+    dailySalaryRate: numDailySalaryRate,
+    dailyRate: numDailySalaryRate,
     absentDays: Number(numAbsentDays),
-    absenceDeductions: Number(totalAbsenceDeduction.toFixed(2)),
+    absenceDeductions: totalAbsenceDeduction,
     latenessPenalties: Number(numLatenessFines.toFixed(2)),
-    totalDeductions: Number(totalDeductions.toFixed(2)),
-    netSalary: Number(netSalary.toFixed(2)),
+    otherDeductions: Number(numOtherDeductions.toFixed(2)),
+    totalDeductions,
+    netSalary,
   };
 }
 

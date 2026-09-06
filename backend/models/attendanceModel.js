@@ -73,6 +73,12 @@ const attendanceSchema = new mongoose.Schema(
       default: "",
     },
 
+    lateReason: {
+      type: String,
+      trim: true,
+      default: "",
+    },
+
     notes: {
       type: String,
       trim: true,
@@ -119,6 +125,13 @@ const attendanceSchema = new mongoose.Schema(
     flaggedAt: {
       type: Date,
       default: null,
+    },
+
+    auditLog: {
+      adminId: { type: String, default: "" },
+      adminName: { type: String, default: "" },
+      reason: { type: String, default: "" },
+      timestamp: { type: Date, default: null },
     },
   },
   {

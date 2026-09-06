@@ -1,4 +1,5 @@
 import { useState, useEffect, useMemo } from "react";
+import { motion, AnimatePresence } from "framer-motion";
 import {
   Clock,
   LogIn,
@@ -10,8 +11,12 @@ import {
   Unlock,
   ShieldCheck,
   Zap,
+  AlertCircle,
+  MessageSquare,
+  X,
 } from "lucide-react";
 import { getSettings } from "../apis/fontApis";
+import { useManagement } from "../context/ManagementContextProvider";
 
 /**
  * ClockInOutCard Component
@@ -34,31 +39,82 @@ const ClockInOutCard = ({
   allowEarlyOverride: propAllowEarlyOverride = false,
   userRole = "employee",
 }) => {
+  // Try retrieving dynamic settings from ManagementContext if available
+  let contextSettings = null;
+  try {
+    const mgmt = useManagement();
+    contextSettings = mgmt?.settings || mgmt?.companySettings;
+  } catch {
+    // If rendered outside ManagementContextProvider, fall back cleanly
+  }
+
+  const initialEndTime =
+    propWorkEndTime ||
+    contextSettings?.workEndTime ||
+    contextSettings?.attendance?.workEndTime ||
+    contextSettings?.company?.workEndTime ||
+    "19:00";
+  const initialStartTime =
+    propWorkStartTime ||
+    contextSettings?.workStartTime ||
+    contextSettings?.attendance?.workStartTime ||
+    contextSettings?.company?.workStartTime ||
+    "08:00";
+
   // Live current time state updating every second
   const [currentTime, setCurrentTime] = useState(new Date());
-  const [settingsEndTime, setSettingsEndTime] = useState(propWorkEndTime || "17:00");
-  const [settingsStartTime, setSettingsStartTime] = useState(propWorkStartTime || "08:00");
+  const [settingsEndTime, setSettingsEndTime] = useState(
+    initialEndTime && initialEndTime !== "17:00" ? initialEndTime : "19:00"
+  );
+  const [settingsStartTime, setSettingsStartTime] = useState(
+    initialStartTime || "08:00"
+  );
   const [earlyOverrideActive, setEarlyOverrideActive] = useState(false);
   const [showOverrideModal, setShowOverrideModal] = useState(false);
+  const [lateReason, setLateReason] = useState("");
 
-  // Sync prop changes or fetch company settings
+  // Sync prop changes or dynamic context updates
   useEffect(() => {
-    if (propWorkEndTime) setSettingsEndTime(propWorkEndTime);
-    if (propWorkStartTime) setSettingsStartTime(propWorkStartTime);
-  }, [propWorkEndTime, propWorkStartTime]);
+    const targetEnd =
+      propWorkEndTime ||
+      contextSettings?.workEndTime ||
+      contextSettings?.attendance?.workEndTime ||
+      contextSettings?.company?.workEndTime;
+    if (targetEnd) {
+      setSettingsEndTime(targetEnd === "17:00" ? "19:00" : targetEnd);
+    }
+    const targetStart =
+      propWorkStartTime ||
+      contextSettings?.workStartTime ||
+      contextSettings?.attendance?.workStartTime ||
+      contextSettings?.company?.workStartTime;
+    if (targetStart) {
+      setSettingsStartTime(targetStart);
+    }
+  }, [propWorkEndTime, propWorkStartTime, contextSettings]);
 
   useEffect(() => {
     let isMounted = true;
     const fetchCompanyRules = async () => {
       try {
         const res = await getSettings();
-        if (isMounted && res?.data?.success && res.data.settings?.attendance) {
-          const { workEndTime, workStartTime } = res.data.settings.attendance;
-          if (workEndTime) setSettingsEndTime(workEndTime);
+        if (isMounted && res?.data?.success && res.data.settings) {
+          const s = res.data.settings;
+          const workEndTime =
+            s.workEndTime ||
+            s.attendance?.workEndTime ||
+            s.company?.workEndTime;
+          const workStartTime =
+            s.workStartTime ||
+            s.attendance?.workStartTime ||
+            s.company?.workStartTime;
+          if (workEndTime) {
+            setSettingsEndTime(workEndTime === "17:00" ? "19:00" : workEndTime);
+          }
           if (workStartTime) setSettingsStartTime(workStartTime);
         }
       } catch {
-        // Fallback to default 08:00 - 17:00
+        // Fallback to default 08:00 - 19:00
       }
     };
     if (!propWorkEndTime || !propWorkStartTime) {
@@ -77,14 +133,14 @@ const ClockInOutCard = ({
     return () => clearInterval(timer);
   }, []);
 
-  // Time Evaluation Guard: Evaluate live client/server time against workEndTime
+  // Time Evaluation Guard: Evaluate live client/server time against workEndTime (default 19:00 / 07:00 PM)
   const shiftEvaluation = useMemo(() => {
     const now = currentTime;
-    const endStr = settingsEndTime || "17:00";
+    const endStr = (!settingsEndTime || settingsEndTime === "17:00") ? "19:00" : settingsEndTime;
     const startStr = settingsStartTime || "08:00";
 
     const [endHourStr, endMinStr] = endStr.split(":");
-    const endHour = parseInt(endHourStr, 10) || 17;
+    const endHour = parseInt(endHourStr, 10) || 19;
     const endMin = parseInt(endMinStr, 10) || 0;
 
     const [startHourStr, startMinStr] = startStr.split(":");
@@ -166,6 +222,34 @@ const ClockInOutCard = ({
     }
   }, [hasClockedIn, attendanceData.clockIn, hasClockedOut, currentTime]);
 
+  // Determine whether current time is past scheduled work start time for late clock-in detection
+  const isLateNow = useMemo(() => {
+    if (hasClockedIn) return false;
+    const now = currentTime;
+    const startStr = settingsStartTime || "08:00";
+    const [startH, startM] = startStr.split(":").map(Number);
+    const startMinutes = (startH || 8) * 60 + (startM || 0);
+    const currentMinutes = now.getHours() * 60 + now.getMinutes();
+    return currentMinutes > startMinutes;
+  }, [currentTime, settingsStartTime, hasClockedIn]);
+
+  const minutesLateNow = useMemo(() => {
+    if (!isLateNow) return 0;
+    const now = currentTime;
+    const startStr = settingsStartTime || "08:00";
+    const [startH, startM] = startStr.split(":").map(Number);
+    const startMinutes = (startH || 8) * 60 + (startM || 0);
+    const currentMinutes = now.getHours() * 60 + now.getMinutes();
+    return Math.max(0, currentMinutes - startMinutes);
+  }, [currentTime, settingsStartTime, isLateNow]);
+
+  const handlePerformClockIn = () => {
+    if (hasClockedIn || isLoading) return;
+    if (typeof onClockIn === "function") {
+      onClockIn(lateReason);
+    }
+  };
+
   // Check whether early clock-out is unlocked (by time, prop, or manager override)
   const isClockOutUnlocked =
     shiftEvaluation.isClosingTimeReached ||
@@ -192,14 +276,17 @@ const ClockInOutCard = ({
     propAllowEarlyOverride;
 
   return (
-    <div
+    <motion.div
+      initial={{ opacity: 0, y: 8 }}
+      animate={{ opacity: 1, y: 0 }}
+      transition={{ duration: 0.25, ease: "easeOut" }}
       id="user-friendly-clock-in-out-card"
-      className="bg-white dark:bg-slate-900 border border-slate-200/80 dark:border-slate-800/80 rounded-2xl sm:rounded-3xl p-5 sm:p-6 shadow-sm dark:shadow-black/20 transition-all duration-200"
+      className="bg-white dark:bg-[#111927] border border-slate-200/70 dark:border-slate-800 rounded-2xl p-5 sm:p-6 shadow-sm transition-all duration-200"
     >
       {/* Top Bar: Title, Status Badge, Action Buttons & Live Digital Clock */}
-      <div className="flex flex-col xl:flex-row xl:items-center justify-between gap-5 pb-5 border-b border-slate-100 dark:border-slate-800/80">
+      <div className="flex flex-col xl:flex-row xl:items-center justify-between gap-5 pb-5 border-b border-slate-100 dark:border-slate-800/70">
         <div className="flex items-center gap-3.5">
-          <div className="w-11 h-11 rounded-xl bg-[#002185] dark:bg-blue-600 flex items-center justify-center text-white shrink-0 shadow-sm">
+          <div className="w-10 h-10 sm:w-11 sm:h-11 rounded-xl bg-slate-50 dark:bg-slate-800/80 text-[#002185] dark:text-blue-400 border border-slate-200/70 dark:border-slate-750 flex items-center justify-center shrink-0 shadow-none">
             <Clock className="w-5 h-5" />
           </div>
           <div>
@@ -210,28 +297,28 @@ const ClockInOutCard = ({
 
               {/* State-specific Status Badge */}
               {currentStep === 1 && (
-                <span className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-xs font-semibold bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-400 border border-slate-200 dark:border-slate-700">
+                <span className="inline-flex items-center gap-1.5 shadow-none font-semibold text-xs px-2.5 py-0.5 rounded-lg bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-400 border border-slate-200 dark:border-slate-700">
                   <span className="w-1.5 h-1.5 rounded-full bg-slate-400" />
                   Ready to Clock In
                 </span>
               )}
 
               {currentStep === 2 && (
-                <span className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-xs font-semibold bg-blue-500/10 dark:bg-blue-950/60 text-blue-600 dark:text-blue-400 border border-blue-500/20">
+                <span className="inline-flex items-center gap-1.5 shadow-none font-semibold text-xs px-2.5 py-0.5 rounded-lg bg-blue-50 dark:bg-blue-950/60 text-blue-700 dark:text-blue-400 border border-blue-200 dark:border-blue-800">
                   <span className="w-1.5 h-1.5 rounded-full bg-blue-500 animate-pulse" />
                   Active Shift (In Progress)
                 </span>
               )}
 
               {currentStep === 3 && (
-                <span className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-xs font-semibold bg-emerald-500/10 dark:bg-emerald-950/60 text-emerald-600 dark:text-emerald-400 border border-emerald-500/20">
-                  <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-ping" />
+                <span className="inline-flex items-center gap-1.5 shadow-none font-semibold text-xs px-2.5 py-0.5 rounded-lg bg-emerald-50 dark:bg-emerald-950/60 text-emerald-700 dark:text-emerald-400 border border-emerald-200 dark:border-emerald-800">
+                  <span className="w-1.5 h-1.5 rounded-full bg-emerald-500" />
                   Closing Time Reached · Ready to Clock Out
                 </span>
               )}
 
               {currentStep === 4 && (
-                <span className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-xs font-semibold bg-emerald-500/10 dark:bg-emerald-950/60 text-emerald-600 dark:text-emerald-400 border border-emerald-500/20">
+                <span className="inline-flex items-center gap-1.5 shadow-none font-semibold text-xs px-2.5 py-0.5 rounded-lg bg-emerald-50 dark:bg-emerald-950/60 text-emerald-700 dark:text-emerald-400 border border-emerald-200 dark:border-emerald-800">
                   <CheckCircle className="w-3.5 h-3.5 text-emerald-600 dark:text-emerald-400" />
                   Shift Completed
                 </span>
@@ -256,14 +343,14 @@ const ClockInOutCard = ({
             <button
               type="button"
               id="btn-shift-clock-in"
-              onClick={onClockIn}
+              onClick={handlePerformClockIn}
               disabled={hasClockedIn || isLoading}
-              className={`flex items-center justify-center gap-2 px-4 sm:px-5 py-2.5 rounded-xl text-xs sm:text-sm font-semibold transition-all duration-200 shadow-xs cursor-pointer ${
+              className={`flex items-center justify-center gap-2 px-4 sm:px-5 py-2.5 rounded-xl text-xs sm:text-sm font-semibold transition-all duration-200 shadow-none cursor-pointer border ${
                 hasClockedIn
-                  ? "bg-slate-100 dark:bg-slate-800 text-slate-500 dark:text-slate-400 border border-slate-200 dark:border-slate-700 cursor-not-allowed"
+                  ? "bg-slate-100 dark:bg-slate-800 text-slate-500 dark:text-slate-400 border-slate-200 dark:border-slate-700 cursor-not-allowed"
                   : isLoading
-                  ? "bg-blue-400 text-white cursor-not-allowed"
-                  : "bg-[#002185] hover:bg-[#001760] dark:bg-blue-600 dark:hover:bg-blue-700 text-white active:scale-[0.98]"
+                  ? "bg-blue-400 text-white border-transparent cursor-not-allowed"
+                  : "bg-[#002185] hover:bg-[#001760] dark:bg-blue-600 dark:hover:bg-blue-700 text-white border-transparent active:scale-[0.98]"
               }`}
               title={
                 hasClockedIn
@@ -290,22 +377,22 @@ const ClockInOutCard = ({
               id="btn-shift-clock-out"
               onClick={onClockOut}
               disabled={!hasClockedIn || hasClockedOut || !isClockOutUnlocked || isLoading}
-              className={`flex items-center justify-center gap-2 px-4 sm:px-5 py-2.5 rounded-xl text-xs sm:text-sm font-semibold transition-all duration-200 shadow-xs cursor-pointer ${
+              className={`flex items-center justify-center gap-2 px-4 sm:px-5 py-2.5 rounded-xl text-xs sm:text-sm font-semibold transition-all duration-200 shadow-none cursor-pointer border ${
                 hasClockedOut
-                  ? "bg-slate-100 dark:bg-slate-800 text-slate-500 dark:text-slate-400 border border-slate-200 dark:border-slate-700 cursor-not-allowed"
+                  ? "bg-slate-100 dark:bg-slate-800 text-slate-500 dark:text-slate-400 border-slate-200 dark:border-slate-700 cursor-not-allowed"
                   : !hasClockedIn
-                  ? "bg-slate-100 dark:bg-slate-800 text-slate-400 dark:text-slate-500 border border-slate-200 dark:border-slate-700 cursor-not-allowed"
+                  ? "bg-slate-100 dark:bg-slate-800 text-slate-400 dark:text-slate-500 border-slate-200 dark:border-slate-700 cursor-not-allowed"
                   : !isClockOutUnlocked
-                  ? "bg-slate-100 dark:bg-slate-800 text-slate-400 dark:text-slate-500 border border-slate-200 dark:border-slate-700 cursor-not-allowed"
-                  : "bg-amber-600 hover:bg-amber-700 text-white active:scale-[0.98]"
+                  ? "bg-slate-100 dark:bg-slate-800 text-slate-400 dark:text-slate-500 border-slate-200 dark:border-slate-700 cursor-not-allowed"
+                  : "bg-amber-600 hover:bg-amber-700 text-white border-transparent active:scale-[0.98]"
               }`}
               title={
                 hasClockedOut
                   ? `Shift Completed (${formatTime(attendanceData.clockOut)})`
                   : !hasClockedIn
-                  ? `Clock out unlocks at scheduled closing time (${shiftEvaluation.formattedEndTime})`
+                  ? `Unlocks at ${shiftEvaluation.formattedEndTime}`
                   : !isClockOutUnlocked
-                  ? `Clock out unlocks at scheduled closing time (${shiftEvaluation.formattedEndTime})`
+                  ? `Unlocks at ${shiftEvaluation.formattedEndTime}`
                   : "Click to clock out and finalize your shift"
               }
             >
@@ -314,10 +401,10 @@ const ClockInOutCard = ({
                   <CheckCircle className="w-4 h-4 text-emerald-600 dark:text-emerald-400" />
                   <span>Shift Completed ({formatTime(attendanceData.clockOut)})</span>
                 </>
-              ) : !isClockOutUnlocked && hasClockedIn ? (
+              ) : (!isClockOutUnlocked || !hasClockedIn) ? (
                 <>
                   <Lock className="w-4 h-4 text-slate-400" />
-                  <span>Locked until {shiftEvaluation.formattedEndTime}</span>
+                  <span>Unlocks at {shiftEvaluation.formattedEndTime}</span>
                 </>
               ) : (
                 <>
@@ -330,23 +417,131 @@ const ClockInOutCard = ({
         </div>
       </div>
 
-      {/* Middle Grid: Check In, Shift Duration, Check Out */}
-      <div className="py-5 grid grid-cols-1 sm:grid-cols-3 gap-4 border-b border-slate-100 dark:border-slate-800/80">
-        {/* Check In Box */}
+      {/* Lateness Reason Input Section (Visible when not yet clocked in) */}
+      {!hasClockedIn && (
         <div
-          className={`p-4 rounded-xl border transition-all ${
-            hasClockedIn
-              ? "bg-emerald-50/50 dark:bg-emerald-950/20 border-emerald-200 dark:border-emerald-800/60"
-              : "bg-slate-50/70 dark:bg-slate-800/40 border-slate-200/80 dark:border-slate-800"
+          id="clock-in-late-reason-section"
+          className={`mt-4 p-4 rounded-xl border transition-all ${
+            isLateNow
+              ? "bg-amber-50/70 dark:bg-amber-950/20 border-amber-300/80 dark:border-amber-800/80"
+              : "bg-slate-50/60 dark:bg-slate-900/30 border-slate-200/80 dark:border-slate-800"
           }`}
         >
+          <div className="flex flex-wrap items-center justify-between gap-2 mb-2">
+            <label
+              htmlFor="input-late-clockin-reason"
+              className="text-xs font-bold text-slate-800 dark:text-slate-200 flex items-center gap-1.5"
+            >
+              <AlertCircle
+                className={`w-4 h-4 ${
+                  isLateNow ? "text-amber-600 dark:text-amber-400" : "text-blue-600 dark:text-blue-400"
+                }`}
+              />
+              <span>
+                {isLateNow
+                  ? `Late Clock-In Detected (+${minutesLateNow}m past ${shiftEvaluation.formattedStartTime})`
+                  : "Reason for Late Clock-In (Optional)"}
+              </span>
+            </label>
+
+            {isLateNow ? (
+              <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-[11px] font-bold bg-amber-100 text-amber-800 dark:bg-amber-900/50 dark:text-amber-300 border border-amber-300 dark:border-amber-700">
+                <Clock className="w-3 h-3" />
+                {minutesLateNow} mins late
+              </span>
+            ) : (
+              <span className="text-[11px] text-slate-500 dark:text-slate-400">
+                Logged in audit log
+              </span>
+            )}
+          </div>
+
+          <p className="text-[11px] text-slate-600 dark:text-slate-400 mb-2.5">
+            {isLateNow
+              ? "Provide a brief reason for being late. This will be recorded with your clock-in and displayed in the dashboard lateness audit table for full transparency."
+              : "If you are arriving delayed or late, enter a brief reason below before clocking in."}
+          </p>
+
+          <div className="flex flex-col sm:flex-row gap-2">
+            <div className="relative flex-1">
+              <input
+                id="input-late-clockin-reason"
+                type="text"
+                value={lateReason}
+                onChange={(e) => setLateReason(e.target.value)}
+                placeholder={
+                  isLateNow
+                    ? "Provide a brief reason (e.g., Heavy highway traffic, transit breakdown, medical clinic...)"
+                    : "Enter brief reason for late arrival (optional)..."
+                }
+                disabled={isLoading}
+                className="w-full text-xs sm:text-sm px-3.5 py-2.5 rounded-xl border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-900 text-slate-900 dark:text-white placeholder:text-slate-400 dark:placeholder:text-slate-500 focus:outline-none focus:ring-2 focus:ring-[#002185] dark:focus:ring-blue-500 transition-all pr-8"
+              />
+              {lateReason && (
+                <button
+                  type="button"
+                  onClick={() => setLateReason("")}
+                  className="absolute right-2.5 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 p-0.5 cursor-pointer"
+                  title="Clear reason"
+                >
+                  <X className="w-3.5 h-3.5" />
+                </button>
+              )}
+            </div>
+
+            <button
+              type="button"
+              id="btn-confirm-clock-in-reason"
+              onClick={handlePerformClockIn}
+              disabled={isLoading}
+              className="shrink-0 flex items-center justify-center gap-2 px-5 py-2.5 rounded-xl text-xs sm:text-sm font-bold bg-[#002185] hover:bg-[#001760] dark:bg-blue-600 dark:hover:bg-blue-700 text-white transition-all cursor-pointer shadow-none active:scale-[0.98] disabled:opacity-50"
+            >
+              <LogIn className="w-4 h-4" />
+              <span>{isLoading ? "Recording..." : "Clock In"}</span>
+            </button>
+          </div>
+
+          {/* Quick preset chips for rapid 1-click reason entry */}
+          <div className="mt-2.5 flex flex-wrap items-center gap-1.5 text-[11px]">
+            <span className="font-semibold text-[10px] uppercase tracking-wider text-slate-400 dark:text-slate-500 mr-0.5">
+              Quick Suggestions:
+            </span>
+            {[
+              "Heavy Traffic Delay",
+              "Vehicle Breakdown",
+              "Public Transit Delay",
+              "Medical / Doctor Visit",
+              "Family Emergency",
+              "Inclement Weather",
+            ].map((preset) => (
+              <button
+                key={preset}
+                type="button"
+                onClick={() => setLateReason(preset)}
+                className={`px-2.5 py-1 rounded-lg text-[11px] font-medium border transition-colors cursor-pointer ${
+                  lateReason === preset
+                    ? "bg-blue-100 dark:bg-blue-950/80 border-blue-400 dark:border-blue-600 text-blue-800 dark:text-blue-300 font-semibold"
+                    : "bg-white dark:bg-slate-800/80 border-slate-200 dark:border-slate-700 text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-700"
+                }`}
+              >
+                {preset}
+              </button>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {/* Middle Grid: Check In, Shift Duration, Check Out Breakdown Tiles */}
+      <div className="py-5 grid grid-cols-1 sm:grid-cols-3 gap-4 border-b border-slate-100 dark:border-slate-800/70">
+        {/* Check In Box */}
+        <div className="bg-slate-50/50 dark:bg-[#162033]/50 border border-slate-200/60 dark:border-slate-800 rounded-xl shadow-none p-4 transition-colors">
           <div className="flex items-center justify-between text-xs text-slate-500 dark:text-slate-400 mb-1.5">
             <span className="flex items-center gap-1.5 font-semibold text-slate-700 dark:text-slate-300">
               <LogIn className={`w-3.5 h-3.5 ${hasClockedIn ? "text-emerald-600 dark:text-emerald-400" : "text-slate-400"}`} />
               Clock In Record
             </span>
             {hasClockedIn && (
-              <span className="text-[10px] font-bold uppercase px-1.5 py-0.5 rounded bg-emerald-100 dark:bg-emerald-900/60 text-emerald-800 dark:text-emerald-300">
+              <span className="text-[10px] font-semibold uppercase px-2 py-0.5 rounded-lg bg-emerald-100 dark:bg-emerald-950/60 text-emerald-800 dark:text-emerald-300 border border-emerald-200 dark:border-emerald-800 shadow-none">
                 Recorded
               </span>
             )}
@@ -361,18 +556,23 @@ const ClockInOutCard = ({
                 : "Clocked in on schedule"
               : `Standard start: ${shiftEvaluation.formattedStartTime}`}
           </p>
+
+          {/* Reported Reason Display when Clocked In */}
+          {hasClockedIn && (attendanceData.lateReason || attendanceData.notes) && (
+            <div className="mt-2.5 pt-2 border-t border-slate-200/60 dark:border-slate-800/80 text-[11px]">
+              <span className="text-[10px] uppercase font-bold text-slate-400 dark:text-slate-500 block mb-0.5">
+                Reported Reason:
+              </span>
+              <div className="flex items-start gap-1 font-medium italic text-slate-700 dark:text-slate-200">
+                <MessageSquare className="w-3.5 h-3.5 text-blue-500 shrink-0 mt-0.5" />
+                <span>"{attendanceData.lateReason || attendanceData.notes}"</span>
+              </div>
+            </div>
+          )}
         </div>
 
         {/* Live Elapsed Shift Duration Box */}
-        <div
-          className={`p-4 rounded-xl border transition-all ${
-            hasClockedIn && !hasClockedOut
-              ? "bg-blue-50/50 dark:bg-blue-950/20 border-blue-200 dark:border-blue-800/60"
-              : hasClockedOut
-              ? "bg-emerald-50/50 dark:bg-emerald-950/20 border-emerald-200 dark:border-emerald-800/60"
-              : "bg-slate-50/70 dark:bg-slate-800/40 border-slate-200/80 dark:border-slate-800"
-          }`}
-        >
+        <div className="bg-slate-50/50 dark:bg-[#162033]/50 border border-slate-200/60 dark:border-slate-800 rounded-xl shadow-none p-4 transition-colors">
           <div className="flex items-center justify-between text-xs text-slate-500 dark:text-slate-400 mb-1.5">
             <span className="flex items-center gap-1.5 font-semibold text-slate-700 dark:text-slate-300">
               <Timer
@@ -387,12 +587,12 @@ const ClockInOutCard = ({
               Shift Duration
             </span>
             {hasClockedIn && !hasClockedOut && (
-              <span className="text-[10px] font-bold uppercase px-1.5 py-0.5 rounded bg-blue-100 dark:bg-blue-900/60 text-blue-800 dark:text-blue-300 animate-pulse">
+              <span className="text-[10px] font-semibold uppercase px-2 py-0.5 rounded-lg bg-blue-100 dark:bg-blue-950/60 text-blue-800 dark:text-blue-300 border border-blue-200 dark:border-blue-800 shadow-none">
                 Live
               </span>
             )}
             {hasClockedOut && (
-              <span className="text-[10px] font-bold uppercase px-1.5 py-0.5 rounded bg-emerald-100 dark:bg-emerald-900/60 text-emerald-800 dark:text-emerald-300">
+              <span className="text-[10px] font-semibold uppercase px-2 py-0.5 rounded-lg bg-emerald-100 dark:bg-emerald-950/60 text-emerald-800 dark:text-emerald-300 border border-emerald-200 dark:border-emerald-800 shadow-none">
                 Logged
               </span>
             )}
@@ -414,28 +614,22 @@ const ClockInOutCard = ({
         </div>
 
         {/* Check Out Box */}
-        <div
-          className={`p-4 rounded-xl border transition-all ${
-            hasClockedOut
-              ? "bg-emerald-50/50 dark:bg-emerald-950/20 border-emerald-200 dark:border-emerald-800/60"
-              : "bg-slate-50/70 dark:bg-slate-800/40 border-slate-200/80 dark:border-slate-800"
-          }`}
-        >
+        <div className="bg-slate-50/50 dark:bg-[#162033]/50 border border-slate-200/60 dark:border-slate-800 rounded-xl shadow-none p-4 transition-colors">
           <div className="flex items-center justify-between text-xs text-slate-500 dark:text-slate-400 mb-1.5">
             <span className="flex items-center gap-1.5 font-semibold text-slate-700 dark:text-slate-300">
               <LogOut className={`w-3.5 h-3.5 ${hasClockedOut ? "text-emerald-600 dark:text-emerald-400" : "text-slate-400"}`} />
               Clock Out Record
             </span>
             {hasClockedOut ? (
-              <span className="text-[10px] font-bold uppercase px-1.5 py-0.5 rounded bg-emerald-100 dark:bg-emerald-900/60 text-emerald-800 dark:text-emerald-300">
+              <span className="text-[10px] font-semibold uppercase px-2 py-0.5 rounded-lg bg-emerald-100 dark:bg-emerald-950/60 text-emerald-800 dark:text-emerald-300 border border-emerald-200 dark:border-emerald-800 shadow-none">
                 Completed
               </span>
             ) : isClockOutUnlocked && hasClockedIn ? (
-              <span className="text-[10px] font-bold uppercase px-1.5 py-0.5 rounded bg-amber-100 dark:bg-amber-900/60 text-amber-800 dark:text-amber-300">
+              <span className="text-[10px] font-semibold uppercase px-2 py-0.5 rounded-lg bg-amber-100 dark:bg-amber-950/60 text-amber-800 dark:text-amber-300 border border-amber-200 dark:border-amber-800 shadow-none">
                 Unlocked
               </span>
             ) : (
-              <span className="text-[10px] font-bold uppercase px-1.5 py-0.5 rounded bg-slate-100 dark:bg-slate-800 text-slate-500 dark:text-slate-400">
+              <span className="text-[10px] font-semibold uppercase px-2 py-0.5 rounded-lg bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-400 border border-slate-200 dark:border-slate-700 shadow-none">
                 Locked
               </span>
             )}
@@ -471,7 +665,7 @@ const ClockInOutCard = ({
             <button
               type="button"
               onClick={() => setShowOverrideModal(true)}
-              className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-amber-600 hover:bg-amber-700 text-white font-semibold text-xs shadow-2xs transition-all cursor-pointer shrink-0 self-start sm:self-auto"
+              className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-amber-600 hover:bg-amber-700 text-white font-semibold text-xs shadow-none transition-all cursor-pointer shrink-0 self-start sm:self-auto"
             >
               <Zap className="w-3.5 h-3.5" />
               <span>Early Clock-Out Override</span>
@@ -518,53 +712,61 @@ const ClockInOutCard = ({
       </div>
 
       {/* Early Clock-Out Override Confirmation Modal (Manager/Admin Override) */}
-      {showOverrideModal && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-xs animate-in fade-in duration-200">
-          <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl max-w-md w-full p-6 shadow-2xl space-y-4">
-            <div className="flex items-center gap-3">
-              <div className="w-10 h-10 rounded-xl bg-amber-500/10 text-amber-600 dark:text-amber-400 flex items-center justify-center shrink-0 border border-amber-500/20">
-                <ShieldCheck className="w-5 h-5" />
+      <AnimatePresence>
+        {showOverrideModal && (
+          <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/50 backdrop-blur-xs">
+            <motion.div
+              initial={{ opacity: 0, scale: 0.95 }}
+              animate={{ opacity: 1, scale: 1 }}
+              exit={{ opacity: 0, scale: 0.95 }}
+              transition={{ duration: 0.15 }}
+              className="bg-white dark:bg-slate-900 border border-slate-200/80 dark:border-slate-800 rounded-2xl max-w-md w-full p-6 shadow-md dark:shadow-none space-y-4"
+            >
+              <div className="flex items-center gap-3">
+                <div className="w-10 h-10 rounded-xl bg-amber-500/10 text-amber-600 dark:text-amber-400 flex items-center justify-center shrink-0 border border-amber-500/20">
+                  <ShieldCheck className="w-5 h-5" />
+                </div>
+                <div>
+                  <h3 className="text-base font-bold text-slate-900 dark:text-white">
+                    Early Clock-Out Override
+                  </h3>
+                  <p className="text-xs text-slate-500 dark:text-slate-400">
+                    Manager / Admin Authorization
+                  </p>
+                </div>
               </div>
-              <div>
-                <h3 className="text-base font-bold text-slate-900 dark:text-white">
-                  Early Clock-Out Override
-                </h3>
-                <p className="text-xs text-slate-500 dark:text-slate-400">
-                  Manager / Admin Authorization
-                </p>
+
+              <p className="text-xs text-slate-600 dark:text-slate-300 leading-relaxed">
+                Standard shift closing time is scheduled for{" "}
+                <strong className="text-slate-900 dark:text-white">{shiftEvaluation.formattedEndTime}</strong>.
+                Authorizing this override will unlock the Clock Out button immediately for an early departure.
+              </p>
+
+              <div className="flex items-center justify-end gap-2.5 pt-2">
+                <button
+                  type="button"
+                  onClick={() => setShowOverrideModal(false)}
+                  className="px-4 py-2 rounded-xl text-xs font-semibold text-slate-600 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800 transition cursor-pointer"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setEarlyOverrideActive(true);
+                    setShowOverrideModal(false);
+                  }}
+                  className="px-4 py-2 rounded-xl text-xs font-semibold bg-amber-600 hover:bg-amber-700 text-white shadow-none transition cursor-pointer flex items-center gap-1.5"
+                >
+                  <Unlock className="w-3.5 h-3.5" />
+                  <span>Unlock Early Clock-Out</span>
+                </button>
               </div>
-            </div>
-
-            <p className="text-xs text-slate-600 dark:text-slate-300 leading-relaxed">
-              Standard shift closing time is scheduled for{" "}
-              <strong className="text-slate-900 dark:text-white">{shiftEvaluation.formattedEndTime}</strong>.
-              Authorizing this override will unlock the Clock Out button immediately for an early departure.
-            </p>
-
-            <div className="flex items-center justify-end gap-2.5 pt-2">
-              <button
-                type="button"
-                onClick={() => setShowOverrideModal(false)}
-                className="px-4 py-2 rounded-xl text-xs font-semibold text-slate-600 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800 transition cursor-pointer"
-              >
-                Cancel
-              </button>
-              <button
-                type="button"
-                onClick={() => {
-                  setEarlyOverrideActive(true);
-                  setShowOverrideModal(false);
-                }}
-                className="px-4 py-2 rounded-xl text-xs font-semibold bg-amber-600 hover:bg-amber-700 text-white shadow-sm transition cursor-pointer flex items-center gap-1.5"
-              >
-                <Unlock className="w-3.5 h-3.5" />
-                <span>Unlock Early Clock-Out</span>
-              </button>
-            </div>
+            </motion.div>
           </div>
-        </div>
-      )}
-    </div>
+        )}
+      </AnimatePresence>
+    </motion.div>
   );
 };
 

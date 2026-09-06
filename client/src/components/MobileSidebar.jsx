@@ -10,13 +10,10 @@ import {
   X,
   ShieldCheck,
   User,
-  Sun,
-  Moon,
   Megaphone,
 } from "lucide-react";
 import eyenitLogo from "../assets/eyenit_logo.png";
 import { useManagement } from "../context/ManagementContextProvider";
-import { useTheme } from "../context/ThemeContext";
 
 /**
  * MobileSidebar Component
@@ -33,7 +30,6 @@ export const MobileSidebar = ({
   const { pathname } = useLocation();
   const navigate = useNavigate();
   const { user, role: contextRole, logout } = useManagement();
-  const { isDark, toggleTheme } = useTheme();
 
   // Animation lifecycle state to ensure smooth open and close transitions
   const [isRendered, setIsRendered] = useState(isOpen);
@@ -246,29 +242,8 @@ export const MobileSidebar = ({
           )}
         </nav>
 
-        {/* Bottom Actions: Theme Toggle & Sign Out */}
-        <div className="pt-2.5 border-t border-gray-200/80 dark:border-slate-800 space-y-1.5">
-          {/* Quick Theme Toggle in Mobile Sidebar */}
-          <button
-            id="mobile-sidebar-theme-toggle"
-            type="button"
-            onClick={toggleTheme}
-            className="flex items-center justify-between w-full px-2.5 py-2 rounded-xl text-xs font-semibold text-gray-700 dark:text-slate-200 hover:bg-gray-100 dark:hover:bg-slate-800 transition-all cursor-pointer"
-            aria-label="Toggle Theme"
-          >
-            <span className="flex items-center gap-2">
-              {isDark ? (
-                <Sun className="w-4 h-4 text-amber-400" />
-              ) : (
-                <Moon className="w-4 h-4 text-[#002185]" />
-              )}
-              <span>{isDark ? "Light Mode" : "Dark Mode"}</span>
-            </span>
-            <span className="text-[10px] px-1.5 py-0.5 rounded bg-gray-200 dark:bg-slate-700 text-gray-600 dark:text-slate-300 font-mono">
-              {isDark ? "Dark" : "Light"}
-            </span>
-          </button>
-
+        {/* Bottom Actions: Sign Out */}
+        <div className="pt-2.5 border-t border-gray-200/80 dark:border-slate-800">
           {/* Sign Out Button */}
           <button
             id="mobile-sidebar-logout-btn"
