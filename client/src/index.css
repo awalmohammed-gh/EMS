@@ -49,6 +49,24 @@ body.dark,
   scrollbar-width: thin;
 }
 
+/* Safe area insets for mobile notched displays */
+.safe-bottom,
+.pb-safe {
+  padding-bottom: max(env(safe-area-inset-bottom, 0px), 0.5rem);
+}
+.pt-safe {
+  padding-top: max(env(safe-area-inset-top, 0px), 0.5rem);
+}
+
+/* iOS Safari auto-zoom prevention for inputs below 16px */
+@media screen and (max-width: 768px) {
+  input:not([type="checkbox"]):not([type="radio"]):not([type="range"]),
+  select,
+  textarea {
+    font-size: 16px !important;
+  }
+}
+
 /* Hide scrollbar for Chrome, Safari and Opera, and Firefox while keeping full scrollability */
 .no-scrollbar::-webkit-scrollbar {
   display: none;
