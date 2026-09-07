@@ -1483,7 +1483,7 @@ const Attendance = () => {
           </div>
 
           <div className="overflow-x-auto">
-            <table className="w-full text-left">
+            <table className="w-full text-left min-w-[760px]">
               <thead className="bg-slate-50/80 dark:bg-[#162033]/60 border-b border-slate-200 dark:border-slate-800 text-xs font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400">
                 <tr>
                   <th className="px-5 py-3">Employee</th>

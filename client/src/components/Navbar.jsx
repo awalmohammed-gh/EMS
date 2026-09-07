@@ -161,7 +161,7 @@ export const Navbar = ({ role: propsRole }) => {
               {isProfileMenuOpen && (
                 <div
                   id="user-profile-dropdown-menu"
-                  className="absolute right-0 mt-2 w-72 sm:w-80 bg-white dark:bg-slate-900 rounded-2xl border border-[#E2E8F0] dark:border-slate-800 shadow-2xl z-[1001] py-2 animate-in fade-in slide-in-from-top-2 duration-200 overflow-hidden"
+                  className="absolute right-0 mt-2 w-72 sm:w-80 max-w-[calc(100vw-1.5rem)] bg-white dark:bg-slate-900 rounded-2xl border border-[#E2E8F0] dark:border-slate-800 shadow-2xl z-[1001] py-2 animate-in fade-in slide-in-from-top-2 duration-200 overflow-hidden"
                   role="menu"
                   aria-orientation="vertical"
                 >
