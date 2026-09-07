@@ -6,6 +6,7 @@ import {
   CheckCircle2,
   Loader2,
 } from "lucide-react";
+import CustomSelect from "../CustomSelect";
 
 const PRESET_EXCUSES = [
   { id: "medical", label: "Medical Emergency / Doctor's Note" },
@@ -14,6 +15,12 @@ const PRESET_EXCUSES = [
   { id: "biometric", label: "Biometric Device / Scanner Glitch" },
   { id: "manager", label: "Manager Discretionary Exception" },
   { id: "custom", label: "Custom Justification..." },
+];
+
+const EXCUSE_STATUS_OPTIONS = [
+  { value: "Present", label: "Present (Excused)" },
+  { value: "On Time", label: "On Time" },
+  { value: "Late", label: "Keep 'Late' (Penalty 0 Only)" },
 ];
 
 const ExcuseLatenessModal = ({
@@ -72,11 +79,11 @@ const ExcuseLatenessModal = ({
     <div
       id="modal-excuse-lateness"
       onClick={onClose}
-      className="fixed inset-0 z-50 flex items-end sm:items-center justify-center p-0 sm:p-4 bg-slate-950/60 backdrop-blur-sm animate-fade-in"
+      className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-4 overflow-y-auto bg-black/50 backdrop-blur-sm animate-fade-in"
     >
       <div
         onClick={(e) => e.stopPropagation()}
-        className="w-full max-h-[90vh] rounded-t-[28px] sm:rounded-3xl sm:max-w-lg bg-white dark:bg-slate-900 shadow-2xl border border-[#E2E8F0] dark:border-slate-800 overflow-hidden flex flex-col animate-fade-in"
+        className="w-full max-w-lg mx-auto bg-white dark:bg-[#111927] border border-slate-200/70 dark:border-slate-800 rounded-2xl shadow-lg max-h-[90vh] flex flex-col overflow-hidden animate-fade-in"
       >
         {/* Modal Header */}
         <div className="flex items-center justify-between px-5 sm:px-6 py-4 border-b border-[#E2E8F0] dark:border-slate-800 bg-[#F8FAFC] dark:bg-slate-800/50 shrink-0">
@@ -190,24 +197,21 @@ const ExcuseLatenessModal = ({
           </div>
 
           {/* Configuration Options */}
-          <div className="space-y-2 pt-2 border-t border-[#E2E8F0] dark:border-slate-700">
-            <div className="flex items-center justify-between flex-wrap gap-2">
+          <div className="space-y-3 pt-2 border-t border-[#E2E8F0] dark:border-slate-700">
+            <div className="space-y-1.5">
               <label
                 htmlFor="target-status-select"
-                className="text-xs font-semibold text-[#334155] dark:text-slate-300"
+                className="block text-xs font-semibold text-[#334155] dark:text-slate-300"
               >
                 Update Attendance Status to:
               </label>
-              <select
+              <CustomSelect
                 id="target-status-select"
+                name="targetStatus"
                 value={targetStatus}
                 onChange={(e) => setTargetStatus(e.target.value)}
-                className="rounded-lg border border-[#E2E8F0] dark:border-slate-700 bg-white dark:bg-slate-800 px-3 py-1 text-xs font-semibold text-[#002185] dark:text-blue-300 focus:outline-hidden focus:border-emerald-500 cursor-pointer"
-              >
-                <option value="Present">Present (Excused)</option>
-                <option value="On Time">On Time</option>
-                <option value="Late">Keep 'Late' (Penalty 0 Only)</option>
-              </select>
+                options={EXCUSE_STATUS_OPTIONS}
+              />
             </div>
 
             <label className="flex items-center gap-2.5 p-2 rounded-lg bg-emerald-50/60 dark:bg-emerald-950/40 border border-emerald-100 dark:border-emerald-800 cursor-pointer">

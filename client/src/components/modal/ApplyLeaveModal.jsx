@@ -15,13 +15,13 @@ export const ApplyLeaveModal = ({ onClose, onSuccess }) => {
     <div
       id="apply-leave-modal-overlay"
       onClick={onClose}
-      className="fixed inset-0 z-50 flex items-end sm:items-center justify-center p-0 sm:p-4 bg-slate-950/60 backdrop-blur-sm animate-fade-in"
+      className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-4 overflow-y-auto bg-black/50 backdrop-blur-sm animate-fade-in"
     >
       {/* Modal Container */}
       <div
         id="apply-leave-modal-container"
         onClick={(e) => e.stopPropagation()}
-        className="relative z-10 w-full max-h-[90vh] overflow-y-auto rounded-t-[28px] sm:rounded-3xl sm:max-w-lg bg-white dark:bg-slate-900 shadow-2xl border border-[#002185]/20 dark:border-slate-800 animate-fade-in p-5 sm:p-6"
+        className="w-full max-w-lg mx-auto bg-white dark:bg-[#111927] border border-slate-200/70 dark:border-slate-800 rounded-2xl shadow-lg max-h-[90vh] flex flex-col overflow-hidden animate-fade-in p-5 sm:p-6"
       >
         <div className="flex justify-end mb-2">
           <button

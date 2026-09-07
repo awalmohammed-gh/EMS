@@ -23,6 +23,7 @@ import {
   downloadPayslipPDF,
   printPayslipDocument,
 } from "../../utils/payslipPdfGenerator";
+import CustomSelect from "../CustomSelect";
 
 const EmployeePayslipsModal = ({ payslip, allPayslips = [], onClose }) => {
   const [showVarianceComparison, setShowVarianceComparison] = useState(false);
@@ -327,15 +328,15 @@ const EmployeePayslipsModal = ({ payslip, allPayslips = [], onClose }) => {
   return (
     <div
       onClick={onClose}
-      className="fixed inset-0 z-50 flex items-end sm:items-center justify-center p-0 sm:p-4 bg-slate-950/70 backdrop-blur-sm animate-fade-in"
+      className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-4 overflow-y-auto bg-black/50 backdrop-blur-sm animate-fade-in"
     >
       {/* Modal */}
       <div
         onClick={(e) => e.stopPropagation()}
-        className="relative z-10 max-h-[90vh] w-full max-w-3xl overflow-y-auto rounded-t-[28px] sm:rounded-3xl bg-white dark:bg-[#111927] shadow-2xl border border-slate-200 dark:border-slate-800/80 animate-fade-in"
+        className="w-full max-w-3xl mx-auto bg-white dark:bg-[#111927] border border-slate-200/70 dark:border-slate-800 rounded-2xl shadow-lg max-h-[90vh] flex flex-col overflow-hidden animate-fade-in"
       >
         {/* Header */}
-        <div className="sticky top-0 z-20 flex items-center justify-between border-b border-slate-200 dark:border-slate-800/80 px-5 sm:px-6 py-4 bg-white dark:bg-[#111927] rounded-t-[28px] sm:rounded-t-3xl">
+        <div className="flex items-center justify-between border-b border-slate-200 dark:border-slate-800/80 px-5 sm:px-6 py-4 bg-white dark:bg-[#111927] shrink-0">
           <div className="flex items-center gap-3 min-w-0">
             <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-[#002185] dark:bg-blue-600 text-white">
               <FileText className="h-5 w-5 text-white" />
@@ -362,7 +363,7 @@ const EmployeePayslipsModal = ({ payslip, allPayslips = [], onClose }) => {
         </div>
 
         {/* Content */}
-        <div className="space-y-6 p-6">
+        <div className="space-y-6 p-4 sm:p-6 overflow-y-auto overflow-x-hidden flex-1">
           {/* Employee & Payment Information Cards */}
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             {/* Employee Information */}
@@ -511,22 +512,18 @@ const EmployeePayslipsModal = ({ payslip, allPayslips = [], onClose }) => {
 
                   {/* Multiple Historical Months Selector (if more than 1 prior record available) */}
                   {priorPayslips.length > 1 && (
-                    <div className="flex items-center gap-2">
+                    <div className="flex flex-col sm:flex-row sm:items-center gap-2 w-full sm:w-auto">
                       <span className="text-xs text-slate-500 dark:text-slate-400 whitespace-nowrap">Compare with:</span>
-                      <select
-                        value={selectedPreviousMonthId || String(previousPayslip?._id || previousPayslip?.id || previousPayslip?.payslipNumber || "")}
-                        onChange={(e) => setSelectedPreviousMonthId(e.target.value)}
-                        className="text-xs bg-white dark:bg-[#111927] border border-slate-300 dark:border-slate-700 rounded-lg px-2.5 py-1.5 text-slate-900 dark:text-slate-100 font-medium focus:ring-1 focus:ring-[#002185] dark:focus:ring-blue-500 cursor-pointer"
-                      >
-                        {priorPayslips.map((p, idx) => (
-                          <option
-                            key={`prior-${idx}`}
-                            value={String(p._id || p.id || p.payslipNumber || "")}
-                          >
-                            {p.month || p.payMonth || `Payslip #${idx + 1}`} ({formatCurrency(p.netSalary || p.netPay || 0)})
-                          </option>
-                        ))}
-                      </select>
+                      <div className="w-full sm:w-64">
+                        <CustomSelect
+                          value={selectedPreviousMonthId || String(previousPayslip?._id || previousPayslip?.id || previousPayslip?.payslipNumber || "")}
+                          onChange={(e) => setSelectedPreviousMonthId(e.target.value)}
+                          options={priorPayslips.map((p, idx) => ({
+                            value: String(p._id || p.id || p.payslipNumber || ""),
+                            label: `${p.month || p.payMonth || `Payslip #${idx + 1}`} (${formatCurrency(p.netSalary || p.netPay || 0)})`
+                          }))}
+                        />
+                      </div>
                     </div>
                   )}
 

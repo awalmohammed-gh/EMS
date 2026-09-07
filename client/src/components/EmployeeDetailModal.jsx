@@ -182,12 +182,12 @@ export const EmployeeDetailModal = ({
 
   return (
     <div
-      className="fixed inset-0 z-50 flex items-end sm:items-center justify-center bg-slate-950/60 backdrop-blur-sm p-0 sm:p-4 animate-fade-in"
+      className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-4 overflow-y-auto bg-black/50 backdrop-blur-sm animate-fade-in"
       onClick={onClose}
     >
       <div
         id="print-employee-profile-card"
-        className="bg-white dark:bg-slate-900 rounded-t-[28px] sm:rounded-3xl max-w-2xl w-full overflow-hidden shadow-2xl border border-slate-200 dark:border-slate-800 animate-fade-in flex flex-col max-h-[90vh] print-container"
+        className="w-full max-w-2xl mx-auto bg-white dark:bg-[#111927] border border-slate-200/70 dark:border-slate-800 rounded-2xl shadow-lg max-h-[90vh] flex flex-col overflow-hidden animate-fade-in print-container"
         onClick={(e) => e.stopPropagation()}
       >
         {/* Header */}

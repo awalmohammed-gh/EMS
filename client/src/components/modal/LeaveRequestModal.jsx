@@ -1,7 +1,19 @@
 import { useState } from "react";
-import { X, Calendar, FileText, Send, CalendarDays, AlertCircle, CheckCircle2 } from "lucide-react";
+import { X, Calendar, FileText, Send, CalendarDays, AlertCircle, CheckCircle2, Briefcase } from "lucide-react";
 import { applyForLeave } from "../../apis/fontApis";
 import { useManagement } from "../../context/ManagementContextProvider";
+import CustomSelect from "../CustomSelect";
+
+const LEAVE_OPTIONS = [
+  { value: "Annual Leave", label: "Annual Leave (Paid)" },
+  { value: "Sick Leave", label: "Sick Leave (Paid)" },
+  { value: "Casual Leave", label: "Casual Leave (Paid)" },
+  { value: "Maternity Leave", label: "Maternity Leave (Paid)" },
+  { value: "Paternity Leave", label: "Paternity Leave (Paid)" },
+  { value: "Study Leave", label: "Study Leave" },
+  { value: "Bereavement Leave", label: "Bereavement Leave" },
+  { value: "Unpaid Leave", label: "Unpaid Leave" },
+];
 
 export const LeaveRequestModal = ({ onClose, onSuccess, initialLeaveType = "Annual Leave" }) => {
   const [formData, setFormData] = useState({
@@ -124,16 +136,16 @@ export const LeaveRequestModal = ({ onClose, onSuccess, initialLeaveType = "Annu
     <div
       id="leave-request-modal"
       onClick={onClose}
-      className="fixed inset-0 z-50 flex items-end sm:items-center justify-center p-0 sm:p-4 bg-slate-950/60 backdrop-blur-sm animate-fade-in"
+      className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-4 overflow-y-auto bg-black/50 backdrop-blur-sm animate-fade-in"
     >
       {/* Modal Card */}
       <div
         id="leave-request-dialog"
         onClick={(e) => e.stopPropagation()}
-        className="relative z-10 w-full max-h-[90vh] overflow-y-auto rounded-t-[28px] sm:rounded-3xl sm:max-w-lg bg-white dark:bg-slate-900 shadow-2xl border border-[#002185]/20 dark:border-slate-800 animate-fade-in p-5 sm:p-6 flex flex-col"
+        className="w-full max-w-lg mx-auto bg-white dark:bg-[#111927] border border-slate-200/70 dark:border-slate-800 rounded-2xl shadow-lg max-h-[90vh] flex flex-col overflow-hidden animate-fade-in p-5 sm:p-6"
       >
         {/* Header */}
-        <div className="flex items-center justify-between border-b border-[#E2E8F0] dark:border-slate-800 pb-4 mb-5">
+        <div className="flex items-center justify-between border-b border-[#E2E8F0] dark:border-slate-800 pb-4 mb-5 shrink-0">
           <div className="flex items-center gap-3">
             <div className="p-2.5 rounded-xl bg-[#002185]/5 dark:bg-blue-950/50 text-[#002185] dark:text-blue-400 shrink-0">
               <CalendarDays className="w-5 h-5" />
@@ -147,7 +159,7 @@ export const LeaveRequestModal = ({ onClose, onSuccess, initialLeaveType = "Annu
             id="close-leave-modal-btn"
             type="button"
             onClick={onClose}
-            className="p-1.5 rounded-lg text-[#64748B] hover:text-[#ff5500] hover:bg-[#F8FAFC] dark:hover:bg-slate-800 transition-colors cursor-pointer"
+            className="p-1.5 rounded-lg text-[#64748B] hover:text-[#ff5500] hover:bg-[#F8FAFC] dark:hover:bg-slate-800 transition-colors cursor-pointer shrink-0"
           >
             <X className="w-5 h-5" />
           </button>
@@ -155,43 +167,35 @@ export const LeaveRequestModal = ({ onClose, onSuccess, initialLeaveType = "Annu
 
         {/* Feedback Alerts */}
         {errorMessage && (
-          <div id="leave-modal-error-alert" className="mb-4 flex items-center gap-2 p-3 text-xs text-rose-700 bg-rose-50 border border-rose-200 rounded-xl animate-fade-in">
+          <div id="leave-modal-error-alert" className="mb-4 flex items-center gap-2 p-3 text-xs text-rose-700 bg-rose-50 border border-rose-200 rounded-xl animate-fade-in shrink-0">
             <AlertCircle className="w-4 h-4 shrink-0" />
             <span>{errorMessage}</span>
           </div>
         )}
 
         {successMessage && (
-          <div id="leave-modal-success-alert" className="mb-4 flex items-center gap-2 p-3 text-xs text-emerald-700 bg-emerald-50 border border-emerald-200 rounded-xl animate-fade-in">
+          <div id="leave-modal-success-alert" className="mb-4 flex items-center gap-2 p-3 text-xs text-emerald-700 bg-emerald-50 border border-emerald-200 rounded-xl animate-fade-in shrink-0">
             <CheckCircle2 className="w-4 h-4 shrink-0" />
             <span>{successMessage}</span>
           </div>
         )}
 
         {/* Form */}
-        <form id="leave-request-modal-form" onSubmit={handleSubmit} className="space-y-4">
+        <form id="leave-request-modal-form" onSubmit={handleSubmit} className="space-y-4 overflow-y-auto overflow-x-hidden flex-1">
           {/* Leave Type */}
           <div>
-            <label className="block text-xs font-bold text-[#002185] uppercase tracking-wider mb-1.5">
+            <label htmlFor="modal-leave-type-select" className="block text-xs font-bold text-[#002185] dark:text-blue-300 uppercase tracking-wider mb-1.5">
               Leave Type <span className="text-[#ff5500]">*</span>
             </label>
-            <select
+            <CustomSelect
               id="modal-leave-type-select"
               name="leaveType"
               value={formData.leaveType}
               onChange={handleChange}
+              options={LEAVE_OPTIONS}
+              icon={Briefcase}
               required
-              className="w-full px-3.5 py-2.5 rounded-xl border border-[#E2E8F0] bg-[#FFFFFF] text-sm text-[#0F172A] font-medium outline-hidden focus:border-[#002185] focus:ring-2 focus:ring-[#002185]/20 cursor-pointer"
-            >
-              <option value="Annual Leave">Annual Leave (Paid)</option>
-              <option value="Sick Leave">Sick Leave (Paid)</option>
-              <option value="Casual Leave">Casual Leave (Paid)</option>
-              <option value="Maternity Leave">Maternity Leave (Paid)</option>
-              <option value="Paternity Leave">Paternity Leave (Paid)</option>
-              <option value="Study Leave">Study Leave</option>
-              <option value="Bereavement Leave">Bereavement Leave</option>
-              <option value="Unpaid Leave">Unpaid Leave</option>
-            </select>
+            />
           </div>
 
           {/* Date Range */}

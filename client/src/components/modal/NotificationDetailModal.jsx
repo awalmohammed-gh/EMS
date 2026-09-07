@@ -83,7 +83,7 @@ export const NotificationDetailModal = ({
   const modalContent = (
     <div
       id="notification-detail-modal-overlay"
-      className="fixed inset-0 z-50 flex items-end sm:items-center justify-center p-0 sm:p-4 bg-slate-950/60 backdrop-blur-sm animate-fade-in"
+      className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-4 overflow-y-auto bg-black/50 backdrop-blur-sm animate-fade-in"
       onClick={handleDismiss}
       role="dialog"
       aria-modal="true"
@@ -91,7 +91,7 @@ export const NotificationDetailModal = ({
     >
       <div
         id="notification-detail-modal-container"
-        className="relative w-full max-h-[90vh] bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-t-[28px] sm:rounded-3xl sm:max-w-lg shadow-2xl p-5 sm:p-6 overflow-hidden flex flex-col gap-4 animate-fade-in"
+        className="w-full max-w-lg mx-auto bg-white dark:bg-[#111927] border border-slate-200/70 dark:border-slate-800 rounded-2xl shadow-lg max-h-[90vh] flex flex-col overflow-hidden animate-fade-in p-5 sm:p-6 gap-4"
         onClick={(e) => e.stopPropagation()}
       >
         {/* Header Section */}

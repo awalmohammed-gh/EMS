@@ -5,19 +5,19 @@ import {
   CheckCircle2,
   AlertCircle,
   Sparkles,
-  Search,
   Loader2,
   CalendarCheck,
+  User,
 } from "lucide-react";
 import { allEmployees, namesList, createManualAttendanceRecord } from "../../apis/fontApis";
 import { useManagement } from "../../context/ManagementContextProvider";
+import CustomSelect from "../CustomSelect";
 
 export const RecordAttendanceModal = ({ isOpen = true, onClose, onSuccess }) => {
   const { setShowToast } = useManagement();
   const [employees, setEmployees] = useState([]);
   const [isLoadingEmployees, setIsLoadingEmployees] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
-  const [searchTerm, setSearchTerm] = useState("");
 
   const todayStr = useMemo(() => new Date().toISOString().split("T")[0], []);
 
@@ -31,6 +31,25 @@ export const RecordAttendanceModal = ({ isOpen = true, onClose, onSuccess }) => 
   });
 
   const [errors, setErrors] = useState({});
+
+  const employeeOptions = useMemo(() => {
+    return employees.map((emp) => ({
+      value: emp._id || emp.employeeId || emp.id,
+      label: `${emp.fullName} (${emp.employeeId || "EMP"})`,
+      sublabel: emp.department || "General Staff",
+    }));
+  }, [employees]);
+
+  const STATUS_OPTIONS = useMemo(
+    () => [
+      { value: "Present", label: "Present / On Time" },
+      { value: "Late", label: "Late Clock-in" },
+      { value: "Half Day", label: "Half Day Shift" },
+      { value: "Absent", label: "Absent (Deduction applies)" },
+      { value: "On Leave", label: "Approved Leave" },
+    ],
+    []
+  );
 
   // Fetch employees list
   useEffect(() => {
@@ -81,18 +100,6 @@ export const RecordAttendanceModal = ({ isOpen = true, onClose, onSuccess }) => 
       isMounted = false;
     };
   }, [isOpen]);
-
-  // Filtered employee options
-  const filteredEmployees = useMemo(() => {
-    if (!searchTerm.trim()) return employees;
-    const term = searchTerm.toLowerCase();
-    return employees.filter(
-      (emp) =>
-        (emp.fullName && emp.fullName.toLowerCase().includes(term)) ||
-        (emp.employeeId && emp.employeeId.toLowerCase().includes(term)) ||
-        (emp.department && emp.department.toLowerCase().includes(term))
-    );
-  }, [employees, searchTerm]);
 
   // Selected employee object
   const selectedEmployeeObj = useMemo(() => {
@@ -256,12 +263,12 @@ export const RecordAttendanceModal = ({ isOpen = true, onClose, onSuccess }) => 
     <div
       id="record-attendance-modal-backdrop"
       onClick={onClose}
-      className="fixed inset-0 z-50 flex items-end sm:items-center justify-center p-0 sm:p-4 bg-slate-950/60 backdrop-blur-xs animate-in fade-in duration-150"
+      className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-4 overflow-y-auto bg-black/50 backdrop-blur-sm animate-fade-in"
     >
       <div
         id="record-attendance-modal-container"
         onClick={(e) => e.stopPropagation()}
-        className="w-full max-h-[92vh] sm:max-h-[88vh] rounded-t-3xl sm:rounded-2xl sm:max-w-xl bg-white dark:bg-slate-900 shadow-2xl border border-slate-200 dark:border-slate-800 overflow-hidden flex flex-col animate-in zoom-in-95 duration-150"
+        className="w-full max-w-lg mx-auto bg-white dark:bg-[#111927] border border-slate-200/70 dark:border-slate-800 rounded-2xl shadow-lg max-h-[90vh] flex flex-col overflow-hidden animate-fade-in"
       >
         {/* Header */}
         <div className="flex items-center justify-between border-b border-slate-200 dark:border-slate-800 px-5 sm:px-6 py-4 bg-slate-50/80 dark:bg-slate-850">
@@ -295,7 +302,7 @@ export const RecordAttendanceModal = ({ isOpen = true, onClose, onSuccess }) => 
         </div>
 
         {/* Modal Form */}
-        <form onSubmit={handleSubmit} className="p-5 sm:p-6 space-y-4 overflow-y-auto flex-1">
+        <form onSubmit={handleSubmit} className="p-4 sm:p-6 space-y-4 overflow-y-auto overflow-x-hidden flex-1">
           {/* Employee Selector */}
           <div>
             <div className="flex items-center justify-between mb-1.5">
@@ -310,41 +317,21 @@ export const RecordAttendanceModal = ({ isOpen = true, onClose, onSuccess }) => 
               </span>
             </div>
 
-            {/* Quick Search filter if list is long */}
-            {employees.length > 5 && (
-              <div className="relative mb-2">
-                <Search className="w-3.5 h-3.5 absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none" />
-                <input
-                  id="record-attendance-search-employee"
-                  type="text"
-                  placeholder="Filter by name or employee ID..."
-                  value={searchTerm}
-                  onChange={(e) => setSearchTerm(e.target.value)}
-                  className="w-full pl-8 pr-3 py-1.5 text-xs bg-slate-50 dark:bg-slate-800/60 border border-slate-200 dark:border-slate-700 rounded-lg text-slate-800 dark:text-slate-200 focus:outline-none focus:ring-1 focus:ring-emerald-500"
-                />
-              </div>
-            )}
-
-            <select
+            <CustomSelect
               id="record-attendance-employee-select"
+              name="employeeId"
               value={formData.employeeId}
               onChange={(e) =>
                 setFormData((prev) => ({ ...prev, employeeId: e.target.value }))
               }
-              required
+              options={employeeOptions}
+              icon={User}
+              placeholder="-- Choose employee --"
+              searchable={true}
+              searchPlaceholder="Filter employees..."
               disabled={isLoadingEmployees}
-              className="w-full text-xs sm:text-sm bg-slate-50 dark:bg-slate-800/80 border border-slate-200 dark:border-slate-700 rounded-xl px-3.5 py-2.5 text-slate-800 dark:text-slate-200 focus:outline-none focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-500 transition-colors"
-            >
-              <option value="">-- Choose employee --</option>
-              {filteredEmployees.map((emp) => (
-                <option
-                  key={emp._id || emp.employeeId || emp.id}
-                  value={emp._id || emp.employeeId || emp.id}
-                >
-                  {emp.fullName} ({emp.employeeId || "EMP"}) • {emp.department || "General"}
-                </option>
-              ))}
-            </select>
+              required
+            />
 
             {errors.employeeId && (
               <p className="text-xs text-rose-500 mt-1 flex items-center gap-1">
@@ -421,18 +408,13 @@ export const RecordAttendanceModal = ({ isOpen = true, onClose, onSuccess }) => 
               >
                 Status <span className="text-rose-500">*</span>
               </label>
-              <select
+              <CustomSelect
                 id="record-attendance-status-select"
+                name="status"
                 value={formData.status}
                 onChange={(e) => handleStatusChange(e.target.value)}
-                className="w-full text-xs sm:text-sm bg-slate-50 dark:bg-slate-800/80 border border-slate-200 dark:border-slate-700 rounded-xl px-3.5 py-2.5 text-slate-800 dark:text-slate-200 focus:outline-none focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-500 transition-colors"
-              >
-                <option value="Present">Present / On Time</option>
-                <option value="Late">Late Clock-in</option>
-                <option value="Half Day">Half Day Shift</option>
-                <option value="Absent">Absent (Deduction applies)</option>
-                <option value="On Leave">Approved Leave</option>
-              </select>
+                options={STATUS_OPTIONS}
+              />
             </div>
           </div>
 

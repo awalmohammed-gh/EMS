@@ -12,6 +12,18 @@ import {
 } from "lucide-react";
 import { applyForLeave } from "../apis/fontApis";
 import { useManagement } from "../context/ManagementContextProvider";
+import CustomSelect from "./CustomSelect";
+
+const LEAVE_TYPE_OPTIONS = [
+  { value: "Annual Leave", label: "Annual Leave" },
+  { value: "Sick Leave", label: "Sick Leave" },
+  { value: "Casual Leave", label: "Casual Leave" },
+  { value: "Maternity Leave", label: "Maternity Leave" },
+  { value: "Paternity Leave", label: "Paternity Leave" },
+  { value: "Study Leave", label: "Study Leave" },
+  { value: "Compassionate Leave", label: "Compassionate Leave" },
+  { value: "Unpaid Leave", label: "Unpaid Leave" },
+];
 
 export const LeaveRequestForm = ({
   onSuccess = null,
@@ -187,34 +199,19 @@ export const LeaveRequestForm = ({
       <form onSubmit={handleSubmit} className="space-y-5">
         {/* Leave Type Selector */}
         <div>
-          <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300 uppercase tracking-wider mb-2">
+          <label htmlFor="leave-type-select" className="block text-xs font-semibold text-slate-700 dark:text-slate-300 uppercase tracking-wider mb-2">
             Leave Type <span className="text-rose-600 dark:text-rose-400">*</span>
           </label>
-          <div className="relative">
-            <Briefcase className="absolute left-3.5 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
-            <select
-              name="leaveType"
-              value={formData.leaveType}
-              onChange={handleChange}
-              disabled={isLoading}
-              required
-              className="w-full pl-10 pr-10 py-2.5 text-sm bg-slate-50 dark:bg-[#162033] border border-slate-200 dark:border-slate-700/60 rounded-xl text-slate-900 dark:text-slate-100 focus:outline-none focus:border-[#002185] dark:focus:border-blue-500 focus:bg-white dark:focus:bg-[#111927] transition-all appearance-none cursor-pointer disabled:opacity-60"
-            >
-              <option value="Annual Leave">Annual Leave</option>
-              <option value="Sick Leave">Sick Leave</option>
-              <option value="Casual Leave">Casual Leave</option>
-              <option value="Maternity Leave">Maternity Leave</option>
-              <option value="Paternity Leave">Paternity Leave</option>
-              <option value="Study Leave">Study Leave</option>
-              <option value="Compassionate Leave">Compassionate Leave</option>
-              <option value="Unpaid Leave">Unpaid Leave</option>
-            </select>
-            <div className="absolute inset-y-0 right-0 pr-3.5 flex items-center pointer-events-none text-slate-400">
-              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 9l-7 7-7-7" />
-              </svg>
-            </div>
-          </div>
+          <CustomSelect
+            id="leave-type-select"
+            name="leaveType"
+            value={formData.leaveType}
+            onChange={handleChange}
+            options={LEAVE_TYPE_OPTIONS}
+            icon={Briefcase}
+            disabled={isLoading}
+            required
+          />
         </div>
 
         {/* Date Range Selection */}

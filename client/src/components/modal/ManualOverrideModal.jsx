@@ -6,8 +6,10 @@ import {
   AlertCircle,
   CheckCircle2,
   Zap,
+  User,
 } from "lucide-react";
 import { getPenaltySettings, getSettings } from "../../apis/fontApis";
+import CustomSelect from "../CustomSelect";
 
 // Strict Regex pattern for 24-hour HH:MM format (00:00 to 23:59)
 const TIME_24H_REGEX = /^([01]\d|2[0-3]):([0-5]\d)$/;
@@ -78,6 +80,25 @@ export const ManualOverrideModal = ({
   });
   const [isWaived, setIsWaived] = useState(false);
   const [userManuallySetStatus, setUserManuallySetStatus] = useState(false);
+
+  const employeeOptions = useMemo(() => {
+    return employeesList.map((emp) => ({
+      value: emp.employeeId || emp._id,
+      label: `${emp.fullName} (${emp.employeeId || "EMP"})`,
+      sublabel: emp.department || "General Staff",
+    }));
+  }, [employeesList]);
+
+  const STATUS_OPTIONS = useMemo(
+    () => [
+      { value: "On Time", label: "On Time" },
+      { value: "Late", label: "Late" },
+      { value: "Present", label: "Present" },
+      { value: "Absent", label: "Absent" },
+      { value: "On Leave", label: "On Leave" },
+    ],
+    []
+  );
 
   // 1. Dynamic fetch of company settings (single source of truth)
   useEffect(() => {
@@ -329,12 +350,12 @@ export const ManualOverrideModal = ({
     <div
       id="manual-override-modal-backdrop"
       onClick={onClose}
-      className="fixed inset-0 z-50 flex items-end sm:items-center justify-center p-0 sm:p-4 bg-slate-950/60 backdrop-blur-sm animate-fade-in"
+      className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-4 overflow-y-auto bg-black/50 backdrop-blur-sm animate-fade-in"
     >
       <div
         id="manual-override-modal-container"
         onClick={(e) => e.stopPropagation()}
-        className="w-full max-h-[92vh] rounded-t-[28px] sm:rounded-3xl sm:max-w-lg bg-white dark:bg-slate-900 shadow-2xl border border-slate-200 dark:border-slate-800 overflow-hidden animate-fade-in flex flex-col"
+        className="w-full max-w-lg mx-auto bg-white dark:bg-[#111927] border border-slate-200/70 dark:border-slate-800 rounded-2xl shadow-lg max-h-[90vh] flex flex-col overflow-hidden animate-fade-in"
       >
         {/* Modal Header */}
         <div className="flex items-center justify-between border-b border-slate-100 dark:border-slate-800 px-5 sm:px-6 py-4 bg-slate-50/90 dark:bg-slate-800/50 shrink-0">
@@ -378,15 +399,16 @@ export const ManualOverrideModal = ({
         </div>
 
         {/* Modal Form */}
-        <form onSubmit={handleSubmit} className="p-4 sm:p-6 space-y-4 overflow-y-auto max-h-[85vh] sm:max-h-[80vh] flex-1">
+        <form onSubmit={handleSubmit} className="p-4 sm:p-6 space-y-4 overflow-y-auto overflow-x-hidden flex-1">
           {/* Employee Selector (Only shown for new records) */}
           {!formData.id && (
             <div>
-              <label className="block text-xs font-semibold uppercase tracking-wider text-slate-500 dark:text-slate-400 mb-1.5">
+              <label htmlFor="override-employee-select" className="block text-xs font-semibold uppercase tracking-wider text-slate-500 dark:text-slate-400 mb-1.5">
                 Select Employee <span className="text-rose-500">*</span>
               </label>
-              <select
+              <CustomSelect
                 id="override-employee-select"
+                name="employeeId"
                 value={formData.employeeId || ""}
                 onChange={(e) =>
                   setFormData &&
@@ -395,16 +417,13 @@ export const ManualOverrideModal = ({
                     employeeId: e.target.value,
                   }))
                 }
+                options={employeeOptions}
+                icon={User}
+                placeholder="-- Choose an employee --"
+                searchable={true}
+                searchPlaceholder="Search employees..."
                 required
-                className="w-full text-xs sm:text-sm bg-slate-50 dark:bg-slate-800/80 border border-slate-200 dark:border-slate-700 rounded-xl px-3.5 py-2.5 text-slate-800 dark:text-slate-200 focus:outline-none focus:ring-2 focus:ring-[#0B1E48]/20 focus:border-[#0B1E48] dark:focus:border-blue-500 transition-colors"
-              >
-                <option value="">-- Choose an employee --</option>
-                {employeesList.map((emp) => (
-                  <option key={emp._id || emp.employeeId} value={emp.employeeId || emp._id}>
-                    {emp.fullName} ({emp.employeeId || "EMP"}) - {emp.department || "General"}
-                  </option>
-                ))}
-              </select>
+              />
             </div>
           )}
 
@@ -433,7 +452,7 @@ export const ManualOverrideModal = ({
             {/* Attendance Status */}
             <div>
               <div className="flex items-center justify-between mb-1.5">
-                <label className="block text-xs font-semibold uppercase tracking-wider text-slate-500 dark:text-slate-400">
+                <label htmlFor="override-status-select" className="block text-xs font-semibold uppercase tracking-wider text-slate-500 dark:text-slate-400">
                   Status <span className="text-rose-500">*</span>
                 </label>
                 {latenessCalculation.isLate && !userManuallySetStatus && (
@@ -442,18 +461,13 @@ export const ManualOverrideModal = ({
                   </span>
                 )}
               </div>
-              <select
+              <CustomSelect
                 id="override-status-select"
+                name="status"
                 value={formData.status || "On Time"}
                 onChange={(e) => handleStatusChange(e.target.value)}
-                className="w-full text-xs sm:text-sm bg-slate-50 dark:bg-slate-800/80 border border-slate-200 dark:border-slate-700 rounded-xl px-3.5 py-2.5 text-slate-800 dark:text-slate-200 focus:outline-none focus:ring-2 focus:ring-[#0B1E48]/20 focus:border-[#0B1E48] dark:focus:border-blue-500 transition-colors font-medium"
-              >
-                <option value="On Time">On Time</option>
-                <option value="Late">Late</option>
-                <option value="Present">Present</option>
-                <option value="Absent">Absent</option>
-                <option value="On Leave">On Leave</option>
-              </select>
+                options={STATUS_OPTIONS}
+              />
             </div>
           </div>
 

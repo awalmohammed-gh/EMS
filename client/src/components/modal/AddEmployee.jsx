@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { useManagement } from "../../context/ManagementContextProvider";
 import { createUserAccount } from "../../apis/fontApis";
+import CustomSelect from "../CustomSelect";
 import {
   X,
   User,
@@ -9,7 +10,6 @@ import {
   Briefcase,
   Calendar,
   UserPlus,
-  ChevronDown,
   Mail,
   Lock,
   Shield,
@@ -19,6 +19,39 @@ import {
   Check,
   AlertCircle,
 } from "lucide-react";
+
+const ROLE_OPTIONS = [
+  {
+    value: "employee",
+    label: "Employee / Standard Staff",
+    sublabel: "Self-Service Attendance & Payslips",
+  },
+  {
+    value: "manager",
+    label: "Manager",
+    sublabel: "Departmental Oversight & Approvals",
+  },
+  {
+    value: "hr",
+    label: "HR Specialist",
+    sublabel: "Staff Directory & Onboarding",
+  },
+  {
+    value: "admin",
+    label: "Administrator",
+    sublabel: "Full System & Role Privileges",
+  },
+];
+
+const DEPARTMENT_OPTIONS = [
+  { value: "Software Engineering", label: "Software Engineering" },
+  { value: "Quality Assurance", label: "Quality Assurance" },
+  { value: "DevOps & Infrastructure", label: "DevOps & Infrastructure" },
+  { value: "Product & Design", label: "Product & Design" },
+  { value: "Human Resources", label: "Human Resources" },
+  { value: "Finance & Accounting", label: "Finance & Accounting" },
+  { value: "Operations & Support", label: "Operations & Support" },
+];
 
 export const AddEmployee = ({ onEmployeeAdded }) => {
   const { setShowEmployeeModal, setShowToast } = useManagement();
@@ -267,11 +300,11 @@ Login URL: ${window.location.origin}/auth/employee/login`;
       <div
         id="modal-add-employee"
         onClick={() => setShowEmployeeModal(false)}
-        className="fixed inset-0 z-50 flex items-end sm:items-center justify-center p-0 sm:p-4 bg-slate-950/60 backdrop-blur-sm animate-fade-in"
+        className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-4 overflow-y-auto bg-black/50 backdrop-blur-sm animate-fade-in"
       >
         <div
           onClick={(e) => e.stopPropagation()}
-          className="w-full max-h-[90vh] rounded-t-[28px] sm:rounded-3xl sm:max-w-2xl bg-white dark:bg-slate-900 shadow-2xl border border-slate-200 dark:border-slate-800 animate-fade-in flex flex-col overflow-hidden"
+          className="w-full max-w-lg sm:max-w-2xl mx-auto bg-white dark:bg-[#111927] border border-slate-200/70 dark:border-slate-800 rounded-2xl shadow-lg max-h-[90vh] flex flex-col overflow-hidden animate-fade-in"
         >
           {createdCredentials ? (
             /* Success & Copyable Credentials Screen */
@@ -419,7 +452,7 @@ Login URL: ${window.location.origin}/auth/employee/login`;
                 id="add-employee-form"
                 onSubmit={handleSubmit}
                 noValidate
-                className="flex-1 overflow-y-auto max-h-[85vh] sm:max-h-[80vh] px-4 sm:px-6 py-4 sm:py-5 space-y-4"
+                className="flex-1 overflow-y-auto overflow-x-hidden max-h-[85vh] sm:max-h-[80vh] p-4 sm:p-6 space-y-4"
               >
                 {/* Validation errors summary banner */}
                 {Object.keys(formErrors).some((k) => formErrors[k]) && (
@@ -444,25 +477,16 @@ Login URL: ${window.location.origin}/auth/employee/login`;
                     <Shield className="w-3.5 h-3.5 text-blue-600 dark:text-blue-400" />
                     Assigned Role <span className="text-rose-500">*</span>
                   </label>
-                  <div className="relative">
-                    <select
-                      id="add-employee-role-select"
-                      name="role"
-                      value={employeeForm.role}
-                      onChange={handleChange}
-                      onBlur={handleBlur}
-                      className="w-full pl-3.5 pr-9 py-2 border border-slate-200 dark:border-slate-700 rounded-lg bg-white dark:bg-slate-900 text-slate-900 dark:text-white text-xs font-bold hover:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-600 appearance-none cursor-pointer"
-                      required
-                    >
-                      <option value="employee">Employee / Standard Staff (Self-Service Attendance & Payslips)</option>
-                      <option value="manager">Manager (Departmental Oversight & Approvals)</option>
-                      <option value="hr">HR Specialist (Staff Directory & Onboarding)</option>
-                      <option value="admin">Administrator (Full System & Role Privileges)</option>
-                    </select>
-                    <div className="absolute inset-y-0 right-0 pr-3 flex items-center pointer-events-none">
-                      <ChevronDown className="h-4 w-4 text-slate-400" />
-                    </div>
-                  </div>
+                  <CustomSelect
+                    id="add-employee-role-select"
+                    name="role"
+                    value={employeeForm.role}
+                    onChange={handleChange}
+                    options={ROLE_OPTIONS}
+                    icon={Shield}
+                    placeholder="Select Assigned Role"
+                    required
+                  />
                 </div>
 
                 {/* Employee ID & Full Name */}
@@ -591,31 +615,16 @@ Login URL: ${window.location.origin}/auth/employee/login`;
                   <label htmlFor="select-employee-department" className="mb-1.5 block text-xs font-bold text-slate-800 dark:text-slate-200">
                     Department <span className="text-rose-500">*</span>
                   </label>
-                  <div className="relative">
-                    <div className="absolute inset-y-0 left-0 pl-3.5 flex items-center pointer-events-none">
-                      <Building2 className="h-4 w-4 text-slate-400" />
-                    </div>
-                    <select
-                      id="select-employee-department"
-                      name="department"
-                      value={employeeForm.department}
-                      onChange={handleChange}
-                      onBlur={handleBlur}
-                      className="w-full pl-10 pr-9 py-2 border border-slate-200 dark:border-slate-700 rounded-lg bg-white dark:bg-slate-900 text-slate-900 dark:text-white text-xs hover:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500 appearance-none cursor-pointer"
-                      required
-                    >
-                      <option value="Software Engineering">Software Engineering</option>
-                      <option value="Quality Assurance">Quality Assurance</option>
-                      <option value="DevOps & Infrastructure">DevOps & Infrastructure</option>
-                      <option value="Product & Design">Product & Design</option>
-                      <option value="Human Resources">Human Resources</option>
-                      <option value="Finance & Accounting">Finance & Accounting</option>
-                      <option value="Operations & Support">Operations & Support</option>
-                    </select>
-                    <div className="absolute inset-y-0 right-0 pr-3 flex items-center pointer-events-none">
-                      <ChevronDown className="h-4 w-4 text-slate-400" />
-                    </div>
-                  </div>
+                  <CustomSelect
+                    id="select-employee-department"
+                    name="department"
+                    value={employeeForm.department}
+                    onChange={handleChange}
+                    options={DEPARTMENT_OPTIONS}
+                    icon={Building2}
+                    placeholder="Select Department"
+                    required
+                  />
                   {touched.department && formErrors.department && (
                     <p className="mt-1 text-[11px] text-rose-600 dark:text-rose-400 font-medium">{formErrors.department}</p>
                   )}

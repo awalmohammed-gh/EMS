@@ -209,12 +209,12 @@ export const PayrollDetailsModal = ({ payrollId, initialData, onClose, onRefresh
   return (
     <div
       id="payroll-details-modal-overlay"
-      className="fixed inset-0 z-50 flex items-end sm:items-center justify-center p-0 sm:p-4 bg-slate-950/60 backdrop-blur-sm animate-fade-in"
+      className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-4 overflow-y-auto bg-black/50 backdrop-blur-sm animate-fade-in"
       onClick={onClose}
     >
       <div
         id="payroll-details-modal-container"
-        className="bg-white dark:bg-slate-900 rounded-t-[28px] sm:rounded-3xl max-w-3xl w-full max-h-[90vh] flex flex-col shadow-2xl border border-[#E2E8F0] dark:border-slate-800 overflow-hidden animate-fade-in"
+        className="w-full max-w-3xl mx-auto bg-white dark:bg-[#111927] border border-slate-200/70 dark:border-slate-800 rounded-2xl shadow-lg max-h-[90vh] flex flex-col overflow-hidden animate-fade-in"
         onClick={(e) => e.stopPropagation()}
       >
         {/* Modal Header */}

@@ -389,14 +389,14 @@ export const AvatarGeneratorModal = ({
   return (
     <div
       id="modal-avatar-studio-backdrop"
-      className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-xs p-3 sm:p-4 overflow-y-auto animate-in fade-in duration-200"
+      className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm p-3 sm:p-4 overflow-y-auto animate-fade-in"
       onClick={(e) => {
         if (e.target.id === "modal-avatar-studio-backdrop") onClose();
       }}
     >
-      <div className="bg-white dark:bg-[#111927] rounded-3xl max-w-2xl w-full p-5 sm:p-6 shadow-2xl border border-slate-200 dark:border-slate-800 space-y-5 my-8 animate-in zoom-in-95 duration-200">
+      <div className="w-full max-w-2xl mx-auto bg-white dark:bg-[#111927] border border-slate-200/70 dark:border-slate-800 rounded-2xl shadow-lg max-h-[90vh] flex flex-col overflow-hidden animate-fade-in">
         {/* Header */}
-        <div className="flex items-center justify-between border-b border-slate-200 dark:border-slate-800/80 pb-4">
+        <div className="flex items-center justify-between border-b border-slate-200 dark:border-slate-800/80 px-5 sm:px-6 py-4 shrink-0">
           <div className="flex items-center gap-2.5">
             <div className="w-10 h-10 rounded-2xl bg-[#002185]/10 dark:bg-blue-900/30 text-[#002185] dark:text-blue-400 flex items-center justify-center shadow-xs">
               <Palette className="w-5 h-5" />
@@ -419,8 +419,10 @@ export const AvatarGeneratorModal = ({
           </button>
         </div>
 
-        {/* Tab Switcher */}
-        <div className="flex items-center p-1 bg-slate-100 dark:bg-slate-900/80 rounded-2xl border border-slate-200/80 dark:border-slate-800">
+        {/* Scrollable Content Body */}
+        <div className="p-5 sm:p-6 space-y-5 overflow-y-auto overflow-x-hidden flex-1">
+          {/* Tab Switcher */}
+          <div className="flex items-center p-1 bg-slate-100 dark:bg-slate-900/80 rounded-2xl border border-slate-200/80 dark:border-slate-800">
           <button
             type="button"
             onClick={() => setActiveTab("generator")}
@@ -697,9 +699,10 @@ export const AvatarGeneratorModal = ({
             )}
           </div>
         )}
+        </div>
 
         {/* Footer Actions */}
-        <div className="flex flex-col sm:flex-row items-center justify-between gap-3 pt-3 border-t border-slate-200 dark:border-slate-800/80">
+        <div className="flex flex-col sm:flex-row items-center justify-between gap-3 px-5 sm:px-6 py-3 border-t border-slate-200 dark:border-slate-800/80 shrink-0">
           <div>
             {(initialAvatarUrl || user?.profilePicture || user?.avatar || admin?.profile_image_url) && (
               <button
