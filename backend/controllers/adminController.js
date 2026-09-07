@@ -10,6 +10,8 @@ import { Settings } from "../models/adminSettingsModel.js";
 import { Notification } from "../models/notificationModel.js";
 import { AuditLog } from "../models/AuditLog.js";
 import { User } from "../models/userModel.js";
+import { livePayrollStore } from "./payrollController.js";
+import { liveLeaveStore } from "./leaveController.js";
 
 // Function for creating admin account (Admin-only restricted)
 export const createAdminAccount = async (req, res) => {
@@ -508,68 +510,160 @@ export const deleteEmployee = async (req, res) => {
       }).lean();
     }
 
-    const empObjectId = targetEmployee?._id || (mongoose.Types.ObjectId.isValid(id) ? new mongoose.Types.ObjectId(id) : null);
+    let empObjectId = targetEmployee?._id || (mongoose.Types.ObjectId.isValid(id) ? new mongoose.Types.ObjectId(id) : null);
     const empCode = targetEmployee?.employeeId || (typeof id === "string" ? id : "");
     const empEmail = targetEmployee?.email || (typeof id === "string" && id.includes("@") ? id : "");
     const empName = targetEmployee?.fullName || empCode || "Employee";
 
+    // If empObjectId wasn't found from Employee, try to resolve it from Attendance or in-memory stores
+    if (!empObjectId && empCode) {
+      try {
+        const attDoc = await Attendance.findOne({ employeeId: empCode }).select("employee").lean();
+        if (attDoc?.employee && mongoose.Types.ObjectId.isValid(attDoc.employee)) {
+          empObjectId = new mongoose.Types.ObjectId(attDoc.employee);
+        }
+      } catch {
+        // continue
+      }
+    }
+    if (!empObjectId && empCode && Array.isArray(liveLeaveStore)) {
+      const match = liveLeaveStore.find((l) => l?.employee?.employeeId === empCode && l?.employee?._id);
+      if (match?.employee?._id && mongoose.Types.ObjectId.isValid(match.employee._id)) {
+        empObjectId = new mongoose.Types.ObjectId(match.employee._id);
+      }
+    }
+    if (!empObjectId && empCode && Array.isArray(livePayrollStore)) {
+      const match = livePayrollStore.find((p) => p?.employee?.employeeId === empCode && p?.employee?._id);
+      if (match?.employee?._id && mongoose.Types.ObjectId.isValid(match.employee._id)) {
+        empObjectId = new mongoose.Types.ObjectId(match.employee._id);
+      }
+    }
+
     // 2. Execute cascading purges across all associated collections sequentially
-    // Build comprehensive search criteria matching ObjectId, custom employeeId, and string IDs
-    const buildPurgeFilter = (fieldPrefix = "employee") => {
-      const orClauses = [];
-      if (empObjectId) {
-        orClauses.push({ [fieldPrefix]: empObjectId });
+    // Attendance records purge:
+    // Attendance schema has `employee` (ObjectId) and `employeeId` (String).
+    // NEVER query `employee` with a non-ObjectId string.
+    const attendanceOrClauses = [];
+    if (empObjectId && mongoose.Types.ObjectId.isValid(empObjectId)) {
+      attendanceOrClauses.push({ employee: new mongoose.Types.ObjectId(empObjectId) });
+    }
+    if (empCode) {
+      attendanceOrClauses.push({ employeeId: String(empCode) });
+    }
+    if (id && String(id) !== String(empCode)) {
+      if (mongoose.Types.ObjectId.isValid(id)) {
+        attendanceOrClauses.push({ employee: new mongoose.Types.ObjectId(id) });
+      } else {
+        attendanceOrClauses.push({ employeeId: String(id) });
       }
-      if (empCode) {
-        orClauses.push({ [fieldPrefix]: empCode });
-        orClauses.push({ employeeId: empCode });
+    }
+    const attendanceFilter = attendanceOrClauses.length > 1
+      ? { $or: attendanceOrClauses }
+      : (attendanceOrClauses[0] || null);
+
+    const attendanceDeleteResult = attendanceFilter
+      ? await Attendance.deleteMany(attendanceFilter).catch((err) => {
+          console.warn("[Cascading Delete] Attendance purge warning:", err.message);
+          return { deletedCount: 0 };
+        })
+      : { deletedCount: 0 };
+
+    // Payroll / Payslips records purge:
+    // Payroll schema only has `employee` (ObjectId). Only query with valid ObjectId.
+    const payrollOrClauses = [];
+    if (empObjectId && mongoose.Types.ObjectId.isValid(empObjectId)) {
+      payrollOrClauses.push({ employee: new mongoose.Types.ObjectId(empObjectId) });
+    }
+    if (id && mongoose.Types.ObjectId.isValid(id) && (!empObjectId || String(id) !== String(empObjectId))) {
+      payrollOrClauses.push({ employee: new mongoose.Types.ObjectId(id) });
+    }
+    const payrollFilter = payrollOrClauses.length > 1
+      ? { $or: payrollOrClauses }
+      : (payrollOrClauses[0] || null);
+
+    const payrollDeleteResult = payrollFilter
+      ? await Payroll.deleteMany(payrollFilter).catch((err) => {
+          console.warn("[Cascading Delete] Payroll purge warning:", err.message);
+          return { deletedCount: 0 };
+        })
+      : { deletedCount: 0 };
+
+    // Also prune from in-memory livePayrollStore
+    try {
+      if (Array.isArray(livePayrollStore)) {
+        for (let i = livePayrollStore.length - 1; i >= 0; i--) {
+          const p = livePayrollStore[i];
+          const matchObjectId = empObjectId && (String(p?.employee?._id || p?.employee) === String(empObjectId));
+          const matchCode = empCode && (p?.employeeId === empCode || p?.employee?.employeeId === empCode || String(p?.employee) === empCode);
+          const matchId = id && (p?.employeeId === String(id) || String(p?.employee) === String(id));
+          if (matchObjectId || matchCode || matchId) {
+            livePayrollStore.splice(i, 1);
+          }
+        }
       }
-      if (id && String(id) !== String(empCode)) {
-        orClauses.push({ [fieldPrefix]: String(id) });
-        orClauses.push({ employeeId: String(id) });
+    } catch {
+      // safe fallback
+    }
+
+    // Leave Requests records purge:
+    // Leave schema only has `employee` (ObjectId). Only query with valid ObjectId.
+    const leaveOrClauses = [];
+    if (empObjectId && mongoose.Types.ObjectId.isValid(empObjectId)) {
+      leaveOrClauses.push({ employee: new mongoose.Types.ObjectId(empObjectId) });
+    }
+    if (id && mongoose.Types.ObjectId.isValid(id) && (!empObjectId || String(id) !== String(empObjectId))) {
+      leaveOrClauses.push({ employee: new mongoose.Types.ObjectId(id) });
+    }
+    const leaveFilter = leaveOrClauses.length > 1
+      ? { $or: leaveOrClauses }
+      : (leaveOrClauses[0] || null);
+
+    const leaveDeleteResult = leaveFilter
+      ? await Leave.deleteMany(leaveFilter).catch((err) => {
+          console.warn("[Cascading Delete] Leave purge warning:", err.message);
+          return { deletedCount: 0 };
+        })
+      : { deletedCount: 0 };
+
+    // Also prune from in-memory liveLeaveStore
+    try {
+      if (Array.isArray(liveLeaveStore)) {
+        for (let i = liveLeaveStore.length - 1; i >= 0; i--) {
+          const l = liveLeaveStore[i];
+          const matchObjectId = empObjectId && (String(l?.employee?._id || l?.employee) === String(empObjectId));
+          const matchCode = empCode && (l?.employeeId === empCode || l?.employee?.employeeId === empCode || String(l?.employee) === empCode);
+          const matchId = id && (l?.employeeId === String(id) || String(l?.employee) === String(id));
+          if (matchObjectId || matchCode || matchId) {
+            liveLeaveStore.splice(i, 1);
+          }
+        }
       }
-      return orClauses.length > 0 ? { $or: orClauses } : { employeeId: String(id) };
-    };
-
-    // Attendance records purge
-    const attendanceDeleteResult = await Attendance.deleteMany(buildPurgeFilter("employee")).catch((err) => {
-      console.warn("[Cascading Delete] Attendance purge warning:", err.message);
-      return { deletedCount: 0 };
-    });
-
-    // Payroll / Payslips records purge
-    const payrollDeleteResult = await Payroll.deleteMany(buildPurgeFilter("employee")).catch((err) => {
-      console.warn("[Cascading Delete] Payroll purge warning:", err.message);
-      return { deletedCount: 0 };
-    });
-
-    // Leave Requests records purge
-    const leaveDeleteResult = await Leave.deleteMany(buildPurgeFilter("employee")).catch((err) => {
-      console.warn("[Cascading Delete] Leave purge warning:", err.message);
-      return { deletedCount: 0 };
-    });
+    } catch {
+      // safe fallback
+    }
 
     // Notifications purge (recipients, metadata, or references)
     const notifOrClauses = [];
-    if (empObjectId) {
+    if (empObjectId && mongoose.Types.ObjectId.isValid(empObjectId)) {
       notifOrClauses.push({ recipient_id: String(empObjectId) });
-      notifOrClauses.push({ recipient: empObjectId });
+      notifOrClauses.push({ recipient: new mongoose.Types.ObjectId(empObjectId) });
       notifOrClauses.push({ "metadata.employee_id": String(empObjectId) });
     }
     if (empCode) {
-      notifOrClauses.push({ recipient_id: empCode });
-      notifOrClauses.push({ "metadata.employeeId": empCode });
+      notifOrClauses.push({ recipient_id: String(empCode) });
+      notifOrClauses.push({ "metadata.employeeId": String(empCode) });
     }
-    if (id) {
+    if (id && String(id) !== String(empCode) && (!empObjectId || String(id) !== String(empObjectId))) {
       notifOrClauses.push({ recipient_id: String(id) });
       notifOrClauses.push({ "metadata.employeeId": String(id) });
     }
-    const notificationDeleteResult = await Notification.deleteMany(
-      notifOrClauses.length > 0 ? { $or: notifOrClauses } : { recipient_id: String(id) }
-    ).catch((err) => {
-      console.warn("[Cascading Delete] Notification purge warning:", err.message);
-      return { deletedCount: 0 };
-    });
+    const notifFilter = notifOrClauses.length > 1 ? { $or: notifOrClauses } : (notifOrClauses[0] || null);
+    const notificationDeleteResult = notifFilter
+      ? await Notification.deleteMany(notifFilter).catch((err) => {
+          console.warn("[Cascading Delete] Notification purge warning:", err.message);
+          return { deletedCount: 0 };
+        })
+      : { deletedCount: 0 };
 
     // Primary Employee Document deletion
     let employeeDeletedCount = 0;
