@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback, useMemo } from "react";
+import { useState, useEffect, useCallback, useMemo, useRef } from "react";
 import {
   X,
   User,
@@ -7,7 +7,6 @@ import {
   Calculator,
   CreditCard,
   FileText,
-  Sparkles,
   AlertTriangle,
   Clock,
   UserX,
@@ -15,6 +14,10 @@ import {
   Trash2,
   Building2,
   Briefcase,
+  ChevronDown,
+  Check,
+  Search,
+  Info,
 } from "lucide-react";
 import { namesList, payrollGenerate, calculatePayrollSummary, getEmployeeProfile } from "../../apis/fontApis";
 import { useManagement } from "../../context/ManagementContextProvider";
@@ -351,16 +354,62 @@ export const GeneratePayslipModal = ({ onClose, onSuccess, isOpen = true }) => {
         const fullEmp = profileRes.data.employee;
         setSelectedEmployee(fullEmp);
         if (fullEmp.baseSalary && Number(fullEmp.baseSalary) > 0) {
-          empBaseSalary = Number(fullEmp.baseSalary);
+          const profileBaseSalary = Number(fullEmp.baseSalary);
           setPayslipForm((prev) => ({
             ...prev,
-            basicSalary: empBaseSalary,
+            basicSalary: profileBaseSalary,
           }));
         }
       }
     } catch (err) {
       console.warn("Could not fetch full profile:", err.message);
     }
+  };
+
+  // Format employee option text with fallback
+  const formatEmployeeOption = useCallback((employee) => {
+    if (!employee) return "";
+    const idStr = employee.employeeId || "EMP";
+    const nameStr = employee.fullName || "Staff";
+    const deptStr = employee.department ? ` (${employee.department})` : "";
+    const baseStr = employee.baseSalary ? ` - Base: ${formatCurrency(employee.baseSalary)}` : "";
+    return `${idStr} - ${nameStr}${deptStr}${baseStr}`;
+  }, []);
+
+  // Dropdown state for accessible contained employee selection
+  const [isEmployeeDropdownOpen, setIsEmployeeDropdownOpen] = useState(false);
+  const [employeeSearchQuery, setEmployeeSearchQuery] = useState("");
+  const dropdownRef = useRef(null);
+
+  useEffect(() => {
+    const handleClickOutside = (event) => {
+      if (dropdownRef.current && !dropdownRef.current.contains(event.target)) {
+        setIsEmployeeDropdownOpen(false);
+      }
+    };
+    document.addEventListener("mousedown", handleClickOutside);
+    return () => document.removeEventListener("mousedown", handleClickOutside);
+  }, []);
+
+  const selectedEmployeeLabel = useMemo(() => {
+    if (!payslipForm.employeeId) return "";
+    const found = employeeNames.find((e) => String(e._id) === String(payslipForm.employeeId));
+    return found ? formatEmployeeOption(found) : "";
+  }, [payslipForm.employeeId, employeeNames, formatEmployeeOption]);
+
+  const filteredEmployees = useMemo(() => {
+    if (!employeeSearchQuery.trim()) return employeeNames;
+    const q = employeeSearchQuery.toLowerCase();
+    return employeeNames.filter((emp) => {
+      const name = (emp.fullName || "").toLowerCase();
+      const id = (emp.employeeId || "").toLowerCase();
+      const dept = (emp.department || "").toLowerCase();
+      return name.includes(q) || id.includes(q) || dept.includes(q);
+    });
+  }, [employeeNames, employeeSearchQuery]);
+
+  const handleSelectEmployee = (empId) => {
+    handleEmployeeChange({ target: { value: empId } });
   };
 
   // Handle Input Changes with immediate auto-calculation trigger on Month change
@@ -490,15 +539,15 @@ export const GeneratePayslipModal = ({ onClose, onSuccess, isOpen = true }) => {
     <div
       id="payslip-modal-container"
       onClick={onClose}
-      className="fixed inset-0 z-50 flex items-end sm:items-center justify-center p-0 sm:p-4 bg-slate-950/60 backdrop-blur-sm animate-fade-in"
+      className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-4 bg-slate-950/60 backdrop-blur-sm animate-fade-in"
     >
       {/* Modal Container */}
       <div
         onClick={(e) => e.stopPropagation()}
-        className="relative z-10 flex max-h-[92vh] w-full max-w-2xl flex-col rounded-t-[28px] sm:rounded-3xl bg-white dark:bg-slate-900 shadow-2xl border border-slate-200 dark:border-slate-800 animate-fade-in overflow-hidden"
+        className="relative z-10 flex max-h-[90vh] w-full max-w-xl lg:max-w-2xl mx-4 sm:mx-auto flex-col rounded-2xl sm:rounded-3xl bg-white dark:bg-slate-900 shadow-xl border border-slate-200/70 dark:border-slate-800 animate-fade-in overflow-hidden"
       >
         {/* Header */}
-        <div className="flex items-center justify-between border-b border-slate-200 dark:border-slate-800 px-5 sm:px-6 py-3.5 bg-white dark:bg-slate-900 shrink-0">
+        <div className="flex items-center justify-between border-b border-slate-200/70 dark:border-slate-800 px-5 sm:px-6 py-3.5 bg-white dark:bg-slate-900 shrink-0">
           <div>
             <h2 className="text-base sm:text-xl font-black text-[#002185] dark:text-blue-400">
               Generate &amp; Calculate Payslip
@@ -518,11 +567,11 @@ export const GeneratePayslipModal = ({ onClose, onSuccess, isOpen = true }) => {
           </button>
         </div>
 
-        {/* Auto-Calculate Quick Bar */}
-        <div className="mx-5 sm:mx-6 mt-3 p-2.5 rounded-xl bg-slate-50 dark:bg-slate-800/60 border border-slate-200 dark:border-slate-700 flex items-center justify-between gap-3 shrink-0">
-          <div className="flex items-center gap-2 text-xs text-[#002185] dark:text-blue-400 min-w-0">
-            <Sparkles className="w-4 h-4 text-amber-500 shrink-0" />
-            <span className="font-medium truncate">
+        {/* Top Notice Banner: fluid wrapping layout, enterprise Info icon, clean hairline border */}
+        <div className="mx-4 sm:mx-6 mt-3.5 p-3 rounded-xl bg-slate-50/80 dark:bg-slate-800/50 border border-slate-200/70 dark:border-slate-800 flex flex-col sm:flex-row sm:items-center justify-between gap-2.5 shadow-xs shrink-0">
+          <div className="flex items-start sm:items-center gap-2.5 text-xs sm:text-sm font-medium leading-relaxed text-[#002185] dark:text-blue-300 min-w-0">
+            <Info className="w-4 h-4 text-[#002185] dark:text-blue-400 shrink-0 mt-0.5 sm:mt-0" />
+            <span className="leading-relaxed">
               Dynamic absence penalty: Base Salary ÷ {standardWorkingDays} Working Days × Absent Days
             </span>
           </div>
@@ -531,63 +580,155 @@ export const GeneratePayslipModal = ({ onClose, onSuccess, isOpen = true }) => {
             type="button"
             onClick={handleRecalculate}
             disabled={isCalculating || !payslipForm.employeeId}
-            className="px-3 py-1.5 rounded-lg bg-[#002185] hover:bg-[#ff5500] text-white text-xs font-bold transition-all shadow-xs shrink-0 flex items-center gap-1.5 cursor-pointer disabled:opacity-50"
+            className="self-end sm:self-auto shrink-0 px-3.5 py-1.5 rounded-lg bg-[#002185] hover:bg-[#ff5500] text-white text-xs font-bold transition-all shadow-xs flex items-center gap-1.5 cursor-pointer disabled:opacity-50"
           >
             <Calculator className="w-3.5 h-3.5" />
             <span>{isCalculating ? "Calculating..." : "Recalculate"}</span>
           </button>
         </div>
 
-        {/* Form Body - Scrollable */}
+        {/* Form Body - Scrollable without horizontal overflow */}
         <form
           id="payslip-form"
           onSubmit={handleSubmit}
-          className="flex-1 overflow-y-auto px-5 sm:px-6 py-3.5 space-y-4 text-xs"
+          className="flex-1 overflow-y-auto overflow-x-hidden px-4 sm:px-6 py-3.5 space-y-4 text-xs"
         >
           {/* Employee Selection */}
-          <div>
+          <div ref={dropdownRef} className="relative w-full max-w-full">
             <label className="mb-1 block font-semibold text-[#002185] dark:text-slate-200 uppercase tracking-wider text-[11px]">
               Select Employee <span className="text-red-500">*</span>
             </label>
 
-            <div className="relative">
-              <User className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
+            <div className="relative w-full max-w-full">
+              <User className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400 pointer-events-none z-10" />
+
+              {/* Accessible Custom Dropdown Trigger Button */}
+              <button
+                id="payslip-employee-dropdown-trigger"
+                type="button"
+                onClick={() => setIsEmployeeDropdownOpen((prev) => !prev)}
+                className="w-full max-w-full flex items-center justify-between rounded-xl border border-slate-200/90 dark:border-slate-800 bg-white dark:bg-slate-900 py-2.5 pl-10 pr-3 font-semibold text-slate-900 dark:text-slate-100 outline-hidden transition hover:border-[#002185] focus:border-[#002185] focus:ring-2 focus:ring-[#002185]/20 cursor-pointer overflow-hidden text-left shadow-2xs"
+                aria-haspopup="listbox"
+                aria-expanded={isEmployeeDropdownOpen}
+              >
+                <span
+                  className={`truncate block flex-1 pr-2 text-xs sm:text-sm ${
+                    selectedEmployee ? "text-slate-900 dark:text-slate-100 font-semibold" : "text-slate-400 font-normal"
+                  }`}
+                  title={selectedEmployeeLabel || "-- Choose Staff Member --"}
+                >
+                  {selectedEmployeeLabel || "-- Choose Staff Member --"}
+                </span>
+                <ChevronDown
+                  className={`w-4 h-4 text-slate-400 shrink-0 transition-transform duration-200 ${
+                    isEmployeeDropdownOpen ? "rotate-180 text-[#002185] dark:text-blue-400" : ""
+                  }`}
+                />
+              </button>
+
+              {/* Native select kept for full DOM/form test compatibility */}
               <select
                 id="payslip-employee-select"
                 name="employeeId"
                 value={payslipForm.employeeId}
                 onChange={handleEmployeeChange}
                 required
-                className="w-full appearance-none rounded-xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 py-2.5 pl-10 pr-4 font-semibold text-slate-900 dark:text-slate-100 outline-hidden transition hover:border-[#002185] focus:border-[#002185] focus:ring-2 focus:ring-[#002185]/20 cursor-pointer"
+                className="sr-only"
+                tabIndex={-1}
+                aria-hidden="true"
               >
                 <option value="">-- Choose Staff Member --</option>
                 {employeeNames.map((employee) => (
                   <option key={employee._id} value={employee._id}>
-                    {employee.employeeId || "EMP"} - {employee.fullName} ({employee.department || "Staff"}) - Base: {formatCurrency(employee.baseSalary || 2500)}
+                    {formatEmployeeOption(employee)}
                   </option>
                 ))}
               </select>
+
+              {/* Custom Popover Listbox: Anchored left-0 right-0 w-full max-w-full */}
+              {isEmployeeDropdownOpen && (
+                <div
+                  id="payslip-employee-dropdown-menu"
+                  className="absolute left-0 right-0 top-full mt-1.5 z-40 w-full max-w-full overflow-hidden rounded-xl border border-slate-200/90 dark:border-slate-800 bg-white dark:bg-slate-900 shadow-xl animate-in fade-in zoom-in-95 duration-150"
+                >
+                  {/* Search Filter Input */}
+                  <div className="p-2 border-b border-slate-100 dark:border-slate-800 bg-slate-50/80 dark:bg-slate-800/50">
+                    <div className="relative w-full">
+                      <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-slate-400 pointer-events-none" />
+                      <input
+                        type="text"
+                        placeholder="Search employee by name, ID or department..."
+                        value={employeeSearchQuery}
+                        onChange={(e) => setEmployeeSearchQuery(e.target.value)}
+                        onClick={(e) => e.stopPropagation()}
+                        className="w-full pl-8 pr-3 py-1.5 text-xs rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 text-slate-900 dark:text-slate-100 outline-hidden focus:border-[#002185] focus:ring-1 focus:ring-[#002185]/30"
+                        autoFocus
+                      />
+                    </div>
+                  </div>
+
+                  {/* Options List */}
+                  <div
+                    role="listbox"
+                    className="max-h-56 overflow-y-auto overflow-x-hidden divide-y divide-slate-100 dark:divide-slate-800/60"
+                  >
+                    {filteredEmployees.length === 0 ? (
+                      <div className="p-4 text-center text-xs text-slate-500 dark:text-slate-400">
+                        No matching staff members found
+                      </div>
+                    ) : (
+                      filteredEmployees.map((employee) => {
+                        const label = formatEmployeeOption(employee);
+                        const isSelected = employee._id === payslipForm.employeeId;
+                        return (
+                          <button
+                            key={employee._id}
+                            type="button"
+                            onClick={() => {
+                              handleSelectEmployee(employee._id);
+                              setIsEmployeeDropdownOpen(false);
+                              setEmployeeSearchQuery("");
+                            }}
+                            className={`w-full max-w-full text-left px-3.5 py-2.5 transition flex items-center justify-between gap-2 overflow-hidden cursor-pointer ${
+                              isSelected
+                                ? "bg-blue-50/90 dark:bg-blue-950/50 text-[#002185] dark:text-blue-300 font-semibold"
+                                : "hover:bg-slate-50 dark:hover:bg-slate-800/70 text-slate-700 dark:text-slate-200"
+                            }`}
+                          >
+                            <span className="truncate block flex-1 text-xs" title={label}>
+                              {label}
+                            </span>
+                            {isSelected && (
+                              <Check className="w-3.5 h-3.5 text-[#002185] dark:text-blue-400 shrink-0" />
+                            )}
+                          </button>
+                        );
+                      })
+                    )}
+                  </div>
+                </div>
+              )}
             </div>
 
             {/* Selected Employee Profile Summary Pill */}
             {selectedEmployee && (
-              <div className="mt-2 p-2.5 rounded-lg bg-blue-50/60 dark:bg-blue-950/30 border border-blue-100 dark:border-blue-900/40 flex flex-wrap items-center justify-between gap-2 text-[11px] animate-fade-in">
-                <div className="flex flex-wrap items-center gap-3">
-                  <span className="font-bold text-[#002185] dark:text-blue-300 flex items-center gap-1">
-                    <User className="w-3.5 h-3.5" />
-                    {selectedEmployee.fullName || selectedEmployee.employeeId}
+              <div className="mt-2 p-2.5 rounded-lg bg-blue-50/60 dark:bg-blue-950/30 border border-blue-100 dark:border-blue-900/40 flex flex-wrap items-center justify-between gap-2 text-[11px] animate-fade-in max-w-full overflow-hidden">
+                <div className="flex flex-wrap items-center gap-3 min-w-0">
+                  <span className="font-bold text-[#002185] dark:text-blue-300 flex items-center gap-1 truncate max-w-full">
+                    <User className="w-3.5 h-3.5 shrink-0" />
+                    <span className="truncate">{selectedEmployee.fullName || selectedEmployee.employeeId}</span>
                   </span>
-                  <span className="text-slate-500 dark:text-slate-400 flex items-center gap-1">
-                    <Building2 className="w-3 h-3" />
-                    {selectedEmployee.department || "Operations"}
+                  <span className="text-slate-500 dark:text-slate-400 flex items-center gap-1 truncate">
+                    <Building2 className="w-3 h-3 shrink-0" />
+                    <span className="truncate">{selectedEmployee.department || "Operations"}</span>
                   </span>
-                  <span className="text-slate-500 dark:text-slate-400 flex items-center gap-1">
-                    <Briefcase className="w-3 h-3" />
-                    {selectedEmployee.position || "Staff"}
+                  <span className="text-slate-500 dark:text-slate-400 flex items-center gap-1 truncate">
+                    <Briefcase className="w-3 h-3 shrink-0" />
+                    <span className="truncate">{selectedEmployee.position || "Staff"}</span>
                   </span>
                 </div>
-                <div className="flex items-center gap-2 font-bold text-emerald-700 dark:text-emerald-400">
-                  <Banknote className="w-3.5 h-3.5" />
+                <div className="flex items-center gap-2 font-bold text-emerald-700 dark:text-emerald-400 shrink-0">
+                  <Banknote className="w-3.5 h-3.5 shrink-0" />
                   <span>Base: {formatCurrency(selectedEmployee.baseSalary || payslipForm.basicSalary || 2500)}</span>
                 </div>
               </div>
@@ -724,18 +865,18 @@ export const GeneratePayslipModal = ({ onClose, onSuccess, isOpen = true }) => {
             </div>
 
             {/* Allowance Rows */}
-            <div className="space-y-2">
+            <div className="space-y-2 max-w-full">
               {manualAllowances.map((item) => (
-                <div key={item.id} className="flex items-center gap-2">
+                <div key={item.id} className="flex items-center gap-2 max-w-full min-w-0">
                   <input
                     type="text"
                     placeholder="Allowance Title (e.g. Transport Allowance)"
                     value={item.title}
                     onChange={(e) => handleAllowanceChange(item.id, "title", e.target.value)}
-                    className="flex-1 rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 px-3 py-1.5 text-xs text-slate-900 dark:text-slate-100 outline-hidden focus:border-[#002185]"
+                    className="flex-1 min-w-0 rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 px-3 py-1.5 text-xs text-slate-900 dark:text-slate-100 outline-hidden focus:border-[#002185]"
                   />
 
-                  <div className="relative w-32 sm:w-40">
+                  <div className="relative w-28 sm:w-36 shrink-0">
                     <span className="absolute left-2.5 top-1/2 -translate-y-1/2 text-slate-400 text-[10px] font-bold">GH₵</span>
                     <input
                       type="number"
@@ -752,7 +893,7 @@ export const GeneratePayslipModal = ({ onClose, onSuccess, isOpen = true }) => {
                     <button
                       type="button"
                       onClick={() => handleRemoveAllowance(item.id)}
-                      className="p-1.5 text-slate-400 hover:text-red-500 hover:bg-red-50 dark:hover:bg-red-950/20 rounded-md transition cursor-pointer"
+                      className="p-1.5 text-slate-400 hover:text-red-500 hover:bg-red-50 dark:hover:bg-red-950/20 rounded-md transition cursor-pointer shrink-0"
                       title="Remove allowance"
                     >
                       <Trash2 className="w-3.5 h-3.5" />
@@ -784,7 +925,7 @@ export const GeneratePayslipModal = ({ onClose, onSuccess, isOpen = true }) => {
             {/* Attendance Days Metric Stats */}
             {attendanceMetrics && (
               <div>
-                <div className="grid grid-cols-4 sm:grid-cols-5 gap-2 text-[10px] text-center">
+                <div className="grid grid-cols-2 sm:grid-cols-5 gap-2 text-[10px] text-center">
                   <div className="p-1.5 rounded-lg bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800">
                     <span className="text-slate-500 block">Attended</span>
                     <span className="font-bold text-emerald-600 text-xs">{attendanceMetrics.presentDays || attendanceMetrics.attendedDays || 0}d</span>
@@ -801,7 +942,7 @@ export const GeneratePayslipModal = ({ onClose, onSuccess, isOpen = true }) => {
                     <span className="text-slate-500 block">Late Days</span>
                     <span className="font-bold text-amber-600 text-xs">{attendanceMetrics.lateDays || 0}</span>
                   </div>
-                  <div className="p-1.5 rounded-lg bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 col-span-4 sm:col-span-1">
+                  <div className="p-1.5 rounded-lg bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 col-span-2 sm:col-span-1">
                     <span className="text-slate-500 block">Unelapsed</span>
                     <span className="font-bold text-slate-600 dark:text-slate-400 text-xs">
                       {attendanceMetrics.futureWorkingDays !== undefined ? `${attendanceMetrics.futureWorkingDays}d (0 penalty)` : "0d"}
@@ -920,20 +1061,21 @@ export const GeneratePayslipModal = ({ onClose, onSuccess, isOpen = true }) => {
             <label className="mb-1 block font-semibold text-[#002185] dark:text-slate-200 uppercase tracking-wider text-[11px]">
               Payment Method <span className="text-red-500">*</span>
             </label>
-            <div className="relative">
-              <CreditCard className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
+            <div className="relative w-full max-w-full">
+              <CreditCard className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400 pointer-events-none" />
               <select
                 id="payslip-payment-method"
                 name="paymentMethod"
                 value={payslipForm.paymentMethod}
                 onChange={handleChange}
                 required
-                className="w-full appearance-none rounded-xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 py-2.5 pl-10 pr-4 font-medium text-slate-900 dark:text-slate-100 outline-hidden transition hover:border-[#002185] focus:border-[#002185] focus:ring-2 focus:ring-[#002185]/20 cursor-pointer"
+                className="w-full max-w-full appearance-none rounded-xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 py-2.5 pl-10 pr-9 font-medium text-slate-900 dark:text-slate-100 outline-hidden transition hover:border-[#002185] focus:border-[#002185] focus:ring-2 focus:ring-[#002185]/20 cursor-pointer truncate"
               >
                 <option value="Bank Transfer">Bank Transfer</option>
                 <option value="Mobile Money">Mobile Money</option>
                 <option value="Cash">Cash</option>
               </select>
+              <ChevronDown className="absolute right-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400 pointer-events-none" />
             </div>
           </div>
 
