@@ -117,6 +117,21 @@ export const AuthProvider = ({ children }) => {
             localStorage.setItem("adminData", JSON.stringify(data.user));
           } else {
             localStorage.setItem("employeeData", JSON.stringify(data.user));
+            if (data.activeShift || data.hasActiveShift) {
+              const ongoing = data.activeShift || data.todayRecord;
+              if (ongoing) {
+                localStorage.setItem("todayAttendance", JSON.stringify(ongoing));
+                localStorage.setItem("activeShift", JSON.stringify(ongoing));
+                window.dispatchEvent(
+                  new CustomEvent("attendance-updated", {
+                    detail: { action: "auth_me_active_shift", data: ongoing },
+                  })
+                );
+              }
+            } else if (data.todayRecord) {
+              localStorage.setItem("todayAttendance", JSON.stringify(data.todayRecord));
+              localStorage.removeItem("activeShift");
+            }
           }
           setIsLoading(false);
           return data.user;
@@ -170,7 +185,7 @@ export const AuthProvider = ({ children }) => {
   }, [refreshUser]);
 
   // Login handler
-  const login = (userData, userRole = "admin", userToken = null) => {
+  const login = (userData, userRole = "admin", userToken = null, authPayload = null) => {
     setUser(userData);
     setRole(userRole);
     if (userToken) setToken(userToken);
@@ -187,6 +202,42 @@ export const AuthProvider = ({ children }) => {
       if (userToken) {
         localStorage.setItem("employeeToken", userToken);
         localStorage.setItem("token", userToken);
+      }
+    }
+
+    if (authPayload) {
+      const activeShift = authPayload.activeShift;
+      const todayRec = authPayload.todayRecord || authPayload.attendance;
+      const ongoing =
+        activeShift ||
+        (todayRec && (todayRec.clockIn || todayRec.clockInTime) && (!todayRec.clockOut && !todayRec.clockOutTime)
+          ? todayRec
+          : null);
+
+      if (ongoing) {
+        try {
+          localStorage.setItem("todayAttendance", JSON.stringify(ongoing));
+          localStorage.setItem("activeShift", JSON.stringify(ongoing));
+          window.dispatchEvent(
+            new CustomEvent("attendance-updated", {
+              detail: { action: "auth_login_shift", data: ongoing },
+            })
+          );
+        } catch (e) {
+          console.warn("Error caching shift in AuthContext login:", e);
+        }
+      } else if (todayRec) {
+        try {
+          localStorage.setItem("todayAttendance", JSON.stringify(todayRec));
+          localStorage.removeItem("activeShift");
+          window.dispatchEvent(
+            new CustomEvent("attendance-updated", {
+              detail: { action: "auth_login_record", data: todayRec },
+            })
+          );
+        } catch (e) {
+          console.warn("Error caching attendance record in AuthContext login:", e);
+        }
       }
     }
   };
@@ -212,6 +263,8 @@ export const AuthProvider = ({ children }) => {
       localStorage.removeItem("employeeData");
       localStorage.removeItem("userRole");
       localStorage.removeItem("isLoggedIn");
+      localStorage.removeItem("activeShift");
+      localStorage.removeItem("todayAttendance");
     }
   };
 

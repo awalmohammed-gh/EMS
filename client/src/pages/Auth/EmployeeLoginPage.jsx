@@ -15,6 +15,7 @@ import eyenitLogo from "../../assets/eyenit_logo.png";
 import { authService } from "../../services/authService";
 import { useManagement } from "../../context/ManagementContextProvider";
 import { useAuth } from "../../context/AuthContext";
+import { useAttendance } from "../../context/AttendanceContext";
 
 export const EmployeeLoginPage = () => {
   const navigate = useNavigate();
@@ -31,6 +32,7 @@ export const EmployeeLoginPage = () => {
   const { setShowToast, setUser: setManagementUser, setRole: setManagementRole } =
     useManagement();
   const { login: contextLogin } = useAuth();
+  const { autoPopulateFromAuth } = useAttendance();
 
   const handleInputChange = (e) => {
     const { name, value, type, checked } = e.target;
@@ -75,8 +77,13 @@ export const EmployeeLoginPage = () => {
         const userObj = result.employee || result.user;
         const userToken = result.token;
 
+        // Auto-populate attendance context immediately with active shift or today's record
+        if (typeof autoPopulateFromAuth === "function") {
+          autoPopulateFromAuth(result);
+        }
+
         if (typeof contextLogin === "function") {
-          contextLogin(userObj, "employee", userToken);
+          contextLogin(userObj, "employee", userToken, result);
         }
         if (typeof setManagementUser === "function") {
           setManagementUser(userObj);
@@ -85,9 +92,25 @@ export const EmployeeLoginPage = () => {
           setManagementRole("employee");
         }
 
+        const hasActiveShift = Boolean(result.hasActiveShift || result.activeShift);
+        const shiftClockIn = result.activeShift?.clockIn || result.activeShift?.clockInTime;
+        let formattedTime = "";
+        if (shiftClockIn) {
+          try {
+            formattedTime = new Date(shiftClockIn).toLocaleTimeString([], {
+              hour: "2-digit",
+              minute: "2-digit",
+            });
+          } catch {
+            // ignore
+          }
+        }
+
         setShowToast({
           show: true,
-          message: `Welcome back, ${userObj?.fullName || "Employee"}!`,
+          message: hasActiveShift
+            ? `Welcome back, ${userObj?.fullName || "Employee"}! Ongoing shift${formattedTime ? ` from ${formattedTime}` : ""} restored.`
+            : `Welcome back, ${userObj?.fullName || "Employee"}!`,
           type: "success",
         });
 

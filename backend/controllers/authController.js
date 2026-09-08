@@ -4,8 +4,148 @@ import mongoose from "mongoose";
 import { Admin } from "../models/Admin.js";
 import { Employee } from "../models/employeeModel.js";
 import { User } from "../models/userModel.js";
+import { Attendance } from "../models/attendanceModel.js";
+import { liveAttendanceStore } from "./employeeAttendance.js";
 
 const getJwtSecret = () => process.env.JWT_SECRET || "default_jwt_secret_key_12345";
+
+/**
+ * Helper to check and verify if a user has an active, incomplete shift in the database immediately upon login
+ */
+export const verifyActiveIncompleteShift = async (employee) => {
+  if (!employee) {
+    return {
+      hasActiveShift: false,
+      activeShift: null,
+      todayRecord: null,
+      attendanceState: null,
+    };
+  }
+
+  const todayStr = new Date().toISOString().split("T")[0];
+  const empId = employee._id ? employee._id.toString() : (employee.id ? employee.id.toString() : null);
+  const empCode = employee.employeeId || "";
+  const email = employee.email || "";
+
+  let activeShift = null;
+  let todayRecord = null;
+
+  try {
+    // 1. Query database for an open, incomplete shift:
+    // Defined as: employee clocked in (clockIn or clockInTime is set), but NOT clocked out (clockOut and clockOutTime are null/falsy)
+    const activeShiftConditions = [
+      ...(empId && mongoose.Types.ObjectId.isValid(empId) ? [{ employee: empId }] : []),
+      ...(empCode ? [{ employeeId: empCode }] : []),
+      ...(email ? [{ "employee.email": email }] : []),
+    ];
+
+    if (activeShiftConditions.length > 0) {
+      activeShift = await Attendance.findOne({
+        $or: activeShiftConditions,
+        $and: [
+          {
+            $or: [
+              { clockIn: { $ne: null, $exists: true } },
+              { clockInTime: { $ne: null, $exists: true } },
+            ],
+          },
+          {
+            $or: [
+              { clockOut: null },
+              { clockOut: { $exists: false } },
+            ],
+          },
+          {
+            $or: [
+              { clockOutTime: null },
+              { clockOutTime: { $exists: false } },
+            ],
+          },
+        ],
+      })
+        .populate("employee", "fullName employeeId department position email avatar")
+        .sort({ date: -1, createdAt: -1 })
+        .lean();
+
+      // 2. Query today's attendance record (could be incomplete or completed)
+      todayRecord = await Attendance.findOne({
+        $or: activeShiftConditions,
+        date: todayStr,
+      })
+        .populate("employee", "fullName employeeId department position email avatar")
+        .sort({ updatedAt: -1, createdAt: -1 })
+        .lean();
+    }
+  } catch (err) {
+    console.warn("Error querying active shift in authController:", err.message);
+  }
+
+  // 3. Check and sync with liveAttendanceStore in memory
+  if (liveAttendanceStore) {
+    const keysToCheck = [
+      empId ? `${empId}_${todayStr}` : null,
+      empCode ? `${empCode}_${todayStr}` : null,
+    ].filter(Boolean);
+
+    for (const key of keysToCheck) {
+      const memRec = liveAttendanceStore.get(key);
+      if (memRec) {
+        if (!todayRecord) todayRecord = memRec;
+        if (!activeShift && (memRec.clockIn || memRec.clockInTime) && (!memRec.clockOut && !memRec.clockOutTime)) {
+          activeShift = memRec;
+        }
+        break;
+      }
+    }
+
+    // If an active shift was found, ensure it is cached in liveAttendanceStore across keys
+    if (activeShift) {
+      const shiftDate = activeShift.date || todayStr;
+      if (empId) liveAttendanceStore.set(`${empId}_${shiftDate}`, activeShift);
+      if (empCode) liveAttendanceStore.set(`${empCode}_${shiftDate}`, activeShift);
+    }
+  }
+
+  if (activeShift && (!todayRecord || todayRecord.date === activeShift.date)) {
+    todayRecord = activeShift;
+  }
+
+  const hasActiveShift = Boolean(activeShift);
+  const primaryRecord = activeShift || todayRecord;
+
+  const hasClockedIn = Boolean(activeShift || (todayRecord && (todayRecord.clockIn || todayRecord.clockInTime)));
+  const hasClockedOut = Boolean(!activeShift && todayRecord && (todayRecord.clockOut || todayRecord.clockOutTime));
+  const isClockedIn = Boolean(activeShift || (hasClockedIn && !hasClockedOut));
+  const isClockedOut = hasClockedOut;
+
+  const attendanceState = {
+    hasActiveShift,
+    hasClockedIn,
+    hasClockedOut,
+    isClockedIn,
+    isClockedOut,
+    isActiveShift: isClockedIn,
+    clockIn: activeShift?.clockIn || activeShift?.clockInTime || todayRecord?.clockIn || todayRecord?.clockInTime || null,
+    clockOut: activeShift ? null : (todayRecord?.clockOut || todayRecord?.clockOutTime || null),
+    status: activeShift?.status || todayRecord?.status || (hasClockedIn ? "On Time" : "Not Clocked In"),
+    workHours: Number(activeShift?.workHours || todayRecord?.workHours || 0),
+    delayMinutes: Number(activeShift?.delayMinutes ?? activeShift?.lateMinutes ?? todayRecord?.delayMinutes ?? todayRecord?.lateMinutes ?? 0),
+    lateMinutes: Number(activeShift?.lateMinutes ?? activeShift?.delayMinutes ?? todayRecord?.lateMinutes ?? todayRecord?.delayMinutes ?? 0),
+    latePenalty: Number(activeShift?.latePenalty ?? todayRecord?.latePenalty ?? 0),
+    penaltyTier: activeShift?.penaltyTier || todayRecord?.penaltyTier || "",
+    lateReason: activeShift?.lateReason || activeShift?.notes || todayRecord?.lateReason || todayRecord?.notes || "",
+    date: activeShift?.date || todayRecord?.date || todayStr,
+    shiftId: activeShift?._id || todayRecord?._id || null,
+  };
+
+  return {
+    hasActiveShift,
+    activeShift: activeShift || null,
+    todayRecord: todayRecord || null,
+    attendance: primaryRecord || null,
+    attendanceState,
+  };
+};
 
 /**
  * Helper to generate JWT token with consistent payload structure
@@ -322,12 +462,22 @@ export const employeeLogin = async (req, res) => {
     const safeEmployee = employee.toObject ? employee.toObject() : employee;
     delete safeEmployee.password;
 
+    // Verify if employee has an active, incomplete shift in the database immediately upon login
+    const shiftVerification = await verifyActiveIncompleteShift(safeEmployee);
+
     return res.status(200).json({
       success: true,
-      message: "Employee login successful.",
+      message: shiftVerification.hasActiveShift
+        ? "Employee login successful. You have an active ongoing shift."
+        : "Employee login successful.",
       token,
       employee: safeEmployee,
       user: safeEmployee,
+      hasActiveShift: shiftVerification.hasActiveShift,
+      activeShift: shiftVerification.activeShift,
+      todayRecord: shiftVerification.todayRecord,
+      attendance: shiftVerification.attendance,
+      attendanceState: shiftVerification.attendanceState,
     });
   } catch (error) {
     console.error("Employee login error:", error);
@@ -468,11 +618,19 @@ export const getAuthMe = async (req, res) => {
           profile_picture: empAvatar,
           profile_image_url: empAvatar,
         };
+
+        const shiftVerification = await verifyActiveIncompleteShift(safeEmp);
+
         return res.status(200).json({
           success: true,
           role: "employee",
           user: safeEmp,
           employee: safeEmp,
+          hasActiveShift: shiftVerification.hasActiveShift,
+          activeShift: shiftVerification.activeShift,
+          todayRecord: shiftVerification.todayRecord,
+          attendance: shiftVerification.attendance,
+          attendanceState: shiftVerification.attendanceState,
         });
       }
 

@@ -4,6 +4,7 @@ import mongoose from "mongoose";
 import { Employee } from "../models/employeeModel.js";
 import { User } from "../models/userModel.js";
 import { Admin } from "../models/Admin.js";
+import { verifyActiveIncompleteShift } from "./authController.js";
 
 const isValidObjectId = (id) =>
   id && mongoose.Types.ObjectId.isValid(id) && String(new mongoose.Types.ObjectId(id)) === String(id);
@@ -232,11 +233,22 @@ export const employeeLogin = async (req, res) => {
     const safeEmployee = employee.toObject ? employee.toObject() : employee;
     delete safeEmployee.password;
 
+    // Verify if user has an active, incomplete shift in the database immediately upon login
+    const shiftVerification = await verifyActiveIncompleteShift(safeEmployee);
+
     res.status(200).json({
       success: true,
-      message: "Login successful.",
+      message: shiftVerification.hasActiveShift
+        ? "Login successful. You have an active ongoing shift."
+        : "Login successful.",
       token,
       employee: safeEmployee,
+      user: safeEmployee,
+      hasActiveShift: shiftVerification.hasActiveShift,
+      activeShift: shiftVerification.activeShift,
+      todayRecord: shiftVerification.todayRecord,
+      attendance: shiftVerification.attendance,
+      attendanceState: shiftVerification.attendanceState,
     });
   } catch (error) {
     console.error("Employee login error:", error);

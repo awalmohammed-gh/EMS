@@ -398,8 +398,9 @@ const EmployeeDashboard = () => {
       : (overview.presentDays || 0) + (overview.absentDays || 0);
 
   // Check if user has clocked in today
-  const hasClockedIn = Boolean(attendanceData.clockIn);
-  const hasClockedOut = Boolean(attendanceData.clockOut);
+  const hasClockedIn = Boolean(attendanceData.clockIn || attendanceData.clockInTime);
+  const hasClockedOut = Boolean(attendanceData.clockOut || attendanceData.clockOutTime);
+  const isActiveShift = hasClockedIn && !hasClockedOut;
 
   // Shift status label & description with indicator icon
   const getShiftStatusInfo = () => {

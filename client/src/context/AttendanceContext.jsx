@@ -92,9 +92,19 @@ const normalizeAttendanceRecord = (raw, fallbackDate = getTodayString()) => {
 };
 
 export const AttendanceProvider = ({ children }) => {
-  // Initialize state with cached today record if valid for today's date
+  // Initialize state with activeShift or cached today record if valid
   const [todayRecord, setTodayRecord] = useState(() => {
     try {
+      // 1. Check for dedicated active incomplete shift cached upon login
+      const activeCached = localStorage.getItem("activeShift");
+      if (activeCached) {
+        const parsed = JSON.parse(activeCached);
+        if (parsed && (parsed.clockIn || parsed.clockInTime) && (!parsed.clockOut && !parsed.clockOutTime)) {
+          return normalizeAttendanceRecord(parsed, parsed.date || getTodayString());
+        }
+      }
+
+      // 2. Check standard storage key
       const cached = localStorage.getItem(STORAGE_KEY);
       if (cached) {
         const parsed = JSON.parse(cached);
@@ -123,8 +133,14 @@ export const AttendanceProvider = ({ children }) => {
     try {
       if (record) {
         localStorage.setItem(STORAGE_KEY, JSON.stringify(record));
+        if (record.clockIn && !record.clockOut) {
+          localStorage.setItem("activeShift", JSON.stringify(record));
+        } else if (record.clockOut) {
+          localStorage.removeItem("activeShift");
+        }
       } else {
         localStorage.removeItem(STORAGE_KEY);
+        localStorage.removeItem("activeShift");
       }
     } catch (e) {
       console.warn("Error saving attendance to storage:", e);
@@ -226,6 +242,47 @@ export const AttendanceProvider = ({ children }) => {
       console.warn("Could not fetch attendance history:", err.message);
     }
   }, [saveToStorage]);
+
+  // Auto-populate and hydrate attendance dashboard state directly from login verification payload
+  const autoPopulateFromAuth = useCallback(
+    (authPayload) => {
+      if (!authPayload) return null;
+      const todayStr = getTodayString();
+      const shiftData =
+        authPayload.activeShift || authPayload.todayRecord || authPayload.attendance;
+      if (!shiftData) return null;
+
+      const normalized = normalizeAttendanceRecord(
+        shiftData,
+        shiftData.date || todayStr
+      );
+      setTodayRecord(normalized);
+      saveToStorage(normalized);
+
+      if (
+        authPayload.hasActiveShift ||
+        (normalized.clockIn && !normalized.clockOut)
+      ) {
+        try {
+          localStorage.setItem("activeShift", JSON.stringify(normalized));
+          localStorage.setItem(STORAGE_KEY, JSON.stringify(normalized));
+        } catch (e) {
+          console.warn("Error caching active shift:", e);
+        }
+        broadcastAttendanceChange("active_shift_hydrated", normalized);
+      } else {
+        try {
+          localStorage.removeItem("activeShift");
+        } catch {
+          // ignore
+        }
+        broadcastAttendanceChange("attendance_hydrated", normalized);
+      }
+
+      return normalized;
+    },
+    [saveToStorage, broadcastAttendanceChange]
+  );
 
   // Unified Clock-In handler
   const clockIn = useCallback(
@@ -432,10 +489,10 @@ export const AttendanceProvider = ({ children }) => {
 
     // Cross-tab storage change listener
     const handleStorageChange = (e) => {
-      if (e.key === STORAGE_KEY && e.newValue) {
+      if ((e.key === STORAGE_KEY || e.key === "activeShift") && e.newValue) {
         try {
           const parsed = JSON.parse(e.newValue);
-          const normalized = normalizeAttendanceRecord(parsed, getTodayString());
+          const normalized = normalizeAttendanceRecord(parsed, parsed.date || getTodayString());
           setTodayRecord(normalized);
         } catch {
           // ignore
@@ -518,13 +575,15 @@ export const AttendanceProvider = ({ children }) => {
       isOnTime,
       shiftStatus,
       currentStep,
-      // Action handlers
+      // Action handlers & auto-population helpers
       clockIn,
       clockOut,
       refreshAttendance,
       fetchAttendanceHistory,
       updateTodayRecord,
       setTodayRecord,
+      autoPopulateFromAuth,
+      hydrateActiveShift: autoPopulateFromAuth,
     }),
     [
       todayRecord,
@@ -548,6 +607,7 @@ export const AttendanceProvider = ({ children }) => {
       refreshAttendance,
       fetchAttendanceHistory,
       updateTodayRecord,
+      autoPopulateFromAuth,
     ]
   );
 

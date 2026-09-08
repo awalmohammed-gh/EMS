@@ -18,6 +18,7 @@ import ErrorMessage from "../ui/ErrorMessage";
 import eyenitLogo from "../assets/eyenit_logo.png";
 import { adminLogin, adminRegister, employeeLogin } from "../apis/fontApis";
 import { useManagement } from "../context/ManagementContextProvider";
+import { useAttendance } from "../context/AttendanceContext";
 import Toaster from "../ui/Toaster";
 
 export const LoginForm = ({ role = "admin", title, subtitle, initialMode = "login" }) => {
@@ -33,6 +34,7 @@ export const LoginForm = ({ role = "admin", title, subtitle, initialMode = "logi
   const [error, setError] = useState(null);
   const [isLoading, setIsLoading] = useState(false);
   const { showToast, setShowToast, setUser, setRole } = useManagement();
+  const { autoPopulateFromAuth } = useAttendance();
   const navigate = useNavigate();
 
   const handleInputChange = (e) => {
@@ -189,9 +191,18 @@ export const LoginForm = ({ role = "admin", title, subtitle, initialMode = "logi
           if (typeof setRole === "function") setRole("employee");
         }
 
+        // Auto-populate attendance dashboard state if active shift exists
+        if (typeof autoPopulateFromAuth === "function") {
+          autoPopulateFromAuth(res.data);
+        }
+
+        const hasActiveShift = Boolean(res.data?.hasActiveShift || res.data?.activeShift);
+
         setShowToast({
           show: true,
-          message: `Welcome back, ${employee?.fullName || "Employee"}!`,
+          message: hasActiveShift
+            ? `Welcome back, ${employee?.fullName || "Employee"}! Ongoing shift restored.`
+            : `Welcome back, ${employee?.fullName || "Employee"}!`,
           type: "success",
         });
 

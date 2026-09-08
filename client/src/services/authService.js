@@ -38,6 +38,47 @@ export const authService = {
           user: response.data.employee || response.data.user,
           role: "employee",
         });
+
+        // Verify and auto-populate active shift state immediately upon login
+        const activeShift = response.data.activeShift;
+        const todayRecord = response.data.todayRecord || response.data.attendance;
+        const activeRecord =
+          activeShift ||
+          (todayRecord && (todayRecord.clockIn || todayRecord.clockInTime) && (!todayRecord.clockOut && !todayRecord.clockOutTime)
+            ? todayRecord
+            : null);
+
+        if (activeRecord) {
+          try {
+            localStorage.setItem("todayAttendance", JSON.stringify(activeRecord));
+            localStorage.setItem("activeShift", JSON.stringify(activeRecord));
+            window.dispatchEvent(
+              new CustomEvent("attendance-updated", {
+                detail: { action: "login_active_shift", data: activeRecord },
+              })
+            );
+          } catch (storageErr) {
+            console.warn("Could not cache active shift to localStorage:", storageErr);
+          }
+        } else if (todayRecord) {
+          try {
+            localStorage.setItem("todayAttendance", JSON.stringify(todayRecord));
+            localStorage.removeItem("activeShift");
+            window.dispatchEvent(
+              new CustomEvent("attendance-updated", {
+                detail: { action: "login_today_record", data: todayRecord },
+              })
+            );
+          } catch (storageErr) {
+            console.warn("Could not cache today attendance:", storageErr);
+          }
+        } else {
+          try {
+            localStorage.removeItem("activeShift");
+          } catch {
+            // ignore
+          }
+        }
       }
       return response.data;
     }

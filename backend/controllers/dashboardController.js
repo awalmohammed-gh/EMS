@@ -696,6 +696,16 @@ export const employeeDashboardOverview = async (req, res) => {
       todayAttendance = { ...todayAttendance, ...matchingToday };
     }
 
+    // Also check for any active incomplete shift (clockIn without clockOut)
+    if (!todayAttendance?.clockIn) {
+      const activeIncomplete = allAttendanceRecords.find(
+        (r) => (r.clockIn || r.clockInTime) && (!r.clockOut && !r.clockOutTime)
+      );
+      if (activeIncomplete) {
+        todayAttendance = { ...todayAttendance, ...activeIncomplete };
+      }
+    }
+
     let todayClockIn = todayAttendance?.clockIn || null;
     let todayClockOut = todayAttendance?.clockOut || null;
     let todayWorkHours = Number(todayAttendance?.workHours || 0);
