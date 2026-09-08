@@ -1,7 +1,5 @@
-import Login from "./Login";
+import EmployeeLoginPage from "./EmployeeLoginPage";
 
-export const EmployeeLogin = (props) => {
-  return <Login initialRole="employee" {...props} />;
-};
+export const EmployeeLogin = EmployeeLoginPage;
+export default EmployeeLoginPage;
 
-export default EmployeeLogin;

@@ -28,8 +28,6 @@ import { useManagement } from "../../context/ManagementContextProvider";
 import Loading from "../../ui/Loading";
 import ErrorMessage from "../../ui/ErrorMessage";
 import {
-  attendanceClockIn,
-  attendanceClockOut,
   getEmployeeAttendance,
   getNowAttendance,
   getSettings,
@@ -39,6 +37,7 @@ import AttendanceIntensityHeatmap from "../../components/AttendanceIntensityHeat
 import AttendanceMonthlyCalendar from "../../components/AttendanceMonthlyCalendar";
 import GlobalDateRangePicker from "../../components/GlobalDateRangePicker";
 import AttendanceReportModal from "../../components/modal/AttendanceReportModal";
+import { useAttendance } from "../../context/AttendanceContext";
 import {
   ResponsiveContainer,
   BarChart,
@@ -121,25 +120,25 @@ const CustomWeeklyHoursTooltip = ({ active, payload }) => {
 const EmployeesAttendance = () => {
   const { showToast, setShowToast, user, settings } = useManagement();
 
-  // Today's attendance state
-  const [attendanceData, setAttendanceData] = useState({
-    date: null,
-    clockIn: null,
-    clockOut: null,
-    status: null,
-    workHours: 0,
-    lateMinutes: 0,
-    latePenalty: 0,
-    penaltyTier: "",
-  });
+  // Centralized Global Attendance State
+  const {
+    todayRecord,
+    clockIn: contextClockIn,
+    clockOut: contextClockOut,
+    refreshAttendance: contextRefreshAttendance,
+    isClocking: isAttendanceClocking,
+  } = useAttendance();
+
+  const attendanceData = todayRecord;
+  const hasClockedIn = Boolean(attendanceData?.clockIn || attendanceData?.clockInTime);
+  const hasClockedOut = Boolean(attendanceData?.clockOut || attendanceData?.clockOutTime);
 
   const [isLoading, setIsLoading] = useState(false);
-  const [isClocking, setIsClocking] = useState(false);
+  const [isLocalClocking, setIsLocalClocking] = useState(false);
+  const isClocking = isLocalClocking || isAttendanceClocking;
   const [error, setError] = useState(null);
   const [employee, setEmployee] = useState(null);
   const [attendanceHistory, setAttendanceHistory] = useState([]);
-  const [hasClockedIn, setHasClockedIn] = useState(false);
-  const [hasClockedOut, setHasClockedOut] = useState(false);
 
   // Shift Settings & Early Override Guard State (Default to 19:00 / 07:00 PM)
   const initialEnd = settings?.workEndTime || settings?.attendance?.workEndTime || "19:00";
@@ -328,41 +327,10 @@ const EmployeesAttendance = () => {
     try {
       setError(null);
       const { data } = await getNowAttendance();
-
-      if (data?.success) {
-        if (data.employee) {
-          setEmployee(data.employee);
-        }
-
-        if (data.attendance) {
-          const att = data.attendance;
-          setAttendanceData({
-            date: att.date || new Date().toISOString().split("T")[0],
-            clockIn: att.clockIn || att.clockInTime || null,
-            clockOut: att.clockOut || att.clockOutTime || null,
-            status: att.status || null,
-            workHours: att.workHours || 0,
-            lateMinutes: att.lateMinutes ?? att.delayMinutes ?? 0,
-            latePenalty: att.latePenalty || 0,
-            penaltyTier: att.penaltyTier || "",
-          });
-          setHasClockedIn(Boolean(att.clockIn || att.clockInTime));
-          setHasClockedOut(Boolean(att.clockOut || att.clockOutTime));
-        } else {
-          setAttendanceData({
-            date: new Date().toISOString().split("T")[0],
-            clockIn: null,
-            clockOut: null,
-            status: null,
-            workHours: 0,
-            lateMinutes: 0,
-            latePenalty: 0,
-            penaltyTier: "",
-          });
-          setHasClockedIn(false);
-          setHasClockedOut(false);
-        }
+      if (data?.success && data.employee) {
+        setEmployee(data.employee);
       }
+      await contextRefreshAttendance(true);
     } catch (err) {
       console.warn("Could not fetch today's attendance:", err.message);
     }
@@ -424,153 +392,59 @@ const EmployeesAttendance = () => {
     init();
   }, []);
 
-  // Handle Clock In
+  // Handle Clock In via centralized AttendanceContext
   const handleClockIn = async () => {
     if (isClocking || hasClockedIn) return;
     try {
-      setIsClocking(true);
+      setIsLocalClocking(true);
       const reasonToSend = lateReason.trim();
-      const { data } = await attendanceClockIn({
-        lateReason: reasonToSend,
-        notes: reasonToSend,
+      const result = await contextClockIn(reasonToSend);
+
+      setShowToast({
+        show: true,
+        message: result?.data?.message || "Clock In recorded successfully!",
+        type: "success",
       });
 
-      if (data?.success) {
-        const att = data.attendance;
-        const nowIso = new Date().toISOString();
-        const rawStatus = att?.status || data.status || "";
-        const computedDelayMinutes = Number(att?.lateMinutes ?? data.delayMinutes ?? att?.delayMinutes ?? data.lateMinutes ?? 0);
-        const computedLatePenalty = Number(att?.latePenalty ?? data.latePenalty ?? 0);
-        const isLateCheck = computedDelayMinutes > 0 || String(rawStatus).toLowerCase() === "late";
-        const normalizedStatus = isLateCheck ? "Late" : "On Time";
-        const recordedReason = att?.lateReason || att?.notes || data.lateReason || reasonToSend || "";
-
-        setAttendanceData({
-          date: att?.date || nowIso.split("T")[0],
-          clockIn: att?.clockIn || att?.clockInTime || nowIso,
-          clockOut: null,
-          status: normalizedStatus,
-          workHours: att?.workHours || 0,
-          lateMinutes: computedDelayMinutes,
-          latePenalty: computedLatePenalty,
-          penaltyTier: att?.penaltyTier ?? data.penaltyTier ?? (isLateCheck ? "Late" : "On Time"),
-          lateReason: recordedReason,
-          notes: recordedReason,
-        });
-        setHasClockedIn(true);
-        setHasClockedOut(false);
-
-        setShowToast({
-          show: true,
-          message: data.message || "Clock In recorded successfully!",
-          type: "success",
-        });
-
-        // Broadcast to real-time sync channel
-        try {
-          const bc = new BroadcastChannel("eyenit_attendance_sync");
-          bc.postMessage({ type: "clock_in", timestamp: Date.now() });
-          bc.close();
-        } catch {
-          // Ignore
-        }
-
-        window.dispatchEvent(
-          new CustomEvent("attendance-updated", {
-            detail: { action: "clock_in", data },
-          })
-        );
-        window.dispatchEvent(
-          new CustomEvent("lateness-analytics-invalidate", {
-            detail: { action: "clock_in", data },
-          })
-        );
-
-        // Re-sync history immediately
-        await fetchAttendanceHistory();
-      } else {
-        setShowToast({
-          show: true,
-          message: data?.message || "Clock in failed.",
-          type: "error",
-        });
-      }
+      setLateReason("");
+      await fetchAttendanceHistory();
     } catch (err) {
       const errorMessage =
-        err.response?.data?.message || err.message || "Clock in failed.";
+        err?.response?.data?.message || err.message || "Clock in failed.";
       setShowToast({
         show: true,
         message: errorMessage,
         type: "error",
       });
     } finally {
-      setIsClocking(false);
+      setIsLocalClocking(false);
     }
   };
 
-  // Handle Clock Out
+  // Handle Clock Out via centralized AttendanceContext
   const handleClockOut = async () => {
     if (isClocking || !hasClockedIn || hasClockedOut) return;
     try {
-      setIsClocking(true);
-      const { data } = await attendanceClockOut();
+      setIsLocalClocking(true);
+      const result = await contextClockOut();
 
-      if (data?.success) {
-        const att = data.attendance;
-        const nowIso = new Date().toISOString();
-        setAttendanceData((prev) => ({
-          ...prev,
-          clockOut: att?.clockOut || att?.clockOutTime || nowIso,
-          workHours: att?.workHours || prev.workHours || 8,
-          status: att?.status || prev.status,
-        }));
-        setHasClockedOut(true);
+      setShowToast({
+        show: true,
+        message: result?.data?.message || "Clock Out recorded successfully! Great work today.",
+        type: "success",
+      });
 
-        setShowToast({
-          show: true,
-          message: data.message || "Clock Out recorded successfully! Great work today.",
-          type: "success",
-        });
-
-        // Broadcast to real-time sync channel
-        try {
-          const bc = new BroadcastChannel("eyenit_attendance_sync");
-          bc.postMessage({ type: "clock_out", timestamp: Date.now() });
-          bc.close();
-        } catch {
-          // Ignore
-        }
-
-        window.dispatchEvent(
-          new CustomEvent("attendance-updated", {
-            detail: { action: "clock_out", data },
-          })
-        );
-        window.dispatchEvent(
-          new CustomEvent("lateness-analytics-invalidate", {
-            detail: { action: "clock_out", data },
-          })
-        );
-
-        // Re-sync history immediately
-        await fetchAttendanceHistory();
-      } else {
-        setShowToast({
-          show: true,
-          message: data?.message || "Clock out failed.",
-          type: "error",
-        });
-      }
+      await fetchAttendanceHistory();
     } catch (err) {
       const errorMessage =
-        err.response?.data?.message || err.message || "Clock out failed.";
+        err?.response?.data?.message || err.message || "Clock out failed.";
       setShowToast({
         show: true,
         message: errorMessage,
         type: "error",
       });
     } finally {
-      setIsClocking(false);
+      setIsLocalClocking(false);
     }
   };
 

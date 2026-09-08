@@ -1,42 +1,41 @@
-import {
-  createHashRouter,
-  createRoutesFromElements,
-  Navigate,
-  Route,
-} from "react-router-dom";
-
-import Attendance from "../pages/Admin/Attendance";
-import Employees from "../pages/Admin/Employees";
-import Payslips from "../pages/Admin/Payslips";
-import PrintPayslips from "../pages/Admin/PrintPayslips";
-import Settings from "../pages/Admin/Settings";
-import AdminLayout from "../layout/AdminLayout";
-import ProtectedRoute from "./ProtectedRoute";
-import WelcomePage from "../pages/WelcomePage";
+import { Routes, Route, Navigate } from "react-router-dom";
 import EmployeeLoginPage from "../pages/Auth/EmployeeLoginPage";
 import AdminLoginPage from "../pages/Auth/AdminLoginPage";
 import AdminRegister from "../pages/Auth/AdminRegister";
+import WelcomePage from "../pages/WelcomePage";
+import ProtectedRoute from "./ProtectedRoute";
+import AdminLayout from "../layout/AdminLayout";
+import AdminDashboard from "../pages/Admin/AdminDashboard";
+import Employees from "../pages/Admin/Employees";
+import Attendance from "../pages/Admin/Attendance";
+import Payslips from "../pages/Admin/Payslips";
+import PrintPayslips from "../pages/Admin/PrintPayslips";
+import Leave from "../pages/Admin/Leave";
+import AdminAnnouncements from "../pages/Admin/Announcements";
+import Settings from "../pages/Admin/Settings";
 import EmployeesLayout from "../layout/EmployeesLayout";
+import EmployeeDashboard from "../pages/Employees/EmployeeDashboard";
 import EmployeesAttendance from "../pages/Employees/EmployeesAttendance";
 import EmployeeLeave from "../pages/Employees/EmployeeLeave";
 import EmployeePayslips from "../pages/Employees/EmployeePayslips";
 import EmployeeSettings from "../pages/Employees/EmployeeSettings";
-import EmployeeDashboard from "../pages/Employees/EmployeeDashboard";
-import AdminDashboard from "../pages/Admin/AdminDashboard";
-import Leave from "../pages/Admin/Leave";
-import AdminAnnouncements from "../pages/Admin/Announcements";
 
-export const router = createHashRouter(
-  createRoutesFromElements(
-    <>
-      {/* Public Routes */}
+/**
+ * AppRoutes Component
+ * Centralized declarative route definitions for React Router
+ */
+export const AppRoutes = () => {
+  return (
+    <Routes>
+      {/* Public Landing */}
       <Route path="/" element={<Navigate to="/welcome" replace />} />
       <Route path="/welcome" element={<WelcomePage />} />
 
-      {/* Dedicated Authentication Routes */}
+      {/* Dedicated Authentication Pages */}
       <Route path="/login" element={<EmployeeLoginPage />} />
       <Route path="/employee/login" element={<EmployeeLoginPage />} />
       <Route path="/login/employee" element={<Navigate to="/login" replace />} />
+
       <Route path="/admin/login" element={<AdminLoginPage />} />
       <Route path="/login/admin" element={<Navigate to="/admin/login" replace />} />
       <Route path="/admin/register" element={<AdminRegister />} />
@@ -56,7 +55,6 @@ export const router = createHashRouter(
           <Route path="announcements" element={<AdminAnnouncements />} />
           <Route path="settings" element={<Settings />} />
         </Route>
-        {/* Top-level aliases for direct admin routes */}
         <Route path="/admin/employees" element={<Navigate to="/admin/dashboard/employees" replace />} />
         <Route path="/admin/attendance" element={<Navigate to="/admin/dashboard/attendance" replace />} />
         <Route path="/admin/payroll" element={<Navigate to="/admin/dashboard/payroll" replace />} />
@@ -80,7 +78,6 @@ export const router = createHashRouter(
           <Route path="payroll" element={<EmployeePayslips />} />
           <Route path="settings" element={<EmployeeSettings />} />
         </Route>
-        {/* Top-level aliases for direct employee routes */}
         <Route path="/employee/attendance" element={<Navigate to="/employee/dashboard/attendance" replace />} />
         <Route path="/employee/leave" element={<Navigate to="/employee/dashboard/leave" replace />} />
         <Route path="/employee/leaves" element={<Navigate to="/employee/dashboard/leave" replace />} />
@@ -89,8 +86,10 @@ export const router = createHashRouter(
         <Route path="/employee/settings" element={<Navigate to="/employee/dashboard/settings" replace />} />
       </Route>
 
-      {/* Catch all - Redirect to welcome */}
+      {/* Fallback */}
       <Route path="*" element={<Navigate to="/welcome" replace />} />
-    </>,
-  ),
-);
+    </Routes>
+  );
+};
+
+export default AppRoutes;

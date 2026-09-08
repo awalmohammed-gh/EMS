@@ -26,6 +26,10 @@ import {
   Layers,
   Building,
   Activity,
+  ArrowUpDown,
+  ArrowUp,
+  ArrowDown,
+  Calendar,
 } from "lucide-react";
 import { exportEmployeesToCSV } from "../utils/exportCsv";
 import {
@@ -66,6 +70,10 @@ export const EmployeeDirectory = ({
   const [copiedField, setCopiedField] = useState(null);
   const [isExporting, setIsExporting] = useState(false);
   const [exportSuccess, setExportSuccess] = useState(false);
+
+  // Sorting state for table and directory views
+  const [sortField, setSortField] = useState("fullName");
+  const [sortOrder, setSortOrder] = useState("asc");
 
   // Bulk Selection State
   const [selectedEmployeeIds, setSelectedEmployeeIds] = useState([]);
@@ -182,9 +190,9 @@ export const EmployeeDirectory = ({
     };
   };
 
-  // Filtered employees list
+  // Filtered and sorted employees list
   const filteredEmployees = useMemo(() => {
-    return employees.filter((emp) => {
+    const list = employees.filter((emp) => {
       const q = search.toLowerCase().trim();
       const nameMatch = (emp.fullName || "").toLowerCase().includes(q);
       const emailMatch = (emp.email || "").toLowerCase().includes(q);
@@ -216,7 +224,86 @@ export const EmployeeDirectory = ({
 
       return matchesSearch && matchesStatus && matchesDept;
     });
-  }, [employees, search, selectedStatus, selectedDepartment]);
+
+    if (!sortField) return list;
+
+    return [...list].sort((a, b) => {
+      let aVal;
+      let bVal;
+
+      if (sortField === "fullName" || sortField === "name") {
+        aVal = (a.fullName || "").toLowerCase();
+        bVal = (b.fullName || "").toLowerCase();
+        return sortOrder === "asc"
+          ? aVal.localeCompare(bVal)
+          : bVal.localeCompare(aVal);
+      }
+
+      if (sortField === "employeeId" || sortField === "id") {
+        aVal = (a.employeeId || "").toLowerCase();
+        bVal = (b.employeeId || "").toLowerCase();
+        return sortOrder === "asc"
+          ? aVal.localeCompare(bVal, undefined, { numeric: true, sensitivity: "base" })
+          : bVal.localeCompare(aVal, undefined, { numeric: true, sensitivity: "base" });
+      }
+
+      if (sortField === "department" || sortField === "role") {
+        aVal = (a.department || a.position || "").toLowerCase();
+        bVal = (b.department || b.position || "").toLowerCase();
+        return sortOrder === "asc"
+          ? aVal.localeCompare(bVal)
+          : bVal.localeCompare(aVal);
+      }
+
+      if (
+        sortField === "employmentDate" ||
+        sortField === "joiningDate" ||
+        sortField === "date"
+      ) {
+        aVal = new Date(
+          a.employmentDate ||
+            a.joiningDate ||
+            a.hireDate ||
+            a.dateOfJoining ||
+            a.createdAt ||
+            0
+        ).getTime();
+        bVal = new Date(
+          b.employmentDate ||
+            b.joiningDate ||
+            b.hireDate ||
+            b.dateOfJoining ||
+            b.createdAt ||
+            0
+        ).getTime();
+        return sortOrder === "asc" ? aVal - bVal : bVal - aVal;
+      }
+
+      if (sortField === "baseSalary" || sortField === "salary") {
+        aVal = Number(a.baseSalary ?? a.basicSalary ?? a.salary ?? 0);
+        bVal = Number(b.baseSalary ?? b.basicSalary ?? b.salary ?? 0);
+        return sortOrder === "asc" ? aVal - bVal : bVal - aVal;
+      }
+
+      if (sortField === "status") {
+        aVal = getStatusBadge(a.status, a.isActive, a).label.toLowerCase();
+        bVal = getStatusBadge(b.status, b.isActive, b).label.toLowerCase();
+        return sortOrder === "asc"
+          ? aVal.localeCompare(bVal)
+          : bVal.localeCompare(aVal);
+      }
+
+      if (sortField === "location") {
+        aVal = (a.location || "").toLowerCase();
+        bVal = (b.location || "").toLowerCase();
+        return sortOrder === "asc"
+          ? aVal.localeCompare(bVal)
+          : bVal.localeCompare(aVal);
+      }
+
+      return 0;
+    });
+  }, [employees, search, selectedStatus, selectedDepartment, sortField, sortOrder]);
 
   // Quick Metrics
   const metrics = useMemo(() => {
@@ -520,6 +607,97 @@ export const EmployeeDirectory = ({
     }
   };
 
+  const formatSalary = (val) => {
+    const num = Number(val ?? 0);
+    return `GH₵${num.toLocaleString("en-GH", {
+      minimumFractionDigits: 2,
+      maximumFractionDigits: 2,
+    })}`;
+  };
+
+  const handleSort = (field) => {
+    if (sortField === field) {
+      setSortOrder((prev) => (prev === "asc" ? "desc" : "asc"));
+    } else {
+      setSortField(field);
+      // For dates and salary, highest/newest first by default
+      if (field === "employmentDate" || field === "baseSalary") {
+        setSortOrder("desc");
+      } else {
+        setSortOrder("asc");
+      }
+    }
+  };
+
+  const renderSortHeader = (field, label, align = "left", className = "") => {
+    const isSorted = sortField === field;
+    return (
+      <th
+        scope="col"
+        key={`sort-header-${field}`}
+        onClick={() => handleSort(field)}
+        onKeyDown={(e) => {
+          if (e.key === "Enter" || e.key === " ") {
+            e.preventDefault();
+            handleSort(field);
+          }
+        }}
+        tabIndex={0}
+        role="columnheader"
+        aria-sort={
+          isSorted
+            ? sortOrder === "asc"
+              ? "ascending"
+              : "descending"
+            : "none"
+        }
+        className={`px-4 py-3.5 select-none transition-colors group cursor-pointer hover:bg-slate-100/70 dark:hover:bg-slate-800/60 focus:outline-none focus:bg-blue-50/50 dark:focus:bg-blue-950/30 ${
+          align === "right"
+            ? "text-right"
+            : align === "center"
+            ? "text-center"
+            : "text-left"
+        } ${
+          isSorted
+            ? "text-[#002185] dark:text-blue-400 font-bold bg-blue-50/50 dark:bg-blue-950/30"
+            : "text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-slate-100"
+        } ${className}`}
+        title={`Click to sort by ${label} (${
+          isSorted && sortOrder === "asc" ? "descending" : "ascending"
+        })`}
+      >
+        <div
+          className={`inline-flex items-center gap-1.5 uppercase tracking-wider text-xs font-semibold ${
+            align === "right"
+              ? "justify-end"
+              : align === "center"
+              ? "justify-center"
+              : "justify-start"
+          }`}
+        >
+          <span>{label}</span>
+          <span
+            className={`inline-flex items-center shrink-0 transition-transform ${
+              isSorted
+                ? "text-[#002185] dark:text-blue-400"
+                : "text-slate-400/60 dark:text-slate-500 group-hover:text-slate-600 dark:group-hover:text-slate-300"
+            }`}
+          >
+            {isSorted ? (
+              sortOrder === "asc" ? (
+                <ArrowUp className="w-3.5 h-3.5 stroke-[2.5]" />
+              ) : (
+                <ArrowDown className="w-3.5 h-3.5 stroke-[2.5]" />
+              )
+            ) : (
+              <ArrowUpDown className="w-3.5 h-3.5 opacity-60 group-hover:opacity-100" />
+            )}
+          </span>
+        </div>
+      </th>
+    );
+  };
+
   const isAllSelected =
     filteredEmployees.length > 0 &&
     selectedEmployeeIds.length === filteredEmployees.length;
@@ -750,6 +928,29 @@ export const EmployeeDirectory = ({
                   {st === "All" ? "All Statuses" : st}
                 </option>
               ))}
+            </select>
+
+            {/* Sort Selector */}
+            <select
+              id="employee-sort-select"
+              value={`${sortField}-${sortOrder}`}
+              onChange={(e) => {
+                const [f, o] = e.target.value.split("-");
+                setSortField(f);
+                setSortOrder(o);
+              }}
+              className="px-3 py-2.5 bg-slate-50 dark:bg-slate-950/60 border border-slate-200/80 dark:border-slate-800/80 rounded-xl text-xs text-slate-700 dark:text-slate-200 focus:outline-none focus:border-blue-500 cursor-pointer hover:border-blue-500 transition-all shrink-0 font-medium"
+              title="Sort employee list"
+            >
+              <option value="fullName-asc">Sort: Name (A → Z)</option>
+              <option value="fullName-desc">Sort: Name (Z → A)</option>
+              <option value="employmentDate-desc">Sort: Joining Date (Newest)</option>
+              <option value="employmentDate-asc">Sort: Joining Date (Oldest)</option>
+              <option value="baseSalary-desc">Sort: Salary (Highest)</option>
+              <option value="baseSalary-asc">Sort: Salary (Lowest)</option>
+              <option value="employeeId-asc">Sort: ID (Ascending)</option>
+              <option value="department-asc">Sort: Department (A → Z)</option>
+              <option value="status-asc">Sort: Status</option>
             </select>
 
             {/* View Mode Switcher */}
@@ -1033,6 +1234,17 @@ export const EmployeeDirectory = ({
                         <MapPin className="w-3 h-3 text-slate-400 shrink-0" />
                         <span>{emp.location || "Accra Head Office"}</span>
                       </div>
+
+                      {/* Joining Date & Salary Meta Row */}
+                      <div className="mt-2 pt-2 border-t border-slate-100 dark:border-slate-800/80 flex items-center justify-between text-[11px]">
+                        <div className="flex items-center gap-1.5 text-slate-500 dark:text-slate-400" title="Joining Date">
+                          <Calendar className="w-3 h-3 text-slate-400 shrink-0" />
+                          <span>Joined {formatDate(emp.employmentDate || emp.joiningDate || emp.hireDate || emp.dateOfJoining || emp.createdAt)}</span>
+                        </div>
+                        <div className="font-mono font-semibold text-slate-800 dark:text-slate-200" title="Base Salary">
+                          {formatSalary(emp.baseSalary ?? emp.basicSalary ?? emp.salary ?? 0)}
+                        </div>
+                      </div>
                     </div>
                   </div>
 
@@ -1263,6 +1475,17 @@ export const EmployeeDirectory = ({
                       <MapPin className="w-3 h-3 text-slate-400 shrink-0" />
                       <span>{emp.location || "Accra Head Office"}</span>
                     </div>
+
+                    {/* Joining Date & Salary Meta Row */}
+                    <div className="mt-2 pt-2 border-t border-slate-100 dark:border-slate-800/60 flex items-center justify-between text-[11px]">
+                      <div className="flex items-center gap-1.5 text-slate-500 dark:text-slate-400" title="Joining Date">
+                        <Calendar className="w-3 h-3 text-slate-400 shrink-0" />
+                        <span>Joined {formatDate(emp.employmentDate || emp.joiningDate || emp.hireDate || emp.dateOfJoining || emp.createdAt)}</span>
+                      </div>
+                      <div className="font-mono font-semibold text-slate-800 dark:text-slate-200" title="Base Salary">
+                        {formatSalary(emp.baseSalary ?? emp.basicSalary ?? emp.salary ?? 0)}
+                      </div>
+                    </div>
                   </div>
 
                   {/* Admin Status Switcher Row */}
@@ -1359,12 +1582,14 @@ export const EmployeeDirectory = ({
                         </button>
                       </th>
                     )}
-                    <th className="px-4 py-3.5">Staff Member</th>
-                    <th className="px-4 py-3.5">ID</th>
-                    <th className="px-4 py-3.5">Role & Department</th>
+                    {renderSortHeader("fullName", "Staff Member")}
+                    {renderSortHeader("employeeId", "ID")}
+                    {renderSortHeader("department", "Role & Dept")}
+                    {renderSortHeader("employmentDate", "Joining Date")}
+                    {renderSortHeader("baseSalary", "Salary", "right")}
                     <th className="px-4 py-3.5">Contact Details</th>
-                    <th className="px-4 py-3.5">Location</th>
-                    <th className="px-4 py-3.5 text-center">Status</th>
+                    {renderSortHeader("location", "Location")}
+                    {renderSortHeader("status", "Status", "center")}
                     {isAdmin && <th className="px-4 py-3.5 text-center">Update Status</th>}
                     <th className="px-4 py-3.5 text-right">Actions</th>
                   </tr>
@@ -1439,7 +1664,7 @@ export const EmployeeDirectory = ({
                         </td>
 
                         {/* Employee ID */}
-                        <td className="px-4 py-3 font-mono font-semibold text-blue-600 dark:text-blue-400">
+                        <td className="px-4 py-3 font-mono font-semibold text-blue-600 dark:text-blue-400 whitespace-nowrap">
                           {emp.employeeId || "EMP"}
                         </td>
 
@@ -1451,6 +1676,27 @@ export const EmployeeDirectory = ({
                           <div className="text-[11px] text-slate-500 dark:text-slate-400">
                             {emp.department}
                           </div>
+                        </td>
+
+                        {/* Joining Date */}
+                        <td className="px-4 py-3 whitespace-nowrap text-slate-600 dark:text-slate-300">
+                          <div className="flex items-center gap-1.5 text-xs">
+                            <Calendar className="w-3.5 h-3.5 text-slate-400 shrink-0" />
+                            <span>
+                              {formatDate(
+                                emp.employmentDate ||
+                                  emp.joiningDate ||
+                                  emp.hireDate ||
+                                  emp.dateOfJoining ||
+                                  emp.createdAt
+                              )}
+                            </span>
+                          </div>
+                        </td>
+
+                        {/* Base Salary */}
+                        <td className="px-4 py-3 whitespace-nowrap text-right font-mono font-semibold text-slate-900 dark:text-white text-xs">
+                          {formatSalary(emp.baseSalary ?? emp.basicSalary ?? emp.salary ?? 0)}
                         </td>
 
                         {/* Contact Details */}

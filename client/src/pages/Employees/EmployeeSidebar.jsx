@@ -6,9 +6,11 @@ import {
   SettingsIcon,
 } from "lucide-react";
 import Sidebar from "../../components/Sidebar";
+import { useAttendance } from "../../context/AttendanceContext";
 
 const EmployeeSidebar = () => {
   const { pathname } = useLocation();
+  const { isClockedIn, isClockedOut } = useAttendance();
 
   const employeeLinks = [
     {
@@ -20,6 +22,16 @@ const EmployeeSidebar = () => {
       name: "Attendance",
       path: "/employee/dashboard/attendance",
       icon: CalendarIcon,
+      badge: isClockedOut ? (
+        <span className="ml-auto inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-bold bg-blue-100 dark:bg-blue-900/60 text-blue-700 dark:text-blue-300">
+          Done
+        </span>
+      ) : isClockedIn ? (
+        <span className="ml-auto inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] font-bold bg-emerald-100 dark:bg-emerald-900/60 text-emerald-700 dark:text-emerald-300">
+          <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" />
+          On
+        </span>
+      ) : null,
     },
     {
       name: "Payslips",
@@ -59,6 +71,9 @@ const EmployeeSidebar = () => {
                 }`}
               />
               <span className="ml-3">{link.name}</span>
+              {link.badge && !isActive && (
+                <span className="ml-auto">{link.badge}</span>
+              )}
               {isActive && (
                 <span className="ml-auto w-1.5 h-6 bg-[#ff5500] rounded-full"></span>
               )}

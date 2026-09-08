@@ -95,11 +95,17 @@ export const clockIn = async (req, res) => {
 
     // 1. Check MongoDB for existing record today
     let existingDoc = null;
+    const rawAuthId = req.user?._id || req.user?.id || req.employee?.id || req.employee?._id;
+    const idCandidates = [employeeId, rawAuthId, resolvedId].filter(Boolean);
+
     if (isValidObjectId(employeeId)) {
       try {
         existingDoc = await Attendance.findOne({
-          employee: employeeId,
           date: today,
+          $or: [
+            { employee: { $in: idCandidates } },
+            ...(employeeCode ? [{ employeeId: employeeCode }] : []),
+          ],
         }).populate("employee", "fullName employeeId department position email avatar").lean();
       } catch (dbErr) {
         console.warn("DB check in clockIn:", dbErr.message);
@@ -108,18 +114,23 @@ export const clockIn = async (req, res) => {
 
     if (existingDoc && (existingDoc.clockIn || existingDoc.clockInTime)) {
       liveAttendanceStore.set(key, existingDoc);
+      if (rawAuthId) liveAttendanceStore.set(`${rawAuthId}_${today}`, existingDoc);
+      if (employeeCode) liveAttendanceStore.set(`${employeeCode}_${today}`, existingDoc);
       return res.status(200).json({
         success: true,
         alreadyClockedIn: true,
         message: "You have already clocked in today.",
         attendance: existingDoc,
+        todayRecord: existingDoc,
         status: existingDoc.lateMinutes > 0 || (existingDoc.status || "").toLowerCase() === "late" ? "late" : "on-time",
         delayMinutes: existingDoc.delayMinutes ?? existingDoc.lateMinutes ?? 0,
         lateMinutes: existingDoc.lateMinutes ?? existingDoc.delayMinutes ?? 0,
         latePenalty: existingDoc.latePenalty || 0,
         penaltyTier: existingDoc.penaltyTier || "",
         hasClockedIn: true,
+        isClockedIn: !Boolean(existingDoc.clockOut || existingDoc.clockOutTime),
         hasClockedOut: Boolean(existingDoc.clockOut || existingDoc.clockOutTime),
+        isClockedOut: Boolean(existingDoc.clockOut || existingDoc.clockOutTime),
       });
     }
 
@@ -183,8 +194,11 @@ export const clockIn = async (req, res) => {
       };
     }
 
-    // Update live memory store
+    // Update live memory store across employee ID, auth ID, and employee code
     liveAttendanceStore.set(key, savedRecord);
+    if (rawAuthId) liveAttendanceStore.set(`${rawAuthId}_${today}`, savedRecord);
+    if (employeeCode) liveAttendanceStore.set(`${employeeCode}_${today}`, savedRecord);
+    if (resolvedId) liveAttendanceStore.set(`${resolvedId}_${today}`, savedRecord);
 
     // Push automated notification record targeting Admins
     try {
@@ -274,6 +288,7 @@ export const clockIn = async (req, res) => {
       alreadyClockedIn: false,
       message: responseMessage,
       attendance: savedRecord,
+      todayRecord: savedRecord,
       status: delayMinutes > 0 ? "late" : "on-time",
       displayStatus,
       delayMinutes,
@@ -286,7 +301,9 @@ export const clockIn = async (req, res) => {
       deductionApplied: !isZeroPenalty,
       notificationMessage: responseMessage,
       hasClockedIn: true,
+      isClockedIn: true,
       hasClockedOut: false,
+      isClockedOut: false,
     });
   } catch (error) {
     return res.status(500).json({
@@ -299,7 +316,8 @@ export const clockIn = async (req, res) => {
 // Clock out handler - Automatic real-time recording
 export const clockOut = async (req, res) => {
   try {
-    let employeeId = req.employee?.id || req.employee?._id;
+    const rawAuthId = req.user?._id || req.user?.id || req.employee?.id || req.employee?._id;
+    let employeeId = rawAuthId;
     const resolvedId = await resolveEmployeeObjectId(employeeId);
     if (resolvedId) employeeId = resolvedId;
 
@@ -322,17 +340,24 @@ export const clockOut = async (req, res) => {
       }
     }
 
+    const employeeCode = employeeDoc?.employeeId || req.employee?.employeeId || "";
     const today = new Date().toISOString().split("T")[0];
     const key = `${employeeId}_${today}`;
+    const rawKey = `${rawAuthId}_${today}`;
+    const codeKey = `${employeeCode}_${today}`;
     const now = new Date();
 
     // Check MongoDB for clock-in record
     let record = null;
+    const idCandidates = [employeeId, rawAuthId, resolvedId].filter(Boolean);
     if (isValidObjectId(employeeId)) {
       try {
         record = await Attendance.findOne({
-          employee: employeeId,
           date: today,
+          $or: [
+            { employee: { $in: idCandidates } },
+            ...(employeeCode ? [{ employeeId: employeeCode }] : []),
+          ],
         }).populate("employee", "fullName employeeId department position email avatar");
       } catch (dbErr) {
         console.warn("DB search in clockOut:", dbErr.message);
@@ -340,30 +365,35 @@ export const clockOut = async (req, res) => {
     }
 
     // Fallback to memory if DB query failed
-    if (!record) {
-      record = liveAttendanceStore.get(key);
+    if (!record || (!record.clockIn && !record.clockInTime)) {
+      record = liveAttendanceStore.get(key) || liveAttendanceStore.get(rawKey) || liveAttendanceStore.get(codeKey);
     }
 
-    if (!record || !record.clockIn) {
+    const clockInVal = record?.clockIn || record?.clockInTime;
+
+    if (!record || !clockInVal) {
       return res.status(400).json({
         success: false,
         message: "No clock-in record found for today. Please clock in first.",
       });
     }
 
-    if (record.clockOut) {
+    if (record.clockOut || record.clockOutTime) {
       return res.status(200).json({
         success: true,
         alreadyClockedOut: true,
         message: "You have already clocked out today.",
         attendance: record,
+        todayRecord: record,
         hasClockedIn: true,
+        isClockedIn: false,
         hasClockedOut: true,
+        isClockedOut: true,
       });
     }
 
     // Calculate hours worked accurately
-    const clockInTime = new Date(record.clockIn);
+    const clockInTime = new Date(clockInVal);
     const diffMs = Math.max(0, now.getTime() - clockInTime.getTime());
     const hoursWorked = Math.max(0.01, Number((diffMs / (1000 * 60 * 60)).toFixed(2)));
 
@@ -372,10 +402,17 @@ export const clockOut = async (req, res) => {
     if (isValidObjectId(employeeId)) {
       try {
         updatedRecord = await Attendance.findOneAndUpdate(
-          { employee: employeeId, date: today },
+          {
+            date: today,
+            $or: [
+              { employee: { $in: idCandidates } },
+              ...(employeeCode ? [{ employeeId: employeeCode }] : []),
+            ],
+          },
           {
             $set: {
               clockOut: now,
+              clockOutTime: now,
               workHours: hoursWorked,
             },
           },
@@ -394,12 +431,16 @@ export const clockOut = async (req, res) => {
       updatedRecord = {
         ...(record.toObject ? record.toObject() : record),
         clockOut: now.toISOString(),
+        clockOutTime: now.toISOString(),
         workHours: hoursWorked,
       };
     }
 
     // Update live memory store
     liveAttendanceStore.set(key, updatedRecord);
+    if (rawAuthId) liveAttendanceStore.set(rawKey, updatedRecord);
+    if (employeeCode) liveAttendanceStore.set(codeKey, updatedRecord);
+    if (resolvedId) liveAttendanceStore.set(`${resolvedId}_${today}`, updatedRecord);
 
     // Push automated notification record targeting Admins
     try {
@@ -436,8 +477,11 @@ export const clockOut = async (req, res) => {
       success: true,
       message: `Clock out successful (${hoursWorked} hrs recorded)!`,
       attendance: updatedRecord,
+      todayRecord: updatedRecord,
       hasClockedIn: true,
+      isClockedIn: false,
       hasClockedOut: true,
+      isClockedOut: true,
     });
   } catch (error) {
     return res.status(500).json({
@@ -724,11 +768,12 @@ export const getAllAttendance = async (req, res) => {
 // Get today's attendance for active employee
 export const getTodayAttendance = async (req, res) => {
   try {
-    let employeeId = req.employee?.id || req.employee?._id;
+    const rawAuthId = req.user?._id || req.user?.id || req.employee?.id || req.employee?._id;
+    let employeeId = rawAuthId;
     const today = new Date().toISOString().split("T")[0];
 
     let employee = null;
-    let attendance = null;
+    let validObjectId = null;
 
     if (employeeId && !isValidObjectId(employeeId)) {
       const empDoc = await Employee.findOne({
@@ -737,6 +782,7 @@ export const getTodayAttendance = async (req, res) => {
       if (empDoc) {
         employee = empDoc;
         employeeId = empDoc._id.toString();
+        validObjectId = employeeId;
       }
     }
 
@@ -747,31 +793,115 @@ export const getTodayAttendance = async (req, res) => {
             .select("fullName position department employeeId email avatar profile_picture")
             .lean();
         }
-
-        const dbAtt = await Attendance.findOne({
-          employee: employeeId,
-          date: today,
-        })
-          .populate("employee", "fullName department position employeeId email avatar")
-          .lean();
-
-        if (dbAtt) {
-          attendance = dbAtt;
+        if (employee) {
+          validObjectId = employee._id.toString();
         }
       } catch (dbErr) {
-        console.warn("DB query in getTodayAttendance:", dbErr.message);
+        console.warn("Employee lookup in getTodayAttendance:", dbErr.message);
       }
     }
 
-    const hasClockedIn = Boolean(attendance?.clockIn);
-    const hasClockedOut = Boolean(attendance?.clockOut);
+    if (!employee && isValidObjectId(rawAuthId)) {
+      try {
+        const userDoc = await User.findById(rawAuthId).lean();
+        if (userDoc) {
+          const matchedEmp = await Employee.findOne({
+            $or: [
+              ...(userDoc.email ? [{ email: userDoc.email }] : []),
+              ...(userDoc.employeeId ? [{ employeeId: userDoc.employeeId }] : []),
+            ],
+          }).lean();
+          if (matchedEmp) {
+            employee = matchedEmp;
+            validObjectId = matchedEmp._id.toString();
+          } else {
+            employee = userDoc;
+            validObjectId = userDoc._id.toString();
+          }
+        }
+      } catch (userErr) {
+        console.warn("User lookup in getTodayAttendance:", userErr.message);
+      }
+    }
+
+    let attendance = null;
+    const employeeCode = employee?.employeeId || req.employee?.employeeId || req.user?.employeeId || "";
+    const idCandidates = [validObjectId, employeeId, rawAuthId, employee?._id].filter(Boolean);
+
+    try {
+      const filterConditions = [
+        { employee: { $in: idCandidates } },
+        ...(employeeCode ? [{ employeeId: employeeCode }] : []),
+      ];
+
+      const dbAtt = await Attendance.findOne({
+        date: today,
+        $or: filterConditions,
+      })
+        .populate("employee", "fullName department position employeeId email avatar")
+        .sort({ updatedAt: -1, createdAt: -1 })
+        .lean();
+
+      if (dbAtt) {
+        attendance = dbAtt;
+      }
+    } catch (dbErr) {
+      console.warn("DB query in getTodayAttendance:", dbErr.message);
+    }
+
+    // Merge in-memory live attendance store records if DB is not populated or in-memory is fresher
+    if (liveAttendanceStore) {
+      const keysToCheck = [
+        `${employeeId}_${today}`,
+        `${rawAuthId}_${today}`,
+        `${validObjectId}_${today}`,
+        `${employeeCode}_${today}`,
+      ].filter(Boolean);
+
+      for (const k of keysToCheck) {
+        const memAtt = liveAttendanceStore.get(k);
+        if (memAtt) {
+          attendance = { ...(attendance || {}), ...memAtt };
+          break;
+        }
+      }
+
+      if (!attendance) {
+        liveAttendanceStore.forEach((liveAtt) => {
+          if (
+            liveAtt.date === today &&
+            (idCandidates.includes(String(liveAtt.employee)) ||
+              idCandidates.includes(String(liveAtt.employee?._id)) ||
+              (employeeCode && liveAtt.employeeId === employeeCode))
+          ) {
+            attendance = liveAtt;
+          }
+        });
+      }
+    }
+
+    const hasClockedIn = Boolean(attendance?.clockIn || attendance?.clockInTime);
+    const hasClockedOut = Boolean(attendance?.clockOut || attendance?.clockOutTime);
+    const isClockedIn = hasClockedIn && !hasClockedOut;
+    const isClockedOut = hasClockedOut;
 
     res.status(200).json({
       success: true,
       employee,
       attendance,
+      todayRecord: attendance,
       hasClockedIn,
+      isClockedIn,
       hasClockedOut,
+      isClockedOut,
+      status: attendance?.status || (hasClockedIn ? "On Time" : "Not Clocked In"),
+      clockIn: attendance?.clockIn || attendance?.clockInTime || null,
+      clockOut: attendance?.clockOut || attendance?.clockOutTime || null,
+      workHours: attendance?.workHours || 0,
+      lateMinutes: attendance?.lateMinutes ?? attendance?.delayMinutes ?? 0,
+      delayMinutes: attendance?.delayMinutes ?? attendance?.lateMinutes ?? 0,
+      latePenalty: attendance?.latePenalty || 0,
+      penaltyTier: attendance?.penaltyTier || "",
     });
   } catch (error) {
     res.status(500).json({

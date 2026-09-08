@@ -1,7 +1,5 @@
 import { useEffect, useState, useCallback } from "react";
 import {
-  attendanceClockIn,
-  attendanceClockOut,
   employeeDashboardOverview,
   getEmployeeMe,
   syncAttendance,
@@ -11,7 +9,6 @@ import {
   CalendarDays,
   CalendarCheck,
   Clock,
-  RefreshCw,
   Lock,
   CheckCircle2,
   AlertTriangle,
@@ -35,23 +32,24 @@ import LatenessDeductionsLineChart from "../../components/LatenessDeductionsLine
 import MonthlyAttendanceCalendarCard from "../../components/MonthlyAttendanceCalendarCard";
 import EmployeeProfileIdentityBanner from "../../components/EmployeeProfileIdentityBanner";
 import { downloadPayslipPDF } from "../../utils/payslipPdfGenerator";
+import { useAttendance } from "../../context/AttendanceContext";
 
 const EmployeeDashboard = () => {
   const [dashboardData, setDashboardData] = useState(null);
   const [isLoading, setIsLoading] = useState(false);
   const [isError, setIsError] = useState(null);
   const [isSyncingAttendance, setIsSyncingAttendance] = useState(false);
-  const [attendanceData, setAttendanceData] = useState({
-    date: null,
-    clockIn: null,
-    clockOut: null,
-    status: null,
-    workHours: 0,
-    delayMinutes: 0,
-    lateMinutes: 0,
-    latePenalty: 0,
-    penaltyTier: "",
-  });
+
+  // Centralized Global Attendance State
+  const {
+    todayRecord,
+    clockIn: contextClockIn,
+    clockOut: contextClockOut,
+    refreshAttendance: contextRefreshAttendance,
+    updateTodayRecord,
+  } = useAttendance();
+
+  const attendanceData = todayRecord;
 
   // Modals State
   const [showApplyLeaveModal, setShowApplyLeaveModal] = useState(false);
@@ -111,37 +109,7 @@ const EmployeeDashboard = () => {
         }
 
         if (data.todayAttendance) {
-          setAttendanceData({
-            date:
-              data.todayAttendance.date ||
-              new Date().toISOString().split("T")[0],
-            clockIn: data.todayAttendance.clockIn || null,
-            clockOut: data.todayAttendance.clockOut || null,
-            status: data.todayAttendance.status || null,
-            workHours: data.todayAttendance.workHours || 0,
-            delayMinutes:
-              data.todayAttendance.delayMinutes !== undefined
-                ? data.todayAttendance.delayMinutes
-                : data.todayAttendance.lateMinutes || 0,
-            lateMinutes:
-              data.todayAttendance.lateMinutes !== undefined
-                ? data.todayAttendance.lateMinutes
-                : data.todayAttendance.delayMinutes || 0,
-            latePenalty: data.todayAttendance.latePenalty || 0,
-            penaltyTier: data.todayAttendance.penaltyTier || "",
-          });
-        } else {
-          setAttendanceData({
-            date: new Date().toISOString().split("T")[0],
-            clockIn: null,
-            clockOut: null,
-            status: null,
-            workHours: 0,
-            delayMinutes: 0,
-            lateMinutes: 0,
-            latePenalty: 0,
-            penaltyTier: "",
-          });
+          updateTodayRecord(data.todayAttendance);
         }
       } else {
         const errorMsg = data?.message || "Failed to fetch dashboard data.";
@@ -172,6 +140,7 @@ const EmployeeDashboard = () => {
     try {
       setIsSyncingAttendance(true);
       const { data } = await syncAttendance();
+      await contextRefreshAttendance();
       if (data && data.success) {
         setShowToast({
           show: true,
@@ -204,119 +173,37 @@ const EmployeeDashboard = () => {
     }
   };
 
-  // Clock In Function
+  // Clock In Function via centralized AttendanceContext
   const handleClockIn = async (reasonParam = "") => {
     try {
       setIsLoading(true);
       setIsError(null);
       const reasonToSend = typeof reasonParam === "string" ? reasonParam.trim() : "";
-      const { data } = await attendanceClockIn({
-        lateReason: reasonToSend,
-        notes: reasonToSend,
+      const result = await contextClockIn(reasonToSend);
+
+      const delayMins = result.record?.delayMinutes || result.record?.lateMinutes || 0;
+      const latePenalty = result.record?.latePenalty || 0;
+      const isLate = delayMins > 0;
+      const isZeroPenalty = isLate && latePenalty === 0;
+      const toastType = isZeroPenalty ? "info" : isLate ? "warning" : "success";
+
+      setShowToast({
+        show: true,
+        message:
+          result.data?.message ||
+          (isLate
+            ? isZeroPenalty
+              ? `Clocked in (${delayMins} mins late). Company policy applied: No salary deduction for this delay.`
+              : `Clocked in (${delayMins} mins late). Lateness penalty of GH₵${Number(latePenalty).toFixed(2)} has been applied as per company policy.`
+            : "Clock in successful!"),
+        type: toastType,
       });
 
-      if (data.success) {
-        let clockInData = null;
-        if (
-          data.attendance &&
-          Array.isArray(data.attendance) &&
-          data.attendance.length > 0
-        ) {
-          clockInData = data.attendance[0];
-        } else if (data.attendance && !Array.isArray(data.attendance)) {
-          clockInData = data.attendance;
-        }
-
-        const now = new Date().toISOString();
-        const today = new Date().toISOString().split("T")[0];
-
-        const clockInTime = clockInData?.clockIn || now;
-        const attendanceDate = clockInData?.date || today;
-        const delayMins =
-          clockInData?.delayMinutes !== undefined
-            ? clockInData.delayMinutes
-            : clockInData?.lateMinutes !== undefined
-            ? clockInData.lateMinutes
-            : data.delayMinutes !== undefined
-            ? data.delayMinutes
-            : data.lateMinutes || 0;
-        const latePenalty =
-          clockInData?.latePenalty !== undefined && clockInData.latePenalty !== null
-            ? Number(clockInData.latePenalty)
-            : data.latePenalty !== undefined && data.latePenalty !== null
-            ? Number(data.latePenalty)
-            : 0;
-        const penaltyTier =
-          clockInData?.penaltyTier || data.penaltyTier || "";
-        const status =
-          clockInData?.status ||
-          (data.status ? (String(data.status).toLowerCase() === "late" ? "Late" : "On Time") : delayMins > 0 ? "Late" : "On Time");
-        const recordedLateReason =
-          clockInData?.lateReason || clockInData?.notes || data.lateReason || reasonToSend || "";
-
-        setAttendanceData({
-          date: attendanceDate,
-          clockIn: clockInTime,
-          clockOut: null,
-          status: status,
-          workHours: 0,
-          delayMinutes: delayMins,
-          lateMinutes: delayMins,
-          latePenalty: latePenalty,
-          penaltyTier: penaltyTier,
-          lateReason: recordedLateReason,
-          notes: recordedLateReason,
-        });
-
-        const isLate = delayMins > 0;
-        const isZeroPenalty = isLate && latePenalty === 0;
-        const toastType = isZeroPenalty ? "info" : isLate ? "warning" : "success";
-
-        setShowToast({
-          show: true,
-          message:
-            data.message ||
-            (isLate
-              ? isZeroPenalty
-                ? `Clocked in (${delayMins} mins late). Company policy applied: No salary deduction for this delay.`
-                : `Clocked in (${delayMins} mins late). Lateness penalty of GH₵${latePenalty.toFixed(2)} has been applied as per company policy.`
-              : "Clock in successful!"),
-          type: toastType,
-        });
-
-        try {
-          const bc = new BroadcastChannel("eyenit_attendance_sync");
-          bc.postMessage({ type: "clock_in", timestamp: Date.now() });
-          bc.close();
-        } catch {
-          // Fallback
-        }
-
-        // Real-Time Revalidation: Invalidate and refetch lateness analytics & attendance
-        window.dispatchEvent(
-          new CustomEvent("attendance-updated", {
-            detail: { action: "clock_in", data: clockInData },
-          })
-        );
-        window.dispatchEvent(
-          new CustomEvent("lateness-analytics-invalidate", {
-            detail: { action: "clock_in", data: clockInData },
-          })
-        );
-        setAnalyticsRefreshKey((prev) => prev + 1);
-
-        await fetchEmployeeDashboardData();
-      } else {
-        setIsError(data.message || "Clock in failed.");
-        setShowToast({
-          show: true,
-          message: data.message || "Clock in failed.",
-          type: "error",
-        });
-      }
+      setAnalyticsRefreshKey((prev) => prev + 1);
+      await fetchEmployeeDashboardData();
     } catch (error) {
       console.error("Clock in error:", error);
-      const errorMessage = error.response?.data?.message || "Clock in failed.";
+      const errorMessage = error.response?.data?.message || error.message || "Clock in failed.";
       setIsError(errorMessage);
       setShowToast({
         show: true,
@@ -328,73 +215,24 @@ const EmployeeDashboard = () => {
     }
   };
 
-  // Clock Out Function
+  // Clock Out Function via centralized AttendanceContext
   const handleClockOut = async () => {
     try {
       setIsLoading(true);
       setIsError(null);
-      const { data } = await attendanceClockOut();
+      const result = await contextClockOut();
 
-      if (data.success) {
-        let clockOutData = null;
-        if (
-          data.attendance &&
-          Array.isArray(data.attendance) &&
-          data.attendance.length > 0
-        ) {
-          clockOutData = data.attendance[0];
-        } else if (data.attendance && !Array.isArray(data.attendance)) {
-          clockOutData = data.attendance;
-        }
+      setShowToast({
+        show: true,
+        message: result?.data?.message || "Clock out successful!",
+        type: "success",
+      });
 
-        const clockOutTime = clockOutData?.clockOut || new Date().toISOString();
-        const workHours = clockOutData?.workHours || 0;
-
-        setAttendanceData((prev) => ({
-          ...prev,
-          clockOut: clockOutTime,
-          workHours: workHours,
-          status: clockOutData?.status || prev.status,
-        }));
-
-        setShowToast({
-          show: true,
-          message: data.message || "Clock out successful!",
-          type: "success",
-        });
-
-        try {
-          const bc = new BroadcastChannel("eyenit_attendance_sync");
-          bc.postMessage({ type: "clock_out", timestamp: Date.now() });
-          bc.close();
-        } catch {
-          // Fallback
-        }
-
-        window.dispatchEvent(
-          new CustomEvent("attendance-updated", {
-            detail: { action: "clock_out", data: clockOutData },
-          })
-        );
-        window.dispatchEvent(
-          new CustomEvent("lateness-analytics-invalidate", {
-            detail: { action: "clock_out", data: clockOutData },
-          })
-        );
-        setAnalyticsRefreshKey((prev) => prev + 1);
-
-        await fetchEmployeeDashboardData();
-      } else {
-        setIsError(data.message || "Clock out failed.");
-        setShowToast({
-          show: true,
-          message: data.message || "Clock out failed.",
-          type: "error",
-        });
-      }
+      setAnalyticsRefreshKey((prev) => prev + 1);
+      await fetchEmployeeDashboardData();
     } catch (error) {
       console.error("Clock out error:", error);
-      const errorMessage = error.response?.data?.message || "Clock out failed.";
+      const errorMessage = error.response?.data?.message || error.message || "Clock out failed.";
       setIsError(errorMessage);
       setShowToast({
         show: true,
@@ -552,8 +390,6 @@ const EmployeeDashboard = () => {
         };
     }
   };
-
-  const accountBadge = getAccountStatusBadge(currentStatus);
 
   // Calculate total days
   const totalDays =

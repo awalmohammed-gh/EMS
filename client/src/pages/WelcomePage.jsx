@@ -23,14 +23,14 @@ const WelcomePage = () => {
   }, []);
   const portalOptions = [
     {
-      to: "/login/admin",
+      to: "/admin/login",
       role: "admin",
       title: "Admin Portal",
       subtitle: "Please enter your credentials to access the admin panel",
       icon: ShieldCheckIcon,
     },
     {
-      to: "/login/employee",
+      to: "/login",
       role: "employee",
       title: "Employee Portal",
       subtitle: "Please enter your credentials to access the employee portal",
