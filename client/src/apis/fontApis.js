@@ -51,6 +51,10 @@ export const bulkUpdateEmployees = (employeeIds, updates) => {
   return api.patch("/admin/employees/bulk-update", { employeeIds, updates });
 };
 
+export const bulkDeleteEmployees = (employeeIds) => {
+  return api.post("/admin/employees/bulk-delete", { employeeIds });
+};
+
 export const deleteEmployee = (id) => {
   return api.delete(`/admin/employees/${id}`);
 };
@@ -253,8 +257,8 @@ export const attendanceClockIn = (data = {}) => {
   return api.post("/attendance/clock-in", data);
 };
 
-export const attendanceClockOut = () => {
-  return api.post("/attendance/clock-out");
+export const attendanceClockOut = (data = {}) => {
+  return api.post("/attendance/clock-out", data);
 };
 
 export const getTodayAttendance = () => {

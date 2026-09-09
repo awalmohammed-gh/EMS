@@ -35,6 +35,7 @@ import { exportEmployeesToCSV } from "../utils/exportCsv";
 import {
   updateEmployeeStatus,
   bulkUpdateEmployees,
+  bulkDeleteEmployees,
   deleteEmployee,
 } from "../apis/fontApis";
 import { useManagement } from "../context/ManagementContextProvider";
@@ -343,9 +344,84 @@ export const EmployeeDirectory = ({
     );
   };
 
+  const selectedEmployeesList = useMemo(() => {
+    const idSet = new Set(selectedEmployeeIds.map(String));
+    return employees.filter(
+      (e) => idSet.has(String(e._id)) || idSet.has(String(e.employeeId))
+    );
+  }, [employees, selectedEmployeeIds]);
+
+  // Bulk delete execution
+  const handleExecuteBulkDelete = async () => {
+    if (selectedEmployeeIds.length === 0) return;
+    try {
+      setIsBulkUpdating(true);
+      const res = await bulkDeleteEmployees(selectedEmployeeIds);
+      if (res?.data?.success) {
+        const deletedIds = new Set(selectedEmployeeIds.map(String));
+        // Evict from local state immediately
+        setLocalEmployees((prev) =>
+          prev.filter(
+            (emp) =>
+              !deletedIds.has(String(emp._id)) &&
+              !deletedIds.has(String(emp.employeeId))
+          )
+        );
+        if (typeof propSetEmployees === "function") {
+          propSetEmployees((prev) =>
+            prev.filter(
+              (emp) =>
+                !deletedIds.has(String(emp._id)) &&
+                !deletedIds.has(String(emp.employeeId))
+            )
+          );
+        }
+        if (typeof onEmployeeDeleted === "function") {
+          selectedEmployeeIds.forEach((id) => onEmployeeDeleted(id));
+        }
+        if (typeof onDeleteSuccess === "function") {
+          selectedEmployeeIds.forEach((id) => onDeleteSuccess(id));
+        }
+
+        setActionMessage({
+          type: "success",
+          text:
+            res.data.message ||
+            `Successfully deleted ${selectedEmployeeIds.length} employee record(s).`,
+        });
+        setSelectedEmployeeIds([]);
+        setShowBulkModal(false);
+        setBulkAction("");
+        if (typeof onRefresh === "function") {
+          await onRefresh();
+        }
+      } else {
+        setActionMessage({
+          type: "error",
+          text: res?.data?.message || "Failed to delete selected employees.",
+        });
+      }
+    } catch (err) {
+      console.error("Bulk delete error:", err);
+      setActionMessage({
+        type: "error",
+        text:
+          err.response?.data?.message ||
+          err.message ||
+          "Failed to perform batch deletion.",
+      });
+    } finally {
+      setIsBulkUpdating(false);
+      setTimeout(() => setActionMessage(null), 5000);
+    }
+  };
+
   // Bulk update execution
   const handleExecuteBulkUpdate = async () => {
     if (selectedEmployeeIds.length === 0) return;
+    if (bulkAction === "delete") {
+      return handleExecuteBulkDelete();
+    }
     try {
       setIsBulkUpdating(true);
       const updates = {};
@@ -359,6 +435,26 @@ export const EmployeeDirectory = ({
 
       const res = await bulkUpdateEmployees(selectedEmployeeIds, updates);
       if (res?.data?.success) {
+        const targetIds = new Set(selectedEmployeeIds.map(String));
+        setLocalEmployees((prev) =>
+          prev.map((emp) => {
+            if (targetIds.has(String(emp._id)) || targetIds.has(String(emp.employeeId))) {
+              return { ...emp, ...updates };
+            }
+            return emp;
+          })
+        );
+        if (typeof propSetEmployees === "function") {
+          propSetEmployees((prev) =>
+            prev.map((emp) => {
+              if (targetIds.has(String(emp._id)) || targetIds.has(String(emp.employeeId))) {
+                return { ...emp, ...updates };
+              }
+              return emp;
+            })
+          );
+        }
+
         setActionMessage({
           type: "success",
           text:
@@ -825,22 +921,21 @@ export const EmployeeDirectory = ({
             </div>
 
             <div className="flex flex-wrap items-center gap-2">
-              {/* Batch Change Department */}
+              {/* Delete Selected Employees */}
               <button
                 type="button"
-                id="btn-bulk-change-department"
+                id="btn-bulk-delete"
                 onClick={() => {
-                  setBulkAction("department");
-                  setBulkTargetDepartment(rawDepartments[0] || "Engineering");
+                  setBulkAction("delete");
                   setShowBulkModal(true);
                 }}
-                className="px-3 py-1.5 rounded-xl bg-white dark:bg-slate-900 border border-blue-300 dark:border-blue-700 text-blue-700 dark:text-blue-300 hover:bg-blue-600 hover:text-white text-xs font-bold transition-all flex items-center gap-1.5 cursor-pointer shadow-2xs"
+                className="px-3 py-1.5 rounded-xl bg-rose-50 dark:bg-rose-950/40 border border-rose-300 dark:border-rose-800 text-rose-700 dark:text-rose-400 hover:bg-rose-600 hover:text-white text-xs font-bold transition-all flex items-center gap-1.5 cursor-pointer shadow-2xs"
               >
-                <Building className="w-3.5 h-3.5" />
-                <span>Batch Department</span>
+                <Trash2 className="w-3.5 h-3.5" />
+                <span>Delete</span>
               </button>
 
-              {/* Batch Change Status */}
+              {/* Update Status */}
               <button
                 type="button"
                 id="btn-bulk-change-status"
@@ -852,12 +947,28 @@ export const EmployeeDirectory = ({
                 className="px-3 py-1.5 rounded-xl bg-white dark:bg-slate-900 border border-blue-300 dark:border-blue-700 text-blue-700 dark:text-blue-300 hover:bg-blue-600 hover:text-white text-xs font-bold transition-all flex items-center gap-1.5 cursor-pointer shadow-2xs"
               >
                 <Activity className="w-3.5 h-3.5" />
-                <span>Batch Status</span>
+                <span>Update Status</span>
+              </button>
+
+              {/* Assign Department */}
+              <button
+                type="button"
+                id="btn-bulk-change-department"
+                onClick={() => {
+                  setBulkAction("department");
+                  setBulkTargetDepartment(rawDepartments[0] || "Engineering");
+                  setShowBulkModal(true);
+                }}
+                className="px-3 py-1.5 rounded-xl bg-white dark:bg-slate-900 border border-blue-300 dark:border-blue-700 text-blue-700 dark:text-blue-300 hover:bg-blue-600 hover:text-white text-xs font-bold transition-all flex items-center gap-1.5 cursor-pointer shadow-2xs"
+              >
+                <Building className="w-3.5 h-3.5" />
+                <span>Assign Department</span>
               </button>
 
               {/* Export Selected CSV */}
               <button
                 type="button"
+                id="btn-bulk-export-csv"
                 onClick={handleExportCSV}
                 className="px-3 py-1.5 rounded-xl bg-blue-600 hover:bg-blue-700 text-white text-xs font-bold transition-all flex items-center gap-1.5 cursor-pointer shadow-2xs"
               >
@@ -868,6 +979,7 @@ export const EmployeeDirectory = ({
               {/* Clear Selection */}
               <button
                 type="button"
+                id="btn-bulk-clear-selection"
                 onClick={() => setSelectedEmployeeIds([])}
                 className="p-1.5 rounded-xl text-blue-600 dark:text-blue-400 hover:bg-blue-200/50 dark:hover:bg-blue-900/40 text-xs font-semibold transition-all cursor-pointer"
                 title="Deselect all"
@@ -1567,19 +1679,16 @@ export const EmployeeDirectory = ({
                 <thead className="bg-slate-50/70 dark:bg-slate-900/60 border-b border-slate-200/70 dark:border-slate-800 text-slate-500 dark:text-slate-400 uppercase font-semibold text-xs tracking-wider">
                   <tr>
                     {isAdmin && (
-                      <th className="px-4 py-3.5 w-10">
-                        <button
-                          type="button"
-                          onClick={handleToggleSelectAll}
-                          className="text-slate-400 hover:text-blue-600 transition-colors p-0.5 cursor-pointer"
-                          title={isAllSelected ? "Deselect all" : "Select all"}
-                        >
-                          {isAllSelected ? (
-                            <CheckSquare className="w-4 h-4 text-blue-600" />
-                          ) : (
-                            <Square className="w-4 h-4 text-slate-400" />
-                          )}
-                        </button>
+                      <th className="px-4 py-3.5 w-10 text-center">
+                        <label className="inline-flex items-center justify-center cursor-pointer">
+                          <input
+                            type="checkbox"
+                            checked={isAllSelected}
+                            onChange={handleToggleSelectAll}
+                            className="w-4 h-4 rounded border-slate-300 dark:border-slate-600 text-blue-600 focus:ring-blue-500 cursor-pointer accent-blue-600"
+                            aria-label={isAllSelected ? "Deselect all employees" : "Select all employees"}
+                          />
+                        </label>
                       </th>
                     )}
                     {renderSortHeader("fullName", "Staff Member")}
@@ -1620,18 +1729,16 @@ export const EmployeeDirectory = ({
                       >
                         {/* Checkbox for Admin */}
                         {isAdmin && (
-                          <td className="px-4 py-3">
-                            <button
-                              type="button"
-                              onClick={() => handleToggleSelectOne(empId)}
-                              className="text-slate-400 hover:text-blue-600 transition-colors p-0.5 cursor-pointer"
-                            >
-                              {isSelected ? (
-                                <CheckSquare className="w-4 h-4 text-blue-600" />
-                              ) : (
-                                <Square className="w-4 h-4 text-slate-300 dark:text-slate-600" />
-                              )}
-                            </button>
+                          <td className="px-4 py-3 text-center">
+                            <label className="inline-flex items-center justify-center cursor-pointer">
+                              <input
+                                type="checkbox"
+                                checked={isSelected}
+                                onChange={() => handleToggleSelectOne(empId)}
+                                className="w-4 h-4 rounded border-slate-300 dark:border-slate-600 text-blue-600 focus:ring-blue-500 cursor-pointer accent-blue-600"
+                                aria-label={`Select ${emp.fullName || emp.name || empId}`}
+                              />
+                            </label>
                           </td>
                         )}
 
@@ -1859,21 +1966,89 @@ export const EmployeeDirectory = ({
               className="bg-white dark:bg-[#111927] rounded-2xl max-w-md w-full overflow-hidden shadow-md dark:shadow-none border border-slate-200/70 dark:border-slate-800"
               onClick={(e) => e.stopPropagation()}
             >
-              <div className="bg-blue-50/70 dark:bg-blue-950/40 p-5 border-b border-blue-200/60 dark:border-blue-800/60 flex items-center gap-3.5">
-                <div className="w-10 h-10 rounded-xl bg-blue-600 text-white flex items-center justify-center shadow-none shrink-0">
-                  <Layers className="w-5 h-5" />
+              <div
+                className={`p-5 border-b flex items-center gap-3.5 ${
+                  bulkAction === "delete"
+                    ? "bg-rose-50/70 dark:bg-rose-950/40 border-rose-200/60 dark:border-rose-800/60"
+                    : "bg-blue-50/70 dark:bg-blue-950/40 border-blue-200/60 dark:border-blue-800/60"
+                }`}
+              >
+                <div
+                  className={`w-10 h-10 rounded-xl text-white flex items-center justify-center shadow-none shrink-0 ${
+                    bulkAction === "delete" ? "bg-rose-600" : "bg-blue-600"
+                  }`}
+                >
+                  {bulkAction === "delete" ? (
+                    <Trash2 className="w-5 h-5" />
+                  ) : bulkAction === "department" ? (
+                    <Building className="w-5 h-5" />
+                  ) : (
+                    <Activity className="w-5 h-5" />
+                  )}
                 </div>
                 <div>
-                  <h3 className="text-base font-bold text-blue-950 dark:text-blue-100">
-                    Batch Update Employees
+                  <h3
+                    className={`text-base font-bold ${
+                      bulkAction === "delete"
+                        ? "text-rose-950 dark:text-rose-100"
+                        : "text-blue-950 dark:text-blue-100"
+                    }`}
+                  >
+                    {bulkAction === "delete"
+                      ? "Delete Selected Employees"
+                      : bulkAction === "department"
+                      ? "Assign Department"
+                      : "Update Status"}
                   </h3>
-                  <p className="text-xs text-blue-700 dark:text-blue-300 mt-0.5">
-                    Updating {selectedEmployeeIds.length} selected employee records simultaneously.
+                  <p
+                    className={`text-xs mt-0.5 ${
+                      bulkAction === "delete"
+                        ? "text-rose-700 dark:text-rose-300"
+                        : "text-blue-700 dark:text-blue-300"
+                    }`}
+                  >
+                    {bulkAction === "delete"
+                      ? `Permanently removing ${selectedEmployeeIds.length} selected employee record(s).`
+                      : bulkAction === "department"
+                      ? `Assigning department to ${selectedEmployeeIds.length} selected employee(s).`
+                      : `Updating status for ${selectedEmployeeIds.length} selected employee(s).`}
                   </p>
                 </div>
               </div>
 
               <div className="p-5 space-y-4 text-xs">
+                {bulkAction === "delete" && (
+                  <div className="space-y-3">
+                    <div className="p-3 bg-rose-50 dark:bg-rose-950/30 border border-rose-200 dark:border-rose-900/50 rounded-xl text-rose-800 dark:text-rose-300 text-xs flex items-start gap-2.5">
+                      <AlertTriangle className="w-4 h-4 text-rose-600 shrink-0 mt-0.5" />
+                      <div>
+                        <span className="font-bold">Permanent Action:</span> Deleting selected employees will permanently purge their profile data, system accounts, attendance logs, payroll calculations, and leave applications.
+                      </div>
+                    </div>
+
+                    <div>
+                      <span className="text-slate-500 dark:text-slate-400 font-semibold mb-1.5 block">
+                        Selected Employees ({selectedEmployeeIds.length}):
+                      </span>
+                      <div className="max-h-36 overflow-y-auto divide-y divide-slate-100 dark:divide-slate-800/80 rounded-xl border border-slate-200/70 dark:border-slate-800 bg-slate-50/50 dark:bg-slate-900/40 p-2">
+                        {selectedEmployeesList.map((emp) => (
+                          <div
+                            key={emp._id || emp.employeeId}
+                            className="py-1.5 px-2 flex items-center justify-between text-xs"
+                          >
+                            <span className="font-semibold text-slate-800 dark:text-slate-200">
+                              {emp.fullName || emp.name}
+                            </span>
+                            <span className="text-[11px] font-mono text-slate-400">
+                              {emp.employeeId}
+                            </span>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  </div>
+                )}
+
                 {bulkAction === "department" && (
                   <div>
                     <label className="block text-slate-700 dark:text-slate-300 font-semibold mb-1.5">
@@ -1912,9 +2087,11 @@ export const EmployeeDirectory = ({
                   </div>
                 )}
 
-                <p className="text-[11px] text-slate-500 dark:text-slate-400 bg-slate-50/70 dark:bg-slate-800/60 p-3 rounded-xl border border-slate-200/70 dark:border-slate-700">
-                  This change will be applied directly to the database and will reflect across payroll, permissions, and reporting modules.
-                </p>
+                {bulkAction !== "delete" && (
+                  <p className="text-[11px] text-slate-500 dark:text-slate-400 bg-slate-50/70 dark:bg-slate-800/60 p-3 rounded-xl border border-slate-200/70 dark:border-slate-700">
+                    This change will be applied directly to the database and will reflect across payroll, permissions, and reporting modules.
+                  </p>
+                )}
               </div>
 
               <div className="p-4 bg-slate-50/70 dark:bg-slate-800/60 border-t border-slate-200/70 dark:border-slate-700 flex items-center justify-end gap-2.5">
@@ -1928,19 +2105,38 @@ export const EmployeeDirectory = ({
                 </button>
                 <button
                   type="button"
+                  id="btn-confirm-bulk-action"
                   disabled={isBulkUpdating}
                   onClick={handleExecuteBulkUpdate}
-                  className="px-4 py-2 rounded-xl bg-blue-600 hover:bg-blue-700 text-white text-xs font-semibold transition-all shadow-none flex items-center gap-1.5 cursor-pointer disabled:opacity-50"
+                  className={`px-4 py-2 rounded-xl text-white text-xs font-semibold transition-all shadow-none flex items-center gap-1.5 cursor-pointer disabled:opacity-50 ${
+                    bulkAction === "delete"
+                      ? "bg-rose-600 hover:bg-rose-700"
+                      : "bg-blue-600 hover:bg-blue-700"
+                  }`}
                 >
                   {isBulkUpdating ? (
                     <>
                       <Loader2 className="w-3.5 h-3.5 animate-spin" />
-                      <span>Updating Records...</span>
+                      <span>
+                        {bulkAction === "delete"
+                          ? "Deleting Records..."
+                          : "Updating Records..."}
+                      </span>
+                    </>
+                  ) : bulkAction === "delete" ? (
+                    <>
+                      <Trash2 className="w-3.5 h-3.5" />
+                      <span>Delete {selectedEmployeeIds.length} Employee{selectedEmployeeIds.length > 1 ? "s" : ""}</span>
+                    </>
+                  ) : bulkAction === "department" ? (
+                    <>
+                      <Building className="w-3.5 h-3.5" />
+                      <span>Assign Department</span>
                     </>
                   ) : (
                     <>
                       <Check className="w-3.5 h-3.5" />
-                      <span>Apply Batch Update</span>
+                      <span>Update Status</span>
                     </>
                   )}
                 </button>

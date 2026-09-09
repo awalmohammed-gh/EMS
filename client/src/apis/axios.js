@@ -24,36 +24,44 @@ export const api = axios.create({
   },
 });
 
+let inMemoryToken =
+  typeof window !== "undefined"
+    ? localStorage.getItem("token") ||
+      localStorage.getItem("auth_token") ||
+      localStorage.getItem("employeeToken") ||
+      localStorage.getItem("adminToken") ||
+      sessionStorage.getItem("token") ||
+      null
+    : null;
+
+if (inMemoryToken) {
+  api.defaults.headers.common["Authorization"] = `Bearer ${inMemoryToken}`;
+}
+
 /**
  * Request Interceptor:
- * Attaches JWT Bearer token and role identifiers to all outgoing requests
+ * Automatically attaches Authorization Bearer and role headers if token exists,
+ * while preserving cookie transmission via withCredentials: true.
  */
 api.interceptors.request.use(
   (config) => {
-    if (typeof window !== "undefined") {
-      // Look up JWT tokens from standard storage keys
-      const token =
-        localStorage.getItem("token") ||
-        localStorage.getItem("adminToken") ||
-        localStorage.getItem("employeeToken") ||
-        sessionStorage.getItem("token");
+    // Flag for AJAX requests
+    config.headers["X-Requested-With"] = "XMLHttpRequest";
 
-      if (token) {
-        // Standard RFC 6750 Authorization Bearer header
-        config.headers.Authorization = `Bearer ${token}`;
-        // Multi-role custom header compatibility
-        config.headers["x-admin-token"] = token;
-        config.headers["x-employee-token"] = token;
-      }
+    const token =
+      inMemoryToken ||
+      (typeof window !== "undefined"
+        ? localStorage.getItem("token") ||
+          localStorage.getItem("auth_token") ||
+          localStorage.getItem("employeeToken") ||
+          localStorage.getItem("adminToken") ||
+          sessionStorage.getItem("token")
+        : null);
 
-      // Add user role header if present
-      const role = localStorage.getItem("userRole");
-      if (role) {
-        config.headers["x-role"] = role;
-      }
-
-      // Flag for AJAX requests
-      config.headers["X-Requested-With"] = "XMLHttpRequest";
+    if (token) {
+      config.headers.Authorization = `Bearer ${token}`;
+      config.headers["x-employee-token"] = token;
+      config.headers["x-admin-token"] = token;
     }
 
     return config;
@@ -145,32 +153,46 @@ export const apiService = {
   },
 
   /**
-   * Helper to set / overwrite token in storage and runtime headers
+   * Helper to set and store active token
    */
-  setToken: (token, role = "admin") => {
+  setToken: (token) => {
+    inMemoryToken = token || null;
     if (typeof window !== "undefined") {
       if (token) {
-        localStorage.setItem("token", token);
-        if (role === "admin") {
-          localStorage.setItem("adminToken", token);
-        } else {
-          localStorage.setItem("employeeToken", token);
+        try {
+          localStorage.setItem("token", token);
+          localStorage.setItem("auth_token", token);
+        } catch {
+          // ignore
         }
+        api.defaults.headers.common["Authorization"] = `Bearer ${token}`;
+      } else {
+        try {
+          localStorage.removeItem("token");
+          localStorage.removeItem("auth_token");
+        } catch {
+          // ignore
+        }
+        delete api.defaults.headers.common["Authorization"];
       }
     }
   },
 
   /**
-   * Helper to clear auth tokens from storage
+   * Helper to clear auth tokens
    */
   clearToken: () => {
+    inMemoryToken = null;
     if (typeof window !== "undefined") {
-      localStorage.removeItem("token");
-      localStorage.removeItem("adminToken");
-      localStorage.removeItem("employeeToken");
-      localStorage.removeItem("adminData");
-      localStorage.removeItem("employeeData");
-      localStorage.removeItem("userRole");
+      try {
+        localStorage.removeItem("token");
+        localStorage.removeItem("auth_token");
+        localStorage.removeItem("employeeToken");
+        localStorage.removeItem("adminToken");
+      } catch {
+        // ignore
+      }
+      delete api.defaults.headers.common["Authorization"];
     }
   },
 
@@ -178,13 +200,20 @@ export const apiService = {
    * Helper to retrieve currently stored token
    */
   getToken: () => {
+    if (inMemoryToken) return inMemoryToken;
     if (typeof window !== "undefined") {
-      return (
-        localStorage.getItem("token") ||
-        localStorage.getItem("adminToken") ||
-        localStorage.getItem("employeeToken") ||
-        null
-      );
+      try {
+        return (
+          localStorage.getItem("token") ||
+          localStorage.getItem("auth_token") ||
+          localStorage.getItem("employeeToken") ||
+          localStorage.getItem("adminToken") ||
+          sessionStorage.getItem("token") ||
+          null
+        );
+      } catch {
+        return null;
+      }
     }
     return null;
   },

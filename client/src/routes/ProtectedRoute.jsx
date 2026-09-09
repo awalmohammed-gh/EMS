@@ -6,18 +6,9 @@ import Loading from "../ui/Loading";
 const ProtectedRoute = ({ allowRole }) => {
   const location = useLocation();
   const { isLoading: isAdminLoading, adminExists, isAuthorized } = useAdminAuth();
-  const { user, token, role: authRole, isLoading: isAuthLoading } = useAuth();
+  const { user, role: authRole, isLoading: isAuthLoading } = useAuth();
 
-  const storedRole =
-    typeof window !== "undefined" ? localStorage.getItem("userRole") : null;
-  const hasEmpToken =
-    typeof window !== "undefined" &&
-    Boolean(localStorage.getItem("employeeToken") || (storedRole === "employee" && localStorage.getItem("token")));
-  const hasAdminToken =
-    typeof window !== "undefined" &&
-    Boolean(localStorage.getItem("adminToken") || (storedRole === "admin" && localStorage.getItem("token")));
-
-  const effectiveRole = authRole || storedRole || (user?.role ? user.role : null);
+  const effectiveRole = authRole || user?.role || null;
 
   // Await full hydration before any redirect evaluation
   if (isAuthLoading || (allowRole === "admin" && isAdminLoading)) {
@@ -31,11 +22,15 @@ const ProtectedRoute = ({ allowRole }) => {
     }
 
     // Explicitly reject logged-in employees attempting to access admin routes
-    if ((effectiveRole === "employee" || hasEmpToken) && !isAuthorized && !hasAdminToken) {
+    if (user && effectiveRole === "employee" && !isAuthorized) {
       return <Navigate to="/employee/dashboard" replace state={{ from: location }} />;
     }
 
-    if (!isAuthorized && !hasAdminToken) {
+    const isAdminUser =
+      Boolean(user) &&
+      (effectiveRole === "admin" || effectiveRole === "super_admin" || isAuthorized);
+
+    if (!isAdminUser) {
       return <Navigate to="/admin/login" replace state={{ from: location }} />;
     }
 
@@ -45,12 +40,14 @@ const ProtectedRoute = ({ allowRole }) => {
   // If protecting an Employee route
   if (allowRole === "employee") {
     const isEmployeeAuthenticated =
-      effectiveRole === "employee" ||
-      hasEmpToken ||
-      Boolean(user && (user.role === "employee" || user.employeeId)) ||
-      (effectiveRole === "admin" || isAuthorized); // Admins can preview/inspect employee portal
+      Boolean(user) &&
+      (effectiveRole === "employee" ||
+        effectiveRole === "admin" ||
+        effectiveRole === "super_admin" ||
+        isAuthorized ||
+        Boolean(user?.employeeId));
 
-    if (!isEmployeeAuthenticated && !token && !hasEmpToken) {
+    if (!isEmployeeAuthenticated) {
       return <Navigate to="/employee/login" replace state={{ from: location }} />;
     }
 

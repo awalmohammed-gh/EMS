@@ -222,28 +222,37 @@ export const employeeLogin = async (req, res) => {
       },
     );
 
-    // Save cookie
-    res.cookie("employeeToken", token, {
+    const isHttps = req.secure || req.headers["x-forwarded-proto"] === "https" || process.env.NODE_ENV === "production";
+    const cookieOptions = {
       httpOnly: true,
-      secure: process.env.NODE_ENV === "production",
-      sameSite: process.env.NODE_ENV === "production" ? "none" : "lax",
+      secure: isHttps,
+      sameSite: isHttps ? "none" : "lax",
       maxAge: 7 * 24 * 60 * 60 * 1000,
-    });
+      path: "/",
+    };
+
+    // Save cookies (auth_token primary)
+    res.cookie("auth_token", token, cookieOptions);
+    res.cookie("employeeToken", token, cookieOptions);
+    res.cookie("token", token, cookieOptions);
 
     const safeEmployee = employee.toObject ? employee.toObject() : employee;
     delete safeEmployee.password;
+    safeEmployee.id = safeEmployee._id ? safeEmployee._id.toString() : safeEmployee.id;
+    safeEmployee.name = safeEmployee.fullName || safeEmployee.name || "";
+    safeEmployee.avatar = safeEmployee.avatar || safeEmployee.profilePicture || safeEmployee.profile_image_url || "";
 
     // Verify if user has an active, incomplete shift in the database immediately upon login
     const shiftVerification = await verifyActiveIncompleteShift(safeEmployee);
 
     res.status(200).json({
       success: true,
+      token,
       message: shiftVerification.hasActiveShift
         ? "Login successful. You have an active ongoing shift."
         : "Login successful.",
-      token,
-      employee: safeEmployee,
       user: safeEmployee,
+      employee: safeEmployee,
       hasActiveShift: shiftVerification.hasActiveShift,
       activeShift: shiftVerification.activeShift,
       todayRecord: shiftVerification.todayRecord,
@@ -262,11 +271,16 @@ export const employeeLogin = async (req, res) => {
 // Employee Logout
 export const employeeLogout = async (req, res) => {
   try {
-    res.clearCookie("employeeToken", {
+    const clearOptions = {
       httpOnly: true,
       secure: process.env.NODE_ENV === "production",
       sameSite: process.env.NODE_ENV === "production" ? "none" : "lax",
-    });
+      path: "/",
+    };
+
+    res.clearCookie("auth_token", clearOptions);
+    res.clearCookie("employeeToken", clearOptions);
+    res.clearCookie("token", clearOptions);
 
     res.status(200).json({
       success: true,

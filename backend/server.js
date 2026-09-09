@@ -21,6 +21,7 @@ import authRouter from "./routes/authRoutes.js";
 import announcementRouter from "./routes/announcementRoutes.js";
 import userRouter from "./routes/userRoutes.js";
 import { logErrorToFile } from "./utils/logger.js";
+import { autoCloseAllStaleShifts } from "./controllers/employeeAttendance.js";
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -29,7 +30,7 @@ const __dirname = path.dirname(__filename);
 const validateEnvironmentVariables = () => {
   const warnings = [];
 
-  // Normalize MONGO_URI and MONGODB_URI for Atlas & Vercel
+  // Normalize MONGO_URI and MONGODB_URI for Atlas and local environments
   if (process.env.MONGO_URI && !process.env.MONGODB_URI) {
     process.env.MONGODB_URI = process.env.MONGO_URI;
   } else if (process.env.MONGODB_URI && !process.env.MONGO_URI) {
@@ -63,16 +64,15 @@ app.set("io", io);
 
 const port = process.env.PORT || 3000;
 
-// Dynamic CORS configuration supporting Vercel preview/production domains
+// Standard CORS configuration for standalone Node.js server
 app.use(
   cors({
     origin: (origin, callback) => {
       // Allow requests with no origin (mobile apps, server-to-server, curl)
       if (!origin) return callback(null, true);
 
-      // Dynamically allow Vercel previews (*.vercel.app), localhost, and configured client URLs
+      // Allow localhost, local IP addresses, and configured client URLs
       if (
-        origin.endsWith(".vercel.app") ||
         origin.includes("localhost") ||
         origin.includes("127.0.0.1") ||
         origin === process.env.CLIENT_URL ||
@@ -101,7 +101,7 @@ app.use(cookieParser());
 app.use(express.json({ limit: "25mb", strict: false }));
 app.use(express.urlencoded({ limit: "25mb", extended: true }));
 
-// Ensure upload directory exists (wrapped in try-catch for serverless read-only filesystems)
+// Ensure upload directories exist for persistent local storage
 const uploadsStaticDir = path.resolve(__dirname, "uploads");
 const avatarsStaticDir = path.resolve(__dirname, "uploads/avatars");
 try {
@@ -109,7 +109,7 @@ try {
     fs.mkdirSync(avatarsStaticDir, { recursive: true });
   }
 } catch (fsErr) {
-  console.warn("[Server] Note: Read-only filesystem detected, skipping local upload directory creation:", fsErr.message);
+  console.warn("[Backend] Note: Error ensuring local upload directory exists:", fsErr.message);
 }
 
 // Serve uploaded profile images and avatars
@@ -118,26 +118,28 @@ app.use("/uploads", (req, res) => {
   res.status(404).send("File not found");
 });
 
-// database connection (with graceful offline fallback)
-connectMongodb().catch((err) => {
-  console.warn("MongoDB Connection Error:", err?.message || err);
+// Health check endpoint (always accessible regardless of DB state)
+app.get("/api/health", (req, res) => {
+  const isDbConnected = mongoose.connection.readyState === 1;
+  res.status(isDbConnected ? 200 : 503).json({
+    status: isDbConnected ? "healthy" : "degraded",
+    database: isDbConnected ? "connected" : "disconnected",
+    timestamp: new Date().toISOString(),
+  });
 });
 
-// Middleware ensuring database connection is ready for incoming serverless API requests
-app.use(async (req, res, next) => {
-  if (req.path.startsWith("/api") && mongoose?.connection?.readyState !== 1) {
-    try {
-      await connectMongodb();
-    } catch {
-      // Caught by route error handlers
-    }
+// Database readiness guard for API routes (fails fast with 503 instead of buffering/hanging queries)
+app.use("/api", (req, res, next) => {
+  if (req.path === "/health") return next();
+
+  if (mongoose.connection.readyState !== 1) {
+    return res.status(503).json({
+      success: false,
+      message: "Database connection is not available. Please verify MongoDB status.",
+      code: "DATABASE_DISCONNECTED",
+    });
   }
   next();
-});
-
-// api endpoints
-app.get("/api/health", (req, res) => {
-  res.status(200).json({ status: "healthy", timestamp: new Date().toISOString() });
 });
 app.use("/api/auth", authRouter);
 app.use("/api/users", userRouter);
@@ -203,12 +205,47 @@ const isMainModule = Boolean(
   fileURLToPath(import.meta.url) === path.resolve(process.argv[1])
 );
 
-// Standalone server execution: only listen when directly executed as the main script (not imported in serverless or wrappers)
-if (isMainModule && !process.env.VERCEL) {
-  server.listen(port, "0.0.0.0", () => {
-    console.log(`Server listening on http://0.0.0.0:${port}`);
-  });
-}
+// Standalone server execution: connect to database BEFORE listening for requests
+const startBackendServer = async () => {
+  if (isMainModule) {
+    try {
+      console.log("[Backend] Initializing MongoDB connection...");
+      await connectMongodb();
+      console.log("[Backend] Database ready for incoming requests.");
+
+      // Run initial auto-close sweep for unclosed shifts from prior calendar days
+      try {
+        await autoCloseAllStaleShifts();
+      } catch (sweepErr) {
+        console.warn("[Backend] Stale shift auto-close sweep notice:", sweepErr.message);
+      }
+
+      // Schedule periodic background sweep to catch 7:30 PM auto-close and midnight rollovers
+      setInterval(async () => {
+        try {
+          if (mongoose.connection.readyState === 1) {
+            await autoCloseAllStaleShifts();
+          }
+        } catch {
+          // ignore background interval sweep errors
+        }
+      }, 60 * 1000).unref();
+    } catch (error) {
+      console.error("[Backend] Critical: Failed to establish initial database connection:", error.message);
+      if (process.env.NODE_ENV === "production" && !process.env.ALLOW_OFFLINE_FALLBACK) {
+        console.error("[Backend] Halting startup: Database connection required in production.");
+        process.exit(1);
+      }
+      console.warn("[Backend] Starting server in degraded mode. API requests will be guarded.");
+    }
+
+    server.listen(port, "0.0.0.0", () => {
+      console.log(`Server listening on http://0.0.0.0:${port}`);
+    });
+  }
+};
+
+startBackendServer();
 
 // Graceful Shutdown & Process Signal Handling to prevent hanging socket connections
 let isShuttingDown = false;
@@ -246,7 +283,7 @@ const gracefulShutdown = (signal) => {
   }, 5000).unref();
 };
 
-if (isMainModule && !process.env.VERCEL) {
+if (isMainModule) {
   process.on("SIGTERM", () => gracefulShutdown("SIGTERM"));
   process.on("SIGINT", () => gracefulShutdown("SIGINT"));
 }

@@ -148,18 +148,38 @@ export const adminLogin = async (req, res) => {
       { expiresIn: "7d" }
     );
 
-    res.cookie("token", token, {
+    const isHttps = req.secure || req.headers["x-forwarded-proto"] === "https" || process.env.NODE_ENV === "production";
+    const cookieOptions = {
       httpOnly: true,
-      secure: process.env.NODE_ENV === "production",
-      sameSite: process.env.NODE_ENV === "production" ? "none" : "lax",
+      secure: isHttps,
+      sameSite: isHttps ? "none" : "lax",
       maxAge: 7 * 24 * 60 * 60 * 1000,
-    });
+      path: "/",
+    };
+
+    res.cookie("auth_token", token, cookieOptions);
+    res.cookie("token", token, cookieOptions);
+
+    const safeAdmin = {
+      _id: authenticatedAdmin._id.toString(),
+      id: authenticatedAdmin._id.toString(),
+      name: authenticatedAdmin.fullName || authenticatedAdmin.full_name,
+      fullName: authenticatedAdmin.fullName || authenticatedAdmin.full_name,
+      full_name: authenticatedAdmin.fullName || authenticatedAdmin.full_name,
+      email: authenticatedAdmin.email,
+      role: authenticatedAdmin.role || "admin",
+      department: authenticatedAdmin.department || "Executive Management",
+      position: authenticatedAdmin.role === "super_admin" ? "Super Admin" : "Administrator",
+      avatar: authenticatedAdmin.avatar || authenticatedAdmin.profile_image_url || "",
+      profile_image_url: authenticatedAdmin.avatar || authenticatedAdmin.profile_image_url || "",
+    };
 
     return res.status(200).json({
       success: true,
-      message: "Login successful.",
       token,
-      admin: authenticatedAdmin,
+      message: "Login successful.",
+      user: safeAdmin,
+      admin: safeAdmin,
     });
   } catch (error) {
     console.error("Admin login error:", error);
@@ -173,11 +193,15 @@ export const adminLogin = async (req, res) => {
 // Function for admin to logout
 export const adminLogout = async (req, res) => {
   try {
-    res.clearCookie("token", {
+    const clearOptions = {
       httpOnly: true,
       secure: process.env.NODE_ENV === "production",
       sameSite: process.env.NODE_ENV === "production" ? "none" : "lax",
-    });
+      path: "/",
+    };
+
+    res.clearCookie("auth_token", clearOptions);
+    res.clearCookie("token", clearOptions);
 
     return res.status(200).json({
       success: true,
@@ -799,6 +823,141 @@ export const bulkUpdateEmployees = async (req, res) => {
     return res.status(500).json({
       success: false,
       message: error.message || "Failed to bulk update employees.",
+    });
+  }
+};
+
+// Admin action: bulk delete employees with cascading cleanup
+export const bulkDeleteEmployees = async (req, res) => {
+  try {
+    const { employeeIds } = req.body;
+    if (!Array.isArray(employeeIds) || employeeIds.length === 0) {
+      return res.status(400).json({
+        success: false,
+        message: "An array of employeeIds is required for bulk deletion.",
+      });
+    }
+
+    let deletedCount = 0;
+    const errors = [];
+
+    for (const id of employeeIds) {
+      try {
+        let targetEmployee = null;
+        if (mongoose.Types.ObjectId.isValid(id)) {
+          targetEmployee = await Employee.findById(id).lean();
+        }
+        if (!targetEmployee) {
+          targetEmployee = await Employee.findOne({
+            $or: [{ employeeId: id }, { email: id }],
+          }).lean();
+        }
+
+        const empObjectId = targetEmployee?._id || (mongoose.Types.ObjectId.isValid(id) ? new mongoose.Types.ObjectId(id) : null);
+        const empCode = targetEmployee?.employeeId || (typeof id === "string" ? id : "");
+        const empEmail = targetEmployee?.email || (typeof id === "string" && id.includes("@") ? id : "");
+
+        // Purge Attendance
+        const attClauses = [];
+        if (empObjectId && mongoose.Types.ObjectId.isValid(empObjectId)) {
+          attClauses.push({ employee: new mongoose.Types.ObjectId(empObjectId) });
+        }
+        if (empCode) {
+          attClauses.push({ employeeId: String(empCode) });
+        }
+        if (id && String(id) !== String(empCode)) {
+          if (mongoose.Types.ObjectId.isValid(id)) {
+            attClauses.push({ employee: new mongoose.Types.ObjectId(id) });
+          } else {
+            attClauses.push({ employeeId: String(id) });
+          }
+        }
+        if (attClauses.length > 0) {
+          await Attendance.deleteMany({ $or: attClauses }).catch(() => {});
+        }
+
+        // Purge Payroll
+        const payClauses = [];
+        if (empObjectId && mongoose.Types.ObjectId.isValid(empObjectId)) {
+          payClauses.push({ employee: new mongoose.Types.ObjectId(empObjectId) });
+        }
+        if (id && mongoose.Types.ObjectId.isValid(id) && (!empObjectId || String(id) !== String(empObjectId))) {
+          payClauses.push({ employee: new mongoose.Types.ObjectId(id) });
+        }
+        if (payClauses.length > 0) {
+          await Payroll.deleteMany({ $or: payClauses }).catch(() => {});
+        }
+
+        // Purge Leave
+        const leaveClauses = [];
+        if (empObjectId && mongoose.Types.ObjectId.isValid(empObjectId)) {
+          leaveClauses.push({ employee: new mongoose.Types.ObjectId(empObjectId) });
+        }
+        if (id && mongoose.Types.ObjectId.isValid(id) && (!empObjectId || String(id) !== String(empObjectId))) {
+          leaveClauses.push({ employee: new mongoose.Types.ObjectId(id) });
+        }
+        if (leaveClauses.length > 0) {
+          await Leave.deleteMany({ $or: leaveClauses }).catch(() => {});
+        }
+
+        // Purge memory stores
+        if (Array.isArray(livePayrollStore)) {
+          for (let i = livePayrollStore.length - 1; i >= 0; i--) {
+            const p = livePayrollStore[i];
+            if (p?.employeeId === empCode || String(p?.employee?._id || p?.employee) === String(empObjectId)) {
+              livePayrollStore.splice(i, 1);
+            }
+          }
+        }
+        if (Array.isArray(liveLeaveStore)) {
+          for (let i = liveLeaveStore.length - 1; i >= 0; i--) {
+            const l = liveLeaveStore[i];
+            if (l?.employee?.employeeId === empCode || String(l?.employee?._id || l?.employee) === String(empObjectId)) {
+              liveLeaveStore.splice(i, 1);
+            }
+          }
+        }
+
+        // Purge Employee
+        if (empObjectId) {
+          await Employee.findByIdAndDelete(empObjectId).catch(() => {});
+        }
+        await Employee.deleteMany({
+          $or: [
+            ...(empObjectId ? [{ _id: empObjectId }] : []),
+            ...(empCode ? [{ employeeId: empCode }] : []),
+            { employeeId: String(id) },
+          ],
+        }).catch(() => {});
+
+        // Purge User auth credentials if linked
+        if (User) {
+          await User.deleteMany({
+            $or: [
+              ...(empObjectId ? [{ _id: empObjectId }] : []),
+              ...(empEmail ? [{ email: empEmail }] : []),
+              { email: String(id) },
+            ],
+          }).catch(() => {});
+        }
+
+        deletedCount++;
+      } catch (err) {
+        errors.push({ id, error: err.message });
+      }
+    }
+
+    return res.status(200).json({
+      success: true,
+      message: `Successfully deleted ${deletedCount} employee(s).`,
+      deletedCount,
+      errors: errors.length > 0 ? errors : undefined,
+    });
+  } catch (error) {
+    console.error("Error in bulkDeleteEmployees:", error);
+    return res.status(500).json({
+      success: false,
+      message: error.message || "Failed to bulk delete employees.",
     });
   }
 };

@@ -25,7 +25,7 @@ import EmployeeLeaveChart from "../../components/EmployeeLeaveChart";
 import AnnouncementBoard from "../../components/AnnouncementBoard";
 import ApplyLeaveModal from "../../components/modal/ApplyLeaveModal";
 import EmployeePayslipsModal from "../../components/modal/EmployeePayslipsModal";
-import ClockInOutCard from "../../components/ClockInOutCard";
+import DailyShiftClock from "../../components/DailyShiftClock";
 import ShiftStatusCard from "../../components/ShiftStatusCard";
 import WeeklyAttendanceChart from "../../components/WeeklyAttendanceChart";
 import LatenessDeductionsLineChart from "../../components/LatenessDeductionsLineChart";
@@ -102,7 +102,6 @@ const EmployeeDashboard = () => {
               user?.avatar ||
               "",
           };
-          localStorage.setItem("employeeData", JSON.stringify(mergedEmployee));
           if (typeof setUser === "function") {
             setUser(mergedEmployee);
           }
@@ -134,6 +133,47 @@ const EmployeeDashboard = () => {
       setIsLoading(false);
     }
   }, [setUser, setShowToast]);
+
+  // Automated 12:00 AM (Midnight) Workday Reset & Rollover Timer
+  useEffect(() => {
+    const now = new Date();
+    const tomorrowMidnight = new Date(
+      now.getFullYear(),
+      now.getMonth(),
+      now.getDate() + 1,
+      0,
+      0,
+      1
+    );
+    const msUntilMidnight = Math.max(1000, tomorrowMidnight.getTime() - now.getTime());
+
+    const timer = setTimeout(() => {
+      console.log("[EmployeeDashboard] Midnight boundary reached: refreshing attendance status...");
+      if (contextRefreshAttendance) {
+        contextRefreshAttendance(false);
+      }
+      fetchEmployeeDashboardData();
+    }, msUntilMidnight);
+
+    // Watchdog check for date rollover (e.g. system wake)
+    let lastDate = now.toISOString().split("T")[0];
+    const watchdog = setInterval(() => {
+      const currentDate = new Date().toISOString().split("T")[0];
+      if (currentDate !== lastDate) {
+        lastDate = currentDate;
+        console.log("[EmployeeDashboard] Date rollover watchdog triggered:", currentDate);
+        if (contextRefreshAttendance) {
+          contextRefreshAttendance(false);
+        }
+        fetchEmployeeDashboardData();
+      }
+    }, 20000);
+
+    return () => {
+      clearTimeout(timer);
+      clearInterval(watchdog);
+    };
+  }, [todayRecord, contextRefreshAttendance]);
 
   // Manual Sync Attendance & Re-evaluate lateness penalty logs
   const handleSyncAttendance = async () => {
@@ -216,11 +256,11 @@ const EmployeeDashboard = () => {
   };
 
   // Clock Out Function via centralized AttendanceContext
-  const handleClockOut = async () => {
+  const handleClockOut = async (reason = "") => {
     try {
       setIsLoading(true);
       setIsError(null);
-      const result = await contextClockOut();
+      const result = await contextClockOut(reason);
 
       setShowToast({
         show: true,
@@ -398,8 +438,10 @@ const EmployeeDashboard = () => {
       : (overview.presentDays || 0) + (overview.absentDays || 0);
 
   // Check if user has clocked in today
-  const hasClockedIn = Boolean(attendanceData.clockIn || attendanceData.clockInTime);
-  const hasClockedOut = Boolean(attendanceData.clockOut || attendanceData.clockOutTime);
+  const todayStr = new Date().toISOString().split("T")[0];
+  const isTodayRecord = Boolean(!attendanceData?.date || attendanceData.date === todayStr);
+  const hasClockedIn = isTodayRecord && Boolean(attendanceData.clockIn || attendanceData.clockInTime);
+  const hasClockedOut = isTodayRecord && Boolean(attendanceData.clockOut || attendanceData.clockOutTime);
   const isActiveShift = hasClockedIn && !hasClockedOut;
 
   // Shift status label & description with indicator icon
@@ -583,8 +625,8 @@ const EmployeeDashboard = () => {
           userName={employee?.fullName || user?.fullName || employee?.name || user?.name}
         />
 
-        {/* User-Friendly Clock In / Clock Out Card */}
-        <ClockInOutCard
+        {/* Daily Shift Clock with Automated Midnight Reset & 3-Case Action State Resolution */}
+        <DailyShiftClock
           attendanceData={attendanceData}
           hasClockedIn={hasClockedIn}
           hasClockedOut={hasClockedOut}
@@ -593,7 +635,6 @@ const EmployeeDashboard = () => {
           onClockOut={handleClockOut}
           workEndTime={settings?.workEndTime || settings?.attendance?.workEndTime || "19:00"}
           workStartTime={settings?.workStartTime || settings?.attendance?.workStartTime || "08:00"}
-          userRole={user?.role}
         />
 
         {/* 4 Standard Daily Metric Cards */}

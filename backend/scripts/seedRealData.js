@@ -1,5 +1,4 @@
 import "dotenv/config";
-import mongoose from "mongoose";
 import bcrypt from "bcryptjs";
 import { Admin } from "../models/Admin.js";
 import { User } from "../models/userModel.js";
@@ -10,22 +9,12 @@ import { Leave } from "../models/leaveModel.js";
 import { Settings } from "../models/adminSettingsModel.js";
 import { Announcement } from "../models/announcementModel.js";
 import { Notification } from "../models/notificationModel.js";
+import { connectMongodb, closeMongodb } from "../config/mongodb.js";
 
 const seedRealData = async () => {
   try {
-    const mongoUri = process.env.MONGODB_URI;
-    if (!mongoUri) {
-      console.warn("⚠️ MONGODB_URI not provided. Seed script requires a MongoDB connection.");
-      process.exit(0);
-    }
-
-    const baseUri = mongoUri.endsWith("/") ? mongoUri.slice(0, -1) : mongoUri;
-    const connectionString = baseUri.includes("?") ? baseUri : `${baseUri}/employee-system`;
-
-    console.log("Connecting to MongoDB for full production seed...");
-    await mongoose.connect(connectionString, {
-      serverSelectionTimeoutMS: 5000,
-    });
+    console.log("Connecting to MongoDB via consolidated lifecycle for seed...");
+    await connectMongodb();
     console.log("✅ MongoDB Connected successfully.");
 
     // 1. Seed / Upsert Settings
@@ -537,7 +526,7 @@ const seedRealData = async () => {
     console.log("✅ Seeded notifications.");
 
     console.log("🎉 Complete production-ready database seed finished successfully!");
-    await mongoose.disconnect();
+    await closeMongodb();
     process.exit(0);
   } catch (error) {
     console.error("❌ Error running seedRealData:", error);

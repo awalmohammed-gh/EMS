@@ -23,16 +23,516 @@ export const getEmployeeLiveToday = (employeeId, todayStr) => {
 };
 
 // Helper to resolve employee ObjectId
-const resolveEmployeeObjectId = async (idOrKey) => {
+export const resolveEmployeeObjectId = async (idOrKey) => {
   if (!idOrKey) return null;
-  if (isValidObjectId(idOrKey)) return idOrKey;
   try {
+    if (isValidObjectId(idOrKey)) {
+      const empDirect = await Employee.findById(idOrKey).select("_id").lean();
+      if (empDirect) return empDirect._id.toString();
+
+      // Check User model if idOrKey belonged to users collection
+      const userDirect = await User.findById(idOrKey).select("email employeeId").lean();
+      if (userDirect) {
+        const empFromUser = await Employee.findOne({
+          $or: [
+            ...(userDirect.email ? [{ email: userDirect.email.toLowerCase() }] : []),
+            ...(userDirect.employeeId ? [{ employeeId: userDirect.employeeId }] : []),
+          ],
+        }).select("_id").lean();
+        if (empFromUser) return empFromUser._id.toString();
+      }
+      return idOrKey;
+    }
+
     const emp = await Employee.findOne({
-      $or: [{ employeeId: idOrKey }, { email: idOrKey }],
+      $or: [{ employeeId: idOrKey }, { email: String(idOrKey).toLowerCase() }],
     }).select("_id").lean();
     return emp ? emp._id.toString() : null;
   } catch {
-    return null;
+    return isValidObjectId(idOrKey) ? idOrKey : null;
+  }
+};
+
+/**
+ * Thoroughly resolves an employee's context from request, auth tokens, and database models.
+ * Returns documents, canonical Employee ObjectId, and comprehensive candidate identifiers.
+ */
+export const resolveEmployeeInfo = async (req, rawId = null) => {
+  const targetId = rawId || req.user?._id || req.user?.id || req.employee?.id || req.employee?._id;
+  let employeeDoc = null;
+  let userDoc = null;
+
+  // 1. Direct Employee findById if targetId is an ObjectId
+  if (targetId && isValidObjectId(targetId)) {
+    try {
+      employeeDoc = await Employee.findById(targetId)
+        .select("fullName employeeId department position email avatar profile_picture baseSalary salary")
+        .lean();
+    } catch {
+      // ignore
+    }
+    if (!employeeDoc) {
+      try {
+        userDoc = await User.findById(targetId).select("-password").lean();
+      } catch {
+        // ignore
+      }
+    }
+  }
+
+  // 2. Lookup Employee by email if not resolved yet
+  const emailCandidate = (
+    userDoc?.email ||
+    req.user?.email ||
+    req.employee?.email ||
+    (targetId && !isValidObjectId(targetId) && String(targetId).includes("@") ? String(targetId) : "")
+  )
+    .toLowerCase()
+    .trim();
+
+  if (!employeeDoc && emailCandidate) {
+    try {
+      employeeDoc = await Employee.findOne({ email: emailCandidate })
+        .select("fullName employeeId department position email avatar profile_picture baseSalary salary")
+        .lean();
+    } catch {
+      // ignore
+    }
+  }
+
+  // 3. Lookup Employee by employeeId code if not resolved yet
+  const codeCandidate = String(
+    req.employee?.employeeId ||
+    req.user?.employeeId ||
+    userDoc?.employeeId ||
+    (targetId && !isValidObjectId(targetId) ? targetId : "")
+  ).trim();
+
+  if (!employeeDoc && codeCandidate) {
+    try {
+      employeeDoc = await Employee.findOne({
+        $or: [{ employeeId: codeCandidate }, { employeeId: codeCandidate.toUpperCase() }],
+      })
+        .select("fullName employeeId department position email avatar profile_picture baseSalary salary")
+        .lean();
+    } catch {
+      // ignore
+    }
+  }
+
+  // 4. Assemble candidate ObjectIds
+  const rawIdCandidates = [
+    employeeDoc?._id,
+    userDoc?._id,
+    targetId,
+    req.user?._id,
+    req.user?.id,
+    req.employee?._id,
+    req.employee?.id,
+  ].filter((id) => id && isValidObjectId(id));
+
+  const uniqueIdStrs = Array.from(new Set(rawIdCandidates.map((id) => id.toString())));
+  const objectIdList = uniqueIdStrs.map((id) => new mongoose.Types.ObjectId(id));
+
+  // Assemble candidate employee codes
+  const codeCandidates = Array.from(
+    new Set(
+      [
+        employeeDoc?.employeeId,
+        userDoc?.employeeId,
+        req.user?.employeeId,
+        req.employee?.employeeId,
+        codeCandidate,
+      ]
+        .filter(Boolean)
+        .map((c) => String(c).trim())
+    )
+  );
+
+  const employeeObjectId = employeeDoc?._id
+    ? employeeDoc._id.toString()
+    : uniqueIdStrs[0] || null;
+
+  const employeeCode = employeeDoc?.employeeId || codeCandidates[0] || "";
+
+  return {
+    employeeDoc,
+    userDoc,
+    employeeObjectId,
+    employeeCode,
+    idCandidates: objectIdList,
+    idCandidateStrings: uniqueIdStrs,
+    codeCandidates,
+  };
+};
+
+/**
+ * Automatically closes any open/unfinished attendance records belonging to an employee
+ * from prior calendar days where clockOut is null.
+ *
+ * Runs before evaluating today's attendance status or processing new clock-ins.
+ * Sets shiftStatus: 'Auto-Closed', notes: 'Shift auto-closed at midnight due to missing clock-out'.
+ */
+export const autoCloseUnfinishedShifts = async (employeeIdentifier, rawAuthUser = null) => {
+  try {
+    const startOfToday = new Date();
+    startOfToday.setHours(0, 0, 0, 0);
+    const todayDateStr = startOfToday.toISOString().split("T")[0];
+
+    const idCandidates = [];
+    const codeCandidates = [];
+    const emailCandidates = [];
+
+    if (employeeIdentifier) {
+      if (isValidObjectId(employeeIdentifier)) {
+        idCandidates.push(new mongoose.Types.ObjectId(employeeIdentifier));
+      } else if (typeof employeeIdentifier === "string" && employeeIdentifier.includes("@")) {
+        emailCandidates.push(employeeIdentifier.toLowerCase().trim());
+      } else {
+        codeCandidates.push(String(employeeIdentifier).trim());
+      }
+    }
+
+    if (rawAuthUser) {
+      const authId = rawAuthUser._id || rawAuthUser.id;
+      if (authId && isValidObjectId(authId)) {
+        idCandidates.push(new mongoose.Types.ObjectId(authId));
+      }
+      if (rawAuthUser.employeeId) {
+        codeCandidates.push(String(rawAuthUser.employeeId).trim());
+      }
+      if (rawAuthUser.email) {
+        emailCandidates.push(String(rawAuthUser.email).toLowerCase().trim());
+      }
+    }
+
+    // Probe User model if an auth user ID was passed to retrieve linked employeeId and email
+    for (const rawId of [...idCandidates]) {
+      try {
+        const u = await User.findById(rawId).select("email employeeId").lean();
+        if (u) {
+          if (u.email) emailCandidates.push(u.email.toLowerCase().trim());
+          if (u.employeeId) codeCandidates.push(String(u.employeeId).trim());
+        }
+      } catch {}
+      try {
+        const e = await Employee.findById(rawId).select("email employeeId").lean();
+        if (e) {
+          if (e.email) emailCandidates.push(e.email.toLowerCase().trim());
+          if (e.employeeId) codeCandidates.push(String(e.employeeId).trim());
+        }
+      } catch {}
+    }
+
+    // Look up Employee records matching any of the candidate IDs, codes, or emails
+    if (codeCandidates.length > 0 || idCandidates.length > 0 || emailCandidates.length > 0) {
+      try {
+        const empDocs = await Employee.find({
+          $or: [
+            ...(idCandidates.length > 0 ? [{ _id: { $in: idCandidates } }] : []),
+            ...(codeCandidates.length > 0 ? [{ employeeId: { $in: codeCandidates } }] : []),
+            ...(emailCandidates.length > 0 ? [{ email: { $in: emailCandidates } }] : []),
+          ],
+        }).select("_id employeeId email").lean();
+
+        for (const emp of empDocs) {
+          if (emp._id) idCandidates.push(emp._id);
+          if (emp.employeeId) codeCandidates.push(emp.employeeId);
+          if (emp.email) emailCandidates.push(emp.email.toLowerCase().trim());
+        }
+      } catch {
+        // ignore lookup errors
+      }
+    }
+
+    const uniqueIds = Array.from(new Set(idCandidates.map((id) => id.toString()))).map(
+      (id) => new mongoose.Types.ObjectId(id)
+    );
+    const uniqueCodes = Array.from(new Set(codeCandidates.filter(Boolean)));
+
+    const orClauses = [];
+    if (uniqueIds.length > 0) {
+      orClauses.push({ employee: { $in: uniqueIds } });
+    }
+    if (uniqueCodes.length > 0) {
+      orClauses.push({ employeeId: { $in: uniqueCodes } });
+    }
+
+    if (orClauses.length === 0) return { modifiedCount: 0, forceClosed: false, records: [] };
+
+    // Auto force-close any lingering shift started before today that was never clocked out
+    const staleRecords = await Attendance.find({
+      $and: [
+        { $or: orClauses },
+        {
+          $or: [
+            { clockOut: null },
+            { clockOut: { $exists: false } },
+            { clockOut: "" },
+            { clockOutTime: null },
+            { clockOutTime: { $exists: false } },
+            { clockOutTime: "" },
+            { shiftStatus: { $in: ["In-Progress", "In Progress", "Active", "active"] } },
+          ],
+        },
+        {
+          $or: [
+            { clockIn: { $lt: startOfToday } },
+            { date: { $lt: todayDateStr } },
+          ],
+        },
+      ],
+    });
+
+    let modifiedCount = 0;
+    const forceClosedRecords = [];
+    for (const record of staleRecords) {
+      const inTime = record.clockIn ? new Date(record.clockIn) : (record.date ? new Date(`${record.date}T08:00:00`) : startOfToday);
+      let closeTime = new Date(inTime);
+      closeTime.setHours(19, 30, 0, 0);
+      if (closeTime.getTime() <= inTime.getTime()) {
+        closeTime = new Date(inTime.getTime() + 8 * 60 * 60 * 1000);
+      }
+      if (closeTime > startOfToday) {
+        closeTime = new Date(startOfToday.getTime() - 1000);
+      }
+
+      const diffMs = Math.max(0, closeTime.getTime() - inTime.getTime());
+      const hoursWorked = Math.min(12, Math.max(0.01, Number((diffMs / (1000 * 60 * 60)).toFixed(2))));
+
+      record.clockOut = closeTime;
+      record.clockOutTime = closeTime;
+      record.autoClockedOut = true;
+      record.shiftStatus = "Auto-Closed";
+      if (record.status !== "Late") {
+        record.status = "Auto-Closed";
+      }
+      record.workHours = record.workHours > 0 ? record.workHours : hoursWorked;
+      record.autoClosedAt = new Date();
+      const forceNote = "Shift force-closed due to unclosed session from previous day upon next clock-in";
+      record.notes = record.notes ? `${record.notes} | ${forceNote}` : forceNote;
+
+      await record.save();
+      modifiedCount++;
+      forceClosedRecords.push(record);
+    }
+
+    // Clean up stale in-memory store records for this employee for dates before today
+    if (liveAttendanceStore) {
+      for (const [k, val] of liveAttendanceStore.entries()) {
+        const valDate = val?.date || (val?.clockIn ? new Date(val.clockIn).toISOString().split("T")[0] : "");
+        if (valDate && valDate !== todayDateStr) {
+          liveAttendanceStore.delete(k);
+        }
+      }
+    }
+
+    if (modifiedCount > 0) {
+      console.log(
+        `[Attendance] Force clock-out: Auto-closed ${modifiedCount} incomplete session(s) from previous day(s) for employee (${uniqueCodes.join(", ") || uniqueIds.join(", ")}).`
+      );
+    }
+
+    return { modifiedCount, forceClosed: modifiedCount > 0, records: forceClosedRecords };
+  } catch (err) {
+    console.warn("[Attendance] Error in autoCloseUnfinishedShifts:", err.message);
+    return { modifiedCount: 0, forceClosed: false, records: [] };
+  }
+};
+
+export const forceClockOutPreviousDaySessions = autoCloseUnfinishedShifts;
+
+/**
+ * Automated 7:30 PM (19:30) Shift Auto-Close Logic
+ *
+ * If an employee clocked in during the day but has not manually clocked out
+ * by 7:30 PM (19:30), the system automatically clocks them out.
+ *
+ * Sets clockOut to the 19:30 threshold (or current timestamp),
+ * marks autoClockedOut: true,
+ * transitions shiftStatus to "Completed",
+ * records notes: "Auto Clocked Out by System (Missed manual clock-out)",
+ * and calculates accurate workHours based on clockIn.
+ */
+export const autoCloseEveningPastGracePeriod = async (targetEmployeeId = null) => {
+  try {
+    const now = new Date();
+    const currentHour = now.getHours();
+    const currentMinute = now.getMinutes();
+
+    // Check if current server time is >= 19:30 (7:30 PM)
+    const isPastGracePeriod = currentHour > 19 || (currentHour === 19 && currentMinute >= 30);
+    if (!isPastGracePeriod) {
+      return { modifiedCount: 0, checked: false };
+    }
+
+    const startOfToday = new Date();
+    startOfToday.setHours(0, 0, 0, 0);
+    const endOfToday = new Date();
+    endOfToday.setHours(23, 59, 59, 999);
+    const todayDateStr = startOfToday.toISOString().split("T")[0];
+
+    // Standard 19:30 auto-close timestamp for today
+    const autoClockOutTime = new Date();
+    autoClockOutTime.setHours(19, 30, 0, 0);
+
+    const baseFilter = {
+      clockOut: null,
+      $or: [
+        { clockIn: { $gte: startOfToday, $lte: endOfToday } },
+        { date: todayDateStr },
+      ],
+    };
+
+    if (targetEmployeeId) {
+      const idCandidates = [targetEmployeeId];
+      if (isValidObjectId(targetEmployeeId)) {
+        idCandidates.push(new mongoose.Types.ObjectId(targetEmployeeId));
+      }
+      baseFilter.$and = [
+        {
+          $or: [
+            { employee: { $in: idCandidates } },
+            { employeeId: String(targetEmployeeId) },
+          ],
+        },
+      ];
+    }
+
+    const unclosedRecords = await Attendance.find(baseFilter);
+    if (!unclosedRecords || unclosedRecords.length === 0) {
+      return { modifiedCount: 0, checked: true };
+    }
+
+    let modifiedCount = 0;
+    for (const record of unclosedRecords) {
+      const inTime = record.clockIn ? new Date(record.clockIn) : autoClockOutTime;
+      const effectiveCloseTime = now < autoClockOutTime ? now : autoClockOutTime;
+      const diffMs = Math.max(0, effectiveCloseTime.getTime() - inTime.getTime());
+      const hoursWorked = Math.max(0.01, Number((diffMs / (1000 * 60 * 60)).toFixed(2)));
+
+      record.clockOut = effectiveCloseTime;
+      record.clockOutTime = effectiveCloseTime;
+      record.autoClockedOut = true;
+      record.shiftStatus = "Completed";
+      if (record.status !== "Late") {
+        record.status = "Completed";
+      }
+      record.workHours = hoursWorked;
+      record.autoClosedAt = now;
+      record.notes = record.notes
+        ? `${record.notes} | Auto Clocked Out by System (Missed manual clock-out)`
+        : "Auto Clocked Out by System (Missed manual clock-out)";
+
+      await record.save();
+      modifiedCount++;
+
+      // Invalidate memory store
+      if (liveAttendanceStore) {
+        if (record.employee) {
+          liveAttendanceStore.delete(`${record.employee.toString()}_${todayDateStr}`);
+        }
+        if (record.employeeId) {
+          liveAttendanceStore.delete(`${record.employeeId}_${todayDateStr}`);
+        }
+      }
+    }
+
+    if (modifiedCount > 0) {
+      console.log(`[Attendance] 7:30 PM auto-close triggered: auto-closed ${modifiedCount} shift(s).`);
+    }
+
+    return { modifiedCount, checked: true };
+  } catch (err) {
+    console.warn("[Attendance] Error in autoCloseEveningPastGracePeriod:", err.message);
+    return { modifiedCount: 0, error: err.message };
+  }
+};
+
+/**
+ * System-wide sweeper: auto-close any open shift across all employees
+ * whose clockIn date is prior to today (midnight rollover),
+ * and auto-close today's unclosed shifts if current time is >= 19:30 (7:30 PM).
+ */
+export const autoCloseAllStaleShifts = async () => {
+  try {
+    const startOfToday = new Date();
+    startOfToday.setHours(0, 0, 0, 0);
+    const todayDateStr = startOfToday.toISOString().split("T")[0];
+
+    // 1. Midnight rollover: Auto-close any lingering shift from prior days
+    const staleShifts = await Attendance.find({
+      $and: [
+        {
+          $or: [
+            { clockOut: null },
+            { clockOut: { $exists: false } },
+            { clockOutTime: null },
+            { clockOutTime: { $exists: false } },
+          ],
+        },
+        {
+          $or: [
+            { clockIn: { $lt: startOfToday } },
+            { date: { $lt: todayDateStr } },
+          ],
+        },
+      ],
+    });
+
+    let modifiedCount = 0;
+    for (const record of staleShifts) {
+      const inTime = record.clockIn ? new Date(record.clockIn) : (record.date ? new Date(record.date) : startOfToday);
+      let closeTime = new Date(inTime);
+      closeTime.setHours(19, 30, 0, 0);
+      if (closeTime.getTime() <= inTime.getTime()) {
+        closeTime = new Date(inTime.getTime() + 8 * 60 * 60 * 1000);
+      }
+      if (closeTime > startOfToday) {
+        closeTime = new Date(startOfToday.getTime() - 1000);
+      }
+
+      const diffMs = Math.max(0, closeTime.getTime() - inTime.getTime());
+      const hoursWorked = Math.min(12, Math.max(0.01, Number((diffMs / (1000 * 60 * 60)).toFixed(2))));
+
+      record.clockOut = closeTime;
+      record.clockOutTime = closeTime;
+      record.autoClockedOut = true;
+      record.shiftStatus = "Auto-Closed";
+      if (record.status !== "Late") {
+        record.status = "Auto-Closed";
+      }
+      record.workHours = record.workHours > 0 ? record.workHours : hoursWorked;
+      record.autoClosedAt = new Date();
+      if (!record.notes || !record.notes.includes("Shift auto-closed at midnight")) {
+        record.notes = record.notes
+          ? `${record.notes} | Shift auto-closed at midnight due to missing clock-out`
+          : "Shift auto-closed at midnight due to missing clock-out";
+      }
+
+      await record.save();
+      modifiedCount++;
+    }
+
+    if (liveAttendanceStore) {
+      for (const [k, val] of liveAttendanceStore.entries()) {
+        if (val?.date && val.date !== todayDateStr) {
+          liveAttendanceStore.delete(k);
+        }
+      }
+    }
+
+    if (modifiedCount > 0) {
+      console.log(`[Attendance] System midnight sweeper auto-closed ${modifiedCount} shift(s).`);
+    }
+
+    // 2. 7:30 PM (19:30) check for today's shifts
+    await autoCloseEveningPastGracePeriod();
+
+    return { modifiedCount };
+  } catch (err) {
+    console.warn("[Attendance] Error in autoCloseAllStaleShifts:", err.message);
+    return { modifiedCount: 0 };
   }
 };
 
@@ -55,6 +555,14 @@ export const clockIn = async (req, res) => {
       });
     }
 
+    // Force clock-out any unclosed shift from prior calendar days before evaluating today's clock-in
+    const forceCloseResult = await autoCloseUnfinishedShifts(employeeId, req.user || req.employee);
+    if (forceCloseResult?.modifiedCount > 0) {
+      console.log(
+        `[Attendance] Automatic force clock-out executed for ${forceCloseResult.modifiedCount} incomplete session(s) from previous day(s) for employee ${employeeId}.`
+      );
+    }
+
     // Lookup employee details for rich notification & response
     let employeeDoc = null;
     if (isValidObjectId(employeeId)) {
@@ -68,8 +576,21 @@ export const clockIn = async (req, res) => {
     }
 
     const employeeCode = employeeDoc?.employeeId || req.employee?.employeeId || "";
-    const today = new Date().toISOString().split("T")[0];
+    const startOfToday = new Date();
+    startOfToday.setHours(0, 0, 0, 0);
+    const endOfToday = new Date();
+    endOfToday.setHours(23, 59, 59, 999);
+    const today = startOfToday.toISOString().split("T")[0];
     const key = `${employeeId}_${today}`;
+
+    // Clean up stale in-memory store records from past dates
+    if (liveAttendanceStore) {
+      for (const [k, val] of liveAttendanceStore.entries()) {
+        if (val?.date && val.date !== today) {
+          liveAttendanceStore.delete(k);
+        }
+      }
+    }
 
     // Parse check-in timestamp (from body or server clock)
     const checkInTimestamp = req.body?.clockInTime || req.body?.timestamp || req.body?.clockIn || new Date();
@@ -93,7 +614,7 @@ export const clockIn = async (req, res) => {
     const displayStatus = penaltyEval.status || (delayMinutes > 0 ? "Late" : "On Time");
     const lateReason = String(req.body?.lateReason || req.body?.reason || req.body?.notes || "").trim();
 
-    // 1. Check MongoDB for existing record today
+    // 1. Check MongoDB for existing record strictly today
     let existingDoc = null;
     const rawAuthId = req.user?._id || req.user?.id || req.employee?.id || req.employee?._id;
     const idCandidates = [employeeId, rawAuthId, resolvedId].filter(Boolean);
@@ -101,10 +622,19 @@ export const clockIn = async (req, res) => {
     if (isValidObjectId(employeeId)) {
       try {
         existingDoc = await Attendance.findOne({
-          date: today,
-          $or: [
-            { employee: { $in: idCandidates } },
-            ...(employeeCode ? [{ employeeId: employeeCode }] : []),
+          $and: [
+            {
+              $or: [
+                { employee: { $in: idCandidates } },
+                ...(employeeCode ? [{ employeeId: employeeCode }] : []),
+              ],
+            },
+            {
+              $or: [
+                { clockIn: { $gte: startOfToday, $lte: endOfToday } },
+                { date: today },
+              ],
+            },
           ],
         }).populate("employee", "fullName employeeId department position email avatar").lean();
       } catch (dbErr) {
@@ -122,6 +652,7 @@ export const clockIn = async (req, res) => {
         message: "You have already clocked in today.",
         attendance: existingDoc,
         todayRecord: existingDoc,
+        data: existingDoc,
         status: existingDoc.lateMinutes > 0 || (existingDoc.status || "").toLowerCase() === "late" ? "late" : "on-time",
         delayMinutes: existingDoc.delayMinutes ?? existingDoc.lateMinutes ?? 0,
         lateMinutes: existingDoc.lateMinutes ?? existingDoc.delayMinutes ?? 0,
@@ -131,6 +662,9 @@ export const clockIn = async (req, res) => {
         isClockedIn: !Boolean(existingDoc.clockOut || existingDoc.clockOutTime),
         hasClockedOut: Boolean(existingDoc.clockOut || existingDoc.clockOutTime),
         isClockedOut: Boolean(existingDoc.clockOut || existingDoc.clockOutTime),
+        forceClosedPreviousShift: Boolean(forceCloseResult?.modifiedCount > 0),
+        previousSessionForceClosed: Boolean(forceCloseResult?.modifiedCount > 0),
+        forceClosedCount: forceCloseResult?.modifiedCount || 0,
       });
     }
 
@@ -304,6 +838,9 @@ export const clockIn = async (req, res) => {
       isClockedIn: true,
       hasClockedOut: false,
       isClockedOut: false,
+      forceClosedPreviousShift: Boolean(forceCloseResult?.modifiedCount > 0),
+      previousSessionForceClosed: Boolean(forceCloseResult?.modifiedCount > 0),
+      forceClosedCount: forceCloseResult?.modifiedCount || 0,
     });
   } catch (error) {
     return res.status(500).json({
@@ -317,68 +854,135 @@ export const clockIn = async (req, res) => {
 export const clockOut = async (req, res) => {
   try {
     const rawAuthId = req.user?._id || req.user?.id || req.employee?.id || req.employee?._id;
-    let employeeId = rawAuthId;
-    const resolvedId = await resolveEmployeeObjectId(employeeId);
-    if (resolvedId) employeeId = resolvedId;
+    const empInfo = await resolveEmployeeInfo(req, rawAuthId);
+    const { employeeDoc, employeeObjectId, employeeCode, idCandidates, idCandidateStrings, codeCandidates } = empInfo;
 
-    if (!employeeId) {
+    if (!employeeObjectId && idCandidates.length === 0 && codeCandidates.length === 0) {
       return res.status(401).json({
         success: false,
         message: "Employee identification required for clock out.",
       });
     }
 
-    // Lookup employee details for rich notification
-    let employeeDoc = null;
-    if (isValidObjectId(employeeId)) {
+    // Auto-close any unclosed shift from prior calendar days before evaluating clock-out
+    await autoCloseUnfinishedShifts(employeeObjectId || rawAuthId, req.user || req.employee);
+
+    const now = new Date();
+    const startOfToday = new Date(now);
+    startOfToday.setHours(0, 0, 0, 0);
+    const endOfToday = new Date(now);
+    endOfToday.setHours(23, 59, 59, 999);
+    const today = now.toISOString().split("T")[0];
+    const localToday = now.toLocaleDateString("en-CA");
+    const clientDate = req.body?.date || "";
+    const dateList = Array.from(new Set([today, localToday, clientDate].filter(Boolean)));
+
+    // 1. Direct record ID match if provided by client in req.body
+    let record = null;
+    const explicitId = req.body?.attendanceId || req.body?.recordId || req.body?.id || req.body?._id;
+    if (explicitId && isValidObjectId(explicitId)) {
       try {
-        employeeDoc = await Employee.findById(employeeId)
-          .select("fullName employeeId department position email avatar profile_picture")
-          .lean();
+        record = await Attendance.findById(explicitId).populate("employee", "fullName employeeId department position email avatar");
       } catch (err) {
-        console.warn("Could not fetch employee details for clockOut notification:", err.message);
+        console.warn("[clockOut] Direct findById failed:", err.message);
       }
     }
 
-    const employeeCode = employeeDoc?.employeeId || req.employee?.employeeId || "";
-    const today = new Date().toISOString().split("T")[0];
-    const key = `${employeeId}_${today}`;
-    const rawKey = `${rawAuthId}_${today}`;
-    const codeKey = `${employeeCode}_${today}`;
-    const now = new Date();
+    // 2. Query conditions for this employee across all resolved identifiers
+    const empFilterConditions = [
+      ...(idCandidates.length > 0 ? [{ employee: { $in: idCandidates } }] : []),
+      ...(codeCandidates.length > 0 ? [{ employeeId: { $in: codeCandidates } }] : []),
+    ];
 
-    // Check MongoDB for clock-in record
-    let record = null;
-    const idCandidates = [employeeId, rawAuthId, resolvedId].filter(Boolean);
-    if (isValidObjectId(employeeId)) {
+    // 3. Search for active OPEN shift first (clockIn != null and clockOut is null)
+    if (!record && empFilterConditions.length > 0) {
       try {
         record = await Attendance.findOne({
-          date: today,
-          $or: [
-            { employee: { $in: idCandidates } },
-            ...(employeeCode ? [{ employeeId: employeeCode }] : []),
-          ],
-        }).populate("employee", "fullName employeeId department position email avatar");
+          $or: empFilterConditions,
+          clockIn: { $ne: null },
+          $or: [{ clockOut: null }, { clockOut: { $exists: false } }],
+        })
+          .sort({ clockIn: -1, createdAt: -1 })
+          .populate("employee", "fullName employeeId department position email avatar");
       } catch (dbErr) {
-        console.warn("DB search in clockOut:", dbErr.message);
+        console.warn("[clockOut] DB search for open shift failed:", dbErr.message);
       }
     }
 
-    // Fallback to memory if DB query failed
-    if (!record || (!record.clockIn && !record.clockInTime)) {
-      record = liveAttendanceStore.get(key) || liveAttendanceStore.get(rawKey) || liveAttendanceStore.get(codeKey);
+    // 4. Search for today's record (matching dates or clockIn within today's window)
+    if (!record && empFilterConditions.length > 0) {
+      try {
+        record = await Attendance.findOne({
+          $or: empFilterConditions,
+          $or: [
+            { date: { $in: dateList } },
+            { clockIn: { $gte: startOfToday, $lte: endOfToday } },
+          ],
+        })
+          .sort({ clockIn: -1, createdAt: -1 })
+          .populate("employee", "fullName employeeId department position email avatar");
+      } catch (dbErr) {
+        console.warn("[clockOut] DB search by date failed:", dbErr.message);
+      }
     }
 
-    const clockInVal = record?.clockIn || record?.clockInTime;
-
-    if (!record || !clockInVal) {
-      return res.status(400).json({
-        success: false,
-        message: "No clock-in record found for today. Please clock in first.",
-      });
+    // 5. Fallback to in-memory live store
+    if (!record) {
+      const keysToProbe = [
+        ...idCandidateStrings.map((id) => `${id}_${today}`),
+        ...codeCandidates.map((code) => `${code}_${today}`),
+        ...dateList.flatMap((d) => idCandidateStrings.map((id) => `${id}_${d}`)),
+        ...dateList.flatMap((d) => codeCandidates.map((code) => `${code}_${d}`)),
+      ];
+      for (const k of keysToProbe) {
+        const memRecord = liveAttendanceStore.get(k);
+        if (memRecord && (memRecord.clockIn || memRecord.clockInTime)) {
+          record = memRecord;
+          break;
+        }
+      }
     }
 
-    if (record.clockOut || record.clockOutTime) {
+    // 6. Fallback: Search for the most recent unclocked-out attendance record for this employee
+    if (!record && empFilterConditions.length > 0) {
+      try {
+        record = await Attendance.findOne({
+          $or: empFilterConditions,
+        })
+          .sort({ clockIn: -1, createdAt: -1 })
+          .populate("employee", "fullName employeeId department position email avatar");
+      } catch (dbErr) {
+        console.warn("[clockOut] Fallback recent record search failed:", dbErr.message);
+      }
+    }
+
+    // 7. If client provided clockIn in req.body but no record was found in DB/memory, gracefully create and complete it
+    if (!record && (req.body?.clockIn || req.body?.clockInTime)) {
+      const parsedClockIn = new Date(req.body.clockIn || req.body.clockInTime);
+      if (!isNaN(parsedClockIn.getTime())) {
+        const diffMs = Math.max(0, now.getTime() - parsedClockIn.getTime());
+        const hoursWorked = Math.max(0.01, Number((diffMs / (1000 * 60 * 60)).toFixed(2)));
+        const targetEmpId = employeeDoc?._id || idCandidates[0] || new mongoose.Types.ObjectId();
+        record = new Attendance({
+          employee: targetEmpId,
+          employeeId: employeeCode || "STAFF",
+          date: req.body.date || today,
+          clockIn: parsedClockIn,
+          clockInTime: parsedClockIn,
+          clockOut: now,
+          clockOutTime: now,
+          workHours: hoursWorked,
+          status: "On Time",
+          shiftStatus: "Completed",
+          notes: req.body?.reason ? `Manual recovery: ${req.body.reason}` : "Clocked out via application",
+        });
+        await record.save();
+        await record.populate("employee", "fullName employeeId department position email avatar");
+      }
+    }
+
+    // Check if already clocked out
+    if (record && (record.clockOut || record.clockOutTime)) {
       return res.status(200).json({
         success: true,
         alreadyClockedOut: true,
@@ -392,28 +996,39 @@ export const clockOut = async (req, res) => {
       });
     }
 
+    const clockInVal = record?.clockIn || record?.clockInTime;
+
+    if (!record || !clockInVal) {
+      return res.status(400).json({
+        success: false,
+        message: "No clock-in record found for today. Please clock in first.",
+      });
+    }
+
     // Calculate hours worked accurately
     const clockInTime = new Date(clockInVal);
     const diffMs = Math.max(0, now.getTime() - clockInTime.getTime());
     const hoursWorked = Math.max(0.01, Number((diffMs / (1000 * 60 * 60)).toFixed(2)));
 
-    // Atomically persist clock-out to MongoDB
+    // Persist clock-out to MongoDB
     let updatedRecord = null;
-    if (isValidObjectId(employeeId)) {
+    if (record._id && isValidObjectId(record._id)) {
       try {
-        updatedRecord = await Attendance.findOneAndUpdate(
-          {
-            date: today,
-            $or: [
-              { employee: { $in: idCandidates } },
-              ...(employeeCode ? [{ employeeId: employeeCode }] : []),
-            ],
-          },
+        const notesAppend = req.body?.reason ? String(req.body.reason).trim() : "";
+        const existingNotes = record.notes || "";
+        const updatedNotes = notesAppend
+          ? (existingNotes ? `${existingNotes} | ${notesAppend}` : notesAppend)
+          : existingNotes;
+
+        updatedRecord = await Attendance.findByIdAndUpdate(
+          record._id,
           {
             $set: {
               clockOut: now,
               clockOutTime: now,
               workHours: hoursWorked,
+              shiftStatus: "Completed",
+              ...(updatedNotes ? { notes: updatedNotes } : {}),
             },
           },
           { returnDocument: "after" }
@@ -423,7 +1038,7 @@ export const clockOut = async (req, res) => {
           updatedRecord = updatedRecord.toObject();
         }
       } catch (dbErr) {
-        console.warn("DB update in clockOut:", dbErr.message);
+        console.warn("[clockOut] DB update error:", dbErr.message);
       }
     }
 
@@ -433,14 +1048,19 @@ export const clockOut = async (req, res) => {
         clockOut: now.toISOString(),
         clockOutTime: now.toISOString(),
         workHours: hoursWorked,
+        shiftStatus: "Completed",
       };
     }
 
-    // Update live memory store
-    liveAttendanceStore.set(key, updatedRecord);
-    if (rawAuthId) liveAttendanceStore.set(rawKey, updatedRecord);
-    if (employeeCode) liveAttendanceStore.set(codeKey, updatedRecord);
-    if (resolvedId) liveAttendanceStore.set(`${resolvedId}_${today}`, updatedRecord);
+    // Synchronize across in-memory live attendance store keys
+    const syncKeys = [
+      `${employeeObjectId}_${today}`,
+      ...idCandidateStrings.map((id) => `${id}_${today}`),
+      ...codeCandidates.map((code) => `${code}_${today}`),
+    ];
+    for (const k of syncKeys) {
+      liveAttendanceStore.set(k, updatedRecord);
+    }
 
     // Push automated notification record targeting Admins
     try {
@@ -451,7 +1071,7 @@ export const clockOut = async (req, res) => {
       await createNotificationRecord({
         recipient_id: "admin",
         recipient_role: "admin",
-        sender_id: String(employeeId),
+        sender_id: String(employeeObjectId || rawAuthId),
         sender_role: "employee",
         sender_name: empName,
         title: "Employee Clock Out",
@@ -470,7 +1090,7 @@ export const clockOut = async (req, res) => {
         },
       });
     } catch (notifErr) {
-      console.error("Failed to push clock-out notification:", notifErr.message);
+      console.error("[clockOut] Failed to push clock-out notification:", notifErr.message);
     }
 
     return res.status(200).json({
@@ -738,6 +1358,9 @@ export const getMonthlyAttendanceCalendar = async (req, res) => {
 // Get all attendance for admin - Live automated database sync
 export const getAllAttendance = async (req, res) => {
   try {
+    // Auto-close today's unclosed shifts if current time is >= 19:30 (7:30 PM)
+    await autoCloseEveningPastGracePeriod();
+
     let attendance = [];
 
     try {
@@ -770,7 +1393,11 @@ export const getTodayAttendance = async (req, res) => {
   try {
     const rawAuthId = req.user?._id || req.user?.id || req.employee?.id || req.employee?._id;
     let employeeId = rawAuthId;
-    const today = new Date().toISOString().split("T")[0];
+    const startOfToday = new Date();
+    startOfToday.setHours(0, 0, 0, 0);
+    const endOfToday = new Date();
+    endOfToday.setHours(23, 59, 59, 999);
+    const today = startOfToday.toISOString().split("T")[0];
 
     let employee = null;
     let validObjectId = null;
@@ -824,6 +1451,21 @@ export const getTodayAttendance = async (req, res) => {
       }
     }
 
+    // Auto-close any lingering shift from prior calendar days that was never clocked out
+    await autoCloseUnfinishedShifts(validObjectId || employeeId, req.user || req.employee);
+
+    // 7:30 PM (19:30) check: If server time >= 19:30, auto-close unclosed shift for today
+    await autoCloseEveningPastGracePeriod(validObjectId || employeeId);
+
+    // Clean up stale in-memory store records for dates before today
+    if (liveAttendanceStore) {
+      for (const [k, val] of liveAttendanceStore.entries()) {
+        if (val?.date && val.date !== today) {
+          liveAttendanceStore.delete(k);
+        }
+      }
+    }
+
     let attendance = null;
     const employeeCode = employee?.employeeId || req.employee?.employeeId || req.user?.employeeId || "";
     const idCandidates = [validObjectId, employeeId, rawAuthId, employee?._id].filter(Boolean);
@@ -835,8 +1477,15 @@ export const getTodayAttendance = async (req, res) => {
       ];
 
       const dbAtt = await Attendance.findOne({
-        date: today,
-        $or: filterConditions,
+        $and: [
+          { $or: filterConditions },
+          {
+            $or: [
+              { clockIn: { $gte: startOfToday, $lte: endOfToday } },
+              { date: today },
+            ],
+          },
+        ],
       })
         .populate("employee", "fullName department position employeeId email avatar")
         .sort({ updatedAt: -1, createdAt: -1 })
@@ -849,7 +1498,7 @@ export const getTodayAttendance = async (req, res) => {
       console.warn("DB query in getTodayAttendance:", dbErr.message);
     }
 
-    // Merge in-memory live attendance store records if DB is not populated or in-memory is fresher
+    // Merge in-memory live attendance store records if fresh and strictly matching today
     if (liveAttendanceStore) {
       const keysToCheck = [
         `${employeeId}_${today}`,
@@ -860,7 +1509,7 @@ export const getTodayAttendance = async (req, res) => {
 
       for (const k of keysToCheck) {
         const memAtt = liveAttendanceStore.get(k);
-        if (memAtt) {
+        if (memAtt && memAtt.date === today) {
           attendance = { ...(attendance || {}), ...memAtt };
           break;
         }
@@ -887,17 +1536,21 @@ export const getTodayAttendance = async (req, res) => {
 
     res.status(200).json({
       success: true,
-      employee,
-      attendance,
+      data: attendance, // null if the employee hasn't clocked in today yet
       todayRecord: attendance,
+      attendance,
+      employee,
       hasClockedIn,
       isClockedIn,
       hasClockedOut,
       isClockedOut,
       status: attendance?.status || (hasClockedIn ? "On Time" : "Not Clocked In"),
+      shiftStatus: attendance?.shiftStatus || (hasClockedOut ? "Completed" : hasClockedIn ? "In-Progress" : "Not Started"),
       clockIn: attendance?.clockIn || attendance?.clockInTime || null,
       clockOut: attendance?.clockOut || attendance?.clockOutTime || null,
       workHours: attendance?.workHours || 0,
+      autoClockedOut: Boolean(attendance?.autoClockedOut),
+      notes: attendance?.notes || "",
       lateMinutes: attendance?.lateMinutes ?? attendance?.delayMinutes ?? 0,
       delayMinutes: attendance?.delayMinutes ?? attendance?.lateMinutes ?? 0,
       latePenalty: attendance?.latePenalty || 0,
@@ -1967,5 +2620,32 @@ export const getPerformanceMetrics = async (req, res) => {
     });
   }
 };
+
+/**
+ * Explicit endpoint handler to force clock-out incomplete sessions from previous days
+ */
+export const forceClockOutHandler = async (req, res) => {
+  try {
+    const rawAuthId = req.user?._id || req.user?.id || req.employee?.id || req.employee?._id;
+    const resolvedId = await resolveEmployeeObjectId(rawAuthId);
+    const result = await autoCloseUnfinishedShifts(resolvedId || rawAuthId, req.user || req.employee);
+
+    return res.status(200).json({
+      success: true,
+      message: result.modifiedCount > 0
+        ? `Successfully force clocked out ${result.modifiedCount} unclosed session(s) from previous day(s).`
+        : "No unclosed sessions from previous days were found.",
+      forceClosedCount: result.modifiedCount,
+      forceClosed: result.modifiedCount > 0,
+      records: result.records || [],
+    });
+  } catch (err) {
+    return res.status(500).json({
+      success: false,
+      message: err.message,
+    });
+  }
+};
+
 
 

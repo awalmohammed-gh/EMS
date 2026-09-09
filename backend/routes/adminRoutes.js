@@ -10,6 +10,7 @@ import {
   updateEmployeeStatus,
   deleteEmployee,
   bulkUpdateEmployees,
+  bulkDeleteEmployees,
   getDashboardStats,
   getAdminPayrollSummary,
 } from "../controllers/adminController.js";
@@ -138,6 +139,10 @@ adminRouter.delete("/payslips/:id", verifyAdmin, deletePayroll);
 adminRouter.patch("/employees/bulk-update", verifyAdmin, bulkUpdateEmployees);
 adminRouter.post("/employees/bulk-update", verifyAdmin, bulkUpdateEmployees);
 adminRouter.put("/employees/bulk-update", verifyAdmin, bulkUpdateEmployees);
+
+// Admin-only bulk employee deletion (POST or DELETE /api/admin/employees/bulk-delete)
+adminRouter.post("/employees/bulk-delete", verifyAdmin, bulkDeleteEmployees);
+adminRouter.delete("/employees/bulk-delete", verifyAdmin, bulkDeleteEmployees);
 
 // Admin-only employee status management (PUT /api/admin/employees/:id/status)
 adminRouter.put("/employees/:id/status", verifyAdmin, updateEmployeeStatus);

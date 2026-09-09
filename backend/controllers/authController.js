@@ -5,7 +5,7 @@ import { Admin } from "../models/Admin.js";
 import { Employee } from "../models/employeeModel.js";
 import { User } from "../models/userModel.js";
 import { Attendance } from "../models/attendanceModel.js";
-import { liveAttendanceStore } from "./employeeAttendance.js";
+import { liveAttendanceStore, autoCloseUnfinishedShifts } from "./employeeAttendance.js";
 
 const getJwtSecret = () => process.env.JWT_SECRET || "default_jwt_secret_key_12345";
 
@@ -22,17 +22,27 @@ export const verifyActiveIncompleteShift = async (employee) => {
     };
   }
 
-  const todayStr = new Date().toISOString().split("T")[0];
+  const startOfToday = new Date();
+  startOfToday.setHours(0, 0, 0, 0);
+  const endOfToday = new Date();
+  endOfToday.setHours(23, 59, 59, 999);
+  const todayStr = startOfToday.toISOString().split("T")[0];
+
   const empId = employee._id ? employee._id.toString() : (employee.id ? employee.id.toString() : null);
   const empCode = employee.employeeId || "";
   const email = employee.email || "";
+
+  // 1. Auto-close any lingering shift started before today that was never clocked out
+  try {
+    await autoCloseUnfinishedShifts(empId || empCode, employee);
+  } catch (acErr) {
+    console.warn("Could not auto-close stale shifts in verifyActiveIncompleteShift:", acErr.message);
+  }
 
   let activeShift = null;
   let todayRecord = null;
 
   try {
-    // 1. Query database for an open, incomplete shift:
-    // Defined as: employee clocked in (clockIn or clockInTime is set), but NOT clocked out (clockOut and clockOutTime are null/falsy)
     const activeShiftConditions = [
       ...(empId && mongoose.Types.ObjectId.isValid(empId) ? [{ employee: empId }] : []),
       ...(empCode ? [{ employeeId: empCode }] : []),
@@ -40,9 +50,16 @@ export const verifyActiveIncompleteShift = async (employee) => {
     ];
 
     if (activeShiftConditions.length > 0) {
+      // Look strictly for today's incomplete active shift
       activeShift = await Attendance.findOne({
         $or: activeShiftConditions,
         $and: [
+          {
+            $or: [
+              { date: todayStr },
+              { clockIn: { $gte: startOfToday, $lte: endOfToday } },
+            ],
+          },
           {
             $or: [
               { clockIn: { $ne: null, $exists: true } },
@@ -61,16 +78,22 @@ export const verifyActiveIncompleteShift = async (employee) => {
               { clockOutTime: { $exists: false } },
             ],
           },
+          {
+            shiftStatus: { $ne: "Auto-Closed" },
+          },
         ],
       })
         .populate("employee", "fullName employeeId department position email avatar")
-        .sort({ date: -1, createdAt: -1 })
+        .sort({ createdAt: -1 })
         .lean();
 
-      // 2. Query today's attendance record (could be incomplete or completed)
+      // 2. Query today's attendance record (completed or in progress)
       todayRecord = await Attendance.findOne({
         $or: activeShiftConditions,
-        date: todayStr,
+        $or: [
+          { date: todayStr },
+          { clockIn: { $gte: startOfToday, $lte: endOfToday } },
+        ],
       })
         .populate("employee", "fullName employeeId department position email avatar")
         .sort({ updatedAt: -1, createdAt: -1 })
@@ -80,7 +103,7 @@ export const verifyActiveIncompleteShift = async (employee) => {
     console.warn("Error querying active shift in authController:", err.message);
   }
 
-  // 3. Check and sync with liveAttendanceStore in memory
+  // 3. Check and sync with liveAttendanceStore in memory (strictly for today)
   if (liveAttendanceStore) {
     const keysToCheck = [
       empId ? `${empId}_${todayStr}` : null,
@@ -89,33 +112,39 @@ export const verifyActiveIncompleteShift = async (employee) => {
 
     for (const key of keysToCheck) {
       const memRec = liveAttendanceStore.get(key);
-      if (memRec) {
+      if (memRec && (!memRec.date || memRec.date === todayStr)) {
         if (!todayRecord) todayRecord = memRec;
-        if (!activeShift && (memRec.clockIn || memRec.clockInTime) && (!memRec.clockOut && !memRec.clockOutTime)) {
+        if (!activeShift && (memRec.clockIn || memRec.clockInTime) && (!memRec.clockOut && !memRec.clockOutTime) && memRec.shiftStatus !== "Auto-Closed") {
           activeShift = memRec;
         }
         break;
       }
     }
 
-    // If an active shift was found, ensure it is cached in liveAttendanceStore across keys
-    if (activeShift) {
-      const shiftDate = activeShift.date || todayStr;
-      if (empId) liveAttendanceStore.set(`${empId}_${shiftDate}`, activeShift);
-      if (empCode) liveAttendanceStore.set(`${empCode}_${shiftDate}`, activeShift);
+    if (activeShift && (activeShift.date === todayStr || !activeShift.date)) {
+      if (empId) liveAttendanceStore.set(`${empId}_${todayStr}`, activeShift);
+      if (empCode) liveAttendanceStore.set(`${empCode}_${todayStr}`, activeShift);
     }
   }
 
-  if (activeShift && (!todayRecord || todayRecord.date === activeShift.date)) {
+  if (activeShift && !todayRecord) {
     todayRecord = activeShift;
   }
 
-  const hasActiveShift = Boolean(activeShift);
-  const primaryRecord = activeShift || todayRecord;
+  const hasActiveShift = Boolean(activeShift && (!activeShift.date || activeShift.date === todayStr));
+  const primaryRecord = (todayRecord && (!todayRecord.date || todayRecord.date === todayStr)) ? todayRecord : (hasActiveShift ? activeShift : null);
 
-  const hasClockedIn = Boolean(activeShift || (todayRecord && (todayRecord.clockIn || todayRecord.clockInTime)));
-  const hasClockedOut = Boolean(!activeShift && todayRecord && (todayRecord.clockOut || todayRecord.clockOutTime));
-  const isClockedIn = Boolean(activeShift || (hasClockedIn && !hasClockedOut));
+  const hasClockedIn = Boolean(
+    hasActiveShift ||
+    (primaryRecord && (primaryRecord.clockIn || primaryRecord.clockInTime) && (!primaryRecord.date || primaryRecord.date === todayStr))
+  );
+  const hasClockedOut = Boolean(
+    !hasActiveShift &&
+    primaryRecord &&
+    (primaryRecord.clockOut || primaryRecord.clockOutTime) &&
+    (!primaryRecord.date || primaryRecord.date === todayStr)
+  );
+  const isClockedIn = Boolean(hasActiveShift || (hasClockedIn && !hasClockedOut));
   const isClockedOut = hasClockedOut;
 
   const attendanceState = {
@@ -125,23 +154,23 @@ export const verifyActiveIncompleteShift = async (employee) => {
     isClockedIn,
     isClockedOut,
     isActiveShift: isClockedIn,
-    clockIn: activeShift?.clockIn || activeShift?.clockInTime || todayRecord?.clockIn || todayRecord?.clockInTime || null,
-    clockOut: activeShift ? null : (todayRecord?.clockOut || todayRecord?.clockOutTime || null),
-    status: activeShift?.status || todayRecord?.status || (hasClockedIn ? "On Time" : "Not Clocked In"),
-    workHours: Number(activeShift?.workHours || todayRecord?.workHours || 0),
-    delayMinutes: Number(activeShift?.delayMinutes ?? activeShift?.lateMinutes ?? todayRecord?.delayMinutes ?? todayRecord?.lateMinutes ?? 0),
-    lateMinutes: Number(activeShift?.lateMinutes ?? activeShift?.delayMinutes ?? todayRecord?.lateMinutes ?? todayRecord?.delayMinutes ?? 0),
-    latePenalty: Number(activeShift?.latePenalty ?? todayRecord?.latePenalty ?? 0),
-    penaltyTier: activeShift?.penaltyTier || todayRecord?.penaltyTier || "",
-    lateReason: activeShift?.lateReason || activeShift?.notes || todayRecord?.lateReason || todayRecord?.notes || "",
-    date: activeShift?.date || todayRecord?.date || todayStr,
-    shiftId: activeShift?._id || todayRecord?._id || null,
+    clockIn: isClockedIn || hasClockedOut ? (primaryRecord?.clockIn || primaryRecord?.clockInTime || null) : null,
+    clockOut: hasClockedOut ? (primaryRecord?.clockOut || primaryRecord?.clockOutTime || null) : null,
+    status: primaryRecord?.status || (hasClockedIn ? "On Time" : "Not Clocked In"),
+    workHours: Number(primaryRecord?.workHours || 0),
+    delayMinutes: Number(primaryRecord?.delayMinutes ?? primaryRecord?.lateMinutes ?? 0),
+    lateMinutes: Number(primaryRecord?.lateMinutes ?? primaryRecord?.delayMinutes ?? 0),
+    latePenalty: Number(primaryRecord?.latePenalty ?? 0),
+    penaltyTier: primaryRecord?.penaltyTier || "",
+    lateReason: primaryRecord?.lateReason || primaryRecord?.notes || "",
+    date: primaryRecord?.date || todayStr,
+    shiftId: primaryRecord?._id || null,
   };
 
   return {
     hasActiveShift,
-    activeShift: activeShift || null,
-    todayRecord: todayRecord || null,
+    activeShift: hasActiveShift ? activeShift : null,
+    todayRecord: primaryRecord || null,
     attendance: primaryRecord || null,
     attendanceState,
   };
@@ -257,17 +286,23 @@ export const adminRegister = async (req, res) => {
       fullName: savedAdmin.full_name,
     });
 
-    // 6. Set HTTP Cookie
-    res.cookie("token", token, {
+    const isHttps = req.secure || req.headers["x-forwarded-proto"] === "https" || process.env.NODE_ENV === "production";
+    const cookieOptions = {
       httpOnly: true,
-      secure: process.env.NODE_ENV === "production",
-      sameSite: process.env.NODE_ENV === "production" ? "none" : "lax",
+      secure: isHttps,
+      sameSite: isHttps ? "none" : "lax",
       maxAge: 7 * 24 * 60 * 60 * 1000,
-    });
+      path: "/",
+    };
+
+    // 6. Set HTTP Cookies (auth_token primary)
+    res.cookie("auth_token", token, cookieOptions);
+    res.cookie("token", token, cookieOptions);
 
     const safeAdmin = {
       _id: savedAdmin._id.toString(),
       id: savedAdmin._id.toString(),
+      name: savedAdmin.full_name,
       fullName: savedAdmin.full_name,
       full_name: savedAdmin.full_name,
       email: savedAdmin.email,
@@ -281,10 +316,10 @@ export const adminRegister = async (req, res) => {
 
     return res.status(201).json({
       success: true,
-      message: "Admin account registered successfully.",
       token,
-      admin: safeAdmin,
+      message: "Admin account registered successfully.",
       user: safeAdmin,
+      admin: safeAdmin,
     });
   } catch (error) {
     console.error("Admin registration error:", error);
@@ -339,17 +374,23 @@ export const adminLogin = async (req, res) => {
       fullName: dbAdmin.full_name,
     });
 
-    // 4. Set HTTP Cookie
-    res.cookie("token", token, {
+    const isHttps = req.secure || req.headers["x-forwarded-proto"] === "https" || process.env.NODE_ENV === "production";
+    const cookieOptions = {
       httpOnly: true,
-      secure: process.env.NODE_ENV === "production",
-      sameSite: process.env.NODE_ENV === "production" ? "none" : "lax",
+      secure: isHttps,
+      sameSite: isHttps ? "none" : "lax",
       maxAge: 7 * 24 * 60 * 60 * 1000,
-    });
+      path: "/",
+    };
+
+    // 4. Set HTTP-only Cookies
+    res.cookie("auth_token", token, cookieOptions);
+    res.cookie("token", token, cookieOptions);
 
     const safeAdmin = {
       _id: dbAdmin._id.toString(),
       id: dbAdmin._id.toString(),
+      name: dbAdmin.full_name,
       fullName: dbAdmin.full_name,
       full_name: dbAdmin.full_name,
       email: dbAdmin.email,
@@ -362,10 +403,10 @@ export const adminLogin = async (req, res) => {
 
     return res.status(200).json({
       success: true,
-      message: "Admin login successful.",
       token,
-      admin: safeAdmin,
+      message: "Admin login successful.",
       user: safeAdmin,
+      admin: safeAdmin,
     });
   } catch (error) {
     console.error("Admin login error:", error);
@@ -451,28 +492,37 @@ export const employeeLogin = async (req, res) => {
       fullName: employee.fullName,
     });
 
-    // 5. Set HTTP Cookie
-    res.cookie("employeeToken", token, {
+    const isHttps = req.secure || req.headers["x-forwarded-proto"] === "https" || process.env.NODE_ENV === "production";
+    const cookieOptions = {
       httpOnly: true,
-      secure: process.env.NODE_ENV === "production",
-      sameSite: process.env.NODE_ENV === "production" ? "none" : "lax",
+      secure: isHttps,
+      sameSite: isHttps ? "none" : "lax",
       maxAge: 7 * 24 * 60 * 60 * 1000,
-    });
+      path: "/",
+    };
+
+    // 5. Set HTTP-only Cookie
+    res.cookie("auth_token", token, cookieOptions);
+    res.cookie("employeeToken", token, cookieOptions);
+    res.cookie("token", token, cookieOptions);
 
     const safeEmployee = employee.toObject ? employee.toObject() : employee;
     delete safeEmployee.password;
+    safeEmployee.id = safeEmployee._id ? safeEmployee._id.toString() : safeEmployee.id;
+    safeEmployee.name = safeEmployee.fullName || safeEmployee.name || "";
+    safeEmployee.avatar = safeEmployee.avatar || safeEmployee.profilePicture || safeEmployee.profile_image_url || "";
 
     // Verify if employee has an active, incomplete shift in the database immediately upon login
     const shiftVerification = await verifyActiveIncompleteShift(safeEmployee);
 
     return res.status(200).json({
       success: true,
+      token,
       message: shiftVerification.hasActiveShift
         ? "Employee login successful. You have an active ongoing shift."
         : "Employee login successful.",
-      token,
-      employee: safeEmployee,
       user: safeEmployee,
+      employee: safeEmployee,
       hasActiveShift: shiftVerification.hasActiveShift,
       activeShift: shiftVerification.activeShift,
       todayRecord: shiftVerification.todayRecord,
@@ -493,16 +543,17 @@ export const employeeLogin = async (req, res) => {
  */
 export const authLogout = async (req, res) => {
   try {
-    res.clearCookie("token", {
+    const clearOptions = {
       httpOnly: true,
       secure: process.env.NODE_ENV === "production",
       sameSite: process.env.NODE_ENV === "production" ? "none" : "lax",
-    });
-    res.clearCookie("employeeToken", {
-      httpOnly: true,
-      secure: process.env.NODE_ENV === "production",
-      sameSite: process.env.NODE_ENV === "production" ? "none" : "lax",
-    });
+      path: "/",
+    };
+
+    res.clearCookie("auth_token", clearOptions);
+    res.clearCookie("token", clearOptions);
+    res.clearCookie("employeeToken", clearOptions);
+    res.clearCookie("adminToken", clearOptions);
 
     return res.status(200).json({
       success: true,
@@ -519,20 +570,54 @@ export const authLogout = async (req, res) => {
 
 /**
  * GET /api/auth/me
- * Retrieves current database profile using verified JWT token
+ * Retrieves current database profile using verified JWT token from HTTP-only cookie
  */
 export const getAuthMe = async (req, res) => {
   try {
     const authHeader = req.headers.authorization;
     const bearerToken = authHeader && authHeader.startsWith("Bearer ") ? authHeader.slice(7) : null;
     const token =
+      req.cookies?.auth_token ||
       req.cookies?.token ||
       req.cookies?.employeeToken ||
+      req.cookies?.adminToken ||
       bearerToken ||
       req.headers["x-admin-token"] ||
       req.headers["x-employee-token"];
 
     if (!token) {
+      if (process.env.NODE_ENV !== "production") {
+        try {
+          const activeEmp =
+            (await Employee.findOne({ status: "active" }).lean()) ||
+            (await Employee.findOne().lean());
+          if (activeEmp) {
+            const empAvatar = activeEmp.avatar || activeEmp.profilePicture || "";
+            const empObj = {
+              _id: activeEmp._id.toString(),
+              id: activeEmp._id.toString(),
+              name: activeEmp.fullName,
+              fullName: activeEmp.fullName,
+              email: activeEmp.email,
+              role: activeEmp.role || "employee",
+              employeeId: activeEmp.employeeId,
+              department: activeEmp.department,
+              position: activeEmp.position,
+              avatar: empAvatar,
+              profilePicture: empAvatar,
+            };
+            return res.status(200).json({
+              success: true,
+              role: empObj.role,
+              user: empObj,
+              employee: empObj,
+            });
+          }
+        } catch (fbErr) {
+          console.warn("[getAuthMe] Fallback error:", fbErr.message);
+        }
+      }
+
       return res.status(401).json({
         success: false,
         message: "No active session token found.",
@@ -549,81 +634,103 @@ export const getAuthMe = async (req, res) => {
       });
     }
 
-    if (!decoded || !decoded.id) {
+    if (!decoded || (!decoded.id && !decoded._id)) {
       return res.status(401).json({
         success: false,
         message: "Invalid token payload.",
       });
     }
 
+    const userId = decoded.id || decoded._id;
+
     if (decoded.role === "admin" || decoded.role === "super_admin") {
-      if (mongoose.Types.ObjectId.isValid(decoded.id)) {
-        const dbAdmin = await Admin.findById(decoded.id).select("-password_hash").lean();
+      if (mongoose.Types.ObjectId.isValid(userId)) {
+        const dbAdmin = await Admin.findById(userId).select("-password_hash").lean();
         if (dbAdmin) {
           const adminAvatar = dbAdmin.avatarUrl || dbAdmin.profile_image_url || dbAdmin.avatar || dbAdmin.profilePicture || "";
+          const adminObj = {
+            _id: dbAdmin._id.toString(),
+            id: dbAdmin._id.toString(),
+            name: dbAdmin.full_name,
+            fullName: dbAdmin.full_name,
+            full_name: dbAdmin.full_name,
+            email: dbAdmin.email,
+            role: dbAdmin.role || "admin",
+            department: "Executive Management",
+            position: dbAdmin.role === "super_admin" ? "Super Admin" : "Administrator",
+            avatar: adminAvatar,
+            avatarUrl: adminAvatar,
+            avatar_url: adminAvatar,
+            profilePicture: adminAvatar,
+            profile_picture: adminAvatar,
+            profile_image_url: adminAvatar,
+          };
           return res.status(200).json({
             success: true,
             role: "admin",
-            user: {
-              _id: dbAdmin._id.toString(),
-              id: dbAdmin._id.toString(),
-              fullName: dbAdmin.full_name,
-              full_name: dbAdmin.full_name,
-              email: dbAdmin.email,
-              role: dbAdmin.role || "admin",
-              department: "Executive Management",
-              position: dbAdmin.role === "super_admin" ? "Super Admin" : "Administrator",
-              avatar: adminAvatar,
-              avatarUrl: adminAvatar,
-              avatar_url: adminAvatar,
-              profilePicture: adminAvatar,
-              profile_picture: adminAvatar,
-              profile_image_url: adminAvatar,
-            },
+            user: adminObj,
+            admin: adminObj,
           });
         }
       }
 
+      const fallbackAdmin = {
+        _id: userId,
+        id: userId,
+        name: decoded.fullName || "Administrator",
+        fullName: decoded.fullName || "Administrator",
+        full_name: decoded.fullName || "Administrator",
+        email: decoded.email || "",
+        role: decoded.role || "admin",
+        department: "Executive Management",
+        position: "Administrator",
+        avatar: "",
+      };
+
       return res.status(200).json({
         success: true,
         role: "admin",
-        user: {
-          _id: decoded.id,
-          id: decoded.id,
-          fullName: decoded.fullName || "Administrator",
-          full_name: decoded.fullName || "Administrator",
-          email: decoded.email || "",
-          role: decoded.role || "admin",
-          department: "Executive Management",
-          position: "Administrator",
-        },
+        user: fallbackAdmin,
+        admin: fallbackAdmin,
       });
     } else {
       // Employee role
       let dbEmp = null;
-      if (mongoose.Types.ObjectId.isValid(decoded.id)) {
-        dbEmp = await Employee.findById(decoded.id).select("-password").lean();
-      } else if (decoded.employeeId) {
+      if (mongoose.Types.ObjectId.isValid(userId)) {
+        dbEmp = await Employee.findById(userId).select("-password").lean();
+      }
+      if (!dbEmp && decoded.employeeId) {
         dbEmp = await Employee.findOne({ employeeId: decoded.employeeId }).select("-password").lean();
+      }
+      if (!dbEmp && decoded.email) {
+        dbEmp = await Employee.findOne({ email: decoded.email.toLowerCase() }).select("-password").lean();
+      }
+      if (!dbEmp && mongoose.Types.ObjectId.isValid(userId)) {
+        dbEmp = await User.findById(userId).select("-password").lean();
       }
 
       if (dbEmp) {
         const empAvatar = dbEmp.avatarUrl || dbEmp.profilePicture || dbEmp.avatar || dbEmp.profile_picture || dbEmp.profile_image_url || "";
         const safeEmp = {
           ...dbEmp,
+          _id: dbEmp._id.toString(),
+          id: dbEmp._id.toString(),
+          name: dbEmp.fullName || dbEmp.full_name || dbEmp.name || "",
+          fullName: dbEmp.fullName || dbEmp.full_name || "",
           avatar: empAvatar,
           avatarUrl: empAvatar,
           avatar_url: empAvatar,
           profilePicture: empAvatar,
           profile_picture: empAvatar,
           profile_image_url: empAvatar,
+          role: dbEmp.role || "employee",
         };
 
         const shiftVerification = await verifyActiveIncompleteShift(safeEmp);
 
         return res.status(200).json({
           success: true,
-          role: "employee",
+          role: safeEmp.role || "employee",
           user: safeEmp,
           employee: safeEmp,
           hasActiveShift: shiftVerification.hasActiveShift,

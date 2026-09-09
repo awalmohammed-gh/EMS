@@ -92,32 +92,11 @@ const normalizeAttendanceRecord = (raw, fallbackDate = getTodayString()) => {
 };
 
 export const AttendanceProvider = ({ children }) => {
-  // Initialize state with activeShift or cached today record if valid
-  const [todayRecord, setTodayRecord] = useState(() => {
-    try {
-      // 1. Check for dedicated active incomplete shift cached upon login
-      const activeCached = localStorage.getItem("activeShift");
-      if (activeCached) {
-        const parsed = JSON.parse(activeCached);
-        if (parsed && (parsed.clockIn || parsed.clockInTime) && (!parsed.clockOut && !parsed.clockOutTime)) {
-          return normalizeAttendanceRecord(parsed, parsed.date || getTodayString());
-        }
-      }
-
-      // 2. Check standard storage key
-      const cached = localStorage.getItem(STORAGE_KEY);
-      if (cached) {
-        const parsed = JSON.parse(cached);
-        const todayStr = getTodayString();
-        if (parsed && (parsed.date === todayStr || (!parsed.date && (parsed.clockIn || parsed.clockOut)))) {
-          return normalizeAttendanceRecord(parsed, todayStr);
-        }
-      }
-    } catch (e) {
-      console.warn("Error reading cached attendance:", e);
-    }
-    return { ...defaultTodayRecord, date: getTodayString() };
-  });
+  // Initialize state with fresh in-memory default record for today (zero localStorage)
+  const [todayRecord, setTodayRecord] = useState(() => ({
+    ...defaultTodayRecord,
+    date: getTodayString(),
+  }));
 
   const [attendanceHistory, setAttendanceHistory] = useState([]);
   const [isClocking, setIsClocking] = useState(false);
@@ -128,24 +107,8 @@ export const AttendanceProvider = ({ children }) => {
   const broadcastChannelRef = useRef(null);
   const altBroadcastChannelRef = useRef(null);
 
-  // Sync state to localStorage whenever todayRecord changes
-  const saveToStorage = useCallback((record) => {
-    try {
-      if (record) {
-        localStorage.setItem(STORAGE_KEY, JSON.stringify(record));
-        if (record.clockIn && !record.clockOut) {
-          localStorage.setItem("activeShift", JSON.stringify(record));
-        } else if (record.clockOut) {
-          localStorage.removeItem("activeShift");
-        }
-      } else {
-        localStorage.removeItem(STORAGE_KEY);
-        localStorage.removeItem("activeShift");
-      }
-    } catch (e) {
-      console.warn("Error saving attendance to storage:", e);
-    }
-  }, []);
+  // In-memory state persistence helper (zero localStorage)
+  const saveToStorage = useCallback((_record) => {}, []);
 
   // Broadcast update to other tabs/components
   const broadcastAttendanceChange = useCallback((action, data) => {
@@ -189,7 +152,8 @@ export const AttendanceProvider = ({ children }) => {
 
       if (res?.data?.success) {
         const rawAtt = res.data.todayRecord || res.data.attendance;
-        if (rawAtt) {
+        const recordDate = rawAtt?.date || (rawAtt?.clockIn ? new Date(rawAtt.clockIn).toISOString().split("T")[0] : "");
+        if (rawAtt && (!recordDate || recordDate === todayStr)) {
           const normalized = normalizeAttendanceRecord(rawAtt, todayStr);
           setTodayRecord((prev) => {
             // Keep the one with clock-in if previous has it and response is empty
@@ -200,7 +164,7 @@ export const AttendanceProvider = ({ children }) => {
             return normalized;
           });
         } else {
-          // If server says no attendance, only clear if we didn't clock in recently
+          // If server says no attendance for today or returned stale record
           setTodayRecord((prev) => {
             if (prev.date === todayStr && prev.clockIn) {
               return prev;
@@ -250,11 +214,27 @@ export const AttendanceProvider = ({ children }) => {
       const todayStr = getTodayString();
       const shiftData =
         authPayload.activeShift || authPayload.todayRecord || authPayload.attendance;
-      if (!shiftData) return null;
+      if (!shiftData) {
+        const empty = { ...defaultTodayRecord, date: todayStr };
+        setTodayRecord(empty);
+        saveToStorage(empty);
+        return empty;
+      }
+
+      // Check if shiftData is strictly for today
+      const shiftDate = shiftData.date || (shiftData.clockIn ? new Date(shiftData.clockIn).toISOString().split("T")[0] : todayStr);
+      if (shiftDate !== todayStr) {
+        // Shift is from yesterday or a prior day: purge from active state so employee can clock in today
+        const empty = { ...defaultTodayRecord, date: todayStr };
+        setTodayRecord(empty);
+        saveToStorage(empty);
+        broadcastAttendanceChange("attendance_cleared_for_new_day", empty);
+        return empty;
+      }
 
       const normalized = normalizeAttendanceRecord(
         shiftData,
-        shiftData.date || todayStr
+        shiftDate || todayStr
       );
       setTodayRecord(normalized);
       saveToStorage(normalized);
@@ -263,19 +243,8 @@ export const AttendanceProvider = ({ children }) => {
         authPayload.hasActiveShift ||
         (normalized.clockIn && !normalized.clockOut)
       ) {
-        try {
-          localStorage.setItem("activeShift", JSON.stringify(normalized));
-          localStorage.setItem(STORAGE_KEY, JSON.stringify(normalized));
-        } catch (e) {
-          console.warn("Error caching active shift:", e);
-        }
         broadcastAttendanceChange("active_shift_hydrated", normalized);
       } else {
-        try {
-          localStorage.removeItem("activeShift");
-        } catch {
-          // ignore
-        }
         broadcastAttendanceChange("attendance_hydrated", normalized);
       }
 
@@ -366,7 +335,7 @@ export const AttendanceProvider = ({ children }) => {
   );
 
   // Unified Clock-Out handler
-  const clockOut = useCallback(async () => {
+  const clockOut = useCallback(async (reasonOrData = {}) => {
     setIsClocking(true);
     setError(null);
 
@@ -374,7 +343,21 @@ export const AttendanceProvider = ({ children }) => {
     const nowIso = new Date().toISOString();
 
     try {
-      const res = await attendanceClockOut();
+      const payload = typeof reasonOrData === "string"
+        ? { reason: reasonOrData }
+        : { ...(reasonOrData || {}) };
+
+      if (todayRecord?._id && !payload.attendanceId && !payload.recordId) {
+        payload.attendanceId = todayRecord._id;
+      }
+      if ((todayRecord?.clockIn || todayRecord?.clockInTime) && !payload.clockIn) {
+        payload.clockIn = todayRecord.clockIn || todayRecord.clockInTime;
+      }
+      if (todayRecord?.date && !payload.date) {
+        payload.date = todayRecord.date;
+      }
+
+      const res = await attendanceClockOut(payload);
       const data = res?.data || {};
 
       if (!data.success && !data.alreadyClockedOut) {
@@ -387,7 +370,7 @@ export const AttendanceProvider = ({ children }) => {
       }
 
       setTodayRecord((prev) => {
-        const clockInTime = prev.clockIn || rawAttendance?.clockIn || nowIso;
+        const clockInTime = prev?.clockIn || rawAttendance?.clockIn || nowIso;
         const diffMs = Math.max(0, new Date(nowIso).getTime() - new Date(clockInTime).getTime());
         const workHours = Math.max(0.01, Number((diffMs / (1000 * 60 * 60)).toFixed(2)));
 
@@ -398,6 +381,7 @@ export const AttendanceProvider = ({ children }) => {
             clockOut: nowIso,
             clockOutTime: nowIso,
             workHours: rawAttendance?.workHours || workHours,
+            shiftStatus: "Completed",
           },
           todayStr
         );
@@ -418,11 +402,28 @@ export const AttendanceProvider = ({ children }) => {
       const errMsg =
         err?.response?.data?.message || err.message || "Clock out request failed";
       setError(errMsg);
+
+      // If the backend has no clock-in record for today, purge stale in-memory activeShift
+      if (
+        err?.response?.status === 400 &&
+        errMsg.toLowerCase().includes("no clock-in record found")
+      ) {
+        setTodayRecord((prev) => {
+          if (!prev?.clockIn) return prev;
+          const resetRecord = {
+            ...defaultTodayRecord,
+            date: todayStr,
+          };
+          saveToStorage(resetRecord);
+          return resetRecord;
+        });
+      }
+
       throw err;
     } finally {
       setIsClocking(false);
     }
-  }, [saveToStorage, broadcastAttendanceChange, fetchAttendanceHistory]);
+  }, [todayRecord, saveToStorage, broadcastAttendanceChange, fetchAttendanceHistory]);
 
   // Update todayRecord directly (for manual sync or optimistic updates)
   const updateTodayRecord = useCallback(
@@ -522,10 +523,83 @@ export const AttendanceProvider = ({ children }) => {
     };
   }, [refreshAttendance, fetchAttendanceHistory, saveToStorage]);
 
+  // Automatic 12:00 AM (Midnight) Workday Reset & Rollover Timer
+  useEffect(() => {
+    const now = new Date();
+    const tomorrowMidnight = new Date(
+      now.getFullYear(),
+      now.getMonth(),
+      now.getDate() + 1,
+      0,
+      0,
+      1
+    );
+    const msUntilMidnight = tomorrowMidnight.getTime() - now.getTime();
+
+    // Schedule exact midnight timer
+    const midnightTimer = setTimeout(() => {
+      console.log("[AttendanceContext] Midnight reached: auto-closing yesterday shift and resetting for new workday.");
+      setTodayRecord({ ...defaultTodayRecord, date: getTodayString() });
+      refreshAttendance(false);
+      fetchAttendanceHistory();
+    }, msUntilMidnight);
+
+    // Watchdog interval (every 30s) to detect system wake or date rollover
+    let lastCheckedDate = getTodayString();
+    const dateWatchdog = setInterval(() => {
+      const currentDate = getTodayString();
+      if (currentDate !== lastCheckedDate) {
+        lastCheckedDate = currentDate;
+        console.log("[AttendanceContext] Date boundary rollover detected:", currentDate);
+        setTodayRecord({ ...defaultTodayRecord, date: currentDate });
+        refreshAttendance(false);
+        fetchAttendanceHistory();
+      }
+    }, 30000);
+
+    return () => {
+      clearTimeout(midnightTimer);
+      clearInterval(dateWatchdog);
+    };
+  }, [refreshAttendance, fetchAttendanceHistory, todayRecord?.date]);
+
+  // Evening 7:00 PM (19:00) Unlock and 7:30 PM (19:30) Auto-Close Timers
+  useEffect(() => {
+    const now = new Date();
+    const todayEvening7 = new Date(now.getFullYear(), now.getMonth(), now.getDate(), 19, 0, 1);
+    const todayEvening730 = new Date(now.getFullYear(), now.getMonth(), now.getDate(), 19, 30, 1);
+
+    let unlockTimer = null;
+    let autoCloseTimer = null;
+
+    if (todayEvening7.getTime() > now.getTime()) {
+      unlockTimer = setTimeout(() => {
+        console.log("[AttendanceContext] 7:00 PM unlock reached: refreshing status...");
+        refreshAttendance(false);
+      }, todayEvening7.getTime() - now.getTime());
+    }
+
+    if (todayEvening730.getTime() > now.getTime()) {
+      autoCloseTimer = setTimeout(() => {
+        console.log("[AttendanceContext] 7:30 PM auto-close reached: refreshing status...");
+        refreshAttendance(false);
+        fetchAttendanceHistory();
+      }, todayEvening730.getTime() - now.getTime());
+    }
+
+    return () => {
+      if (unlockTimer) clearTimeout(unlockTimer);
+      if (autoCloseTimer) clearTimeout(autoCloseTimer);
+    };
+  }, [refreshAttendance, fetchAttendanceHistory]);
+
   // Derived flags
-  const isClockedIn = Boolean(todayRecord?.clockIn || todayRecord?.clockInTime);
+  const todayStr = getTodayString();
+  const recordDate = todayRecord?.date || (todayRecord?.clockIn ? new Date(todayRecord.clockIn).toISOString().split("T")[0] : "");
+  const isTodayRecord = Boolean(recordDate && recordDate === todayStr);
+  const isClockedIn = isTodayRecord && Boolean(todayRecord?.clockIn || todayRecord?.clockInTime);
   const hasClockedIn = isClockedIn;
-  const isClockedOut = Boolean(todayRecord?.clockOut || todayRecord?.clockOutTime);
+  const isClockedOut = isTodayRecord && Boolean(todayRecord?.clockOut || todayRecord?.clockOutTime);
   const hasClockedOut = isClockedOut;
   const isActiveShift = isClockedIn && !isClockedOut;
   const isLoading = isSyncing || isClocking;
@@ -625,5 +699,7 @@ export const useAttendance = () => {
   }
   return context;
 };
+
+export const useAttendanceContext = useAttendance;
 
 export default AttendanceContext;

@@ -2,7 +2,8 @@ import { apiService } from "../apis/axios";
 
 /**
  * Centralized Authentication Service
- * Interacts with backend authentication endpoints and manages local auth sessions
+ * Interacts with backend authentication endpoints via secure HTTP-only cookies.
+ * Zero localStorage usage for tokens, credentials, or user profile records.
  */
 export const authService = {
   /**
@@ -18,13 +19,11 @@ export const authService = {
         password: loginPassword,
       });
 
-      if (response.data?.success && response.data?.token) {
-        authService.saveAuthSession({
-          token: response.data.token,
-          user: response.data.admin || response.data.user,
-          role: "admin",
-        });
+      if (response.data?.token) {
+        apiService.setToken(response.data.token);
+        authService.saveAuthSession(response.data.token, response.data.admin || response.data.user, "admin");
       }
+
       return response.data;
     } else {
       const response = await apiService.post("/auth/employee/login", {
@@ -32,14 +31,13 @@ export const authService = {
         password: loginPassword,
       });
 
-      if (response.data?.success && response.data?.token) {
-        authService.saveAuthSession({
-          token: response.data.token,
-          user: response.data.employee || response.data.user,
-          role: "employee",
-        });
+      if (response.data?.token) {
+        apiService.setToken(response.data.token);
+        authService.saveAuthSession(response.data.token, response.data.employee || response.data.user, "employee");
+      }
 
-        // Verify and auto-populate active shift state immediately upon login
+      // Verify and auto-populate active shift state immediately upon login via event
+      if (response.data?.success) {
         const activeShift = response.data.activeShift;
         const todayRecord = response.data.todayRecord || response.data.attendance;
         const activeRecord =
@@ -48,38 +46,21 @@ export const authService = {
             ? todayRecord
             : null);
 
-        if (activeRecord) {
-          try {
-            localStorage.setItem("todayAttendance", JSON.stringify(activeRecord));
-            localStorage.setItem("activeShift", JSON.stringify(activeRecord));
-            window.dispatchEvent(
-              new CustomEvent("attendance-updated", {
-                detail: { action: "login_active_shift", data: activeRecord },
-              })
-            );
-          } catch (storageErr) {
-            console.warn("Could not cache active shift to localStorage:", storageErr);
-          }
-        } else if (todayRecord) {
-          try {
-            localStorage.setItem("todayAttendance", JSON.stringify(todayRecord));
-            localStorage.removeItem("activeShift");
-            window.dispatchEvent(
-              new CustomEvent("attendance-updated", {
-                detail: { action: "login_today_record", data: todayRecord },
-              })
-            );
-          } catch (storageErr) {
-            console.warn("Could not cache today attendance:", storageErr);
-          }
-        } else {
-          try {
-            localStorage.removeItem("activeShift");
-          } catch {
-            // ignore
-          }
+        if (activeRecord && typeof window !== "undefined") {
+          window.dispatchEvent(
+            new CustomEvent("attendance-updated", {
+              detail: { action: "login_active_shift", data: activeRecord },
+            })
+          );
+        } else if (todayRecord && typeof window !== "undefined") {
+          window.dispatchEvent(
+            new CustomEvent("attendance-updated", {
+              detail: { action: "login_today_record", data: todayRecord },
+            })
+          );
         }
       }
+
       return response.data;
     }
   },
@@ -111,18 +92,15 @@ export const authService = {
    */
   registerAdmin: async (data) => {
     const response = await apiService.post("/auth/admin/register", data);
-    if (response.data?.success && response.data?.token) {
-      authService.saveAuthSession({
-        token: response.data.token,
-        user: response.data.admin || response.data.user,
-        role: "admin",
-      });
+    if (response.data?.token) {
+      apiService.setToken(response.data.token);
+      authService.saveAuthSession(response.data.token, response.data.admin || response.data.user, "admin");
     }
     return response.data;
   },
 
   /**
-   * Retrieves current authenticated user profile
+   * Retrieves current authenticated user profile using HTTP-only cookie or Bearer token
    */
   getCurrentUser: async () => {
     const response = await apiService.get("/auth/me");
@@ -130,7 +108,7 @@ export const authService = {
   },
 
   /**
-   * Logs out user from backend session and clears local storage
+   * Logs out user from backend session and clears local session
    */
   logout: async (role = "admin") => {
     try {
@@ -146,79 +124,77 @@ export const authService = {
   },
 
   /**
-   * Persists authentication session into browser storage
+   * Persists authentication session
    */
-  saveAuthSession: ({ token, user, role }) => {
+  saveAuthSession: (token, user, role) => {
     if (typeof window === "undefined") return;
-
-    if (token) {
-      localStorage.setItem("token", token);
-      if (role === "admin") {
-        localStorage.setItem("adminToken", token);
-      } else {
-        localStorage.setItem("employeeToken", token);
+    try {
+      if (token) {
+        localStorage.setItem("token", token);
+        localStorage.setItem("auth_token", token);
       }
-    }
-
-    if (role) {
-      localStorage.setItem("userRole", role);
-    }
-
-    if (user) {
-      const userPayload = JSON.stringify(user);
-      if (role === "admin") {
-        localStorage.setItem("adminData", userPayload);
-      } else {
-        localStorage.setItem("employeeData", userPayload);
+      if (user) {
+        localStorage.setItem("app_user", JSON.stringify(user));
       }
+      if (role) {
+        localStorage.setItem("userRole", role);
+      }
+    } catch {
+      // ignore
     }
   },
 
   /**
-   * Clears all authentication session keys from browser storage
+   * Clears all authentication session keys
    */
   clearAuthSession: () => {
     if (typeof window === "undefined") return;
-    localStorage.removeItem("token");
-    localStorage.removeItem("adminToken");
-    localStorage.removeItem("employeeToken");
-    localStorage.removeItem("adminData");
-    localStorage.removeItem("employeeData");
-    localStorage.removeItem("userRole");
-    localStorage.removeItem("isLoggedIn");
+    try {
+      apiService.clearToken();
+      localStorage.removeItem("token");
+      localStorage.removeItem("auth_token");
+      localStorage.removeItem("adminToken");
+      localStorage.removeItem("employeeToken");
+      localStorage.removeItem("adminData");
+      localStorage.removeItem("employeeData");
+      localStorage.removeItem("userRole");
+      localStorage.removeItem("isLoggedIn");
+      localStorage.removeItem("app_user");
+    } catch {
+      // ignore
+    }
   },
 
   /**
    * Retrieves active JWT token
    */
-  getStoredToken: () => {
-    return apiService.getToken();
-  },
+  getStoredToken: () => apiService.getToken(),
 
   /**
    * Retrieves active stored user
    */
   getStoredUser: () => {
     if (typeof window === "undefined") return null;
-    const role = localStorage.getItem("userRole");
     try {
-      if (role === "employee") {
-        const emp = localStorage.getItem("employeeData");
-        return emp ? JSON.parse(emp) : null;
-      }
-      const admin = localStorage.getItem("adminData");
-      return admin ? JSON.parse(admin) : null;
+      const stored = localStorage.getItem("app_user");
+      return stored ? JSON.parse(stored) : null;
     } catch {
       return null;
     }
   },
 
   /**
-   * Retrieves active stored role
+   * Retrieves active stored role (derived from location if context not ready)
    */
   getStoredRole: () => {
-    if (typeof window === "undefined") return "admin";
-    return localStorage.getItem("userRole") || "admin";
+    if (typeof window !== "undefined") {
+      const saved = localStorage.getItem("userRole");
+      if (saved) return saved;
+      if (window.location.pathname.startsWith("/employee")) {
+        return "employee";
+      }
+    }
+    return "admin";
   },
 };
 

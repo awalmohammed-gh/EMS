@@ -1,21 +1,12 @@
 import "dotenv/config";
-import mongoose from "mongoose";
 import bcrypt from "bcryptjs";
 import { Admin } from "../models/Admin.js";
+import { connectMongodb, closeMongodb } from "../config/mongodb.js";
 
 const seedSuperAdmin = async () => {
   try {
-    const mongoUri = process.env.MONGODB_URI;
-    if (!mongoUri) {
-      console.error("❌ MONGODB_URI environment variable is required to run the seed script.");
-      process.exit(1);
-    }
-
-    const baseUri = mongoUri.endsWith("/") ? mongoUri.slice(0, -1) : mongoUri;
-    const connectionString = baseUri.includes("?") ? baseUri : `${baseUri}/employee-system`;
-
-    console.log("Connecting to MongoDB...");
-    await mongoose.connect(connectionString);
+    console.log("Connecting to MongoDB via consolidated lifecycle...");
+    await connectMongodb();
     console.log("✅ MongoDB Connected successfully.");
 
     const adminEmail = (process.env.ADMIN_EMAIL || "admin@eyenit.com").toLowerCase().trim();
@@ -47,7 +38,7 @@ const seedSuperAdmin = async () => {
     }
 
     console.log("Database seeding completed.");
-    await mongoose.disconnect();
+    await closeMongodb();
     process.exit(0);
   } catch (error) {
     console.error("❌ Error seeding Admin account:", error);

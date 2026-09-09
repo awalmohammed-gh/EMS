@@ -3,6 +3,7 @@ import { motion } from "framer-motion";
 import {
   CheckCircle2,
   AlertTriangle,
+  AlertCircle,
   Clock,
   LogIn,
   RefreshCw,
@@ -14,8 +15,12 @@ import { getSettings } from "../apis/fontApis";
  * ShiftStatusCard Component
  *
  * Real-time dynamic shift status card that immediately reflects whether
- * the employee is "On Time" or "Late" once they clock in for their shift.
- * Default shift start threshold is 8:00 AM (configurable by admin).
+ * the employee is "On-Time", "Late", or "Absent" once they clock in or shift cutoff passes.
+ * Dynamic styling rules:
+ * - On-Time Arrival: Soft emerald theme across card, accents, and "Shift Attendance Status: On-Time Arrival" title.
+ * - Late Arrival: Soft rose theme across card, accents, and "Shift Attendance Status: Late Arrival" title.
+ * - Absent: Soft rose/slate theme with "Status: Absent" badge and "No clock-in recorded for today's scheduled shift." subtitle.
+ * - No colored top accent bars; clean hairline borders.
  */
 const ShiftStatusCard = ({
   attendanceData = {},
@@ -30,6 +35,7 @@ const ShiftStatusCard = ({
   const [companyStartTime, setCompanyStartTime] = useState(
     propWorkStartTime || "08:00"
   );
+  const [companyEndTime, setCompanyEndTime] = useState("19:00");
   const [penaltyTiers, setPenaltyTiers] = useState([
     { tier: 1, name: "Tier 1 (1–30 mins)", minMinutes: 1, maxMinutes: 30, fine: 10 },
     { tier: 2, name: "Tier 2 (31–60 mins)", minMinutes: 31, maxMinutes: 60, fine: 30 },
@@ -51,15 +57,22 @@ const ShiftStatusCard = ({
             attendance?.workStartTime ||
             penalties?.workStartTime ||
             res.data.settings?.workStartTime;
+          const endTime =
+            attendance?.workEndTime ||
+            penalties?.workEndTime ||
+            res.data.settings?.workEndTime;
           if (startTime) {
             setCompanyStartTime(startTime);
+          }
+          if (endTime) {
+            setCompanyEndTime(endTime);
           }
           if (res.data.settings?.latenessTiers) {
             setPenaltyTiers(res.data.settings.latenessTiers);
           }
         }
       } catch {
-        // Fallback to default 08:00
+        // Fallback to default 08:00 / 19:00
       }
     };
 
@@ -94,6 +107,12 @@ const ShiftStatusCard = ({
     return h * 60 + m;
   }, [companyStartTime]);
 
+  const endThresholdHour = useMemo(() => {
+    const raw = companyEndTime || "19:00";
+    const [hStr] = raw.split(":");
+    return parseInt(hStr, 10) || 19;
+  }, [companyEndTime]);
+
   const resolvedEmployeeName = useMemo(() => {
     if (propUserName && typeof propUserName === "string" && propUserName.trim()) {
       return propUserName.trim();
@@ -106,16 +125,6 @@ const ShiftStatusCard = ({
     }
     if (user?.full_name && typeof user.full_name === "string" && user.full_name.trim()) {
       return user.full_name.trim();
-    }
-    try {
-      const storedEmp = localStorage.getItem("employeeData");
-      if (storedEmp) {
-        const parsed = JSON.parse(storedEmp);
-        if (parsed?.fullName) return parsed.fullName;
-        if (parsed?.name) return parsed.name;
-      }
-    } catch {
-      // ignore
     }
     return "";
   }, [propUserName, user]);
@@ -145,44 +154,57 @@ const ShiftStatusCard = ({
 
   // Evaluate Live Status
   const statusEvaluation = useMemo(() => {
-    if (!hasClockedIn || !attendanceData.clockIn) {
-      // State 1: Awaiting Clock-In
+    const isClockedInToday = hasClockedIn && Boolean(attendanceData?.clockIn || attendanceData?.clockInTime);
+    const dbStatus = String(attendanceData?.status || "").trim().toLowerCase();
+    const currentHour = new Date().getHours();
+    const isPastShiftCutoff = currentHour >= endThresholdHour;
+
+    // Check Absent: either status is explicitly Absent OR employee has not clocked in by 7:00 PM
+    if (dbStatus === "absent" || (!isClockedInToday && isPastShiftCutoff)) {
       return {
-        type: "pending",
+        type: "absent",
+        title: "Shift Attendance Status: Absent",
+        badgeText: "Status: Absent",
+        subtitle: "No clock-in recorded for today's scheduled shift.",
         isLate: false,
-        title: "Today's Scheduled Shift",
-        badgeText: "Scheduled",
+        isAbsent: true,
         delayMinutes: 0,
         penaltyAmount: 0,
-        tierName: "On Time",
       };
     }
 
-    // State 2 / 3: Clocked In -> Evaluate On Time vs Late
-    const clockInDate = new Date(attendanceData.clockIn);
+    if (!isClockedInToday) {
+      // Awaiting Clock-In before shift cutoff
+      return {
+        type: "pending",
+        title: "Shift Attendance Status: Scheduled",
+        badgeText: "Scheduled",
+        subtitle: "Work starts from 8:00 AM and ends at 7:00 PM",
+        isLate: false,
+        isAbsent: false,
+        delayMinutes: 0,
+        penaltyAmount: 0,
+      };
+    }
+
+    // Employee has clocked in: Evaluate On-Time vs Late
+    const clockInDate = new Date(attendanceData.clockIn || attendanceData.clockInTime);
     const clockInMinutes =
-      clockInDate.getHours() * 60 + clockInDate.getMinutes();
+      !isNaN(clockInDate.getTime())
+        ? clockInDate.getHours() * 60 + clockInDate.getMinutes()
+        : startThresholdMinutes;
     const delayMins = Math.max(0, clockInMinutes - startThresholdMinutes);
 
-    // Also inspect database recorded values
-    const dbStatus = String(attendanceData.status || "").toLowerCase();
-    const dbDelay =
-      Number(attendanceData.delayMinutes || attendanceData.lateMinutes || 0);
+    const dbDelay = Number(attendanceData.delayMinutes || attendanceData.lateMinutes || 0);
     const hasRecordedPenalty =
       attendanceData.latePenalty !== undefined &&
       attendanceData.latePenalty !== null &&
       attendanceData.latePenalty !== "";
     const dbPenalty = Number(attendanceData.latePenalty || 0);
 
-    const isLate =
-      dbStatus.includes("late") ||
-      dbDelay > 0 ||
-      delayMins > 0;
-
     const finalDelayMinutes = dbDelay > 0 ? dbDelay : delayMins;
+    const isLate = dbStatus.includes("late") || finalDelayMinutes > 0;
 
-    // Determine penalty fine:
-    // If the database has a recorded penalty (including 0), respect it strictly!
     let calculatedFine = hasRecordedPenalty ? dbPenalty : -1;
     let matchingTier = attendanceData.penaltyTier || "";
 
@@ -200,43 +222,87 @@ const ShiftStatusCard = ({
     }
     if (calculatedFine < 0) calculatedFine = 0;
 
+    const clockInShort = formatShortTime(attendanceData.clockIn || attendanceData.clockInTime);
+
     if (isLate) {
-      const isZeroPenalty = calculatedFine === 0;
       return {
-        type: isZeroPenalty ? "late-grace" : "late",
-        isLate: true,
-        isZeroPenalty,
+        type: "late",
         title: "Shift Attendance Status: Late Arrival",
-        badgeText: `Late (+${finalDelayMinutes}m)`,
+        badgeText: "Late Arrival",
+        subtitle: `Clocked in at ${clockInShort} · Late by ${finalDelayMinutes}m${calculatedFine > 0 ? ` (-GH₵${calculatedFine.toFixed(2)})` : ""}`,
+        isLate: true,
+        isAbsent: false,
         delayMinutes: finalDelayMinutes,
         penaltyAmount: calculatedFine,
-        tierName: matchingTier || (isZeroPenalty ? "No Deduction Applied" : `Tier (${finalDelayMinutes} min delay)`),
-        clockInShort: formatShortTime(attendanceData.clockIn),
+        tierName: matchingTier || `Tier (${finalDelayMinutes} min delay)`,
+        clockInShort,
       };
     }
 
     return {
       type: "ontime",
+      title: "Shift Attendance Status: On-Time Arrival",
+      badgeText: "On-Time Arrival",
+      subtitle: `Clocked in at ${clockInShort} (On schedule)`,
       isLate: false,
-      isZeroPenalty: true,
-      title: "Shift Attendance Status: On Time",
-      badgeText: "On Time",
+      isAbsent: false,
       delayMinutes: 0,
       penaltyAmount: 0,
       tierName: "On Time",
-      clockInShort: formatShortTime(attendanceData.clockIn),
+      clockInShort,
     };
   }, [
     hasClockedIn,
-    attendanceData.clockIn,
-    attendanceData.status,
-    attendanceData.delayMinutes,
-    attendanceData.lateMinutes,
-    attendanceData.latePenalty,
-    attendanceData.penaltyTier,
+    attendanceData?.clockIn,
+    attendanceData?.clockInTime,
+    attendanceData?.status,
+    attendanceData?.delayMinutes,
+    attendanceData?.lateMinutes,
+    attendanceData?.latePenalty,
+    attendanceData?.penaltyTier,
     startThresholdMinutes,
+    endThresholdHour,
     penaltyTiers,
   ]);
+
+  // Card theme classes based on attendance status
+  const cardThemeClasses = useMemo(() => {
+    if (statusEvaluation.type === "ontime") {
+      return {
+        container:
+          "bg-emerald-50/40 dark:bg-emerald-950/10 border-emerald-200/70 dark:border-emerald-900/40",
+        accent:
+          "text-emerald-700 dark:text-emerald-300 bg-emerald-100/60 dark:bg-emerald-900/30",
+        badgeBorder: "border-emerald-300/60 dark:border-emerald-800/60",
+      };
+    }
+    if (statusEvaluation.type === "late") {
+      return {
+        container:
+          "bg-rose-50/40 dark:bg-rose-950/10 border-rose-200/70 dark:border-rose-900/40",
+        accent:
+          "text-rose-700 dark:text-rose-300 bg-rose-100/60 dark:bg-rose-900/30",
+        badgeBorder: "border-rose-300/60 dark:border-rose-800/60",
+      };
+    }
+    if (statusEvaluation.type === "absent") {
+      return {
+        container:
+          "bg-rose-50/40 dark:bg-rose-950/10 border-rose-200/70 dark:border-rose-900/40",
+        accent:
+          "text-rose-700 dark:text-rose-300 bg-rose-100/60 dark:bg-rose-900/30",
+        badgeBorder: "border-rose-300/60 dark:border-rose-800/60",
+      };
+    }
+    // Pending
+    return {
+      container:
+        "bg-white dark:bg-[#111927] border-slate-200/80 dark:border-slate-800",
+      accent:
+        "text-slate-700 dark:text-slate-300 bg-slate-100 dark:bg-slate-800",
+      badgeBorder: "border-slate-200 dark:border-slate-700",
+    };
+  }, [statusEvaluation.type]);
 
   return (
     <motion.div
@@ -244,43 +310,22 @@ const ShiftStatusCard = ({
       animate={{ opacity: 1, y: 0 }}
       transition={{ duration: 0.25, ease: "easeOut" }}
       id="shift-realtime-status-card"
-      className="bg-white dark:bg-[#111927] border border-slate-200/70 dark:border-slate-800 rounded-2xl shadow-sm overflow-hidden"
+      className={`border rounded-2xl shadow-sm overflow-hidden transition-colors ${cardThemeClasses.container}`}
     >
-      {/* Subtle top indicator bar */}
-      <div
-        className={`h-1 w-full ${
-          statusEvaluation.type === "ontime"
-            ? "bg-emerald-500"
-            : statusEvaluation.type === "late-grace"
-            ? "bg-[#002185]"
-            : statusEvaluation.type === "late"
-            ? "bg-amber-500"
-            : "bg-[#002185]"
-        }`}
-      />
-
       <div className="p-4 sm:p-5">
         {/* Main Header / Status Row */}
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
           <div className="flex items-center gap-3">
             {/* Status Avatar Icon */}
             <div
-              className={`w-10 h-10 sm:w-11 sm:h-11 rounded-xl flex items-center justify-center shrink-0 border ${
-                statusEvaluation.type === "ontime"
-                  ? "bg-emerald-50 text-emerald-700 dark:bg-emerald-950/40 dark:text-emerald-400 border-emerald-200/70 dark:border-emerald-800/80"
-                  : statusEvaluation.type === "late-grace"
-                  ? "bg-blue-50 text-[#002185] dark:bg-blue-950/40 dark:text-blue-300 border-blue-200/70 dark:border-blue-800/80"
-                  : statusEvaluation.type === "late"
-                  ? "bg-amber-50 text-amber-800 dark:bg-amber-950/40 dark:text-amber-300 border-amber-200/70 dark:border-amber-800/80"
-                  : "bg-slate-50 text-slate-700 dark:bg-slate-800/60 dark:text-slate-300 border-slate-200/70 dark:border-slate-800"
-              }`}
+              className={`w-10 h-10 sm:w-11 sm:h-11 rounded-xl flex items-center justify-center shrink-0 border ${cardThemeClasses.accent} ${cardThemeClasses.badgeBorder}`}
             >
               {statusEvaluation.type === "ontime" ? (
                 <CheckCircle2 className="w-5 h-5 sm:w-5 sm:h-5" />
-              ) : statusEvaluation.type === "late-grace" ? (
-                <Clock className="w-5 h-5 sm:w-5 sm:h-5" />
               ) : statusEvaluation.type === "late" ? (
                 <AlertTriangle className="w-5 h-5 sm:w-5 sm:h-5" />
+              ) : statusEvaluation.type === "absent" ? (
+                <AlertCircle className="w-5 h-5 sm:w-5 sm:h-5" />
               ) : (
                 <Clock className="w-5 h-5 sm:w-5 sm:h-5" />
               )}
@@ -288,8 +333,13 @@ const ShiftStatusCard = ({
 
             <div className="min-w-0">
               {resolvedEmployeeName && (
-                <div className="flex items-center gap-1.5 text-xs font-semibold text-[#002185] dark:text-blue-300 mb-0.5">
-                  <span>{greetingTimeOfDay}, <strong className="text-slate-900 dark:text-white font-bold">{resolvedEmployeeName}</strong></span>
+                <div className="flex items-center gap-1.5 text-xs font-semibold text-slate-700 dark:text-slate-300 mb-0.5">
+                  <span>
+                    {greetingTimeOfDay},{" "}
+                    <strong className="text-slate-900 dark:text-white font-bold">
+                      {resolvedEmployeeName}
+                    </strong>
+                  </span>
                   {user?.employeeId && (
                     <span className="text-[10px] font-mono px-1.5 py-0.5 bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 border border-slate-200/60 dark:border-slate-700/60 rounded">
                       {user.employeeId}
@@ -305,24 +355,16 @@ const ShiftStatusCard = ({
                 {/* Primary Pill Badge */}
                 <span
                   id="shift-status-outcome-badge"
-                  className={`inline-flex items-center gap-1.5 shadow-none font-semibold text-xs px-2.5 py-0.5 rounded-lg border ${
-                    statusEvaluation.type === "ontime"
-                      ? "bg-emerald-50 text-emerald-800 dark:bg-emerald-950/50 dark:text-emerald-300 border-emerald-200 dark:border-emerald-850"
-                      : statusEvaluation.type === "late-grace"
-                      ? "bg-blue-50 text-[#002185] dark:bg-blue-950/50 dark:text-blue-300 border-blue-200 dark:border-blue-800"
-                      : statusEvaluation.type === "late"
-                      ? "bg-amber-50 text-amber-900 dark:bg-amber-950/50 dark:text-amber-200 border-amber-200 dark:border-amber-800"
-                      : "bg-slate-100 text-slate-800 dark:bg-slate-800 dark:text-slate-300 border-slate-200 dark:border-slate-700"
-                  }`}
+                  className={`inline-flex items-center gap-1.5 shadow-none font-semibold text-xs px-2.5 py-0.5 rounded-lg border ${cardThemeClasses.accent} ${cardThemeClasses.badgeBorder}`}
                 >
                   {statusEvaluation.type === "ontime" ? (
-                    <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600 dark:text-emerald-400 shrink-0" />
-                  ) : statusEvaluation.type === "late-grace" ? (
-                    <Clock className="w-3.5 h-3.5 text-[#002185] dark:text-blue-400 shrink-0" />
+                    <CheckCircle2 className="w-3.5 h-3.5 shrink-0" />
                   ) : statusEvaluation.type === "late" ? (
-                    <AlertTriangle className="w-3.5 h-3.5 text-amber-600 dark:text-amber-400 shrink-0" />
+                    <AlertTriangle className="w-3.5 h-3.5 shrink-0" />
+                  ) : statusEvaluation.type === "absent" ? (
+                    <AlertCircle className="w-3.5 h-3.5 shrink-0" />
                   ) : (
-                    <Clock className="w-3.5 h-3.5 text-slate-500 dark:text-slate-400 shrink-0" />
+                    <Clock className="w-3.5 h-3.5 shrink-0" />
                   )}
                   {statusEvaluation.badgeText}
                 </span>
@@ -330,34 +372,12 @@ const ShiftStatusCard = ({
 
               <p className="text-xs text-slate-500 dark:text-slate-400 mt-1 flex flex-wrap items-center gap-1.5 font-normal">
                 <CalendarDays className="w-3.5 h-3.5 text-slate-400 shrink-0" />
-                <span>Shift Start:</span>
+                <span>Shift Hours:</span>
                 <strong className="text-slate-800 dark:text-slate-200 font-semibold">
-                  {formattedStartTime}
+                  {formattedStartTime} – 7:00 PM
                 </strong>
-                {statusEvaluation.type === "ontime" && (
-                  <span className="inline-flex items-center gap-1 text-emerald-700 dark:text-emerald-400 font-medium">
-                    <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600 dark:text-emerald-400 shrink-0" />
-                    <span>Clocked in at <strong>{statusEvaluation.clockInShort}</strong> (On schedule)</span>
-                  </span>
-                )}
-                {statusEvaluation.type === "late-grace" && (
-                  <span className="inline-flex items-center gap-1 text-[#002185] dark:text-blue-300 font-medium">
-                    <Clock className="w-3.5 h-3.5 text-[#002185] dark:text-blue-400 shrink-0" />
-                    <span>Clocked in at <strong>{statusEvaluation.clockInShort}</strong> · No deduction incurred</span>
-                  </span>
-                )}
-                {statusEvaluation.type === "late" && (
-                  <span className="inline-flex items-center gap-1 text-amber-800 dark:text-amber-300 font-medium">
-                    <AlertTriangle className="w-3.5 h-3.5 text-amber-600 dark:text-amber-400 shrink-0" />
-                    <span>Clocked in at <strong>{statusEvaluation.clockInShort}</strong> · -GH₵{Number(statusEvaluation.penaltyAmount || 0).toFixed(2)} deduction</span>
-                  </span>
-                )}
-                {statusEvaluation.type === "pending" && (
-                  <span className="inline-flex items-center gap-1 text-slate-400 dark:text-slate-500 font-normal">
-                    <Clock className="w-3.5 h-3.5 text-slate-400 dark:text-slate-500 shrink-0" />
-                    <span>Awaiting Clock-In</span>
-                  </span>
-                )}
+                <span className="text-slate-400 dark:text-slate-500">·</span>
+                <span>{statusEvaluation.subtitle}</span>
               </p>
             </div>
           </div>
@@ -374,7 +394,7 @@ const ShiftStatusCard = ({
                 <RefreshCw className="w-4 h-4" />
               </button>
             )}
-            {!hasClockedIn && typeof onClockIn === "function" && (
+            {!hasClockedIn && statusEvaluation.type !== "absent" && typeof onClockIn === "function" && (
               <button
                 type="button"
                 id="btn-status-card-clock-in"

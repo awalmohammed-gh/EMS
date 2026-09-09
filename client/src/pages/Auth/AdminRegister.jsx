@@ -100,14 +100,8 @@ export const AdminRegister = () => {
       });
 
       if (res.data?.success) {
-        const { token, admin } = res.data;
-        if (token) {
-          localStorage.setItem("token", token);
-          localStorage.setItem("adminToken", token);
-        }
-        localStorage.setItem("userRole", "admin");
+        const { admin } = res.data;
         if (admin) {
-          localStorage.setItem("adminData", JSON.stringify(admin));
           if (typeof setUser === "function") setUser(admin);
           if (typeof setRole === "function") setRole("admin");
         }

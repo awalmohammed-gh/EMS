@@ -268,16 +268,6 @@ export const AvatarGeneratorModal = ({
         if (typeof setAdmin === "function") setAdmin(updatedAdmin);
         if (typeof setUser === "function") setUser(updatedUser);
 
-        try {
-          const storedAppUser = JSON.parse(localStorage.getItem("app_user") || "{}");
-          localStorage.setItem("app_user", JSON.stringify({ ...storedAppUser, avatar: newUrl, profilePicture: newUrl, profile_image_url: newUrl }));
-          localStorage.setItem("adminData", JSON.stringify(updatedAdmin));
-          localStorage.setItem("employeeData", JSON.stringify(updatedUser));
-          localStorage.setItem("userData", JSON.stringify(updatedUser));
-        } catch {
-          // Ignore localStorage quota warnings
-        }
-
         // Broadcast event across windows and pages
         if (typeof window !== "undefined") {
           window.dispatchEvent(
@@ -342,14 +332,6 @@ export const AvatarGeneratorModal = ({
 
         if (typeof setAdmin === "function") setAdmin(updatedAdmin);
         if (typeof setUser === "function") setUser(updatedUser);
-
-        try {
-          localStorage.setItem("adminData", JSON.stringify(updatedAdmin));
-          localStorage.setItem("employeeData", JSON.stringify(updatedUser));
-          localStorage.setItem("userData", JSON.stringify(updatedUser));
-        } catch {
-          // Ignore
-        }
 
         if (typeof window !== "undefined") {
           window.dispatchEvent(

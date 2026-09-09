@@ -99,8 +99,6 @@ const ProfileSettings = ({ onSaveSuccess }) => {
         const updatedAdmin = res.data.admin || { ...formData, avatar: avatarUrlToSave, profile_image_url: avatarUrlToSave };
         setUser((prev) => ({ ...prev, ...updatedAdmin }));
         if (typeof setAdmin === "function") setAdmin(updatedAdmin);
-        localStorage.setItem("adminData", JSON.stringify(updatedAdmin));
-        localStorage.setItem("userData", JSON.stringify(updatedAdmin));
         setShowToast({
           show: true,
           message: "Profile information updated successfully!",

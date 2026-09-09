@@ -1,24 +1,45 @@
+
 import mongoose from "mongoose";
-import dns from "dns";
 
-dns.setServers(["1.1.1.1", "8.8.8.8"]);
+const connectDB = async () => {
+  if (mongoose.connection.readyState === 1) {
+    return mongoose.connection;
+  }
 
-export const connectMongodb = async () => {
+  const uri = process.env.MONGODB_URI || process.env.MONGO_URI;
+  if (!uri || !uri.trim()) {
+    const errorMsg = "MongoDB URI not found. Please set MONGODB_URI or MONGO_URI in your environment.";
+    console.error(`[MongoDB] Error: ${errorMsg}`);
+    throw new Error(errorMsg);
+  }
+
   try {
-    await mongoose.connect(process.env.MONGO_URI);
-
-    console.log("MongoDB connected successfully");
+    await mongoose.connect(uri.trim(), {
+      serverSelectionTimeoutMS: 8000,
+      maxPoolSize: 10,
+    });
+    console.log("MongoDB connected");
+    return mongoose.connection;
   } catch (error) {
-    console.log("MongoDB Connection Error:", error.message);
+    console.error("MongoDB connection error:", error.message);
+    throw error;
   }
 };
 
-export const closeMongodb = async () => {
+const closeMongodb = async () => {
   try {
-    await mongoose.connection.close();
-
-    console.log("MongoDB connection closed");
+    if (mongoose.connection.readyState !== 0) {
+      await mongoose.connection.close();
+      console.log("MongoDB connection closed");
+    }
   } catch (error) {
-    console.log("Error closing MongoDB:", error.message);
+    console.error("MongoDB close error:", error.message);
   }
 };
+
+export const connectMongodb = connectDB;
+export const disconnectDB = closeMongodb;
+export { connectDB, closeMongodb };
+export default connectDB;
+
+

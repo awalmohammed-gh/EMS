@@ -40,58 +40,19 @@ export const ManagementContextProvider = ({ children }) => {
   const closeSidebar = () => setIsSidebarOpen(false);
   const openSidebar = () => setIsSidebarOpen(true);
 
-  // Role and User state derived dynamically from local storage and JWT tokens
+  // Role and User state derived dynamically from active session (zero localStorage)
   const [role, setRole] = useState(() => {
-    if (typeof window !== "undefined") {
-      if (window.location.pathname.startsWith("/employee")) return "employee";
-      if (window.location.pathname.startsWith("/admin")) return "admin";
-      return localStorage.getItem("userRole") || "admin";
+    if (typeof window !== "undefined" && window.location.pathname.startsWith("/employee")) {
+      return "employee";
     }
     return "admin";
   });
 
-  const [user, setUser] = useState(() => {
-    if (typeof window !== "undefined") {
-      try {
-        const isEmpPath = window.location.pathname.startsWith("/employee");
-        const storedRole = localStorage.getItem("userRole");
-        if (isEmpPath || storedRole === "employee") {
-          const storedEmp = localStorage.getItem("employeeData");
-          if (storedEmp) return JSON.parse(storedEmp);
-        } else {
-          const storedAdmin = localStorage.getItem("adminData");
-          if (storedAdmin) return JSON.parse(storedAdmin);
-        }
-
-        // Fallback: decode JWT payload if available
-        const token =
-          localStorage.getItem("token") ||
-          localStorage.getItem("adminToken") ||
-          localStorage.getItem("employeeToken");
-        if (token) {
-          const decoded = parseJwt(token);
-          if (decoded) {
-            return {
-              _id: decoded.id,
-              id: decoded.id,
-              fullName: decoded.fullName || (decoded.role === "admin" ? "Admin" : "Employee"),
-              full_name: decoded.fullName || (decoded.role === "admin" ? "Admin" : "Employee"),
-              email: decoded.email || "",
-              role: decoded.role || (isEmpPath ? "employee" : "admin"),
-              employeeId: decoded.employeeId || "",
-            };
-          }
-        }
-      } catch (e) {
-        console.warn("Error reading stored user:", e);
-      }
-    }
-    return null;
-  });
+  const [user, setUser] = useState(null);
 
   const [isLoadingUser, setIsLoadingUser] = useState(false);
 
-  // Fetch current logged in user from database based on active session token
+  // Fetch current logged in user from database based on active HTTP-only session cookie
   const fetchCurrentUser = useCallback(async (currentRole) => {
     try {
       setIsLoadingUser(true);
@@ -99,10 +60,8 @@ export const ManagementContextProvider = ({ children }) => {
       if (!activeRole) {
         if (typeof window !== "undefined" && window.location.pathname.startsWith("/employee")) {
           activeRole = "employee";
-        } else if (typeof window !== "undefined" && window.location.pathname.startsWith("/admin")) {
-          activeRole = "admin";
         } else {
-          activeRole = localStorage.getItem("userRole") || "admin";
+          activeRole = "admin";
         }
       }
       setRole(activeRole);
@@ -115,12 +74,6 @@ export const ManagementContextProvider = ({ children }) => {
           setUser(fetchedUser);
           const resolvedRole = meRes.data.role || fetchedUser.role || activeRole;
           setRole(resolvedRole);
-          localStorage.setItem("userRole", resolvedRole);
-          if (resolvedRole === "admin") {
-            localStorage.setItem("adminData", JSON.stringify(fetchedUser));
-          } else {
-            localStorage.setItem("employeeData", JSON.stringify(fetchedUser));
-          }
           return;
         }
       } catch {
@@ -132,14 +85,12 @@ export const ManagementContextProvider = ({ children }) => {
         if (res?.data?.success && res.data.employee) {
           const empData = res.data.employee;
           setUser(empData);
-          localStorage.setItem("employeeData", JSON.stringify(empData));
         }
       } else {
         const res = await getAdminMe();
         if (res?.data?.success && res.data.admin) {
           const adminData = res.data.admin;
           setUser(adminData);
-          localStorage.setItem("adminData", JSON.stringify(adminData));
         }
       }
     } catch (err) {
@@ -223,12 +174,6 @@ export const ManagementContextProvider = ({ children }) => {
         console.warn("Logout error:", err.message);
       }
     } finally {
-      localStorage.removeItem("token");
-      localStorage.removeItem("adminToken");
-      localStorage.removeItem("employeeToken");
-      localStorage.removeItem("employeeData");
-      localStorage.removeItem("adminData");
-      localStorage.removeItem("userRole");
       setUser(null);
       setShowToast({
         show: true,
@@ -350,21 +295,9 @@ export const ManagementContextProvider = ({ children }) => {
     admin: (role === "admin" || user?.role === "admin" || user?.role === "super_admin") ? user : null,
     setAdmin: (newAdminData) => {
       if (typeof newAdminData === "function") {
-        setUser((prev) => {
-          const updated = newAdminData(prev);
-          if (updated) {
-            localStorage.setItem("adminData", JSON.stringify(updated));
-            localStorage.setItem("userData", JSON.stringify(updated));
-          }
-          return updated;
-        });
+        setUser((prev) => newAdminData(prev));
       } else {
-        setUser((prev) => {
-          const updated = { ...prev, ...newAdminData };
-          localStorage.setItem("adminData", JSON.stringify(updated));
-          localStorage.setItem("userData", JSON.stringify(updated));
-          return updated;
-        });
+        setUser((prev) => ({ ...prev, ...newAdminData }));
       }
     },
     role,

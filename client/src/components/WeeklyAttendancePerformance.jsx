@@ -244,8 +244,6 @@ export const WeeklyAttendancePerformance = ({
   // Optional live query to backend performance metrics endpoint with fallback
   const fetchBackendPerformance = useCallback(async () => {
     try {
-      const token = localStorage.getItem("token") || localStorage.getItem("employeeToken") || localStorage.getItem("adminToken");
-      const headers = token ? { Authorization: `Bearer ${token}` } : {};
       const params = {
         month: selectedMonth,
         week: selectedWeek,
@@ -255,7 +253,7 @@ export const WeeklyAttendancePerformance = ({
       if (employeeId) params.employeeId = employeeId;
 
       const res = await axios.get("/api/attendance/performance-metrics", {
-        headers,
+        withCredentials: true,
         params,
         timeout: 4000,
       });

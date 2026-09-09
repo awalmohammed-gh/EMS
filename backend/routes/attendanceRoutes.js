@@ -19,6 +19,7 @@ import {
   deleteAttendanceRecord,
   syncAttendancePenalties,
   getPerformanceMetrics,
+  forceClockOutHandler,
 } from "../controllers/employeeAttendance.js";
 import { overrideAttendanceRecord } from "../controllers/attendanceManagementController.js";
 import { verifyAdmin } from "../middleware/authAdmin.js";
@@ -28,6 +29,7 @@ const attendanceRouter = express.Router();
 attendanceRouter.get("/performance-metrics", getPerformanceMetrics);
 attendanceRouter.post("/clock-in", employeeAuth, clockIn);
 attendanceRouter.post("/clock-out", employeeAuth, clockOut);
+attendanceRouter.post("/force-clock-out", employeeAuth, forceClockOutHandler);
 attendanceRouter.get("/today", employeeAuth, getCurrentEmployee);
 attendanceRouter.get("/attendance", employeeAuth, getEmployeeAttendance);
 attendanceRouter.get("/monthly-calendar", employeeAuth, getMonthlyAttendanceCalendar);

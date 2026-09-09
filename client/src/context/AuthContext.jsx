@@ -1,211 +1,70 @@
 import { createContext, useContext, useState, useEffect, useCallback } from "react";
-import {
-  getAuthMe,
-  getAdminMe,
-  getEmployee,
-  authLogout,
-  adminLogout,
-  employeeLogout,
-} from "../apis/fontApis";
+import { api, apiService } from "../apis/axios";
+import { adminLogout, employeeLogout } from "../apis/fontApis";
 
 const AuthContext = createContext(null);
 
 /**
- * Safely decodes a JWT token string payload in browser environment
+ * Authentication Context Provider
+ * Strictly uses HTTP-only cookie-based authentication with zero localStorage usage.
+ * Automatically hydratres user session from /api/auth/me on initial page load and refresh.
  */
-const parseJwt = (token) => {
-  try {
-    if (!token || typeof token !== "string") return null;
-    const base64Url = token.split(".")[1];
-    if (!base64Url) return null;
-    const base64 = base64Url.replace(/-/g, "+").replace(/_/g, "/");
-    const jsonPayload = decodeURIComponent(
-      atob(base64)
-        .split("")
-        .map((c) => "%" + ("00" + c.charCodeAt(0).toString(16)).slice(-2))
-        .join("")
-    );
-    return JSON.parse(jsonPayload);
-  } catch {
-    return null;
-  }
-};
-
 export const AuthProvider = ({ children }) => {
-  const [user, setUser] = useState(() => {
-    if (typeof window !== "undefined") {
-      try {
-        const storedRole = localStorage.getItem("userRole");
-        if (storedRole === "employee" || window.location.pathname.startsWith("/employee")) {
-          const storedEmp = localStorage.getItem("employeeData");
-          if (storedEmp) return JSON.parse(storedEmp);
-        } else {
-          const storedAdmin = localStorage.getItem("adminData");
-          if (storedAdmin) return JSON.parse(storedAdmin);
-        }
+  const [user, setUser] = useState(null);
+  const [loading, setLoading] = useState(true);
 
-        const token =
-          localStorage.getItem("token") ||
-          localStorage.getItem("adminToken") ||
-          localStorage.getItem("employeeToken");
-        if (token) {
-          const decoded = parseJwt(token);
-          if (decoded) {
-            return {
-              _id: decoded.id || decoded._id,
-              id: decoded.id || decoded._id,
-              fullName: decoded.fullName || (decoded.role === "admin" ? "Admin" : "Employee"),
-              email: decoded.email || "",
-              role: decoded.role || (window.location.pathname.startsWith("/employee") ? "employee" : "admin"),
-              employeeId: decoded.employeeId || "",
-            };
+  // Dedicated Session Hydration
+  const checkAuthSession = useCallback(async () => {
+    try {
+      const res = await api.get("/auth/me");
+      if (res.data?.success && res.data?.user) {
+        const fetchedUser = res.data.user;
+        setUser(fetchedUser);
+
+        // If employee has an active ongoing shift returned by session endpoint, notify attendance listeners
+        if (res.data.activeShift || res.data.hasActiveShift) {
+          const ongoing = res.data.activeShift || res.data.todayRecord;
+          if (ongoing && typeof window !== "undefined") {
+            window.dispatchEvent(
+              new CustomEvent("attendance-updated", {
+                detail: { action: "auth_me_active_shift", data: ongoing },
+              })
+            );
           }
         }
-      } catch (e) {
-        console.warn("AuthContext user initial state error:", e);
-      }
-    }
-    return null;
-  });
-
-  const [role, setRole] = useState(() => {
-    if (typeof window !== "undefined") {
-      if (window.location.pathname.startsWith("/employee")) return "employee";
-      if (window.location.pathname.startsWith("/admin")) return "admin";
-      return localStorage.getItem("userRole") || (localStorage.getItem("employeeToken") ? "employee" : "admin");
-    }
-    return "admin";
-  });
-
-  const [token, setToken] = useState(() => {
-    if (typeof window !== "undefined") {
-      return (
-        localStorage.getItem("token") ||
-        localStorage.getItem("adminToken") ||
-        localStorage.getItem("employeeToken") ||
-        null
-      );
-    }
-    return null;
-  });
-
-  const [isLoading, setIsLoading] = useState(true);
-
-  // Synchronize and refresh active user state from server
-  const refreshUser = useCallback(async () => {
-    try {
-      setIsLoading(true);
-      const activeToken =
-        localStorage.getItem("token") ||
-        localStorage.getItem("adminToken") ||
-        localStorage.getItem("employeeToken");
-
-      if (!activeToken) {
-        setIsLoading(false);
+        return fetchedUser;
+      } else {
+        setUser(null);
         return null;
       }
-
-      // Try getAuthMe
-      try {
-        const { data } = await getAuthMe();
-        if (data && data.success && data.user) {
-          setUser(data.user);
-          const resolvedRole = data.role || data.user.role || (data.user.employeeId ? "employee" : "admin");
-          setRole(resolvedRole);
-          localStorage.setItem("userRole", resolvedRole);
-          if (resolvedRole === "admin") {
-            localStorage.setItem("adminData", JSON.stringify(data.user));
-          } else {
-            localStorage.setItem("employeeData", JSON.stringify(data.user));
-            if (data.activeShift || data.hasActiveShift) {
-              const ongoing = data.activeShift || data.todayRecord;
-              if (ongoing) {
-                localStorage.setItem("todayAttendance", JSON.stringify(ongoing));
-                localStorage.setItem("activeShift", JSON.stringify(ongoing));
-                window.dispatchEvent(
-                  new CustomEvent("attendance-updated", {
-                    detail: { action: "auth_me_active_shift", data: ongoing },
-                  })
-                );
-              }
-            } else if (data.todayRecord) {
-              localStorage.setItem("todayAttendance", JSON.stringify(data.todayRecord));
-              localStorage.removeItem("activeShift");
-            }
-          }
-          setIsLoading(false);
-          return data.user;
-        }
-      } catch (err) {
-        console.warn("getAuthMe query fallback:", err?.message || err);
-      }
-
-      // Fallback based on stored role
-      const storedRole = localStorage.getItem("userRole") || role;
-      if (storedRole === "admin") {
-        try {
-          const { data } = await getAdminMe();
-          if (data && (data.admin || data.user)) {
-            const adminDoc = data.admin || data.user;
-            setUser(adminDoc);
-            setRole("admin");
-            localStorage.setItem("adminData", JSON.stringify(adminDoc));
-            localStorage.setItem("userRole", "admin");
-            setIsLoading(false);
-            return adminDoc;
-          }
-        } catch {
-          // ignore
-        }
-      } else {
-        try {
-          const { data } = await getEmployee();
-          if (data && (data.employee || data.user)) {
-            const empDoc = data.employee || data.user;
-            setUser(empDoc);
-            setRole("employee");
-            localStorage.setItem("employeeData", JSON.stringify(empDoc));
-            localStorage.setItem("userRole", "employee");
-            setIsLoading(false);
-            return empDoc;
-          }
-        } catch {
-          // ignore
-        }
-      }
-    } catch (error) {
-      console.warn("Error refreshing auth user:", error);
+    } catch {
+      setUser(null);
+      return null;
     } finally {
-      setIsLoading(false);
+      setLoading(false);
     }
-  }, [role]);
+  }, []);
 
   useEffect(() => {
-    refreshUser();
-  }, [refreshUser]);
+    checkAuthSession();
+  }, [checkAuthSession]);
 
-  // Login handler
+  // Login handler updating in-memory state and tokens
   const login = (userData, userRole = "admin", userToken = null, authPayload = null) => {
-    setUser(userData);
-    setRole(userRole);
-    if (userToken) setToken(userToken);
-
-    localStorage.setItem("userRole", userRole);
-    if (userRole === "admin") {
-      localStorage.setItem("adminData", JSON.stringify(userData));
-      if (userToken) {
-        localStorage.setItem("adminToken", userToken);
-        localStorage.setItem("token", userToken);
-      }
-    } else {
-      localStorage.setItem("employeeData", JSON.stringify(userData));
-      if (userToken) {
-        localStorage.setItem("employeeToken", userToken);
-        localStorage.setItem("token", userToken);
-      }
+    if (userToken) {
+      apiService.setToken(userToken);
     }
+    const resolvedRole = userData?.role || userRole;
+    const resolvedUser = userData
+      ? {
+          ...userData,
+          role: resolvedRole,
+        }
+      : null;
+    setUser(resolvedUser);
 
-    if (authPayload) {
+    // If attendance information is attached, notify client components
+    if (authPayload && typeof window !== "undefined") {
       const activeShift = authPayload.activeShift;
       const todayRec = authPayload.todayRecord || authPayload.attendance;
       const ongoing =
@@ -215,60 +74,45 @@ export const AuthProvider = ({ children }) => {
           : null);
 
       if (ongoing) {
-        try {
-          localStorage.setItem("todayAttendance", JSON.stringify(ongoing));
-          localStorage.setItem("activeShift", JSON.stringify(ongoing));
-          window.dispatchEvent(
-            new CustomEvent("attendance-updated", {
-              detail: { action: "auth_login_shift", data: ongoing },
-            })
-          );
-        } catch (e) {
-          console.warn("Error caching shift in AuthContext login:", e);
-        }
+        window.dispatchEvent(
+          new CustomEvent("attendance-updated", {
+            detail: { action: "auth_login_shift", data: ongoing },
+          })
+        );
       } else if (todayRec) {
-        try {
-          localStorage.setItem("todayAttendance", JSON.stringify(todayRec));
-          localStorage.removeItem("activeShift");
-          window.dispatchEvent(
-            new CustomEvent("attendance-updated", {
-              detail: { action: "auth_login_record", data: todayRec },
-            })
-          );
-        } catch (e) {
-          console.warn("Error caching attendance record in AuthContext login:", e);
-        }
+        window.dispatchEvent(
+          new CustomEvent("attendance-updated", {
+            detail: { action: "auth_login_record", data: todayRec },
+          })
+        );
       }
     }
   };
 
-  // Logout handler
+  // Logout handler clearing cookies and local tokens
   const logout = async () => {
     try {
-      if (role === "admin") {
+      await api.post("/auth/logout").catch(() => {});
+      if (user?.role === "admin") {
         await adminLogout().catch(() => {});
       } else {
         await employeeLogout().catch(() => {});
       }
-      await authLogout().catch(() => {});
-    } catch (e) {
-      console.warn("Logout API call error:", e);
+    } catch (err) {
+      console.warn("Logout error:", err);
     } finally {
+      apiService.clearToken();
       setUser(null);
-      setToken(null);
-      localStorage.removeItem("token");
-      localStorage.removeItem("adminToken");
-      localStorage.removeItem("employeeToken");
-      localStorage.removeItem("adminData");
-      localStorage.removeItem("employeeData");
-      localStorage.removeItem("userRole");
-      localStorage.removeItem("isLoggedIn");
-      localStorage.removeItem("activeShift");
-      localStorage.removeItem("todayAttendance");
     }
   };
 
-  const isAuthenticated = Boolean(user || token);
+  const role =
+    user?.role ||
+    (typeof window !== "undefined" && window.location.pathname.startsWith("/employee")
+      ? "employee"
+      : "admin");
+
+  const isAuthenticated = Boolean(user);
 
   return (
     <AuthContext.Provider
@@ -276,17 +120,21 @@ export const AuthProvider = ({ children }) => {
         user,
         setUser,
         role,
-        setRole,
-        token,
-        setToken,
+        setRole: (newRole) => {
+          setUser((prev) => (prev ? { ...prev, role: newRole } : prev));
+        },
+        token: user ? "cookie-session" : null,
+        setToken: () => {},
         isAuthenticated,
-        isLoading,
+        loading,
+        isLoading: loading,
         login,
         logout,
-        refreshUser,
+        refreshUser: checkAuthSession,
+        checkAuthSession,
       }}
     >
-      {children}
+      {!loading && children}
     </AuthContext.Provider>
   );
 };

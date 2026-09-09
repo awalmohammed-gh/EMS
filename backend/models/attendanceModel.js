@@ -73,6 +73,21 @@ const attendanceSchema = new mongoose.Schema(
       default: "",
     },
 
+    shiftStatus: {
+      type: String,
+      default: "In-Progress",
+    },
+
+    autoClosedAt: {
+      type: Date,
+      default: null,
+    },
+
+    autoClockedOut: {
+      type: Boolean,
+      default: false,
+    },
+
     lateReason: {
       type: String,
       trim: true,

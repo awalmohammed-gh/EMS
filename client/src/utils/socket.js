@@ -15,21 +15,6 @@ export const getSocket = () => {
 
     socket.on("connect", () => {
       console.log("[Socket.io] Connected to server:", socket.id);
-      
-      // Auto-join user room if stored in localStorage
-      try {
-        const storedUser = localStorage.getItem("employee") || localStorage.getItem("user") || localStorage.getItem("admin");
-        if (storedUser) {
-          const parsed = JSON.parse(storedUser);
-          const userId = parsed?._id || parsed?.id || parsed?.employeeId;
-          const role = parsed?.role || (localStorage.getItem("admin") ? "admin" : "employee");
-          if (userId) {
-            socket.emit("join_room", { employeeId: userId, role });
-          }
-        }
-      } catch (err) {
-        console.warn("[Socket.io] Auto-join failed:", err);
-      }
     });
 
     socket.on("disconnect", (reason) => {

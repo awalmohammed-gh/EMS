@@ -145,16 +145,6 @@ export const ProfilePictureUploader = ({
         if (typeof setAdmin === "function") setAdmin(updatedAdmin);
         if (typeof setUser === "function") setUser(updatedUser);
 
-        try {
-          const storedAppUser = JSON.parse(localStorage.getItem("app_user") || "{}");
-          localStorage.setItem("app_user", JSON.stringify({ ...storedAppUser, avatar: newUrl, profilePicture: newUrl, profile_image_url: newUrl }));
-          localStorage.setItem("adminData", JSON.stringify(updatedAdmin));
-          localStorage.setItem("employeeData", JSON.stringify(updatedUser));
-          localStorage.setItem("userData", JSON.stringify(updatedUser));
-        } catch {
-          // Ignore localStorage quota warnings
-        }
-
         // Dispatch events for across-the-board instant UI update
         if (typeof window !== "undefined") {
           window.dispatchEvent(new CustomEvent("avatarUpdated", { detail: { avatarUrl: newUrl } }));
@@ -220,16 +210,6 @@ export const ProfilePictureUploader = ({
 
         if (typeof setAdmin === "function") setAdmin(updatedAdmin);
         if (typeof setUser === "function") setUser(updatedUser);
-
-        try {
-          const storedAppUser = JSON.parse(localStorage.getItem("app_user") || "{}");
-          localStorage.setItem("app_user", JSON.stringify({ ...storedAppUser, avatar: "", profilePicture: "", profile_image_url: "" }));
-          localStorage.setItem("adminData", JSON.stringify(updatedAdmin));
-          localStorage.setItem("employeeData", JSON.stringify(updatedUser));
-          localStorage.setItem("userData", JSON.stringify(updatedUser));
-        } catch {
-          // Ignore localStorage quota warnings
-        }
 
         if (typeof window !== "undefined") {
           window.dispatchEvent(new CustomEvent("avatarUpdated", { detail: { avatarUrl: "" } }));

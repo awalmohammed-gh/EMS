@@ -412,6 +412,71 @@ const Attendance = () => {
     };
   }, [attendance, employeesList]);
 
+  // Live status counts for quick status indicator filters (respecting search, department, and date)
+  const _statusCounts = useMemo(() => {
+    let baseList = [...attendance];
+    if (searchTerm.trim()) {
+      const term = searchTerm.toLowerCase().trim();
+      baseList = baseList.filter((item) => {
+        const name = item.employee?.fullName?.toLowerCase() || "";
+        const code = item.employee?.employeeId?.toLowerCase() || "";
+        const dept = item.employee?.department?.toLowerCase() || "";
+        const pos = item.employee?.position?.toLowerCase() || "";
+        return name.includes(term) || code.includes(term) || dept.includes(term) || pos.includes(term);
+      });
+    }
+    if (departmentFilter !== "All") {
+      baseList = baseList.filter(
+        (item) => (item.employee?.department || "").toLowerCase() === departmentFilter.toLowerCase()
+      );
+    }
+    if (dateFilter) {
+      baseList = baseList.filter((item) => item.date === dateFilter);
+    }
+    if (startDateFilter) {
+      baseList = baseList.filter((item) => item.date && item.date >= startDateFilter);
+    }
+    if (endDateFilter) {
+      baseList = baseList.filter((item) => item.date && item.date <= endDateFilter);
+    }
+
+    let all = baseList.length;
+    let present = 0;
+    let onTime = 0;
+    let late = 0;
+    let absent = 0;
+    let onLeave = 0;
+    let autoClosed = 0;
+
+    for (const item of baseList) {
+      const s = (item.status || "").toLowerCase();
+      const hasClockIn = Boolean(item.clockIn);
+      const isLate = s.includes("late") || Number(item.delayMinutes || item.lateMinutes || 0) > 0;
+      const isAuto = item.autoClockedOut === true || (item.notes && item.notes.toLowerCase().includes("auto clocked out"));
+
+      if (hasClockIn || s === "present" || s === "on time" || isLate) {
+        present++;
+      }
+      if ((s === "on time" || (hasClockIn && !isLate)) && !isLate) {
+        onTime++;
+      }
+      if (isLate) {
+        late++;
+      }
+      if (s === "absent" || (!hasClockIn && !s.includes("leave"))) {
+        absent++;
+      }
+      if (s.includes("leave")) {
+        onLeave++;
+      }
+      if (isAuto) {
+        autoClosed++;
+      }
+    }
+
+    return { all, present, onTime, late, absent, onLeave, autoClosed };
+  }, [attendance, searchTerm, departmentFilter, dateFilter, startDateFilter, endDateFilter]);
+
   // Filtered attendance records based on search, department, status, and date
   const filteredAttendance = useMemo(() => {
     let list = [...attendance];
@@ -436,10 +501,30 @@ const Attendance = () => {
     // Status filter
     if (statusFilter !== "All") {
       list = list.filter((item) => {
-        if (statusFilter === "On Time") {
-          return item.status === "On Time" || item.status === "Present";
+        const itemStatus = (item.status || "").toLowerCase();
+        const hasClockIn = Boolean(item.clockIn);
+        const isLate = itemStatus.includes("late") || Number(item.delayMinutes || item.lateMinutes || 0) > 0;
+        const isAuto = item.autoClockedOut === true || (item.notes && item.notes.toLowerCase().includes("auto clocked out"));
+
+        if (statusFilter === "Present") {
+          return hasClockIn || itemStatus === "present" || itemStatus === "on time" || isLate;
         }
-        return (item.status || "").toLowerCase() === statusFilter.toLowerCase();
+        if (statusFilter === "On Time") {
+          return (itemStatus === "on time" || (hasClockIn && !isLate)) && !isLate;
+        }
+        if (statusFilter === "Late") {
+          return isLate;
+        }
+        if (statusFilter === "Absent") {
+          return itemStatus === "absent" || (!hasClockIn && !itemStatus.includes("leave"));
+        }
+        if (statusFilter === "On Leave" || statusFilter === "Leave") {
+          return itemStatus.includes("leave");
+        }
+        if (statusFilter === "Auto-Closed") {
+          return isAuto;
+        }
+        return itemStatus === statusFilter.toLowerCase();
       });
     }
 

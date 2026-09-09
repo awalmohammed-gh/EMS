@@ -28,17 +28,6 @@ export const EmployeeProfileIdentityBanner = ({
 
   // Dynamic avatar URL resolution with multi-level fallback
   const getResolvedAvatar = () => {
-    let saved;
-    try {
-      saved = JSON.parse(
-        localStorage.getItem("employeeData") ||
-          localStorage.getItem("userData") ||
-          "{}"
-      );
-    } catch {
-      saved = {};
-    }
-
     return (
       employeeData?.avatar ||
       employeeData?.avatarUrl ||
@@ -50,10 +39,6 @@ export const EmployeeProfileIdentityBanner = ({
       user?.profilePicture ||
       user?.profile_image_url ||
       user?.profile_picture ||
-      saved?.avatar ||
-      saved?.avatarUrl ||
-      saved?.profilePicture ||
-      saved?.profile_image_url ||
       emp.avatar ||
       emp.profilePicture ||
       ""

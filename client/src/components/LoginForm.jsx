@@ -63,14 +63,8 @@ export const LoginForm = ({ role = "admin", title, subtitle, initialMode = "logi
       });
 
       if (res.data?.success) {
-        const { token, admin } = res.data;
-        if (token) {
-          localStorage.setItem("token", token);
-          localStorage.setItem("adminToken", token);
-        }
-        localStorage.setItem("userRole", "admin");
+        const { admin } = res.data;
         if (admin) {
-          localStorage.setItem("adminData", JSON.stringify(admin));
           if (typeof setUser === "function") setUser(admin);
           if (typeof setRole === "function") setRole("admin");
         }
@@ -128,14 +122,8 @@ export const LoginForm = ({ role = "admin", title, subtitle, initialMode = "logi
       });
 
       if (res.data?.success) {
-        const { token, admin } = res.data;
-        if (token) {
-          localStorage.setItem("token", token);
-          localStorage.setItem("adminToken", token);
-        }
-        localStorage.setItem("userRole", "admin");
+        const { admin } = res.data;
         if (admin) {
-          localStorage.setItem("adminData", JSON.stringify(admin));
           if (typeof setUser === "function") setUser(admin);
           if (typeof setRole === "function") setRole("admin");
         }
@@ -179,14 +167,8 @@ export const LoginForm = ({ role = "admin", title, subtitle, initialMode = "logi
       });
 
       if (res.data?.success) {
-        const { token, employee } = res.data;
-        if (token) {
-          localStorage.setItem("token", token);
-          localStorage.setItem("employeeToken", token);
-        }
-        localStorage.setItem("userRole", "employee");
+        const { employee } = res.data;
         if (employee) {
-          localStorage.setItem("employeeData", JSON.stringify(employee));
           if (typeof setUser === "function") setUser(employee);
           if (typeof setRole === "function") setRole("employee");
         }

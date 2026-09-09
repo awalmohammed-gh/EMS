@@ -136,7 +136,6 @@ const EmployeeSettings = () => {
         };
         setProfile(resolvedData);
         setUser((prev) => ({ ...prev, ...resolvedData }));
-        localStorage.setItem("employeeData", JSON.stringify(resolvedData));
       } else if (user) {
         setProfile({
           fullName: user.fullName || user.full_name || "",
@@ -205,8 +204,6 @@ const EmployeeSettings = () => {
           profilePicture: avatarUrlToSave,
         };
         setUser((prev) => ({ ...prev, ...merged }));
-        localStorage.setItem("employeeData", JSON.stringify(merged));
-        localStorage.setItem("userData", JSON.stringify(merged));
         setShowToast({
           show: true,
           message: "Profile details updated successfully!",
