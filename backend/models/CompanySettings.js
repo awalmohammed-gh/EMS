@@ -32,6 +32,38 @@ const latenessTierSchema = new mongoose.Schema(
 
 const companySettingsSchema = new mongoose.Schema(
   {
+    companyName: {
+      type: String,
+      required: true,
+      trim: true,
+      default: "Enterprise Organization",
+    },
+    logoUrl: {
+      type: String,
+      default: "/default-logo.png",
+    },
+    welcomeBackgroundUrl: {
+      type: String,
+      default: "",
+    },
+    primaryColor: {
+      type: String,
+      default: "#0B1E48",
+    },
+    contactEmail: {
+      type: String,
+      trim: true,
+      default: "admin@company.com",
+    },
+    contactPhone: {
+      type: String,
+      trim: true,
+      default: "",
+    },
+    isConfigured: {
+      type: Boolean,
+      default: false,
+    },
     workStartTime: {
       type: String,
       default: "08:00",

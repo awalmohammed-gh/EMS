@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, memo } from "react";
 import {
   BarChart,
   Bar,
@@ -53,7 +53,7 @@ const CustomChartTooltip = ({ active, payload, totalRequests = 0 }) => {
   );
 };
 
-export const EmployeeLeaveChart = ({
+const EmployeeLeaveChartComponent = ({
   onApplyLeave,
   className = "",
   refreshTrigger = 0,
@@ -545,5 +545,6 @@ export const EmployeeLeaveChart = ({
   );
 };
 
+export const EmployeeLeaveChart = memo(EmployeeLeaveChartComponent);
 export default EmployeeLeaveChart;
 

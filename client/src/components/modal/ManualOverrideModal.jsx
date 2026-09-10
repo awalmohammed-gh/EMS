@@ -10,6 +10,9 @@ import {
 } from "lucide-react";
 import { getPenaltySettings, getSettings } from "../../apis/fontApis";
 import CustomSelect from "../CustomSelect";
+import AnimatedModal from "../ui/AnimatedModal";
+import { motion } from "framer-motion";
+import { buttonPressProps } from "../../utils/motion";
 
 // Strict Regex pattern for 24-hour HH:MM format (00:00 to 23:59)
 const TIME_24H_REGEX = /^([01]\d|2[0-3]):([0-5]\d)$/;
@@ -347,15 +350,15 @@ export const ManualOverrideModal = ({
   };
 
   return (
-    <div
+    <AnimatedModal
+      isOpen={true}
+      onClose={onClose}
       id="manual-override-modal-backdrop"
-      onClick={onClose}
-      className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-4 overflow-y-auto bg-black/50 backdrop-blur-sm animate-fade-in"
+      className="max-w-lg"
     >
       <div
         id="manual-override-modal-container"
-        onClick={(e) => e.stopPropagation()}
-        className="w-full max-w-lg mx-auto bg-white dark:bg-[#111927] border border-slate-200/70 dark:border-slate-800 rounded-2xl shadow-lg max-h-[90vh] flex flex-col overflow-hidden animate-fade-in"
+        className="w-full mx-auto bg-white dark:bg-[#111927] border border-slate-200/70 dark:border-slate-800 rounded-2xl shadow-lg max-h-[90vh] flex flex-col overflow-hidden"
       >
         {/* Modal Header */}
         <div className="flex items-center justify-between border-b border-slate-100 dark:border-slate-800 px-5 sm:px-6 py-4 bg-slate-50/90 dark:bg-slate-800/50 shrink-0">
@@ -374,14 +377,16 @@ export const ManualOverrideModal = ({
               </p>
             </div>
           </div>
-          <button
+          <motion.button
             id="close-manual-override-modal-btn"
             type="button"
+            whileTap={{ scale: 0.95 }}
+            transition={{ duration: 0.1 }}
             onClick={onClose}
             className="rounded-lg p-1.5 text-slate-400 hover:text-slate-700 dark:hover:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors cursor-pointer shrink-0"
           >
             <X className="h-5 w-5" />
-          </button>
+          </motion.button>
         </div>
 
         {/* Standard Shift Banner */}
@@ -643,17 +648,19 @@ export const ManualOverrideModal = ({
 
           {/* Action Footer */}
           <div className="flex flex-col-reverse sm:flex-row sm:items-center sm:justify-end gap-2.5 sm:gap-3 pt-3 border-t border-slate-100 dark:border-slate-800">
-            <button
+            <motion.button
               id="cancel-override-btn"
               type="button"
+              {...buttonPressProps}
               onClick={onClose}
               className="w-full sm:w-auto px-4 py-2.5 text-xs sm:text-sm font-semibold text-slate-600 dark:text-slate-400 hover:text-slate-800 dark:hover:text-slate-200 rounded-xl hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors text-center cursor-pointer"
             >
               Cancel
-            </button>
-            <button
+            </motion.button>
+            <motion.button
               id="save-override-btn"
               type="submit"
+              {...buttonPressProps}
               disabled={isSaving || Object.keys(errors).some((k) => Boolean(errors[k]))}
               className="w-full sm:w-auto inline-flex items-center justify-center gap-2 px-5 py-2.5 text-xs sm:text-sm font-bold text-white bg-[#0B1E48] hover:bg-[#002185] active:scale-[0.98] rounded-xl transition-all shadow-xs disabled:opacity-50 disabled:pointer-events-none cursor-pointer"
             >
@@ -665,11 +672,11 @@ export const ManualOverrideModal = ({
                   <span>Save Override</span>
                 </>
               )}
-            </button>
+            </motion.button>
           </div>
         </form>
       </div>
-    </div>
+    </AnimatedModal>
   );
 };
 

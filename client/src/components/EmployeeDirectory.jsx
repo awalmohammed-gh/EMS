@@ -41,6 +41,7 @@ import {
 import { useManagement } from "../context/ManagementContextProvider";
 import Avatar from "./Avatar";
 import EmployeeDetailModal from "./EmployeeDetailModal";
+import { tableContainerVariants, tableRowVariants } from "../utils/motion";
 
 export const EmployeeDirectory = ({
   employees: propEmployees = [],
@@ -1437,8 +1438,14 @@ export const EmployeeDirectory = ({
               </div>
             )}
 
-            {/* Mobile Cards List */}
-            <AnimatePresence mode="popLayout">
+            {/* Mobile Cards List with Staggered Variants */}
+            <motion.div
+              key={`mobile-cards-${selectedDepartment}-${selectedStatus}-${search}-${sortField}-${sortOrder}`}
+              variants={tableContainerVariants}
+              initial="hidden"
+              animate="visible"
+              className="space-y-3.5"
+            >
               {filteredEmployees.map((emp) => {
                 const badge = getStatusBadge(emp.status, emp.isActive, emp);
                 const empId = emp._id || emp.employeeId;
@@ -1454,10 +1461,7 @@ export const EmployeeDirectory = ({
                 return (
                   <motion.div
                     layout
-                    initial={{ opacity: 0, y: 4 }}
-                    animate={{ opacity: 1, y: 0 }}
-                    exit={{ opacity: 0, scale: 0.98 }}
-                    transition={{ duration: 0.15 }}
+                    variants={tableRowVariants}
                     key={`mobile-card-${empId}`}
                     id={`mobile-employee-card-${empId}`}
                     className={`bg-white dark:bg-[#111927] border rounded-xl p-4 shadow-none transition-all ${
@@ -1669,7 +1673,7 @@ export const EmployeeDirectory = ({
                 </motion.div>
               );
             })}
-            </AnimatePresence>
+            </motion.div>
           </div>
 
           {/* Desktop Table View (Visible on md and larger screens) */}
@@ -1703,7 +1707,13 @@ export const EmployeeDirectory = ({
                     <th className="px-4 py-3.5 text-right">Actions</th>
                   </tr>
                 </thead>
-                <tbody className="divide-y divide-slate-100 dark:divide-slate-800/80">
+                <motion.tbody
+                  key={`table-tbody-${selectedDepartment}-${selectedStatus}-${search}-${sortField}-${sortOrder}`}
+                  variants={tableContainerVariants}
+                  initial="hidden"
+                  animate="visible"
+                  className="divide-y divide-slate-100 dark:divide-slate-800/80"
+                >
                   {filteredEmployees.map((emp) => {
                     const badge = getStatusBadge(emp.status, emp.isActive, emp);
                     const empId = emp._id || emp.employeeId;
@@ -1719,9 +1729,7 @@ export const EmployeeDirectory = ({
                     return (
                       <motion.tr
                         layout
-                        initial={{ opacity: 0 }}
-                        animate={{ opacity: 1 }}
-                        transition={{ duration: 0.15 }}
+                        variants={tableRowVariants}
                         key={empId}
                         className={`hover:bg-slate-50/70 dark:hover:bg-slate-800/40 transition-colors ${
                           isSelected ? "bg-blue-50/30 dark:bg-blue-950/20" : ""
@@ -1900,7 +1908,7 @@ export const EmployeeDirectory = ({
                       </motion.tr>
                     );
                   })}
-                </tbody>
+                </motion.tbody>
               </table>
             </div>
           </div>

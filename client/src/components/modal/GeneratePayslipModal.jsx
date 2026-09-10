@@ -22,6 +22,9 @@ import {
 import { namesList, payrollGenerate, calculatePayrollSummary, getEmployeeProfile } from "../../apis/fontApis";
 import { useManagement } from "../../context/ManagementContextProvider";
 import Loading from "../../ui/Loading";
+import AnimatedModal from "../ui/AnimatedModal";
+import { motion } from "framer-motion";
+import { buttonPressProps } from "../../utils/motion";
 
 /**
  * Calculates total standard business days (Monday to Friday) in a given month.
@@ -536,15 +539,15 @@ export const GeneratePayslipModal = ({ onClose, onSuccess, isOpen = true }) => {
   }
 
   return (
-    <div
+    <AnimatedModal
+      isOpen={isOpen}
+      onClose={onClose}
       id="payslip-modal-container"
-      onClick={onClose}
-      className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-4 bg-slate-950/60 backdrop-blur-sm animate-fade-in"
+      className="max-w-xl lg:max-w-2xl"
     >
       {/* Modal Container */}
       <div
-        onClick={(e) => e.stopPropagation()}
-        className="relative z-10 flex max-h-[90vh] w-full max-w-xl lg:max-w-2xl mx-4 sm:mx-auto flex-col rounded-2xl sm:rounded-3xl bg-white dark:bg-slate-900 shadow-xl border border-slate-200/70 dark:border-slate-800 animate-fade-in overflow-hidden"
+        className="relative z-10 flex max-h-[90vh] w-full flex-col rounded-2xl sm:rounded-3xl bg-white dark:bg-slate-900 shadow-xl border border-slate-200/70 dark:border-slate-800 overflow-hidden"
       >
         {/* Header */}
         <div className="flex items-center justify-between border-b border-slate-200/70 dark:border-slate-800 px-5 sm:px-6 py-3.5 bg-white dark:bg-slate-900 shrink-0">
@@ -557,14 +560,16 @@ export const GeneratePayslipModal = ({ onClose, onSuccess, isOpen = true }) => {
             </p>
           </div>
 
-          <button
+          <motion.button
             id="btn-close-payslip-modal"
             type="button"
+            whileTap={{ scale: 0.95 }}
+            transition={{ duration: 0.1 }}
             onClick={onClose}
             className="rounded-lg p-1.5 text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800 hover:text-slate-600 transition cursor-pointer shrink-0"
           >
             <X className="w-5 h-5" />
-          </button>
+          </motion.button>
         </div>
 
         {/* Top Notice Banner: fluid wrapping layout, enterprise Info icon, clean hairline border */}
@@ -1137,28 +1142,30 @@ export const GeneratePayslipModal = ({ onClose, onSuccess, isOpen = true }) => {
 
         {/* Footer */}
         <div className="flex flex-col-reverse sm:flex-row sm:items-center sm:justify-end gap-2.5 sm:gap-3 border-t border-slate-200 dark:border-slate-800 px-5 sm:px-6 py-3 bg-white dark:bg-slate-900 shrink-0">
-          <button
+          <motion.button
             id="btn-cancel-payslip"
             type="button"
+            {...buttonPressProps}
             onClick={onClose}
             className="w-full sm:w-auto rounded-xl border border-slate-200 dark:border-slate-700 px-5 py-2.5 font-semibold text-xs sm:text-sm text-slate-600 dark:text-slate-300 transition hover:bg-slate-100 dark:hover:bg-slate-800 cursor-pointer text-center"
           >
             Cancel
-          </button>
+          </motion.button>
 
-          <button
+          <motion.button
             id="btn-submit-payslip"
             type="submit"
             form="payslip-form"
+            {...buttonPressProps}
             disabled={!payslipForm.employeeId || isCalculating}
             className="w-full sm:w-auto rounded-xl bg-[#002185] hover:bg-[#ff5500] px-6 py-2.5 font-bold text-xs sm:text-sm text-white transition shadow-sm cursor-pointer disabled:opacity-50 flex items-center justify-center gap-2 text-center"
           >
             <Banknote className="w-4 h-4" />
             <span>Save &amp; Publish Payslip</span>
-          </button>
+          </motion.button>
         </div>
       </div>
-    </div>
+    </AnimatedModal>
   );
 };
 

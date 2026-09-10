@@ -4,9 +4,14 @@ import { motion } from "motion/react";
 import { ShieldCheckIcon, UserIcon } from "lucide-react";
 import eyenitLogo from "../assets/eyenit_logo.png";
 import { checkAdminExists } from "../apis/fontApis";
+import { useBranding } from "../context/BrandingContext";
 
 const WelcomePage = () => {
+  const { branding } = useBranding();
   const [adminExists, setAdminExists] = useState(true);
+  const [logoLoadError, setLogoLoadError] = useState(false);
+
+  const activeLogo = logoLoadError || !branding?.logoUrl ? eyenitLogo : branding.logoUrl;
 
   useEffect(() => {
     let isMounted = true;
@@ -80,63 +85,36 @@ const WelcomePage = () => {
     },
   };
 
-  const logoPulse = {
-    animate: {
-      scale: [1, 1.03, 1],
-      opacity: [0.05, 0.08, 0.05],
-      transition: {
-        duration: 8,
-        repeat: Infinity,
-        ease: "easeInOut",
-      },
-    },
-  };
-
   return (
     <div className="min-h-screen flex flex-col items-center justify-center p-6 relative overflow-hidden">
-      {/* Clean Solid Background */}
-      <div className="absolute inset-0 bg-[#f8fafc] dark:bg-slate-900" />
-
-      {/* Subtle blue accents with motion */}
-      <motion.div
-        variants={floatVariants}
-        animate="animate"
-        className="absolute top-0 right-0 w-96 h-96 rounded-full bg-[#002185]/3 blur-3xl"
-      />
-      <motion.div
-        variants={floatVariants}
-        animate="animate"
-        style={{ animationDelay: "2s" }}
-        className="absolute bottom-0 left-0 w-96 h-96 rounded-full bg-[#002185]/3 blur-3xl"
-      />
-
-      {/* Background Logo - Blurred with subtle motion */}
-      <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
-        <div className="relative w-full h-full flex items-center justify-center">
-          <div className="absolute inset-0 grid grid-cols-3 grid-rows-3 gap-8 p-8 opacity-5">
-            {[...Array(9)].map((_, index) => (
-              <div key={index} className="flex items-center justify-center">
-                <img
-                  src={eyenitLogo}
-                  alt=""
-                  className="w-48 h-auto object-contain blur-[2px]"
-                />
-              </div>
-            ))}
-          </div>
-          <motion.div
-            variants={logoPulse}
-            animate="animate"
-            className="absolute inset-0 flex items-center justify-center"
-          >
-            <img
-              src={eyenitLogo}
-              alt=""
-              className="w-96 h-auto object-contain opacity-5 blur-xs"
-            />
-          </motion.div>
+      {/* Background Layer: Custom uploaded image or neutral enterprise fallback */}
+      {branding?.welcomeBackgroundUrl ? (
+        <div
+          className="absolute inset-0 bg-cover bg-center transition-opacity duration-700"
+          style={{ backgroundImage: `url(${branding.welcomeBackgroundUrl})` }}
+        >
+          <div className="absolute inset-0 bg-slate-900/60 dark:bg-slate-950/75 backdrop-blur-[2px]" />
         </div>
-      </div>
+      ) : (
+        <div className="absolute inset-0 bg-[#f8fafc] dark:bg-slate-900" />
+      )}
+
+      {/* Subtle blue accents with motion (only when default background is active) */}
+      {!branding?.welcomeBackgroundUrl && (
+        <>
+          <motion.div
+            variants={floatVariants}
+            animate="animate"
+            className="absolute top-0 right-0 w-96 h-96 rounded-full bg-[#002185]/3 blur-3xl"
+          />
+          <motion.div
+            variants={floatVariants}
+            animate="animate"
+            style={{ animationDelay: "2s" }}
+            className="absolute bottom-0 left-0 w-96 h-96 rounded-full bg-[#002185]/3 blur-3xl"
+          />
+        </>
+      )}
 
       {/* Content - on top of background */}
       <motion.div
@@ -147,24 +125,25 @@ const WelcomePage = () => {
       >
         {/* Logo/Brand */}
         <motion.div variants={itemVariants} className="mb-4 text-center">
-          <div className="flex items-center justify-center">
+          <div className="flex items-center justify-center mb-2">
             <img
-              className="w-30 h-auto object-contain"
-              src={eyenitLogo}
-              alt="Eyenit"
+              className="h-16 w-auto max-w-[180px] object-contain drop-shadow-xs"
+              src={activeLogo}
+              alt={branding?.companyName || "Organization Logo"}
+              onError={() => setLogoLoadError(true)}
             />
           </div>
-          <p className="text-[#002185] text-sm font-medium">
-            Employee Management System
+          <p className={`text-sm font-semibold tracking-tight ${branding?.welcomeBackgroundUrl ? "text-white/90" : "text-[#002185] dark:text-blue-400"}`}>
+            {branding?.companyName || "Employee Management System"}
           </p>
         </motion.div>
 
         {/* Welcome Section */}
-        <motion.div variants={itemVariants} className="text-center mb-10">
-          <h2 className="text-3xl font-bold text-[#002185] mb-3 tracking-tight">
+        <motion.div variants={itemVariants} className="text-center mb-8">
+          <h2 className={`text-3xl font-bold mb-2 tracking-tight ${branding?.welcomeBackgroundUrl ? "text-white" : "text-[#002185] dark:text-white"}`}>
             Welcome Back
           </h2>
-          <p className="text-[#64748B] max-w-md mx-auto">
+          <p className={branding?.welcomeBackgroundUrl ? "text-slate-200 text-sm max-w-md mx-auto" : "text-[#64748B] dark:text-slate-400 text-sm max-w-md mx-auto"}>
             Select your portal to securely access the system
           </p>
         </motion.div>

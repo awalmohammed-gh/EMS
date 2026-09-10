@@ -1,5 +1,6 @@
 import { useState, useRef, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
+import { motion, AnimatePresence } from "framer-motion";
 import {
   Zap,
   X,
@@ -9,6 +10,7 @@ import {
   ChevronRight,
   Sparkles,
 } from "lucide-react";
+import { buttonPressProps } from "../utils/motion";
 
 export const DashboardQuickActions = ({
   onOpenAddEmployee,
@@ -56,14 +58,20 @@ export const DashboardQuickActions = ({
       id="dashboard-floating-quick-actions-container"
       className="fixed bottom-20 md:bottom-8 right-4 sm:right-6 md:right-8 z-40"
     >
-      {/* Popover Speed Dial Menu */}
-      {isOpen && (
-        <div
-          id="dashboard-quick-actions-popover"
-          role="menu"
-          aria-label="Quick Actions Menu"
-          className="absolute bottom-full mb-3 right-0 w-[calc(100vw-2rem)] sm:w-80 max-w-sm rounded-2xl sm:rounded-3xl bg-white/95 dark:bg-slate-900/95 backdrop-blur-md border border-slate-200/90 dark:border-slate-800 shadow-2xl shadow-slate-950/20 p-3 z-50 animate-in fade-in slide-in-from-bottom-3 duration-200 origin-bottom-right"
-        >
+      {/* Popover Speed Dial Menu with Framer Motion Blooming Animation */}
+      <AnimatePresence>
+        {isOpen && (
+          <motion.div
+            id="dashboard-quick-actions-popover"
+            role="menu"
+            aria-label="Quick Actions Menu"
+            initial={{ opacity: 0, scale: 0.94, y: 10 }}
+            animate={{ opacity: 1, scale: 1, y: 0 }}
+            exit={{ opacity: 0, scale: 0.94, y: 10 }}
+            transition={{ duration: 0.18, ease: [0.16, 1, 0.3, 1] }}
+            style={{ transformOrigin: "bottom right" }}
+            className="absolute bottom-full mb-3 right-0 w-[calc(100vw-2rem)] sm:w-80 max-w-sm rounded-2xl sm:rounded-3xl bg-white/95 dark:bg-slate-900/95 backdrop-blur-md border border-slate-200/90 dark:border-slate-800 shadow-2xl shadow-slate-950/20 p-3 z-50 origin-bottom-right"
+          >
           {/* Header */}
           <div className="flex items-center justify-between px-3 py-2 border-b border-slate-100 dark:border-slate-800/80 mb-2">
             <div className="flex items-center gap-2">
@@ -205,17 +213,21 @@ export const DashboardQuickActions = ({
               </button>
             </div>
           </div>
-        </div>
+        </motion.div>
       )}
+      </AnimatePresence>
 
       {/* Floating Trigger Button (FAB) */}
-      <button
+      <motion.button
         id="floating-quick-actions-btn"
         type="button"
         aria-haspopup="menu"
         aria-expanded={isOpen}
+        whileTap={{ scale: 0.94 }}
+        whileHover={{ scale: 1.02 }}
+        transition={{ duration: 0.12 }}
         onClick={() => setIsOpen((prev) => !prev)}
-        className={`group relative flex items-center gap-2.5 px-4 py-3 sm:px-5 sm:py-3.5 rounded-full text-white font-bold text-xs sm:text-sm transition-all duration-200 cursor-pointer shadow-lg active:scale-95 ${
+        className={`group relative flex items-center gap-2.5 px-4 py-3 sm:px-5 sm:py-3.5 rounded-full text-white font-bold text-xs sm:text-sm transition-all duration-200 cursor-pointer shadow-lg ${
           isOpen
             ? "bg-slate-900 dark:bg-slate-800 ring-4 ring-blue-500/20 shadow-slate-950/30"
             : "bg-[#002185] hover:bg-[#081b5c] dark:bg-blue-600 dark:hover:bg-blue-700 shadow-blue-900/30 hover:shadow-xl hover:shadow-blue-900/40"
@@ -239,7 +251,7 @@ export const DashboardQuickActions = ({
         >
           {isOpen ? "×" : "+"}
         </span>
-      </button>
+      </motion.button>
     </div>
   );
 };

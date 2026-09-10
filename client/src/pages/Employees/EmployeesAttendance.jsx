@@ -19,6 +19,7 @@ import {
   Unlock,
   ShieldCheck,
   Printer,
+  Download,
   AlertCircle,
   MessageSquare,
   X,
@@ -38,6 +39,11 @@ import AttendanceIntensityHeatmap from "../../components/AttendanceIntensityHeat
 import AttendanceMonthlyCalendar from "../../components/AttendanceMonthlyCalendar";
 import GlobalDateRangePicker from "../../components/GlobalDateRangePicker";
 import AttendanceReportModal from "../../components/modal/AttendanceReportModal";
+import {
+  exportAttendanceLogsToCSV,
+  exportAttendanceLogsToPDF,
+} from "../../utils/attendanceExportUtils";
+import { useCompanyBranding } from "../../hooks/useCompanyBranding";
 import { useAttendance } from "../../context/AttendanceContext";
 import {
   ResponsiveContainer,
@@ -163,6 +169,42 @@ const EmployeesAttendance = () => {
   const [activeView, setActiveView] = useState("heatmap"); // 'heatmap' | 'table' | 'chart'
   const [showPrintReport, setShowPrintReport] = useState(false);
   const [lateReason, setLateReason] = useState("");
+  const { branding } = useCompanyBranding();
+
+  const handleEmployeeExportCSV = () => {
+    const list = filteredHistory.length > 0 ? filteredHistory : attendanceHistory;
+    if (!list.length) {
+      setShowToast({ show: true, message: "No attendance records to export.", type: "error" });
+      return;
+    }
+    const empName = employee?.fullName || user?.fullName || "Staff";
+    const slug = empName.toLowerCase().replace(/\s+/g, "_");
+    exportAttendanceLogsToCSV({
+      attendanceList: list,
+      periodLabel: selectedMonth !== "all" ? selectedMonth : "Current Period",
+      companyName: branding?.companyName || "Eyenit Logistics & Transport",
+      filename: `attendance_${slug}_${new Date().toISOString().split("T")[0]}.csv`,
+    });
+    setShowToast({ show: true, message: "Downloaded attendance CSV.", type: "success" });
+  };
+
+  const handleEmployeeExportPDF = async () => {
+    const list = filteredHistory.length > 0 ? filteredHistory : attendanceHistory;
+    if (!list.length) {
+      setShowToast({ show: true, message: "No attendance records to export.", type: "error" });
+      return;
+    }
+    const empName = employee?.fullName || user?.fullName || "Staff";
+    const slug = empName.toLowerCase().replace(/\s+/g, "_");
+    await exportAttendanceLogsToPDF({
+      attendanceList: list,
+      periodLabel: selectedMonth !== "all" ? selectedMonth : "Current Period",
+      companyName: branding?.companyName || "Eyenit Logistics & Transport",
+      logoUrl: branding?.logoUrl,
+      filename: `attendance_${slug}_${new Date().toISOString().split("T")[0]}.pdf`,
+    });
+    setShowToast({ show: true, message: "Generated attendance PDF report.", type: "success" });
+  };
 
   // Live ticking digital clock
   const [currentTime, setCurrentTime] = useState(new Date());
@@ -1937,17 +1979,42 @@ const EmployeesAttendance = () => {
               </div>
             )}
 
-            {/* Print Official Attendance Report */}
-            <button
-              type="button"
-              id="btn-employee-print-attendance-report"
-              onClick={() => setShowPrintReport(true)}
-              className="flex items-center gap-1.5 px-3.5 py-1.5 rounded-xl bg-[#002185] hover:bg-[#ff5500] text-white text-xs font-semibold transition-all shadow-xs cursor-pointer"
-              title="Print official monthly attendance audit sheet"
-            >
-              <Printer className="w-3.5 h-3.5" />
-              <span>Print Official Sheet</span>
-            </button>
+            {/* Employee Attendance Export & Print Controls */}
+            <div className="flex items-center gap-1.5 flex-wrap">
+              <button
+                type="button"
+                id="btn-employee-export-csv"
+                onClick={handleEmployeeExportCSV}
+                className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-white dark:bg-[#162033] hover:bg-slate-50 dark:hover:bg-slate-800 border border-slate-200 dark:border-slate-700/60 text-slate-700 dark:text-slate-200 text-xs font-semibold transition-all shadow-xs cursor-pointer"
+                title="Download attendance records as CSV for payroll records"
+              >
+                <Download className="w-3.5 h-3.5 text-emerald-600 dark:text-emerald-400" />
+                <span className="hidden sm:inline">CSV</span>
+              </button>
+
+              <button
+                type="button"
+                id="btn-employee-export-pdf"
+                onClick={handleEmployeeExportPDF}
+                className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-white dark:bg-[#162033] hover:bg-slate-50 dark:hover:bg-slate-800 border border-slate-200 dark:border-slate-700/60 text-slate-700 dark:text-slate-200 text-xs font-semibold transition-all shadow-xs cursor-pointer"
+                title="Download official PDF attendance audit sheet"
+              >
+                <Download className="w-3.5 h-3.5 text-rose-600 dark:text-rose-400" />
+                <span className="hidden sm:inline">PDF</span>
+              </button>
+
+              {/* Print Official Attendance Report */}
+              <button
+                type="button"
+                id="btn-employee-print-attendance-report"
+                onClick={() => setShowPrintReport(true)}
+                className="flex items-center gap-1.5 px-3.5 py-1.5 rounded-xl bg-[#002185] hover:bg-[#ff5500] text-white text-xs font-semibold transition-all shadow-xs cursor-pointer"
+                title="Print official monthly attendance audit sheet"
+              >
+                <Printer className="w-3.5 h-3.5" />
+                <span>Official Sheet</span>
+              </button>
+            </div>
           </div>
         </div>
 

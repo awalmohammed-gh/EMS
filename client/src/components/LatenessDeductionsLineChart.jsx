@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback, useMemo } from "react";
+import { useState, useEffect, useCallback, useMemo, memo } from "react";
 import { motion } from "framer-motion";
 import {
   ResponsiveContainer,
@@ -1041,4 +1041,4 @@ export const LatenessDeductionsLineChart = ({
   );
 };
 
-export default LatenessDeductionsLineChart;
+export default memo(LatenessDeductionsLineChart);

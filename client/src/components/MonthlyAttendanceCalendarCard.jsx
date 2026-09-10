@@ -1,4 +1,4 @@
-import { useState, useMemo, useEffect, useCallback } from "react";
+import { useState, useMemo, useEffect, useCallback, memo } from "react";
 import {
   Calendar as CalendarIcon,
   ChevronLeft,
@@ -34,7 +34,7 @@ const MONTH_NAMES = [
 const DAYS_SHORT = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
 const DAYS_MINI = ["S", "M", "T", "W", "T", "F", "S"];
 
-export const MonthlyAttendanceCalendarCard = ({
+const MonthlyAttendanceCalendarCardComponent = ({
   attendanceLogs = [],
   employeeId = null,
   role = "employee",
@@ -1079,4 +1079,5 @@ export const MonthlyAttendanceCalendarCard = ({
   );
 };
 
+export const MonthlyAttendanceCalendarCard = memo(MonthlyAttendanceCalendarCardComponent);
 export default MonthlyAttendanceCalendarCard;

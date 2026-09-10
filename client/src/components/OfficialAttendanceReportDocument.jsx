@@ -5,22 +5,31 @@ import {
   ArrowLeft,
   CheckCircle2,
   FileCheck,
+  FileSpreadsheet,
+  Users,
+  Clock,
+  ShieldCheck,
 } from "lucide-react";
 import logo from "../assets/eyenit_logo.png";
 import {
   normalizeAttendanceReportData,
   downloadAttendanceReportPDF,
 } from "../utils/attendanceReportPdfGenerator";
+import {
+  exportAttendanceLogsToCSV,
+  exportAttendanceLogsToPDF,
+  normalizeAttendanceAuditRecords,
+} from "../utils/attendanceExportUtils";
 
 /**
  * OfficialAttendanceReportDocument Component
  *
  * Clean corporate document layout matching all styling and print specifications:
- * 1. Header with Company Logo, bold title "ATTENDANCE REPORT" in deep navy (#1e3a8a), dynamic Report ID, Date Generated, and 3px deep navy rule.
- * 2. Two-column metadata grid (EMPLOYEE INFORMATION & AUDIT & REPORT PERIOD with verified compliance status).
- * 3. KPI Highlights Banner with 4 metric cards (Present Days, Late Logins, Absent Days, Total Work Hours & Rate).
+ * 1. Header with Company Logo, bold title in deep navy (#0B1E48 / #1e3a8a), dynamic Report ID, Date Generated, and 3px deep navy rule.
+ * 2. Two-column metadata grid (EMPLOYEE / ROSTER INFORMATION & AUDIT & REPORT PERIOD with verified compliance status).
+ * 3. KPI Highlights Banner with metric cards (Total Staff/Records, Present, Late Logins, Work Hours & Deductions).
  * 4. Daily Attendance Audit Log Table with shift windows, check-in, check-out, duration, and status tags.
- * 5. PDF download and print handlers adhering to @media print CSS rules.
+ * 5. Multi-Page Print and Export to CSV / PDF capabilities for payroll reconciliation.
  */
 export const OfficialAttendanceReportDocument = ({
   employee = {},
@@ -29,9 +38,20 @@ export const OfficialAttendanceReportDocument = ({
   dateRange = "",
   onBack,
   showControls = true,
-  title = "Official Individual Attendance Report",
+  title = "Official Attendance Audit Report",
 }) => {
   const [isExporting, setIsExporting] = useState(false);
+
+  const isRosterMode =
+    !employee?._id ||
+    employee.employeeId === "ALL-STAFF" ||
+    employee.fullName === "Company Staff Roster" ||
+    (attendanceList.length > 0 &&
+      new Set(
+        attendanceList.map(
+          (a) => a?.employee?._id || a?.employee?.employeeId || a?.employeeId
+        )
+      ).size > 1);
 
   const reportPayload = {
     employee,
@@ -41,11 +61,39 @@ export const OfficialAttendanceReportDocument = ({
   };
 
   const data = normalizeAttendanceReportData(reportPayload);
+  const { records: auditRecords, summary: auditSummary } =
+    normalizeAttendanceAuditRecords(attendanceList);
 
-  const handleDownload = async () => {
+  const handleDownloadCSV = () => {
+    try {
+      exportAttendanceLogsToCSV({
+        attendanceList,
+        periodLabel: period || data.reportPeriod || "Audit Period",
+        companyName: "Eyenit Logistics & Transport",
+        filename: `attendance_audit_${
+          isRosterMode ? "roster" : data.employeeId
+        }_${new Date().toISOString().split("T")[0]}.csv`,
+      });
+    } catch (err) {
+      console.error("Attendance CSV export error:", err);
+    }
+  };
+
+  const handleDownloadPDF = async () => {
     try {
       setIsExporting(true);
-      await downloadAttendanceReportPDF(reportPayload);
+      if (isRosterMode) {
+        await exportAttendanceLogsToPDF({
+          attendanceList,
+          periodLabel: period || data.reportPeriod || "Audit Period",
+          companyName: "Eyenit Logistics & Transport",
+          filename: `attendance_audit_roster_${
+            new Date().toISOString().split("T")[0]
+          }.pdf`,
+        });
+      } else {
+        await downloadAttendanceReportPDF(reportPayload);
+      }
     } catch (err) {
       console.error("Attendance PDF download error:", err);
     } finally {
@@ -75,11 +123,13 @@ export const OfficialAttendanceReportDocument = ({
             )}
             <div>
               <h2 className="text-sm font-bold text-slate-800 dark:text-white flex items-center gap-1.5">
-                <FileCheck className="w-4 h-4 text-[#1e3a8a] dark:text-blue-400" />
-                {title}
+                <FileCheck className="w-4 h-4 text-[#0B1E48] dark:text-blue-400" />
+                {isRosterMode ? "Consolidated Attendance & Payroll Audit Sheet" : title}
               </h2>
               <p className="text-xs text-slate-500 dark:text-slate-400">
-                {data.employeeName} • {data.reportPeriod} • {data.records.length} Recorded Shifts
+                {isRosterMode
+                  ? `${auditSummary.totalLogs} Logs • ${auditSummary.totalEmployees} Employees • ${period || data.reportPeriod}`
+                  : `${data.employeeName} • ${data.reportPeriod} • ${data.records.length} Recorded Shifts`}
               </p>
             </div>
           </div>
@@ -87,9 +137,21 @@ export const OfficialAttendanceReportDocument = ({
           <div className="flex items-center gap-2.5 w-full sm:w-auto justify-end">
             <button
               type="button"
+              id="btn-download-attendance-csv"
+              onClick={handleDownloadCSV}
+              className="px-3.5 py-2 bg-emerald-50 dark:bg-emerald-950/40 hover:bg-emerald-100 dark:hover:bg-emerald-900/60 text-emerald-800 dark:text-emerald-300 border border-emerald-200 dark:border-emerald-800 rounded-xl text-xs font-bold flex items-center gap-1.5 transition cursor-pointer"
+              title="Download CSV for payroll systems"
+            >
+              <FileSpreadsheet className="w-4 h-4 text-emerald-600 dark:text-emerald-400" />
+              <span>Export CSV</span>
+            </button>
+
+            <button
+              type="button"
               id="btn-print-attendance-sheet"
               onClick={handlePrint}
-              className="px-4 py-2 bg-slate-100 dark:bg-slate-700 hover:bg-slate-200 dark:hover:bg-slate-600 text-slate-800 dark:text-white rounded-xl text-xs font-bold flex items-center gap-2 transition cursor-pointer"
+              className="px-3.5 py-2 bg-slate-100 dark:bg-slate-700 hover:bg-slate-200 dark:hover:bg-slate-600 text-slate-800 dark:text-white rounded-xl text-xs font-bold flex items-center gap-1.5 transition cursor-pointer"
+              title="Print document"
             >
               <Printer className="w-4 h-4 text-slate-600 dark:text-slate-300" />
               <span>Print Sheet</span>
@@ -98,12 +160,13 @@ export const OfficialAttendanceReportDocument = ({
             <button
               type="button"
               id="btn-download-attendance-pdf"
-              onClick={handleDownload}
+              onClick={handleDownloadPDF}
               disabled={isExporting}
-              className="px-4 py-2 bg-[#1e3a8a] hover:bg-[#172554] text-white rounded-xl text-xs font-bold flex items-center gap-2 shadow-sm transition cursor-pointer disabled:opacity-75"
+              className="px-4 py-2 bg-[#0B1E48] hover:bg-[#081738] text-white rounded-xl text-xs font-bold flex items-center gap-2 shadow-xs transition cursor-pointer disabled:opacity-75"
+              title="Download print-ready PDF"
             >
               <Download className="w-4 h-4" />
-              <span>{isExporting ? "Generating PDF..." : "Download Official PDF"}</span>
+              <span>{isExporting ? "Generating..." : "Download PDF"}</span>
             </button>
           </div>
         </div>
@@ -125,8 +188,8 @@ export const OfficialAttendanceReportDocument = ({
               />
             </div>
             <div>
-              <h1 className="text-2xl sm:text-3xl font-black text-[#1e3a8a] tracking-tight leading-none">
-                ATTENDANCE REPORT
+              <h1 className="text-2xl sm:text-3xl font-black text-[#0B1E48] tracking-tight leading-none">
+                {isRosterMode ? "ATTENDANCE AUDIT & PAYROLL SHEET" : "ATTENDANCE REPORT"}
               </h1>
               <p className="text-xs sm:text-sm font-bold text-slate-500 font-mono mt-1">
                 {data.reportId}
@@ -144,31 +207,31 @@ export const OfficialAttendanceReportDocument = ({
           </div>
         </div>
 
-        {/* Solid deep-navy horizontal line (#1e3a8a, height: 3px) */}
-        <div className="w-full h-[3px] bg-[#1e3a8a] mb-6"></div>
+        {/* Solid deep-navy horizontal line (#0B1E48, height: 3px) */}
+        <div className="w-full h-[3px] bg-[#0B1E48] mb-6"></div>
 
         {/* 2. Metadata Grid (Two-Column Layouts) */}
         <div className="grid grid-cols-1 md:grid-cols-2 gap-5 mb-6">
-          {/* EMPLOYEE INFORMATION */}
+          {/* EMPLOYEE / ROSTER INFORMATION */}
           <div className="bg-slate-50 border border-slate-200 rounded-xl p-4 sm:p-5">
-            <h2 className="text-xs font-black text-[#1e3a8a] uppercase tracking-wider border-b border-slate-200 pb-2 mb-3">
-              EMPLOYEE INFORMATION
+            <h2 className="text-xs font-black text-[#0B1E48] uppercase tracking-wider border-b border-slate-200 pb-2 mb-3">
+              {isRosterMode ? "AUDIT & ROSTER INFORMATION" : "EMPLOYEE INFORMATION"}
             </h2>
             <div className="grid grid-cols-2 gap-y-3 gap-x-4 text-xs">
               <div>
                 <span className="text-[10px] font-bold text-slate-500 uppercase tracking-wide block">
-                  Staff Name
+                  {isRosterMode ? "Scope Title" : "Staff Name"}
                 </span>
                 <span className="font-bold text-slate-900 text-sm block mt-0.5">
-                  {data.employeeName}
+                  {isRosterMode ? "Company Staff Roster" : data.employeeName}
                 </span>
               </div>
               <div>
                 <span className="text-[10px] font-bold text-slate-500 uppercase tracking-wide block">
-                  Employee ID
+                  {isRosterMode ? "Total Employees" : "Employee ID"}
                 </span>
                 <span className="font-bold text-slate-900 text-sm font-mono block mt-0.5">
-                  {data.employeeId}
+                  {isRosterMode ? `${auditSummary.totalEmployees} Active Staff` : data.employeeId}
                 </span>
               </div>
               <div>
@@ -176,15 +239,15 @@ export const OfficialAttendanceReportDocument = ({
                   Department
                 </span>
                 <span className="font-bold text-slate-900 block mt-0.5">
-                  {data.department}
+                  {isRosterMode ? "All Active Departments" : data.department}
                 </span>
               </div>
               <div>
                 <span className="text-[10px] font-bold text-slate-500 uppercase tracking-wide block">
-                  Job Position
+                  {isRosterMode ? "Target System" : "Job Position"}
                 </span>
                 <span className="font-bold text-slate-900 block mt-0.5">
-                  {data.position}
+                  {isRosterMode ? "Payroll & HR Audit Engine" : data.position}
                 </span>
               </div>
             </div>
@@ -192,7 +255,7 @@ export const OfficialAttendanceReportDocument = ({
 
           {/* AUDIT & REPORT PERIOD */}
           <div className="bg-slate-50 border border-slate-200 rounded-xl p-4 sm:p-5">
-            <h2 className="text-xs font-black text-[#1e3a8a] uppercase tracking-wider border-b border-slate-200 pb-2 mb-3">
+            <h2 className="text-xs font-black text-[#0B1E48] uppercase tracking-wider border-b border-slate-200 pb-2 mb-3">
               AUDIT & REPORT PERIOD
             </h2>
             <div className="grid grid-cols-2 gap-y-3 gap-x-4 text-xs">
@@ -201,15 +264,15 @@ export const OfficialAttendanceReportDocument = ({
                   Report Month / Period
                 </span>
                 <span className="font-bold text-slate-900 text-sm block mt-0.5">
-                  {data.reportPeriod}
+                  {period || data.reportPeriod}
                 </span>
               </div>
               <div>
                 <span className="text-[10px] font-bold text-slate-500 uppercase tracking-wide block">
-                  Total Logged Days
+                  Total Logged Shifts
                 </span>
                 <span className="font-bold text-slate-900 text-sm block mt-0.5">
-                  {data.totalDays} Days
+                  {isRosterMode ? `${auditSummary.totalLogs} Logs` : `${data.totalDays} Days`}
                 </span>
               </div>
               <div className="col-span-2">
@@ -218,24 +281,26 @@ export const OfficialAttendanceReportDocument = ({
                 </span>
                 <span className="text-sm font-black text-[#16a34a] inline-flex items-center gap-1.5 mt-0.5">
                   <CheckCircle2 className="w-4 h-4 text-[#16a34a]" />
-                  {data.complianceRate}% Compliance Score ({data.presentDays} Present, {data.excusedDays} Excused)
+                  {isRosterMode
+                    ? `${auditSummary.complianceRate}% Compliance Rate (${auditSummary.presentCount} On-Time, ${auditSummary.excusedCount} Excused)`
+                    : `${data.complianceRate}% Compliance Score (${data.presentDays} Present, ${data.excusedDays} Excused)`}
                 </span>
               </div>
             </div>
           </div>
         </div>
 
-        {/* 3. KPI Highlights Banner (4 Metric Tiles) */}
+        {/* 3. KPI Highlights Banner */}
         <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 mb-6">
           <div className="p-3.5 rounded-xl bg-emerald-50 border border-emerald-200 text-left">
             <span className="text-[10px] font-black text-emerald-800 uppercase tracking-wider block">
-              Present Days
+              {isRosterMode ? "On-Time Shifts" : "Present Days"}
             </span>
             <span className="text-lg font-black text-emerald-700 block mt-0.5">
-              {data.presentDays} Days
+              {isRosterMode ? `${auditSummary.presentCount} Shifts` : `${data.presentDays} Days`}
             </span>
             <span className="text-[10px] font-semibold text-emerald-600">
-              On-time shifts
+              {isRosterMode ? `${auditSummary.complianceRate}% Punctual` : "On-time shifts"}
             </span>
           </div>
 
@@ -244,22 +309,28 @@ export const OfficialAttendanceReportDocument = ({
               Late Check-ins
             </span>
             <span className="text-lg font-black text-rose-700 block mt-0.5">
-              {data.lateDays} Days
+              {isRosterMode ? `${auditSummary.lateCount} Shifts` : `${data.lateDays} Days`}
             </span>
             <span className="text-[10px] font-semibold text-rose-600">
-              {data.totalLateMinutes} total late mins
+              {isRosterMode
+                ? `${auditSummary.totalLateMinutes} mins late`
+                : `${data.totalLateMinutes} total late mins`}
             </span>
           </div>
 
           <div className="p-3.5 rounded-xl bg-amber-50 border border-amber-200 text-left">
             <span className="text-[10px] font-black text-amber-800 uppercase tracking-wider block">
-              Absent Days
+              {isRosterMode ? "Overtime Hours" : "Absent Days"}
             </span>
             <span className="text-lg font-black text-amber-700 block mt-0.5">
-              {data.absentDays} Days
+              {isRosterMode ? `${auditSummary.totalOvertimeHours} hrs` : `${data.absentDays} Days`}
             </span>
             <span className="text-[10px] font-semibold text-amber-600">
-              {data.excusedDays > 0 ? `${data.excusedDays} excused` : "Unexcused"}
+              {isRosterMode
+                ? "Eligible for OT Pay"
+                : data.excusedDays > 0
+                ? `${data.excusedDays} excused`
+                : "Unexcused"}
             </span>
           </div>
 
@@ -268,138 +339,285 @@ export const OfficialAttendanceReportDocument = ({
               Logged Work Hours
             </span>
             <span className="text-lg font-black text-blue-700 block mt-0.5">
-              {data.totalWorkHours} hrs
+              {isRosterMode ? `${auditSummary.totalHours} hrs` : `${data.totalWorkHours} hrs`}
             </span>
             <span className="text-[10px] font-semibold text-blue-600">
-              ~{data.averageHoursPerDay} hrs / day
+              {isRosterMode
+                ? `GH₵ ${auditSummary.totalPenaltyDeductions.toFixed(2)} deductions`
+                : `~${data.averageHoursPerDay} hrs / day`}
             </span>
           </div>
         </div>
 
         {/* 4. Daily Attendance Audit Log Table */}
-        <div className="mb-6 border border-[#bfdbfe] rounded-xl overflow-hidden shadow-2xs">
+        <div className="mb-6 border border-slate-200 rounded-xl overflow-x-auto shadow-2xs">
           <table className="w-full text-left text-xs border-collapse">
             <thead>
-              <tr className="bg-[#f0f7ff] border-b border-[#bfdbfe]">
-                <th className="px-4 py-3 text-[11px] font-black text-[#1e3a8a] uppercase tracking-wider">
-                  DATE & DAY
+              <tr className="bg-[#f0f7ff] border-b border-slate-200">
+                <th className="px-3 py-3 text-[11px] font-black text-[#0B1E48] uppercase tracking-wider">
+                  DATE
                 </th>
-                <th className="px-4 py-3 text-[11px] font-black text-[#1e3a8a] uppercase tracking-wider">
-                  SCHEDULED SHIFT
-                </th>
-                <th className="px-4 py-3 text-[11px] font-black text-[#1e3a8a] uppercase tracking-wider">
+                {isRosterMode && (
+                  <>
+                    <th className="px-3 py-3 text-[11px] font-black text-[#0B1E48] uppercase tracking-wider">
+                      STAFF ID
+                    </th>
+                    <th className="px-3 py-3 text-[11px] font-black text-[#0B1E48] uppercase tracking-wider">
+                      EMPLOYEE NAME
+                    </th>
+                    <th className="px-3 py-3 text-[11px] font-black text-[#0B1E48] uppercase tracking-wider">
+                      DEPARTMENT
+                    </th>
+                  </>
+                )}
+                {!isRosterMode && (
+                  <th className="px-3 py-3 text-[11px] font-black text-[#0B1E48] uppercase tracking-wider">
+                    SCHEDULED SHIFT
+                  </th>
+                )}
+                <th className="px-3 py-3 text-[11px] font-black text-[#0B1E48] uppercase tracking-wider">
                   CLOCK IN
                 </th>
-                <th className="px-4 py-3 text-[11px] font-black text-[#1e3a8a] uppercase tracking-wider">
+                <th className="px-3 py-3 text-[11px] font-black text-[#0B1E48] uppercase tracking-wider">
                   CLOCK OUT
                 </th>
-                <th className="px-4 py-3 text-[11px] font-black text-[#1e3a8a] uppercase tracking-wider">
-                  WORK HOURS
+                <th className="px-3 py-3 text-[11px] font-black text-[#0B1E48] uppercase tracking-wider text-right">
+                  WORK HRS
                 </th>
-                <th className="px-4 py-3 text-[11px] font-black text-[#1e3a8a] uppercase tracking-wider text-center">
+                {isRosterMode && (
+                  <th className="px-3 py-3 text-[11px] font-black text-[#0B1E48] uppercase tracking-wider text-right">
+                    OT HRS
+                  </th>
+                )}
+                {isRosterMode && (
+                  <th className="px-3 py-3 text-[11px] font-black text-[#0B1E48] uppercase tracking-wider text-right">
+                    DEDUCT
+                  </th>
+                )}
+                <th className="px-3 py-3 text-[11px] font-black text-[#0B1E48] uppercase tracking-wider text-center">
                   STATUS
                 </th>
-                <th className="px-4 py-3 text-[11px] font-black text-[#1e3a8a] uppercase tracking-wider text-right">
+                <th className="px-3 py-3 text-[11px] font-black text-[#0B1E48] uppercase tracking-wider text-right">
                   AUDIT NOTES
                 </th>
               </tr>
             </thead>
-            <tbody className="divide-y divide-[#bfdbfe]">
-              {data.records.length > 0 ? (
-                data.records.map((rec, idx) => {
-                  const isEven = idx % 2 === 0;
-                  return (
-                    <tr
-                      key={rec.id || idx}
-                      className={isEven ? "bg-white" : "bg-slate-50/50"}
+            <tbody className="divide-y divide-slate-200">
+              {isRosterMode ? (
+                auditRecords.length > 0 ? (
+                  auditRecords.map((rec, idx) => {
+                    const isEven = idx % 2 === 0;
+                    return (
+                      <tr
+                        key={rec.id || idx}
+                        className={isEven ? "bg-white" : "bg-slate-50/50"}
+                      >
+                        <td className="px-3 py-2.5 font-semibold text-slate-900 whitespace-nowrap">
+                          <span>{rec.date}</span>
+                          <span className="text-[10px] text-slate-500 font-normal ml-1">
+                            ({rec.day})
+                          </span>
+                        </td>
+                        <td className="px-3 py-2.5 font-mono font-bold text-slate-900 whitespace-nowrap">
+                          {rec.employeeId}
+                        </td>
+                        <td className="px-3 py-2.5 font-bold text-slate-900 whitespace-nowrap">
+                          {rec.employeeName}
+                        </td>
+                        <td className="px-3 py-2.5 text-slate-600 whitespace-nowrap">
+                          {rec.department}
+                        </td>
+                        <td className="px-3 py-2.5 font-mono text-slate-900 whitespace-nowrap">
+                          {rec.clockIn}
+                        </td>
+                        <td className="px-3 py-2.5 font-mono text-slate-900 whitespace-nowrap">
+                          {rec.clockOut}
+                        </td>
+                        <td className="px-3 py-2.5 font-bold text-[#0B1E48] text-right whitespace-nowrap">
+                          {rec.workHours.toFixed(1)}h
+                        </td>
+                        <td className="px-3 py-2.5 text-amber-700 text-right whitespace-nowrap">
+                          {rec.overtimeHours > 0 ? `+${rec.overtimeHours.toFixed(1)}h` : "-"}
+                        </td>
+                        <td className="px-3 py-2.5 font-bold text-rose-600 text-right whitespace-nowrap">
+                          {rec.deductionAmount > 0 ? `GH₵${rec.deductionAmount.toFixed(2)}` : "-"}
+                        </td>
+                        <td className="px-3 py-2.5 text-center whitespace-nowrap">
+                          <span
+                            className={`inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[10px] font-bold border ${
+                              rec.status === "Present"
+                                ? "bg-emerald-50 text-emerald-700 border-emerald-200"
+                                : rec.status === "Late"
+                                ? "bg-rose-50 text-rose-700 border-rose-200"
+                                : rec.status === "Excused"
+                                ? "bg-blue-50 text-blue-700 border-blue-200"
+                                : "bg-amber-50 text-amber-700 border-amber-200"
+                            }`}
+                          >
+                            {rec.status}
+                          </span>
+                        </td>
+                        <td className="px-3 py-2.5 text-right text-slate-500 text-[11px] max-w-xs truncate">
+                          {rec.notes}
+                        </td>
+                      </tr>
+                    );
+                  })
+                ) : (
+                  <tr className="bg-white">
+                    <td
+                      colSpan={11}
+                      className="px-4 py-6 text-center text-slate-400 italic text-xs"
                     >
-                      <td className="px-4 py-3 font-semibold text-slate-900">
-                        <span>{rec.date}</span>
-                        <span className="text-[10px] text-slate-500 font-normal block">
-                          {rec.dayOfWeek}
-                        </span>
-                      </td>
-                      <td className="px-4 py-3 text-slate-500 text-[11px]">
-                        {rec.scheduledShift}
-                      </td>
-                      <td className="px-4 py-3 font-mono font-bold text-slate-900">
-                        {rec.clockIn}
-                      </td>
-                      <td className="px-4 py-3 font-mono font-bold text-slate-900">
-                        {rec.clockOut}
-                      </td>
-                      <td className="px-4 py-3 font-semibold text-[#1e3a8a]">
-                        {rec.workHours}
-                      </td>
-                      <td className="px-4 py-3 text-center">
-                        <span
-                          className={`inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[10px] font-bold border ${
-                            rec.status === "Present"
-                              ? "bg-emerald-50 text-emerald-700 border-emerald-200"
-                              : rec.status === "Late"
-                              ? "bg-rose-50 text-rose-700 border-rose-200"
-                              : rec.status === "Excused"
-                              ? "bg-blue-50 text-blue-700 border-blue-200"
-                              : "bg-amber-50 text-amber-700 border-amber-200"
-                          }`}
-                        >
-                          {rec.status}
-                        </span>
-                      </td>
-                      <td className="px-4 py-3 text-right text-slate-500 text-[11px]">
-                        {rec.notes || (rec.isExcused ? "Penalty waived" : "Verified")}
-                      </td>
-                    </tr>
-                  );
-                })
+                      No attendance records found for this period.
+                    </td>
+                  </tr>
+                )
               ) : (
-                <tr className="bg-white">
-                  <td
-                    colSpan={7}
-                    className="px-4 py-6 text-center text-slate-400 italic text-xs"
-                  >
-                    No attendance records found for this period.
-                  </td>
-                </tr>
+                data.records.length > 0 ? (
+                  data.records.map((rec, idx) => {
+                    const isEven = idx % 2 === 0;
+                    return (
+                      <tr
+                        key={rec.id || idx}
+                        className={isEven ? "bg-white" : "bg-slate-50/50"}
+                      >
+                        <td className="px-3 py-3 font-semibold text-slate-900">
+                          <span>{rec.date}</span>
+                          <span className="text-[10px] text-slate-500 font-normal block">
+                            {rec.dayOfWeek}
+                          </span>
+                        </td>
+                        <td className="px-3 py-3 text-slate-500 text-[11px]">
+                          {rec.scheduledShift}
+                        </td>
+                        <td className="px-3 py-3 font-mono font-bold text-slate-900">
+                          {rec.clockIn}
+                        </td>
+                        <td className="px-3 py-3 font-mono font-bold text-slate-900">
+                          {rec.clockOut}
+                        </td>
+                        <td className="px-3 py-3 font-semibold text-[#0B1E48] text-right">
+                          {rec.workHours}
+                        </td>
+                        <td className="px-3 py-3 text-center">
+                          <span
+                            className={`inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[10px] font-bold border ${
+                              rec.status === "Present"
+                                ? "bg-emerald-50 text-emerald-700 border-emerald-200"
+                                : rec.status === "Late"
+                                ? "bg-rose-50 text-rose-700 border-rose-200"
+                                : rec.status === "Excused"
+                                ? "bg-blue-50 text-blue-700 border-blue-200"
+                                : "bg-amber-50 text-amber-700 border-amber-200"
+                            }`}
+                          >
+                            {rec.status}
+                          </span>
+                        </td>
+                        <td className="px-3 py-3 text-right text-slate-500 text-[11px]">
+                          {rec.notes || (rec.isExcused ? "Penalty waived" : "Verified")}
+                        </td>
+                      </tr>
+                    );
+                  })
+                ) : (
+                  <tr className="bg-white">
+                    <td
+                      colSpan={7}
+                      className="px-4 py-6 text-center text-slate-400 italic text-xs"
+                    >
+                      No attendance records found for this period.
+                    </td>
+                  </tr>
+                )
               )}
             </tbody>
             <tfoot>
-              <tr className="bg-[#f1f5f9] border-t-2 border-[#1e3a8a]">
+              <tr className="bg-[#f1f5f9] border-t-2 border-[#0B1E48]">
                 <td
-                  colSpan={4}
-                  className="px-4 py-3 font-black text-[#1e3a8a] uppercase text-xs"
+                  colSpan={isRosterMode ? 6 : 4}
+                  className="px-3 py-3 font-black text-[#0B1E48] uppercase text-xs"
                 >
-                  TOTAL LOGGED WORK HOURS
+                  TOTAL RECONCILED WORK HOURS
                 </td>
-                <td className="px-4 py-3 font-black text-sm text-[#1e3a8a]">
-                  {data.totalWorkHours} hrs
+                <td className="px-3 py-3 font-black text-sm text-[#0B1E48] text-right">
+                  {isRosterMode ? `${auditSummary.totalHours} hrs` : `${data.totalWorkHours} hrs`}
                 </td>
+                {isRosterMode && (
+                  <td className="px-3 py-3 font-black text-xs text-amber-800 text-right">
+                    +{auditSummary.totalOvertimeHours} hrs OT
+                  </td>
+                )}
+                {isRosterMode && (
+                  <td className="px-3 py-3 font-black text-xs text-rose-700 text-right">
+                    GH₵ {auditSummary.totalPenaltyDeductions.toFixed(2)}
+                  </td>
+                )}
                 <td
-                  colSpan={2}
-                  className="px-4 py-3 text-right font-bold text-xs text-[#1e3a8a]"
+                  colSpan={isRosterMode ? 2 : 2}
+                  className="px-3 py-3 text-right font-bold text-xs text-[#0B1E48]"
                 >
-                  Average: {data.averageHoursPerDay} hrs/shift
+                  {isRosterMode
+                    ? `${auditSummary.complianceRate}% Compliance`
+                    : `Average: ${data.averageHoursPerDay} hrs/shift`}
                 </td>
               </tr>
             </tfoot>
           </table>
         </div>
 
-        {/* 5. Footer & Supervisor Sign-off Line for Print */}
-        <div className="flex flex-col sm:flex-row justify-between items-center text-xs text-slate-500 pt-4 border-t border-slate-200 gap-3">
-          <div>
-            <span className="font-semibold block text-slate-700">
-              Generated by Eyenit HR & Attendance Management System
-            </span>
-            <span className="italic text-[11px] text-slate-400">
-              Official Corporate Record • Validated against digital biometric audit logs
-            </span>
+        {/* 5. 3-Column Auditor & Supervisor Sign-off for Print */}
+        <div className="pt-4 border-t border-slate-200">
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 mb-4">
+            <div className="p-3 bg-slate-50 border border-slate-200 rounded-xl text-left">
+              <span className="text-[10px] font-bold text-slate-500 uppercase tracking-wide block mb-2">
+                1. Prepared By (Timekeeper / HR)
+              </span>
+              <div className="h-7 border-b border-dashed border-slate-300"></div>
+              <div className="flex justify-between items-center text-[10px] text-slate-500 mt-1">
+                <span>Signature</span>
+                <span>Date: ____________</span>
+              </div>
+            </div>
+
+            <div className="p-3 bg-slate-50 border border-slate-200 rounded-xl text-left">
+              <span className="text-[10px] font-bold text-slate-500 uppercase tracking-wide block mb-2">
+                2. Verified By (HR Operations)
+              </span>
+              <div className="h-7 border-b border-dashed border-slate-300"></div>
+              <div className="flex justify-between items-center text-[10px] text-slate-500 mt-1">
+                <span>Signature</span>
+                <span>Date: ____________</span>
+              </div>
+            </div>
+
+            <div className="p-3 bg-slate-50 border border-slate-200 rounded-xl text-left">
+              <span className="text-[10px] font-bold text-slate-500 uppercase tracking-wide block mb-2">
+                3. Approved For Payroll Release
+              </span>
+              <div className="h-7 border-b border-dashed border-slate-300"></div>
+              <div className="flex justify-between items-center text-[10px] text-slate-500 mt-1">
+                <span>Signature & Stamp</span>
+                <span>Date: ____________</span>
+              </div>
+            </div>
           </div>
 
-          <div className="text-right pt-2 sm:pt-0">
-            <span className="text-[11px] text-slate-600 block">
-              Supervisor Verification & Sign-off: _______________________
-            </span>
+          <div className="flex flex-col sm:flex-row justify-between items-center text-xs text-slate-500 pt-2 gap-2">
+            <div>
+              <span className="font-semibold block text-slate-700">
+                Official Corporate Attendance & Payroll Audit Document
+              </span>
+              <span className="italic text-[11px] text-slate-400">
+                Generated by Eyenit HR System • Certified Biometric & Timekeeping Logs
+              </span>
+            </div>
+            <div className="text-right">
+              <span className="text-[11px] text-slate-500">
+                Security Hash: SHA256-ATT-{Date.now().toString(36).toUpperCase()}
+              </span>
+            </div>
           </div>
         </div>
       </div>

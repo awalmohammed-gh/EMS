@@ -166,6 +166,17 @@ export const authService = {
   },
 
   /**
+   * Sets active JWT token
+   */
+  setStoredToken: (token) => {
+    apiService.setToken(token);
+    if (typeof window !== "undefined" && token) {
+      localStorage.setItem("token", token);
+      localStorage.setItem("auth_token", token);
+    }
+  },
+
+  /**
    * Retrieves active JWT token
    */
   getStoredToken: () => apiService.getToken(),

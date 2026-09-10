@@ -1,4 +1,4 @@
-import { useState, useEffect, useMemo } from "react";
+import { useState, useEffect, useMemo, memo } from "react";
 import { motion } from "framer-motion";
 import {
   CheckCircle2,
@@ -10,6 +10,7 @@ import {
   CalendarDays,
 } from "lucide-react";
 import { getSettings } from "../apis/fontApis";
+import { buttonPressProps } from "../utils/motion";
 
 /**
  * ShiftStatusCard Component
@@ -26,6 +27,7 @@ const ShiftStatusCard = ({
   attendanceData = {},
   hasClockedIn = false,
   isLoading = false,
+  isSyncing = false,
   onClockIn,
   workStartTime: propWorkStartTime,
   onRefresh,
@@ -385,26 +387,29 @@ const ShiftStatusCard = ({
           {/* Action Trigger on Right */}
           <div className="flex items-center gap-2 self-start sm:self-center shrink-0">
             {typeof onRefresh === "function" && (
-              <button
+              <motion.button
                 type="button"
+                {...buttonPressProps}
                 onClick={onRefresh}
-                className="p-2 rounded-xl text-slate-500 hover:text-slate-700 dark:text-slate-400 dark:hover:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-800 transition cursor-pointer"
+                disabled={isSyncing}
+                className="p-2 rounded-xl text-slate-500 hover:text-slate-700 dark:text-slate-400 dark:hover:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-800 transition cursor-pointer disabled:opacity-60"
                 title="Refresh shift status"
               >
-                <RefreshCw className="w-4 h-4" />
-              </button>
+                <RefreshCw className={`w-4 h-4 ${isSyncing ? "animate-spin text-blue-600" : ""}`} />
+              </motion.button>
             )}
             {!hasClockedIn && statusEvaluation.type !== "absent" && typeof onClockIn === "function" && (
-              <button
+              <motion.button
                 type="button"
                 id="btn-status-card-clock-in"
+                {...buttonPressProps}
                 onClick={onClockIn}
                 disabled={isLoading}
-                className="flex items-center gap-1.5 px-3.5 py-2 rounded-xl bg-[#002185] hover:bg-[#001760] text-white text-xs font-semibold transition border border-transparent shadow-none cursor-pointer active:scale-98 disabled:opacity-60"
+                className="flex items-center gap-1.5 px-3.5 py-2 rounded-xl bg-[#002185] hover:bg-[#001760] text-white text-xs font-semibold transition border border-transparent shadow-none cursor-pointer disabled:opacity-60"
               >
                 <LogIn className="w-3.5 h-3.5" />
                 <span>{isLoading ? "Recording..." : "Clock In Now"}</span>
-              </button>
+              </motion.button>
             )}
           </div>
         </div>
@@ -413,4 +418,4 @@ const ShiftStatusCard = ({
   );
 };
 
-export default ShiftStatusCard;
+export default memo(ShiftStatusCard);

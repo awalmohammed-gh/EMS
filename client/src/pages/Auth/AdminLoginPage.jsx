@@ -16,9 +16,14 @@ import eyenitLogo from "../../assets/eyenit_logo.png";
 import { authService } from "../../services/authService";
 import { useManagement } from "../../context/ManagementContextProvider";
 import { useAuth } from "../../context/AuthContext";
+import { useCompanyBranding } from "../../hooks/useCompanyBranding";
 
 export const AdminLoginPage = () => {
   const navigate = useNavigate();
+  const { branding, logoUrl, primaryColor } = useCompanyBranding();
+  const [logoLoadError, setLogoLoadError] = useState(false);
+
+  const activeLogo = logoLoadError || !logoUrl ? eyenitLogo : logoUrl;
 
   const [formData, setFormData] = useState({
     identifier: "",
@@ -139,34 +144,48 @@ export const AdminLoginPage = () => {
   };
 
   return (
-    <div className="min-h-screen flex flex-col justify-center items-center bg-[#F8FAFC] dark:bg-[#0B111E] py-12 px-4 sm:px-6 lg:px-8 relative selection:bg-[#0B1E48]/10 selection:text-[#0B1E48]">
+    <div className="min-h-screen bg-[#F4F7FB] flex flex-col justify-center items-center px-4 py-8 relative selection:bg-[#0B1E48]/10 selection:text-[#0B1E48]">
+      {/* Background image container if configured */}
+      {branding?.welcomeBackgroundUrl && (
+        <div
+          className="absolute inset-0 bg-cover bg-center -z-10"
+          style={{ backgroundImage: `url(${branding.welcomeBackgroundUrl})` }}
+        >
+          <div className="absolute inset-0 bg-white/70 backdrop-blur-xs" />
+        </div>
+      )}
+
       {/* Return to Portal Selection */}
       <Link
         id="admin-back-to-portals-btn"
         to="/welcome"
-        className="absolute top-6 left-6 inline-flex items-center gap-2 px-3.5 py-2 text-xs font-semibold text-slate-600 dark:text-slate-300 bg-white dark:bg-[#111927] border border-slate-200 dark:border-slate-800 rounded-xl shadow-xs hover:text-[#0B1E48] dark:hover:text-blue-400 hover:border-slate-300 dark:hover:border-slate-700 transition-all z-10"
+        className="absolute top-6 left-6 inline-flex items-center gap-2 px-3 py-1.5 text-xs font-semibold text-slate-700 bg-white border border-slate-200/80 rounded-xl shadow-xs hover:bg-slate-50 transition-colors z-10"
       >
         <ArrowLeft className="w-3.5 h-3.5" />
         <span>Portals</span>
       </Link>
 
       {/* Main Centered Login Container */}
-      <div className="w-full max-w-md mx-auto">
+      <div className="w-full max-w-md mx-auto relative z-10">
         {/* Brand Header */}
         <div className="text-center mb-6">
           {/* Prominent Logo */}
           <div className="mb-4 flex items-center justify-center">
             <img
-              src={eyenitLogo}
-              alt="Eyenit Ghana"
-              className="w-16 h-16 sm:w-20 sm:h-20 object-contain drop-shadow-xs"
+              src={activeLogo}
+              alt={branding?.companyName || "Organization Logo"}
+              onError={() => setLogoLoadError(true)}
+              className="h-16 w-auto max-w-[180px] object-contain drop-shadow-xs"
             />
           </div>
 
-          <h1 className="text-2xl sm:text-3xl font-bold tracking-tight text-[#0B1E48] dark:text-white text-center">
-            Admin Logins
+          {/* Title */}
+          <h1 className="text-2xl sm:text-3xl font-extrabold tracking-tight text-[#0B1E48] dark:text-slate-900 text-center">
+            Management Login
           </h1>
-          <p className="text-sm font-medium text-slate-500 dark:text-slate-400 mt-1 max-w-xs mx-auto">
+
+          {/* Subtitle */}
+          <p className="text-xs sm:text-sm text-slate-600 dark:text-slate-600 font-medium text-center max-w-sm mx-auto mt-2 leading-relaxed">
             Secure administrative access for system configuration, staff directory, and payroll processing
           </p>
         </div>
@@ -179,10 +198,10 @@ export const AdminLoginPage = () => {
               <span>No admin account detected. Setup is required.</span>
             </div>
             <Link
-              to="/admin/register"
+              to="/setup"
               className="font-bold text-[#0B1E48] dark:text-blue-400 hover:underline shrink-0"
             >
-              Create Admin
+              Launch Setup
             </Link>
           </div>
         )}
@@ -311,7 +330,8 @@ export const AdminLoginPage = () => {
               id="admin-submit-btn"
               type="submit"
               disabled={isLoading}
-              className="w-full text-white font-bold py-2.5 px-4 rounded-xl shadow-xs transition-all flex items-center justify-center gap-2 cursor-pointer mt-3 bg-[#0B1E48] hover:bg-[#081738] active:scale-[0.99] disabled:opacity-70 disabled:cursor-not-allowed"
+              style={{ backgroundColor: primaryColor || "#0B1E48" }}
+              className="w-full text-white font-bold py-2.5 px-4 rounded-xl shadow-xs transition-all flex items-center justify-center gap-2 cursor-pointer mt-3 hover:brightness-110 active:scale-[0.99] disabled:opacity-70 disabled:cursor-not-allowed"
             >
               {isLoading ? (
                 <>

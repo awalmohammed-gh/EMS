@@ -16,6 +16,8 @@ import WelcomePage from "../pages/WelcomePage";
 import EmployeeLoginPage from "../pages/Auth/EmployeeLoginPage";
 import AdminLoginPage from "../pages/Auth/AdminLoginPage";
 import AdminRegister from "../pages/Auth/AdminRegister";
+import SetupCompanyPage from "../pages/Auth/SetupCompanyPage";
+import OnboardingGate from "./OnboardingGate";
 import EmployeesLayout from "../layout/EmployeesLayout";
 import EmployeesAttendance from "../pages/Employees/EmployeesAttendance";
 import EmployeeLeave from "../pages/Employees/EmployeeLeave";
@@ -29,18 +31,79 @@ import AdminAnnouncements from "../pages/Admin/Announcements";
 export const router = createHashRouter(
   createRoutesFromElements(
     <>
+      {/* Initial Setup & Onboarding Wizard Route */}
+      <Route
+        path="/setup"
+        element={
+          <OnboardingGate>
+            <SetupCompanyPage />
+          </OnboardingGate>
+        }
+      />
+      <Route
+        path="/setup-company"
+        element={
+          <OnboardingGate>
+            <SetupCompanyPage />
+          </OnboardingGate>
+        }
+      />
+      <Route
+        path="/setup-admin"
+        element={
+          <OnboardingGate>
+            <SetupCompanyPage />
+          </OnboardingGate>
+        }
+      />
+
       {/* Public Routes */}
       <Route path="/" element={<Navigate to="/welcome" replace />} />
-      <Route path="/welcome" element={<WelcomePage />} />
+      <Route
+        path="/welcome"
+        element={
+          <OnboardingGate>
+            <WelcomePage />
+          </OnboardingGate>
+        }
+      />
 
       {/* Dedicated Authentication Routes */}
-      <Route path="/login" element={<EmployeeLoginPage />} />
-      <Route path="/employee/login" element={<EmployeeLoginPage />} />
+      <Route
+        path="/login"
+        element={
+          <OnboardingGate>
+            <EmployeeLoginPage />
+          </OnboardingGate>
+        }
+      />
+      <Route
+        path="/employee/login"
+        element={
+          <OnboardingGate>
+            <EmployeeLoginPage />
+          </OnboardingGate>
+        }
+      />
       <Route path="/login/employee" element={<Navigate to="/login" replace />} />
-      <Route path="/admin/login" element={<AdminLoginPage />} />
+      <Route
+        path="/admin/login"
+        element={
+          <OnboardingGate>
+            <AdminLoginPage />
+          </OnboardingGate>
+        }
+      />
       <Route path="/login/admin" element={<Navigate to="/admin/login" replace />} />
-      <Route path="/admin/register" element={<AdminRegister />} />
-      <Route path="/register/admin" element={<AdminRegister />} />
+      <Route
+        path="/admin/register"
+        element={
+          <OnboardingGate>
+            <AdminRegister />
+          </OnboardingGate>
+        }
+      />
+      <Route path="/register/admin" element={<Navigate to="/admin/register" replace />} />
 
       {/* Admin Protected Routes */}
       <Route element={<ProtectedRoute allowRole="admin" />}>

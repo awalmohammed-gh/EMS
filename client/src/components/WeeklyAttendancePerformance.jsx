@@ -1,4 +1,4 @@
-import { useState, useMemo, useEffect, useCallback } from "react";
+import { useState, useMemo, useEffect, useCallback, memo } from "react";
 import { motion } from "framer-motion";
 import {
   ResponsiveContainer,
@@ -764,4 +764,4 @@ export const WeeklyAttendancePerformance = ({
   );
 };
 
-export default WeeklyAttendancePerformance;
+export default memo(WeeklyAttendancePerformance);

@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, memo } from "react";
 import {
   Megaphone,
   Pin,
@@ -22,7 +22,7 @@ import {
 } from "../apis/fontApis";
 import { AnnouncementModal } from "./modal/AnnouncementModal";
 
-export const AnnouncementBoard = ({
+const AnnouncementBoardComponent = ({
   role = "employee", // "admin" | "employee"
   className = "",
 }) => {
@@ -715,4 +715,5 @@ export const AnnouncementBoard = ({
   }
 };
 
+export const AnnouncementBoard = memo(AnnouncementBoardComponent);
 export default AnnouncementBoard;

@@ -1,28 +1,51 @@
 
 import mongoose from "mongoose";
 
+// Disable command buffering so queries fail fast rather than hanging indefinitely when disconnected
+mongoose.set("bufferCommands", false);
+
+// Attach connection event listeners to handle drops and errors gracefully
+mongoose.connection.on("error", (err) => {
+  console.warn("[MongoDB Event] Connection error:", err.message);
+});
+
+mongoose.connection.on("disconnected", () => {
+  console.warn("[MongoDB Event] Connection lost or disconnected.");
+});
+
 const connectDB = async () => {
   if (mongoose.connection.readyState === 1) {
     return mongoose.connection;
   }
 
-  const uri = process.env.MONGODB_URI || process.env.MONGO_URI;
-  if (!uri || !uri.trim()) {
-    const errorMsg = "MongoDB URI not found. Please set MONGODB_URI or MONGO_URI in your environment.";
-    console.error(`[MongoDB] Error: ${errorMsg}`);
-    throw new Error(errorMsg);
+  const rawUri = process.env.MONGODB_URI || process.env.MONGO_URI;
+  const uri = rawUri && typeof rawUri === "string" ? rawUri.trim() : "";
+
+  if (!uri) {
+    console.warn("[MongoDB] Notice: Neither MONGODB_URI nor MONGO_URI is set. Database operations will run in offline mode.");
+    return null;
   }
 
   try {
-    await mongoose.connect(uri.trim(), {
-      serverSelectionTimeoutMS: 8000,
+    console.log("[MongoDB] Attempting database connection (5s timeout guard)...");
+
+    const connectionPromise = mongoose.connect(uri, {
+      serverSelectionTimeoutMS: 5000,
+      connectTimeoutMS: 5000,
+      socketTimeoutMS: 15000,
       maxPoolSize: 10,
     });
-    console.log("MongoDB connected");
+
+    const timeoutPromise = new Promise((_, reject) =>
+      setTimeout(() => reject(new Error("Mongoose connection timed out after 5000ms")), 5000)
+    );
+
+    await Promise.race([connectionPromise, timeoutPromise]);
+    console.log("[MongoDB] Connected successfully to database.");
     return mongoose.connection;
   } catch (error) {
-    console.error("MongoDB connection error:", error.message);
-    throw error;
+    console.warn("[MongoDB] Connection warning (running in resilient mode):", error.message);
+    return null;
   }
 };
 
@@ -30,10 +53,10 @@ const closeMongodb = async () => {
   try {
     if (mongoose.connection.readyState !== 0) {
       await mongoose.connection.close();
-      console.log("MongoDB connection closed");
+      console.log("[MongoDB] Connection closed.");
     }
   } catch (error) {
-    console.error("MongoDB close error:", error.message);
+    console.error("[MongoDB] Close error:", error.message);
   }
 };
 

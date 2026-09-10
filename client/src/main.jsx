@@ -5,13 +5,16 @@ import { AuthProvider } from './context/AuthContext.jsx'
 import { ManagementContextProvider } from './context/ManagementContextProvider.jsx'
 import { ThemeContextProvider } from './context/ThemeContext.jsx'
 import { AttendanceProvider } from './context/AttendanceContext.jsx'
+import { BrandingProvider } from './context/BrandingContext.jsx'
 
 createRoot(document.getElementById("root")).render(
   <ThemeContextProvider>
     <AuthProvider>
       <ManagementContextProvider>
         <AttendanceProvider>
-          <App />
+          <BrandingProvider>
+            <App />
+          </BrandingProvider>
         </AttendanceProvider>
       </ManagementContextProvider>
     </AuthProvider>

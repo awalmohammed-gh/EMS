@@ -1,5 +1,7 @@
 import { useState, useRef, useEffect, useMemo } from "react";
 import { ChevronDown, Check, Search } from "lucide-react";
+import { motion, AnimatePresence } from "framer-motion";
+import { dropdownPopoverVariants } from "../utils/motion";
 
 /**
  * Universal responsive CustomSelect component.
@@ -133,9 +135,11 @@ export const CustomSelect = ({
       </select>
 
       {/* Visible Interactive Trigger Button */}
-      <button
+      <motion.button
         id={id ? `${id}-trigger` : undefined}
         type="button"
+        whileTap={!disabled ? { scale: 0.99 } : undefined}
+        transition={{ duration: 0.1 }}
         disabled={disabled}
         onClick={() => !disabled && setIsOpen((prev) => !prev)}
         aria-haspopup="listbox"
@@ -165,75 +169,82 @@ export const CustomSelect = ({
             isOpen ? "rotate-180 text-[#002185] dark:text-blue-400" : ""
           }`}
         />
-      </button>
+      </motion.button>
 
-      {/* Clamped Dropdown Popover */}
-      {isOpen && (
-        <div
-          id={id ? `${id}-menu` : undefined}
-          className={`absolute left-0 right-0 top-full mt-1.5 z-50 w-full max-w-full overflow-hidden rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-[#162033] shadow-xl animate-in fade-in zoom-in-95 duration-150 ${dropdownClassName}`}
-        >
-          {/* Optional Search Filter */}
-          {isSearchEnabled && (
-            <div className="p-2 border-b border-slate-100 dark:border-slate-700/80 bg-slate-50/90 dark:bg-[#111927]/80">
-              <div className="relative w-full">
-                <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-slate-400 pointer-events-none" />
-                <input
-                  type="text"
-                  placeholder={searchPlaceholder}
-                  value={searchQuery}
-                  onChange={(e) => setSearchQuery(e.target.value)}
-                  onClick={(e) => e.stopPropagation()}
-                  className="w-full pl-8 pr-3 py-1.5 text-xs rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-[#162033] text-slate-900 dark:text-white outline-hidden focus:border-[#002185] dark:focus:border-blue-500 focus:ring-1 focus:ring-[#002185]/30"
-                  autoFocus
-                />
-              </div>
-            </div>
-          )}
-
-          {/* Options List */}
-          <div
-            role="listbox"
-            className="max-h-56 overflow-y-auto overflow-x-hidden divide-y divide-slate-100 dark:divide-slate-800/60"
+      {/* Clamped Dropdown Popover with Framer Motion Blooming Animation */}
+      <AnimatePresence>
+        {isOpen && (
+          <motion.div
+            id={id ? `${id}-menu` : undefined}
+            variants={dropdownPopoverVariants}
+            initial="hidden"
+            animate="visible"
+            exit="exit"
+            style={{ transformOrigin: "top" }}
+            className={`absolute left-0 right-0 top-full mt-1.5 z-50 w-full max-w-full overflow-hidden rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-[#162033] shadow-xl ${dropdownClassName}`}
           >
-            {filteredOptions.length === 0 ? (
-              <div className="p-3 text-center text-xs text-slate-500 dark:text-slate-400">
-                No matching options
+            {/* Optional Search Filter */}
+            {isSearchEnabled && (
+              <div className="p-2 border-b border-slate-100 dark:border-slate-700/80 bg-slate-50/90 dark:bg-[#111927]/80">
+                <div className="relative w-full">
+                  <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-slate-400 pointer-events-none" />
+                  <input
+                    type="text"
+                    placeholder={searchPlaceholder}
+                    value={searchQuery}
+                    onChange={(e) => setSearchQuery(e.target.value)}
+                    onClick={(e) => e.stopPropagation()}
+                    className="w-full pl-8 pr-3 py-1.5 text-xs rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-[#162033] text-slate-900 dark:text-white outline-hidden focus:border-[#002185] dark:focus:border-blue-500 focus:ring-1 focus:ring-[#002185]/30"
+                    autoFocus
+                  />
+                </div>
               </div>
-            ) : (
-              filteredOptions.map((opt) => {
-                const isSelected = String(opt.value) === String(value);
-                return (
-                  <button
-                    key={opt.value}
-                    type="button"
-                    role="option"
-                    aria-selected={isSelected}
-                    onClick={() => handleSelect(opt.value)}
-                    className={`w-full max-w-full text-left px-3.5 py-2.5 transition flex items-center justify-between gap-2 overflow-hidden cursor-pointer ${
-                      isSelected
-                        ? "bg-blue-50/90 dark:bg-blue-950/60 text-[#002185] dark:text-blue-400 font-semibold"
-                        : "hover:bg-slate-50 dark:hover:bg-slate-800/70 text-slate-700 dark:text-slate-200"
-                    }`}
-                  >
-                    <div className="truncate text-sm flex-1 min-w-0" title={opt.label}>
-                      <span>{opt.label}</span>
-                      {opt.sublabel && (
-                        <span className="block text-xs text-slate-400 dark:text-slate-500 font-normal truncate mt-0.5">
-                          {opt.sublabel}
-                        </span>
-                      )}
-                    </div>
-                    {isSelected && (
-                      <Check className="w-4 h-4 text-[#002185] dark:text-blue-400 shrink-0" />
-                    )}
-                  </button>
-                );
-              })
             )}
-          </div>
-        </div>
-      )}
+
+            {/* Options List */}
+            <div
+              role="listbox"
+              className="max-h-56 overflow-y-auto overflow-x-hidden divide-y divide-slate-100 dark:divide-slate-800/60"
+            >
+              {filteredOptions.length === 0 ? (
+                <div className="p-3 text-center text-xs text-slate-500 dark:text-slate-400">
+                  No matching options
+                </div>
+              ) : (
+                filteredOptions.map((opt) => {
+                  const isSelected = String(opt.value) === String(value);
+                  return (
+                    <button
+                      key={opt.value}
+                      type="button"
+                      role="option"
+                      aria-selected={isSelected}
+                      onClick={() => handleSelect(opt.value)}
+                      className={`w-full max-w-full text-left px-3.5 py-2.5 transition flex items-center justify-between gap-2 overflow-hidden cursor-pointer ${
+                        isSelected
+                          ? "bg-blue-50/90 dark:bg-blue-950/60 text-[#002185] dark:text-blue-400 font-semibold"
+                          : "hover:bg-slate-50 dark:hover:bg-slate-800/70 text-slate-700 dark:text-slate-200"
+                      }`}
+                    >
+                      <div className="truncate text-sm flex-1 min-w-0" title={opt.label}>
+                        <span>{opt.label}</span>
+                        {opt.sublabel && (
+                          <span className="block text-xs text-slate-400 dark:text-slate-500 font-normal truncate mt-0.5">
+                            {opt.sublabel}
+                          </span>
+                        )}
+                      </div>
+                      {isSelected && (
+                        <Check className="w-4 h-4 text-[#002185] dark:text-blue-400 shrink-0" />
+                      )}
+                    </button>
+                  );
+                })
+              )}
+            </div>
+          </motion.div>
+        )}
+      </AnimatePresence>
     </div>
   );
 };

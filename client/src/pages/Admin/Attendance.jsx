@@ -53,6 +53,14 @@ import ExcuseLatenessModal from "../../components/modal/ExcuseLatenessModal";
 import FlagAttendanceModal from "../../components/modal/FlagAttendanceModal";
 import ManualOverrideModal from "../../components/modal/ManualOverrideModal";
 import AttendanceReportModal from "../../components/modal/AttendanceReportModal";
+import AttendanceExportModal from "../../components/modal/AttendanceExportModal";
+import {
+  exportAttendanceLogsToCSV,
+  exportAttendanceLogsToPDF,
+} from "../../utils/attendanceExportUtils";
+import { useCompanyBranding } from "../../hooks/useCompanyBranding";
+import { motion } from "framer-motion";
+import { tableContainerVariants, tableRowVariants } from "../../utils/motion";
 
 const Attendance = () => {
   const [attendance, setAttendance] = useState([]);
@@ -80,6 +88,8 @@ const Attendance = () => {
   const [flagModalRecord, setFlagModalRecord] = useState(null);
   const [isProcessingAction, setIsProcessingAction] = useState(false);
   const [reportModalData, setReportModalData] = useState(null);
+  const [showExportModal, setShowExportModal] = useState(false);
+  const { branding } = useCompanyBranding();
 
   const [adjustmentFormData, setAdjustmentFormData] = useState({
     id: "",
@@ -836,47 +846,92 @@ const Attendance = () => {
     window.scrollTo({ top: 0, behavior: "smooth" });
   };
 
-  // Export to CSV
-  const exportToCSV = () => {
-    const headers = [
-      "Date",
-      "Employee ID",
-      "Employee Name",
-      "Department",
-      "Position",
-      "Clock In",
-      "Clock Out",
-      "Work Hours",
-      "Status",
-      "Notes",
-    ];
-    const rows = filteredAttendance.map((item) => [
-      `"${formatDate(item.date)}"`,
-      `"${getEmployeeCode(item)}"`,
-      `"${getEmployeeName(item)}"`,
-      `"${getEmployeeDepartment(item)}"`,
-      `"${getEmployeePosition(item)}"`,
-      `"${formatTime(item.clockIn)}"`,
-      `"${formatTime(item.clockOut)}"`,
-      item.workHours || 0,
-      `"${item.status || "Absent"}"`,
-      `"${item.notes || ""}"`,
-    ]);
+  // Export to CSV (Enhanced Payroll & Audit format)
+  const handleExportCSV = () => {
+    try {
+      const recordsToExport =
+        filteredAttendance.length > 0 ? filteredAttendance : attendance;
+      if (recordsToExport.length === 0) {
+        setShowToast({
+          show: true,
+          message: "No attendance records to export.",
+          type: "error",
+        });
+        return;
+      }
+      const deptSlug =
+        departmentFilter !== "All"
+          ? `_${departmentFilter.replace(/\s+/g, "_")}`
+          : "";
+      const filename = `payroll_attendance_audit${deptSlug}_${
+        new Date().toISOString().split("T")[0]
+      }.csv`;
 
-    const csvContent =
-      "data:text/csv;charset=utf-8," +
-      [headers.join(","), ...rows.map((row) => row.join(","))].join("\n");
+      exportAttendanceLogsToCSV({
+        attendanceList: recordsToExport,
+        periodLabel: periodSummary.periodLabel || "Current Period",
+        companyName: branding?.companyName || "Eyenit Logistics & Transport",
+        filename,
+      });
 
-    const encodedUri = encodeURI(csvContent);
-    const link = document.createElement("a");
-    link.setAttribute("href", encodedUri);
-    link.setAttribute(
-      "download",
-      `live_attendance_records_${new Date().toISOString().split("T")[0]}.csv`,
-    );
-    document.body.appendChild(link);
-    link.click();
-    document.body.removeChild(link);
+      setShowToast({
+        show: true,
+        message: `Exported ${recordsToExport.length} attendance logs to CSV successfully.`,
+        type: "success",
+      });
+    } catch (err) {
+      console.error("Export CSV error:", err);
+      setShowToast({
+        show: true,
+        message: err.message || "Failed to export attendance logs to CSV.",
+        type: "error",
+      });
+    }
+  };
+
+  // Export to PDF (Official Audit Document)
+  const handleExportPDF = async () => {
+    try {
+      const recordsToExport =
+        filteredAttendance.length > 0 ? filteredAttendance : attendance;
+      if (recordsToExport.length === 0) {
+        setShowToast({
+          show: true,
+          message: "No attendance records to export.",
+          type: "error",
+        });
+        return;
+      }
+      const deptSlug =
+        departmentFilter !== "All"
+          ? `_${departmentFilter.replace(/\s+/g, "_")}`
+          : "";
+      const filename = `attendance_audit_report${deptSlug}_${
+        new Date().toISOString().split("T")[0]
+      }.pdf`;
+
+      await exportAttendanceLogsToPDF({
+        attendanceList: recordsToExport,
+        periodLabel: periodSummary.periodLabel || "Current Period",
+        companyName: branding?.companyName || "Eyenit Logistics & Transport",
+        logoUrl: branding?.logoUrl,
+        departmentFilter,
+        filename,
+      });
+
+      setShowToast({
+        show: true,
+        message: `Generated official audit PDF (${recordsToExport.length} records).`,
+        type: "success",
+      });
+    } catch (err) {
+      console.error("Export PDF error:", err);
+      setShowToast({
+        show: true,
+        message: err.message || "Failed to generate attendance PDF.",
+        type: "error",
+      });
+    }
   };
 
   // Handle Admin Manual Adjustment / Override Submission
@@ -1404,25 +1459,56 @@ const Attendance = () => {
               </div>
             )}
 
-            {/* Print Official Audit Report */}
-            <button
-              id="btn-admin-print-attendance-report"
-              onClick={() => handleOpenAttendanceReport(null)}
-              className="flex items-center gap-1.5 px-3.5 py-2 text-xs font-semibold text-[#002185] dark:text-blue-300 bg-white dark:bg-[#162033] hover:bg-blue-50 dark:hover:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl transition-all duration-200 shadow-xs cursor-pointer"
-              title="Print official attendance audit sheet"
-            >
-              <Printer className="h-3.5 w-3.5 text-blue-600 dark:text-blue-400" />
-              <span>Print Audit Sheet</span>
-            </button>
+            {/* Export & Audit Action Controls */}
+            <div className="flex items-center gap-2 flex-wrap">
+              {/* Quick CSV Export */}
+              <button
+                id="btn-admin-export-csv"
+                type="button"
+                onClick={handleExportCSV}
+                className="flex items-center gap-1.5 px-3 py-2 text-xs font-semibold text-slate-700 dark:text-slate-200 bg-white dark:bg-[#162033] hover:bg-slate-50 dark:hover:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl transition-all duration-200 shadow-xs cursor-pointer"
+                title="Export current attendance records to CSV for payroll"
+              >
+                <Download className="h-3.5 w-3.5 text-emerald-600 dark:text-emerald-400" />
+                <span>CSV</span>
+              </button>
 
-            {/* Export CSV */}
-            <button
-              onClick={exportToCSV}
-              className="flex items-center gap-1.5 px-3.5 py-2 text-xs font-semibold text-white bg-[#002185] dark:bg-blue-600 hover:bg-[#ff5500] dark:hover:bg-blue-700 rounded-xl transition-all duration-200 shadow-xs"
-            >
-              <Download className="h-3.5 w-3.5" />
-              Export CSV
-            </button>
+              {/* Quick PDF Export */}
+              <button
+                id="btn-admin-export-pdf"
+                type="button"
+                onClick={handleExportPDF}
+                className="flex items-center gap-1.5 px-3 py-2 text-xs font-semibold text-slate-700 dark:text-slate-200 bg-white dark:bg-[#162033] hover:bg-slate-50 dark:hover:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl transition-all duration-200 shadow-xs cursor-pointer"
+                title="Download official PDF audit report"
+              >
+                <Download className="h-3.5 w-3.5 text-rose-600 dark:text-rose-400" />
+                <span>PDF</span>
+              </button>
+
+              {/* Print Official Audit Report */}
+              <button
+                id="btn-admin-print-attendance-report"
+                type="button"
+                onClick={() => handleOpenAttendanceReport(null)}
+                className="flex items-center gap-1.5 px-3.5 py-2 text-xs font-semibold text-[#002185] dark:text-blue-300 bg-white dark:bg-[#162033] hover:bg-blue-50 dark:hover:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl transition-all duration-200 shadow-xs cursor-pointer"
+                title="Print official attendance audit sheet"
+              >
+                <Printer className="h-3.5 w-3.5 text-blue-600 dark:text-blue-400" />
+                <span>Print Audit Sheet</span>
+              </button>
+
+              {/* Full Export Options Hub Trigger */}
+              <button
+                id="btn-admin-open-export-modal"
+                type="button"
+                onClick={() => setShowExportModal(true)}
+                className="flex items-center gap-1.5 px-3.5 py-2 text-xs font-semibold text-white bg-[#002185] dark:bg-blue-600 hover:bg-[#ff5500] dark:hover:bg-blue-700 rounded-xl transition-all duration-200 shadow-xs cursor-pointer"
+                title="Open Export & Audit Options Hub"
+              >
+                <Download className="h-3.5 w-3.5" />
+                <span>Export Hub</span>
+              </button>
+            </div>
           </div>
         </div>
 
@@ -1580,7 +1666,13 @@ const Attendance = () => {
                   <th className="px-5 py-3 text-right">Action</th>
                 </tr>
               </thead>
-              <tbody className="divide-y divide-slate-100 dark:divide-slate-800/60 text-sm">
+              <motion.tbody
+                key={`attendance-tbody-${departmentFilter}-${statusFilter}-${startDateFilter}-${endDateFilter}-${currentPage}`}
+                variants={tableContainerVariants}
+                initial="hidden"
+                animate="visible"
+                className="divide-y divide-slate-100 dark:divide-slate-800/60 text-sm"
+              >
                 {currentItems.length > 0 ? (
                   currentItems.map((item) => {
                     const empName = getEmployeeName(item);
@@ -1590,7 +1682,9 @@ const Attendance = () => {
                     const avatar = item.employee?.avatar || item.employee?.profile_picture;
 
                     return (
-                      <tr
+                      <motion.tr
+                        layout
+                        variants={tableRowVariants}
                         key={item._id || item.id || Math.random()}
                         className="hover:bg-slate-50/50 dark:hover:bg-[#162033]/40 transition-colors border-b border-slate-100 dark:border-slate-800/60"
                       >
@@ -1758,7 +1852,7 @@ const Attendance = () => {
                             />
                           </div>
                         </td>
-                      </tr>
+                      </motion.tr>
                     );
                   })
                 ) : (
@@ -1781,7 +1875,7 @@ const Attendance = () => {
                     </td>
                   </tr>
                 )}
-              </tbody>
+              </motion.tbody>
             </table>
           </div>
 
@@ -2154,6 +2248,22 @@ const Attendance = () => {
           period={reportModalData.period}
           dateRange={reportModalData.dateRange}
           title="Staff Attendance & Punctuality Audit"
+        />
+      )}
+
+      {/* Official Attendance Export Hub Modal */}
+      {showExportModal && (
+        <AttendanceExportModal
+          isOpen={showExportModal}
+          onClose={() => setShowExportModal(false)}
+          filteredRecords={filteredAttendance}
+          allRecords={attendance}
+          periodLabel={periodSummary.periodLabel || "Current Period"}
+          departmentFilter={departmentFilter}
+          companyName={branding?.companyName || "Eyenit Logistics & Transport"}
+          logoUrl={branding?.logoUrl}
+          primaryColor={branding?.primaryColor || "#0B1E48"}
+          onOpenPrintReport={() => handleOpenAttendanceReport(null)}
         />
       )}
 

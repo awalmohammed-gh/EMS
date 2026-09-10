@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useMemo, memo } from "react";
 import {
   Building2,
   Briefcase,
@@ -8,17 +8,17 @@ import {
 import Avatar from "./Avatar";
 import { useManagement } from "../context/ManagementContextProvider";
 
-export const EmployeeProfileIdentityBanner = ({
+const EmployeeProfileIdentityBannerComponent = ({
   employeeData,
   todayAttendance,
 }) => {
   const { user } = useManagement();
 
   // Merge employee data from props and context
-  const emp = {
+  const emp = useMemo(() => ({
     ...(user || {}),
     ...(employeeData || {}),
-  };
+  }), [user, employeeData]);
 
   const fullName = emp.fullName || emp.full_name || emp.name || "Employee";
   const employeeId = emp.employeeId || emp.empId || emp.id || "EMP-1001";
@@ -27,7 +27,7 @@ export const EmployeeProfileIdentityBanner = ({
   const email = emp.email || "";
 
   // Dynamic avatar URL resolution with multi-level fallback
-  const getResolvedAvatar = () => {
+  const resolvedAvatar = useMemo(() => {
     return (
       employeeData?.avatar ||
       employeeData?.avatarUrl ||
@@ -43,22 +43,15 @@ export const EmployeeProfileIdentityBanner = ({
       emp.profilePicture ||
       ""
     );
-  };
+  }, [employeeData, user, emp.avatar, emp.profilePicture]);
 
-  const [currentAvatar, setCurrentAvatar] = useState(getResolvedAvatar);
+  const [currentAvatar, setCurrentAvatar] = useState(resolvedAvatar);
 
   useEffect(() => {
-    const avatarUrl = getResolvedAvatar();
-    if (avatarUrl) {
-      setCurrentAvatar(avatarUrl);
+    if (resolvedAvatar) {
+      setCurrentAvatar(resolvedAvatar);
     }
-  }, [
-    employeeData,
-    user,
-    emp.avatar,
-    emp.profilePicture,
-    emp.profile_image_url,
-  ]);
+  }, [resolvedAvatar]);
 
   // Listen for global avatar updates
   useEffect(() => {
@@ -175,4 +168,5 @@ export const EmployeeProfileIdentityBanner = ({
   );
 };
 
+export const EmployeeProfileIdentityBanner = memo(EmployeeProfileIdentityBannerComponent);
 export default EmployeeProfileIdentityBanner;

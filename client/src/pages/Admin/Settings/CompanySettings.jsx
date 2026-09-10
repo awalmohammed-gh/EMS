@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import {
   Building2,
   MapPin,
@@ -10,18 +10,25 @@ import {
   Bell,
   CheckCircle2,
   Upload,
+  Image as ImageIcon,
+  Palette,
 } from "lucide-react";
 import { useManagement } from "../../../context/ManagementContextProvider";
 import { getSettings, updateCompanySettings } from "../../../apis/fontApis";
+import { brandingService } from "../../../services/brandingService";
+import { useBranding } from "../../../context/BrandingContext";
 import ThemePreferenceCard from "../../../components/ThemePreferenceCard";
 
 const defaultCompany = {
-  companyName: "EYENIT Technologies",
-  logo: "/logo.png",
+  companyName: "Enterprise Organization",
+  logo: "/eyenit_logo.png",
+  logoUrl: "/eyenit_logo.png",
+  welcomeBackgroundUrl: "",
+  primaryColor: "#0B1E48",
   address: "Accra, Ghana",
   phone: "+233 30 212 3456",
-  email: "info@eyenit.com",
-  website: "https://www.eyenit.com",
+  email: "info@company.com",
+  website: "https://www.company.com",
   workStartTime: "08:00",
   workEndTime: "19:00",
   defaultCurrency: "GHS",
@@ -31,25 +38,64 @@ const defaultCompany = {
 
 const CompanySettings = ({ onSaveSuccess }) => {
   const { setShowToast } = useManagement();
+  const { refreshBranding } = useBranding();
   const [company, setCompany] = useState(defaultCompany);
   const [isSaving, setIsSaving] = useState(false);
+
+  // Brand asset uploads state
+  const [logoFile, setLogoFile] = useState(null);
+  const [logoPreview, setLogoPreview] = useState("");
+  const [bgFile, setBgFile] = useState(null);
+  const [bgPreview, setBgPreview] = useState("");
+
+  const logoInputRef = useRef(null);
+  const bgInputRef = useRef(null);
 
   useEffect(() => {
     let isMounted = true;
     const fetchSettings = async () => {
       try {
-        const res = await getSettings();
-        if (isMounted && res?.data?.success && res.data.settings) {
-          const comp = res.data.settings.company || {};
-          const att = res.data.settings.attendance || {};
-          const pay = res.data.settings.payroll || {};
-          setCompany((prev) => ({
-            ...prev,
-            ...comp,
-            workStartTime: att.workStartTime || prev.workStartTime,
-            workEndTime: att.workEndTime || prev.workEndTime,
-            defaultCurrency: pay.currency || prev.defaultCurrency,
-          }));
+        const [settingsRes, brandRes] = await Promise.allSettled([
+          getSettings(),
+          brandingService.getAdminBranding(),
+        ]);
+
+        if (isMounted) {
+          let merged = { ...defaultCompany };
+
+          if (settingsRes.status === "fulfilled" && settingsRes.value?.data?.success) {
+            const comp = settingsRes.value.data.settings?.company || {};
+            const att = settingsRes.value.data.settings?.attendance || {};
+            const pay = settingsRes.value.data.settings?.payroll || {};
+            merged = {
+              ...merged,
+              ...comp,
+              workStartTime: att.workStartTime || merged.workStartTime,
+              workEndTime: att.workEndTime || merged.workEndTime,
+              defaultCurrency: pay.currency || merged.defaultCurrency,
+            };
+          }
+
+          if (brandRes.status === "fulfilled" && brandRes.value?.success && brandRes.value.company) {
+            const brandComp = brandRes.value.company;
+            merged = {
+              ...merged,
+              companyName: brandComp.companyName || merged.companyName,
+              logoUrl: brandComp.logoUrl || merged.logoUrl,
+              logo: brandComp.logoUrl || merged.logo,
+              welcomeBackgroundUrl: brandComp.welcomeBackgroundUrl || "",
+              primaryColor: brandComp.primaryColor || merged.primaryColor,
+              email: brandComp.contactEmail || merged.email,
+            };
+            if (brandComp.logoUrl) {
+              setLogoPreview(brandComp.logoUrl);
+            }
+            if (brandComp.welcomeBackgroundUrl) {
+              setBgPreview(brandComp.welcomeBackgroundUrl);
+            }
+          }
+
+          setCompany(merged);
         }
       } catch (err) {
         console.warn("Failed to load company settings:", err?.message);
@@ -65,6 +111,40 @@ const CompanySettings = ({ onSaveSuccess }) => {
     setCompany((prev) => ({ ...prev, [field]: value }));
   };
 
+  const handleLogoFileChange = (e) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    if (!file.type.startsWith("image/")) {
+      setShowToast({
+        show: true,
+        message: "Please select an image file for the company logo.",
+        type: "error",
+      });
+      return;
+    }
+    setLogoFile(file);
+    const reader = new FileReader();
+    reader.onload = () => setLogoPreview(reader.result);
+    reader.readAsDataURL(file);
+  };
+
+  const handleBgFileChange = (e) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    if (!file.type.startsWith("image/")) {
+      setShowToast({
+        show: true,
+        message: "Please select an image file for the welcome background.",
+        type: "error",
+      });
+      return;
+    }
+    setBgFile(file);
+    const reader = new FileReader();
+    reader.onload = () => setBgPreview(reader.result);
+    reader.readAsDataURL(file);
+  };
+
   const handleSave = async (e) => {
     if (e && typeof e.preventDefault === "function") {
       e.preventDefault();
@@ -72,13 +152,28 @@ const CompanySettings = ({ onSaveSuccess }) => {
 
     setIsSaving(true);
     try {
+      // 1. Submit white-label branding changes (supports multipart/form-data for image files)
+      const brandFormData = new FormData();
+      brandFormData.append("companyName", company.companyName || "");
+      brandFormData.append("primaryColor", company.primaryColor || "#0B1E48");
+      brandFormData.append("contactEmail", company.email || "");
+      if (logoFile) {
+        brandFormData.append("logo", logoFile);
+      }
+      if (bgFile) {
+        brandFormData.append("welcomeBackground", bgFile);
+      }
+
+      await brandingService.updateAdminBranding(brandFormData);
+
+      // 2. Synchronize standard company preferences
       const res = await updateCompanySettings({
         companyName: company.companyName,
         address: company.address,
         phone: company.phone,
         email: company.email,
         website: company.website,
-        logo: company.logo,
+        logo: company.logoUrl || company.logo,
         workStartTime: company.workStartTime,
         workEndTime: company.workEndTime,
         defaultCurrency: company.defaultCurrency,
@@ -86,10 +181,13 @@ const CompanySettings = ({ onSaveSuccess }) => {
         systemAlerts: company.systemAlerts,
       });
 
+      // 3. Refresh branding context across application
+      await refreshBranding();
+
       if (res?.data?.success) {
         setShowToast({
           show: true,
-          message: "Company preferences saved successfully!",
+          message: "Brand assets and company preferences saved successfully!",
           type: "success",
         });
         if (typeof onSaveSuccess === "function") {
@@ -100,7 +198,7 @@ const CompanySettings = ({ onSaveSuccess }) => {
       console.error("Failed to save company settings:", err);
       setShowToast({
         show: true,
-        message: err?.response?.data?.message || "Failed to update company settings.",
+        message: err?.response?.data?.message || err?.normalizedMessage || "Failed to update company settings.",
         type: "error",
       });
     } finally {
@@ -110,26 +208,106 @@ const CompanySettings = ({ onSaveSuccess }) => {
 
   return (
     <form onSubmit={handleSave} className="space-y-6">
-      {/* Brand Identity / Logo Header */}
-      <div className="flex flex-col sm:flex-row items-start sm:items-center gap-5 pb-6 border-b border-slate-200 dark:border-slate-800">
-        <div className="w-20 h-20 sm:w-24 sm:h-24 rounded-2xl border-2 border-dashed border-slate-300 dark:border-slate-700 flex items-center justify-center bg-slate-50 dark:bg-slate-800/80 text-[#002185] dark:text-blue-400 shrink-0">
-          <Building2 className="w-10 h-10" />
+      {/* Brand Identity / Logo & Background Customization Header */}
+      <div className="p-5 rounded-2xl bg-slate-50 dark:bg-slate-800/60 border border-slate-200 dark:border-slate-700 space-y-4">
+        <div className="flex items-center justify-between">
+          <div>
+            <h3 className="text-sm font-bold uppercase tracking-wider text-slate-900 dark:text-slate-100 flex items-center gap-2">
+              <Palette className="w-4 h-4 text-[#0B1E48] dark:text-blue-400" />
+              White-Label Brand Assets & Colors
+            </h3>
+            <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">
+              Customize your company emblem, portals background, and primary theme hue
+            </p>
+          </div>
+          <div className="flex items-center gap-2">
+            <span className="text-xs font-semibold text-slate-500 dark:text-slate-400">Primary Hue:</span>
+            <input
+              type="color"
+              value={company.primaryColor || "#0B1E48"}
+              onChange={(e) => handleChange("primaryColor", e.target.value)}
+              className="w-8 h-8 rounded-lg border border-slate-200 dark:border-slate-700 cursor-pointer p-0.5 bg-white dark:bg-slate-800"
+            />
+            <span className="text-xs font-mono font-medium text-slate-700 dark:text-slate-300">
+              {company.primaryColor || "#0B1E48"}
+            </span>
+          </div>
         </div>
-        <div className="space-y-1">
-          <h3 className="text-lg font-bold text-slate-900 dark:text-slate-100">
-            {company.companyName || "Organization Profile"}
-          </h3>
-          <p className="text-xs text-slate-500 dark:text-slate-400">
-            Configure company identity, default operational work hours, and communication preferences
-          </p>
-          <div className="pt-2">
-            <button
-              type="button"
-              className="inline-flex items-center gap-2 px-3 py-1.5 border border-slate-200 dark:border-slate-700 rounded-xl text-xs font-semibold text-slate-700 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-800 transition-colors cursor-pointer"
-            >
-              <Upload className="w-3.5 h-3.5" />
-              Upload Logo
-            </button>
+
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-4 pt-2">
+          {/* Company Logo Customization */}
+          <div className="p-4 rounded-xl bg-white dark:bg-slate-900/60 border border-slate-200 dark:border-slate-800 space-y-3">
+            <div className="flex items-center justify-between">
+              <span className="text-xs font-bold text-slate-800 dark:text-slate-200">Company Logo</span>
+              <button
+                type="button"
+                onClick={() => logoInputRef.current?.click()}
+                className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold bg-[#0B1E48] text-white hover:bg-opacity-90 cursor-pointer shadow-xs"
+              >
+                <Upload className="w-3.5 h-3.5" />
+                Upload New Logo
+              </button>
+            </div>
+            <div className="h-24 rounded-lg bg-slate-50 dark:bg-slate-800/80 border border-slate-200 dark:border-slate-700 flex items-center justify-center p-2 overflow-hidden">
+              {logoPreview ? (
+                <img
+                  src={logoPreview}
+                  alt="Company Logo"
+                  className="max-h-full max-w-full object-contain"
+                />
+              ) : (
+                <Building2 className="w-8 h-8 text-slate-400" />
+              )}
+            </div>
+            <p className="text-[11px] text-slate-400">
+              Recommended: Transparent PNG or SVG. Max 10MB.
+            </p>
+            <input
+              ref={logoInputRef}
+              type="file"
+              accept="image/png,image/jpeg,image/webp,image/svg+xml"
+              onChange={handleLogoFileChange}
+              className="hidden"
+            />
+          </div>
+
+          {/* Welcome Background Customization */}
+          <div className="p-4 rounded-xl bg-white dark:bg-slate-900/60 border border-slate-200 dark:border-slate-800 space-y-3">
+            <div className="flex items-center justify-between">
+              <span className="text-xs font-bold text-slate-800 dark:text-slate-200">Login Welcome Background</span>
+              <button
+                type="button"
+                onClick={() => bgInputRef.current?.click()}
+                className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold bg-[#0B1E48] text-white hover:bg-opacity-90 cursor-pointer shadow-xs"
+              >
+                <ImageIcon className="w-3.5 h-3.5" />
+                Upload Background
+              </button>
+            </div>
+            <div className="h-24 rounded-lg bg-slate-50 dark:bg-slate-800/80 border border-slate-200 dark:border-slate-700 flex items-center justify-center overflow-hidden relative">
+              {bgPreview ? (
+                <img
+                  src={bgPreview}
+                  alt="Welcome Background"
+                  className="w-full h-full object-cover"
+                />
+              ) : (
+                <div className="flex flex-col items-center gap-1 text-slate-400">
+                  <ImageIcon className="w-6 h-6" />
+                  <span className="text-[11px]">Using default subtle theme gradient</span>
+                </div>
+              )}
+            </div>
+            <p className="text-[11px] text-slate-400">
+              Recommended: 1920x1080 Landscape JPEG or PNG.
+            </p>
+            <input
+              ref={bgInputRef}
+              type="file"
+              accept="image/png,image/jpeg,image/webp"
+              onChange={handleBgFileChange}
+              className="hidden"
+            />
           </div>
         </div>
       </div>

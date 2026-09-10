@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useMemo, useCallback } from "react";
+import React, { useState, useEffect, useMemo, useCallback, memo } from "react";
 import {
   Clock,
   LogIn,
@@ -682,4 +682,4 @@ const DailyShiftClock = ({
   );
 };
 
-export default DailyShiftClock;
+export default memo(DailyShiftClock);

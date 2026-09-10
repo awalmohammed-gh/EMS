@@ -1,9 +1,11 @@
 import { Outlet, useLocation } from "react-router-dom";
+import { AnimatePresence, motion, useReducedMotion } from "framer-motion";
 import AdminSidebar from "../pages/Admin/AdminSidebar";
 import EmployeeSidebar from "../pages/Employees/EmployeeSidebar";
 import Navbar from "../components/Navbar";
 import MobileBottomNav from "../components/MobileBottomNav";
 import ErrorBoundary from "../components/ErrorBoundary";
+import { pageVariants, reducedPageVariants } from "../utils/motion";
 
 /**
  * AppLayout
@@ -12,11 +14,14 @@ import ErrorBoundary from "../components/ErrorBoundary";
  */
 export const AppLayout = ({ role: propRole }) => {
   const location = useLocation();
+  const shouldReduceMotion = useReducedMotion();
 
   // Derive active role (admin vs employee)
   const isEmployee =
     propRole === "employee" || location.pathname.startsWith("/employee");
   const role = isEmployee ? "employee" : "admin";
+
+  const activePageVariants = shouldReduceMotion ? reducedPageVariants : pageVariants;
 
   return (
     <div className="flex h-screen bg-[#F8FAFC] dark:bg-slate-900 text-slate-900 dark:text-slate-100 transition-colors duration-200 overflow-hidden">
@@ -31,14 +36,25 @@ export const AppLayout = ({ role: propRole }) => {
         <Navbar role={role} />
 
         {/* Scrollable Page Content Area with Bottom Padding for Mobile Bottom Bar */}
-        <main className="flex-1 w-full overflow-y-auto bg-[#F8FAFC] dark:bg-slate-900 transition-colors duration-200 pb-24 md:pb-8">
-          <ErrorBoundary
-            key={location.pathname}
-            title="Failed to Load View"
-            message="A client-side error occurred while rendering this page. You can try reloading the section or returning to the dashboard."
-          >
-            <Outlet />
-          </ErrorBoundary>
+        <main className="flex-1 w-full overflow-y-auto overflow-x-hidden bg-[#F8FAFC] dark:bg-slate-900 transition-colors duration-200 pb-24 md:pb-8">
+          <AnimatePresence mode="wait">
+            <motion.div
+              key={location.pathname}
+              variants={activePageVariants}
+              initial="initial"
+              animate="animate"
+              exit="exit"
+              className="w-full min-h-full"
+            >
+              <ErrorBoundary
+                key={location.pathname}
+                title="Failed to Load View"
+                message="A client-side error occurred while rendering this page. You can try reloading the section or returning to the dashboard."
+              >
+                <Outlet />
+              </ErrorBoundary>
+            </motion.div>
+          </AnimatePresence>
         </main>
 
         {/* Mobile-Exclusive Navigation Bar & Slide-Up Features Drawer */}

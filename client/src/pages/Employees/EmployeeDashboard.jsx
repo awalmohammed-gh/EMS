@@ -1,4 +1,4 @@
-import { useEffect, useState, useCallback } from "react";
+import { useEffect, useState, useCallback, useMemo, useRef } from "react";
 import {
   employeeDashboardOverview,
   getEmployeeMe,
@@ -16,6 +16,7 @@ import {
   Eye,
   Download,
   ShieldCheck,
+  RefreshCw,
 } from "lucide-react";
 import Loading from "../../ui/Loading";
 import ErrorMessage from "../../ui/ErrorMessage";
@@ -33,6 +34,66 @@ import MonthlyAttendanceCalendarCard from "../../components/MonthlyAttendanceCal
 import EmployeeProfileIdentityBanner from "../../components/EmployeeProfileIdentityBanner";
 import { downloadPayslipPDF } from "../../utils/payslipPdfGenerator";
 import { useAttendance } from "../../context/AttendanceContext";
+
+// Stable reference fallback for zero re-render allocations
+const EMPTY_ARRAY = [];
+
+// Pure date formatting helper declared at module scope
+const formatDate = (dateString) => {
+  if (!dateString) return "N/A";
+  try {
+    const date = new Date(dateString);
+    return date.toLocaleDateString("en-GH", {
+      year: "numeric",
+      month: "short",
+      day: "numeric",
+    });
+  } catch {
+    return dateString;
+  }
+};
+
+// Pure month formatting helper declared at module scope
+const formatMonth = (monthString) => {
+  if (!monthString) return "Current Month";
+  try {
+    if (monthString.includes("-")) {
+      const [year, month] = monthString.split("-");
+      const date = new Date(parseInt(year, 10), parseInt(month, 10) - 1);
+      return date.toLocaleDateString("en-GH", {
+        year: "numeric",
+        month: "long",
+      });
+    }
+    return monthString;
+  } catch {
+    return monthString;
+  }
+};
+
+// Pure status styling helper declared at module scope
+const getStatusColor = (status) => {
+  const s = String(status || "").toLowerCase();
+  switch (s) {
+    case "approved":
+    case "paid":
+    case "published":
+    case "present":
+    case "on time":
+    case "ontime":
+      return "bg-emerald-50 dark:bg-emerald-950/40 text-emerald-700 dark:text-emerald-300 border border-emerald-200 dark:border-emerald-800/60";
+    case "pending":
+    case "pending management review":
+      return "bg-amber-50 dark:bg-amber-950/40 text-amber-700 dark:text-amber-300 border border-amber-200 dark:border-amber-800/60";
+    case "rejected":
+    case "absent":
+      return "bg-rose-50 dark:bg-rose-950/40 text-rose-700 dark:text-rose-300 border border-rose-200 dark:border-rose-800/60";
+    case "late":
+      return "bg-orange-50 dark:bg-orange-950/40 text-orange-700 dark:text-orange-300 border border-orange-200 dark:border-orange-800/60";
+    default:
+      return "bg-slate-100 dark:bg-[#162033] text-slate-600 dark:text-slate-300 border border-slate-200 dark:border-slate-700/60";
+  }
+};
 
 const EmployeeDashboard = () => {
   const [dashboardData, setDashboardData] = useState(null);
@@ -82,32 +143,44 @@ const EmployeeDashboard = () => {
           }
         }
 
-        if (resolvedEmployee) {
-          const mergedEmployee = {
-            ...(user || {}),
-            ...resolvedEmployee,
-            avatar:
-              resolvedEmployee.avatar ||
-              resolvedEmployee.avatarUrl ||
-              resolvedEmployee.profilePicture ||
-              resolvedEmployee.profile_image_url ||
-              user?.avatar ||
-              user?.avatarUrl ||
-              user?.profilePicture ||
-              "",
-            profilePicture:
-              resolvedEmployee.profilePicture ||
-              resolvedEmployee.avatar ||
-              user?.profilePicture ||
-              user?.avatar ||
-              "",
-          };
-          if (typeof setUser === "function") {
-            setUser(mergedEmployee);
-          }
+        if (resolvedEmployee && typeof setUser === "function") {
+          setUser((prevUser) => {
+            const mergedEmployee = {
+              ...(prevUser || {}),
+              ...resolvedEmployee,
+              avatar:
+                resolvedEmployee.avatar ||
+                resolvedEmployee.avatarUrl ||
+                resolvedEmployee.profilePicture ||
+                resolvedEmployee.profile_image_url ||
+                prevUser?.avatar ||
+                prevUser?.avatarUrl ||
+                prevUser?.profilePicture ||
+                "",
+              profilePicture:
+                resolvedEmployee.profilePicture ||
+                resolvedEmployee.avatar ||
+                prevUser?.profilePicture ||
+                prevUser?.avatar ||
+                "",
+            };
+
+            // Avoid triggering context re-render cascade if identity fields are identical
+            if (
+              prevUser &&
+              prevUser._id === mergedEmployee._id &&
+              prevUser.fullName === mergedEmployee.fullName &&
+              prevUser.avatar === mergedEmployee.avatar &&
+              prevUser.role === mergedEmployee.role &&
+              prevUser.status === mergedEmployee.status
+            ) {
+              return prevUser;
+            }
+            return mergedEmployee;
+          });
         }
 
-        if (data.todayAttendance) {
+        if (data.todayAttendance && typeof updateTodayRecord === "function") {
           updateTodayRecord(data.todayAttendance);
         }
       } else {
@@ -132,7 +205,13 @@ const EmployeeDashboard = () => {
     } finally {
       setIsLoading(false);
     }
-  }, [setUser, setShowToast]);
+  }, [setUser, setShowToast, updateTodayRecord]);
+
+  // Stable refs for background timer watchdogs
+  const contextRefreshRef = useRef(contextRefreshAttendance);
+  contextRefreshRef.current = contextRefreshAttendance;
+  const fetchDashboardDataRef = useRef(fetchEmployeeDashboardData);
+  fetchDashboardDataRef.current = fetchEmployeeDashboardData;
 
   // Automated 12:00 AM (Midnight) Workday Reset & Rollover Timer
   useEffect(() => {
@@ -149,10 +228,12 @@ const EmployeeDashboard = () => {
 
     const timer = setTimeout(() => {
       console.log("[EmployeeDashboard] Midnight boundary reached: refreshing attendance status...");
-      if (contextRefreshAttendance) {
-        contextRefreshAttendance(false);
+      if (contextRefreshRef.current) {
+        contextRefreshRef.current(false);
       }
-      fetchEmployeeDashboardData();
+      if (fetchDashboardDataRef.current) {
+        fetchDashboardDataRef.current();
+      }
     }, msUntilMidnight);
 
     // Watchdog check for date rollover (e.g. system wake)
@@ -162,10 +243,12 @@ const EmployeeDashboard = () => {
       if (currentDate !== lastDate) {
         lastDate = currentDate;
         console.log("[EmployeeDashboard] Date rollover watchdog triggered:", currentDate);
-        if (contextRefreshAttendance) {
-          contextRefreshAttendance(false);
+        if (contextRefreshRef.current) {
+          contextRefreshRef.current(false);
         }
-        fetchEmployeeDashboardData();
+        if (fetchDashboardDataRef.current) {
+          fetchDashboardDataRef.current();
+        }
       }
     }, 20000);
 
@@ -173,14 +256,16 @@ const EmployeeDashboard = () => {
       clearTimeout(timer);
       clearInterval(watchdog);
     };
-  }, [todayRecord, contextRefreshAttendance]);
+  }, []);
 
   // Manual Sync Attendance & Re-evaluate lateness penalty logs
-  const handleSyncAttendance = async () => {
+  const handleSyncAttendance = useCallback(async () => {
     try {
       setIsSyncingAttendance(true);
       const { data } = await syncAttendance();
-      await contextRefreshAttendance();
+      if (contextRefreshRef.current) {
+        await contextRefreshRef.current();
+      }
       if (data && data.success) {
         setShowToast({
           show: true,
@@ -211,10 +296,10 @@ const EmployeeDashboard = () => {
     } finally {
       setIsSyncingAttendance(false);
     }
-  };
+  }, [fetchEmployeeDashboardData, setShowToast]);
 
   // Clock In Function via centralized AttendanceContext
-  const handleClockIn = async (reasonParam = "") => {
+  const handleClockIn = useCallback(async (reasonParam = "") => {
     try {
       setIsLoading(true);
       setIsError(null);
@@ -253,10 +338,10 @@ const EmployeeDashboard = () => {
     } finally {
       setIsLoading(false);
     }
-  };
+  }, [contextClockIn, fetchEmployeeDashboardData, setShowToast]);
 
   // Clock Out Function via centralized AttendanceContext
-  const handleClockOut = async (reason = "") => {
+  const handleClockOut = useCallback(async (reason = "") => {
     try {
       setIsLoading(true);
       setIsError(null);
@@ -282,7 +367,7 @@ const EmployeeDashboard = () => {
     } finally {
       setIsLoading(false);
     }
-  };
+  }, [contextClockOut, fetchEmployeeDashboardData, setShowToast]);
 
   useEffect(() => {
     fetchEmployeeDashboardData();
@@ -310,61 +395,10 @@ const EmployeeDashboard = () => {
     };
   }, [fetchEmployeeDashboardData]);
 
-  // Format date
-  const formatDate = (dateString) => {
-    if (!dateString) return "N/A";
-    try {
-      const date = new Date(dateString);
-      return date.toLocaleDateString("en-GH", {
-        year: "numeric",
-        month: "short",
-        day: "numeric",
-      });
-    } catch {
-      return dateString;
-    }
-  };
-
-  // Format month
-  const formatMonth = (monthString) => {
-    if (!monthString) return "Current Month";
-    try {
-      if (monthString.includes("-")) {
-        const [year, month] = monthString.split("-");
-        const date = new Date(parseInt(year), parseInt(month) - 1);
-        return date.toLocaleDateString("en-GH", {
-          year: "numeric",
-          month: "long",
-        });
-      }
-      return monthString;
-    } catch {
-      return monthString;
-    }
-  };
-
-  const getStatusColor = (status) => {
-    const s = String(status || "").toLowerCase();
-    switch (s) {
-      case "approved":
-      case "paid":
-      case "published":
-      case "present":
-      case "on time":
-      case "ontime":
-        return "bg-emerald-50 dark:bg-emerald-950/40 text-emerald-700 dark:text-emerald-300 border border-emerald-200 dark:border-emerald-800/60";
-      case "pending":
-      case "pending management review":
-        return "bg-amber-50 dark:bg-amber-950/40 text-amber-700 dark:text-amber-300 border border-amber-200 dark:border-amber-800/60";
-      case "rejected":
-      case "absent":
-        return "bg-rose-50 dark:bg-rose-950/40 text-rose-700 dark:text-rose-300 border border-rose-200 dark:border-rose-800/60";
-      case "late":
-        return "bg-orange-50 dark:bg-orange-950/40 text-orange-700 dark:text-orange-300 border border-orange-200 dark:border-orange-800/60";
-      default:
-        return "bg-slate-100 dark:bg-[#162033] text-slate-600 dark:text-slate-300 border border-slate-200 dark:border-slate-700/60";
-    }
-  };
+  const handleNavigateToLeave = useCallback(() => {
+    navigate("/employee/dashboard/leave");
+    window.scrollTo({ top: 0, behavior: "smooth" });
+  }, [navigate]);
 
   if (isLoading && !dashboardData) {
     return <Loading />;
@@ -391,7 +425,7 @@ const EmployeeDashboard = () => {
   // Extract data from API response
   const employee = dashboardData.employee || {};
   const overview = dashboardData.overview || {};
-  const recentLeaves = dashboardData.recentLeaves || [];
+  const recentLeaves = dashboardData.recentLeaves || EMPTY_ARRAY;
 
   // Get latest payslip and privacy state from overview
   const latestPayslip = overview.latestPayslip || {};
@@ -400,36 +434,8 @@ const EmployeeDashboard = () => {
     (latestPayslip.status && ["paid", "published"].includes(String(latestPayslip.status).toLowerCase()))
   );
 
-  // Database-bound account status ('active', 'inactive', 'suspended')
-  const currentStatus = (
-    employee?.status ||
-    user?.status ||
-    (employee?.isActive !== false ? "active" : "inactive")
-  ).toLowerCase().trim();
-
-  const getAccountStatusBadge = (status) => {
-    switch (status) {
-      case "active":
-        return {
-          label: "Active",
-          className: "bg-emerald-50 dark:bg-emerald-950/40 text-emerald-700 dark:text-emerald-300 border border-emerald-200 dark:border-emerald-800/60",
-          dotColor: "bg-emerald-600 dark:bg-emerald-400",
-        };
-      case "suspended":
-        return {
-          label: "Suspended",
-          className: "bg-rose-50 dark:bg-rose-950/40 text-rose-700 dark:text-rose-300 border border-rose-200 dark:border-rose-800/60",
-          dotColor: "bg-rose-600 dark:bg-rose-400",
-        };
-      case "inactive":
-      default:
-        return {
-          label: "Inactive",
-          className: "bg-slate-100 dark:bg-[#162033] text-slate-600 dark:text-slate-400 border border-slate-200 dark:border-slate-700/60",
-          dotColor: "bg-slate-500",
-        };
-    }
-  };
+  // Stable attendance logs reference to avoid re-rendering heavy child charts
+  const attendanceLogs = dashboardData.attendanceRecords || dashboardData.attendanceLogs || EMPTY_ARRAY;
 
   // Calculate total days
   const totalDays =
@@ -437,53 +443,48 @@ const EmployeeDashboard = () => {
       ? overview.totalDays
       : (overview.presentDays || 0) + (overview.absentDays || 0);
 
-  // Check if user has clocked in today
+  // Precompute today shift status with useMemo to maintain 60FPS
   const todayStr = new Date().toISOString().split("T")[0];
   const isTodayRecord = Boolean(!attendanceData?.date || attendanceData.date === todayStr);
-  const hasClockedIn = isTodayRecord && Boolean(attendanceData.clockIn || attendanceData.clockInTime);
-  const hasClockedOut = isTodayRecord && Boolean(attendanceData.clockOut || attendanceData.clockOutTime);
-  const isActiveShift = hasClockedIn && !hasClockedOut;
+  const hasClockedIn = isTodayRecord && Boolean(attendanceData?.clockIn || attendanceData?.clockInTime);
+  const hasClockedOut = isTodayRecord && Boolean(attendanceData?.clockOut || attendanceData?.clockOutTime);
 
-  // Shift status label & description with indicator icon
-  const getShiftStatusInfo = () => {
-    if (hasClockedOut) {
-      return {
-        label: "Clocked Out",
-        desc: `Logged ${Number(attendanceData.workHours || 0).toFixed(1)} hrs today`,
-        accent: "#002185",
-        statusBadge: "bg-[#F1F3F6] text-[#51606F]",
-        icon: CheckCircle2,
-      };
-    }
-    if (hasClockedIn) {
-      const isLate =
-        attendanceData.status === "Late" ||
-        attendanceData.status === "late" ||
-        Number(attendanceData.delayMinutes || attendanceData.lateMinutes || 0) > 0;
-      const timeStr = new Date(attendanceData.clockIn).toLocaleTimeString([], {
+  const isLateShift =
+    hasClockedIn &&
+    (attendanceData?.status === "Late" ||
+      attendanceData?.status === "late" ||
+      Number(attendanceData?.delayMinutes || attendanceData?.lateMinutes || 0) > 0);
+
+  let clockInTimeStr = "";
+  if (hasClockedIn && attendanceData?.clockIn) {
+    try {
+      clockInTimeStr = new Date(attendanceData.clockIn).toLocaleTimeString([], {
         hour: "2-digit",
         minute: "2-digit",
       });
-      return {
-        label: isLate ? "Late Shift" : "Active Shift",
-        desc: `In: ${timeStr} · ${isLate ? "Delay recorded" : "On schedule"}`,
-        accent: isLate ? "#C24A0A" : "#0F7A47",
-        statusBadge: isLate
-          ? "bg-[#FFF0E6] text-[#C24A0A]"
-          : "bg-[#ECFDF5] text-[#0F7A47]",
-        icon: isLate ? AlertTriangle : CheckCircle2,
-      };
+    } catch {
+      clockInTimeStr = "";
     }
-    return {
-      label: "Not Clocked In",
-      desc: "Awaiting today's shift clock-in",
-      accent: "#51606F",
-      statusBadge: "bg-[#F1F3F6] text-[#51606F]",
-      icon: Clock,
-    };
-  };
+  }
 
-  const shiftInfo = getShiftStatusInfo();
+  // Shift status label & description with indicator icon
+  const shiftInfo = hasClockedOut
+    ? {
+        label: "Clocked Out",
+        desc: `Logged ${Number(attendanceData?.workHours || 0).toFixed(1)} hrs today`,
+        icon: CheckCircle2,
+      }
+    : hasClockedIn
+    ? {
+        label: isLateShift ? "Late Shift" : "Active Shift",
+        desc: `In: ${clockInTimeStr} · ${isLateShift ? "Delay recorded" : "On schedule"}`,
+        icon: isLateShift ? AlertTriangle : CheckCircle2,
+      }
+    : {
+        label: "Not Clocked In",
+        desc: "Awaiting today's shift clock-in",
+        icon: Clock,
+      };
 
   // 4 Standard Daily Metric Cards (Strictly Privacy Protected - Zero Salary Projections)
   const statsCards = [
@@ -492,28 +493,24 @@ const EmployeeDashboard = () => {
       value: shiftInfo.label,
       icon: shiftInfo.icon,
       description: shiftInfo.desc,
-      accent: shiftInfo.accent,
     },
     {
       title: "Hours Logged",
-      value: `${Number(attendanceData.workHours || 0).toFixed(1)} hrs`,
+      value: `${Number(attendanceData?.workHours || 0).toFixed(1)} hrs`,
       icon: UserCheck,
       description: `${overview.presentDays || 0} shifts recorded this cycle`,
-      accent: "#002185",
     },
     {
       title: "Leave Balance",
       value: `${overview.remainingLeaveDays !== undefined ? overview.remainingLeaveDays : overview.leaveBalance || 0} days`,
       icon: CalendarDays,
       description: `${overview.usedLeaveDays || 0} used of ${overview.totalLeaveDays || 15} days`,
-      accent: "#0F7A47",
     },
     {
       title: "Announcements",
       value: "Active",
       icon: Megaphone,
       description: "Company bulletins & notices",
-      accent: "#C24A0A",
     },
   ];
 
@@ -619,8 +616,10 @@ const EmployeeDashboard = () => {
           hasClockedIn={hasClockedIn}
           hasClockedOut={hasClockedOut}
           isLoading={isLoading}
+          isSyncing={isSyncingAttendance}
           onClockIn={handleClockIn}
           onRefresh={handleSyncAttendance}
+          workStartTime={settings?.workStartTime || settings?.attendance?.workStartTime || "08:00"}
           user={employee?._id ? employee : user}
           userName={employee?.fullName || user?.fullName || employee?.name || user?.name}
         />
@@ -666,14 +665,14 @@ const EmployeeDashboard = () => {
 
         {/* Interactive Weekly Attendance & Shift Performance Chart (Recharts) */}
         <WeeklyAttendanceChart
-          attendanceLogs={dashboardData?.attendanceRecords || dashboardData?.attendanceLogs || []}
+          attendanceLogs={attendanceLogs}
           title="Weekly Attendance & Shift Performance"
           subtitle="Monitor weekly attendance patterns and total hours worked against shift requirements"
         />
 
         {/* Visual Monthly Attendance Calendar Component (Present, Late, Absent at a glance) */}
         <MonthlyAttendanceCalendarCard
-          attendanceLogs={dashboardData?.attendanceRecords || dashboardData?.attendanceLogs || []}
+          attendanceLogs={attendanceLogs}
           employeeId={user?._id || user?.id}
           role="employee"
           title="My Monthly Attendance Calendar"
@@ -759,10 +758,7 @@ const EmployeeDashboard = () => {
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
           {/* Dynamic Leave Type Distribution Chart */}
           <EmployeeLeaveChart
-            onApplyLeave={() => {
-              navigate("/employee/dashboard/leave");
-              window.scrollTo({ top: 0, behavior: "smooth" });
-            }}
+            onApplyLeave={handleNavigateToLeave}
           />
 
           {/* Recent Leave Requests */}
