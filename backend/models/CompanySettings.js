@@ -55,10 +55,40 @@ const companySettingsSchema = new mongoose.Schema(
       trim: true,
       default: "admin@company.com",
     },
+    companyEmail: {
+      type: String,
+      trim: true,
+      default: "",
+    },
     contactPhone: {
       type: String,
       trim: true,
       default: "",
+    },
+    companyPhone: {
+      type: String,
+      trim: true,
+      default: "",
+    },
+    companyAddress: {
+      type: String,
+      trim: true,
+      default: "",
+    },
+    address: {
+      type: String,
+      trim: true,
+      default: "",
+    },
+    industry: {
+      type: String,
+      trim: true,
+      default: "Technology",
+    },
+    numberOfEmployees: {
+      type: String,
+      trim: true,
+      default: "11-50",
     },
     isConfigured: {
       type: Boolean,
@@ -186,6 +216,8 @@ companySettingsSchema.statics.getSingletonSettings = async function () {
 export const CompanySettings =
   mongoose.models.CompanySettings ||
   mongoose.model("CompanySettings", companySettingsSchema);
+
+export const Organization = CompanySettings;
 
 export default CompanySettings;
 

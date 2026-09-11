@@ -6,7 +6,6 @@ import {
   Eye,
   EyeOff,
   ArrowLeft,
-  Loader2,
   AlertCircle,
   Sparkles,
   UserCheck,
@@ -17,6 +16,7 @@ import { useManagement } from "../../context/ManagementContextProvider";
 import { useAuth } from "../../context/AuthContext";
 import { useAttendance } from "../../context/AttendanceContext";
 import { useCompanyBranding } from "../../hooks/useCompanyBranding";
+import { MotionSpinner } from "../../components/ui/MotionSpinner";
 
 export const EmployeeLoginPage = () => {
   const navigate = useNavigate();
@@ -308,7 +308,7 @@ export const EmployeeLoginPage = () => {
             >
               {isLoading ? (
                 <>
-                  <Loader2 className="w-4 h-4 animate-spin" />
+                  <MotionSpinner size="sm" className="text-white" />
                   <span>Signing In...</span>
                 </>
               ) : (

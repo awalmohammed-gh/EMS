@@ -21,7 +21,12 @@ const adminSchema = new mongoose.Schema(
     role: {
       type: String,
       default: "admin",
-      enum: ["admin", "super_admin"],
+      enum: ["admin", "super_admin", "manager"],
+    },
+    organizationId: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: "CompanySettings",
+      default: null,
     },
     profile_image_url: {
       type: String,

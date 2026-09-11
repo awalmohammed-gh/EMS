@@ -5,6 +5,7 @@ import { Admin } from "../models/Admin.js";
 import { Employee } from "../models/employeeModel.js";
 import { User } from "../models/userModel.js";
 import { Attendance } from "../models/attendanceModel.js";
+import { CompanySettings, Organization } from "../models/CompanySettings.js";
 import { liveAttendanceStore, autoCloseUnfinishedShifts } from "./employeeAttendance.js";
 
 const getJwtSecret = () => process.env.JWT_SECRET || "default_jwt_secret_key_12345";
@@ -331,88 +332,231 @@ export const adminRegister = async (req, res) => {
 };
 
 /**
+ * Helper to issue HTTP-only cookies and return user session profile
+ */
+export const sendTokenResponse = (user, statusCode = 200, res, req = null) => {
+  const token = generateAuthToken({
+    id: user._id ? user._id.toString() : user.id,
+    userId: user._id ? user._id.toString() : user.id,
+    email: user.email,
+    role: user.role || "admin",
+    fullName: user.fullName || user.full_name || user.name || "Administrator",
+  });
+
+  const isHttps =
+    (req && (req.secure || req.headers["x-forwarded-proto"] === "https")) ||
+    process.env.NODE_ENV === "production";
+
+  const cookieOptions = {
+    httpOnly: true,
+    secure: isHttps,
+    sameSite: isHttps ? "none" : "lax",
+    maxAge: 7 * 24 * 60 * 60 * 1000,
+    path: "/",
+  };
+
+  res.cookie("auth_token", token, cookieOptions);
+  res.cookie("token", token, cookieOptions);
+
+  const safeProfile = {
+    _id: user._id ? user._id.toString() : user.id,
+    id: user._id ? user._id.toString() : user.id,
+    name: user.fullName || user.full_name || user.name || "Administrator",
+    fullName: user.fullName || user.full_name || user.name || "Administrator",
+    full_name: user.full_name || user.fullName || user.name || "Administrator",
+    email: user.email,
+    role: user.role || "admin",
+    department: user.department || "Executive Management",
+    position:
+      user.position ||
+      (user.role === "manager"
+        ? "Manager"
+        : user.role === "super_admin"
+        ? "Super Admin"
+        : "Administrator"),
+    avatar: user.avatar || user.avatarUrl || user.profile_image_url || "",
+    profile_image_url: user.profile_image_url || user.avatar || "",
+  };
+
+  return res.status(statusCode).json({
+    success: true,
+    token,
+    message: "Management login successful.",
+    user: safeProfile,
+    admin: safeProfile,
+  });
+};
+
+/**
  * POST /api/auth/admin/login
- * Admin Login: verifies credentials against MongoDB database
+ * Dual-Identifier Management Sign-In:
+ * Administrators can authenticate using EITHER their personal admin/manager email
+ * OR the registered Organization Company Email along with their password.
  */
 export const adminLogin = async (req, res) => {
   try {
-    const { email, password } = req.body;
+    const { identifier, email, password } = req.body;
+    const loginEmail = (identifier || email || "").toLowerCase().trim();
 
-    if (!email || !password) {
+    if (!loginEmail || !password) {
       return res.status(400).json({
         success: false,
-        message: "Email and password are required.",
+        message: "Please provide your email address and password.",
       });
     }
 
-    const cleanEmail = email.toLowerCase().trim();
+    // 1. Look up the user by their personal email first (in User or Admin models)
+    let user = await User.findOne({ email: loginEmail });
+    let dbAdmin = null;
 
-    // 1. Query database for Admin user
-    const dbAdmin = await Admin.findOne({ email: cleanEmail });
+    if (!user) {
+      dbAdmin = await Admin.findOne({ email: loginEmail });
+    }
 
-    if (!dbAdmin || !dbAdmin.password_hash) {
+    // 2. Fallback: If no match is found, look up the organization by the identifier and find the associated primary manager/admin
+    if (!user && !dbAdmin) {
+      const matchingCompany = await CompanySettings.findOne({
+        $or: [
+          { companyEmail: loginEmail },
+          { contactEmail: loginEmail },
+          { email: loginEmail },
+          { slug: loginEmail },
+          { companyName: new RegExp(`^${loginEmail}$`, "i") },
+        ],
+      });
+
+      if (matchingCompany) {
+        // Find the associated primary manager/admin
+        if (matchingCompany._id) {
+          user = await User.findOne({
+            organizationId: matchingCompany._id,
+            role: { $in: ["admin", "manager", "super_admin"] },
+          });
+        }
+        if (!user) {
+          user = await User.findOne({
+            role: { $in: ["admin", "manager", "super_admin"] },
+          });
+        }
+        if (!user) {
+          dbAdmin = await Admin.findOne({
+            role: { $in: ["admin", "super_admin"] },
+          });
+        }
+      }
+    }
+
+    if (!user && !dbAdmin) {
+      // Intercept employee credentials attempting to log in via management portal
+      const emp = await Employee.findOne({
+        $or: [{ email: loginEmail }, { employeeId: (identifier || email || "").trim() }],
+      });
+      if (emp && emp.password) {
+        const isEmpMatch = await bcrypt.compare(password, emp.password);
+        if (isEmpMatch) {
+          return res.status(403).json({
+            success: false,
+            message: "Access restricted. Only Managers and Administrators may log in through this portal.",
+          });
+        }
+      }
+
       return res.status(401).json({
         success: false,
-        message: "Invalid admin email or password credentials.",
+        message: "Invalid credentials. No administrator account found matching this email.",
       });
     }
 
-    // 2. Compare password hash using bcrypt
-    const isPasswordValid = await bcrypt.compare(password, dbAdmin.password_hash);
-    if (!isPasswordValid) {
-      return res.status(401).json({
-        success: false,
-        message: "Invalid admin email or password credentials.",
-      });
-    }
-
-    // 3. Generate real JWT session token
-    const token = generateAuthToken({
+    // Unify matched target account
+    const targetAccount = user || {
+      _id: dbAdmin._id,
       id: dbAdmin._id.toString(),
+      fullName: dbAdmin.full_name || dbAdmin.fullName || "Administrator",
+      full_name: dbAdmin.full_name || dbAdmin.fullName || "Administrator",
       email: dbAdmin.email,
       role: dbAdmin.role || "admin",
-      fullName: dbAdmin.full_name,
-    });
+      password: dbAdmin.password_hash,
+      organizationId: dbAdmin.organizationId,
+      profile_image_url: dbAdmin.profile_image_url || "",
+      avatar: dbAdmin.avatar || "",
+      department: dbAdmin.department || "Executive Management",
+      position: dbAdmin.position || (dbAdmin.role === "manager" ? "Manager" : "Administrator"),
+    };
 
-    const isHttps = req.secure || req.headers["x-forwarded-proto"] === "https" || process.env.NODE_ENV === "production";
+    // Role safety gate
+    if (targetAccount.role !== "admin" && targetAccount.role !== "manager" && targetAccount.role !== "super_admin") {
+      return res.status(403).json({
+        success: false,
+        message: "Access restricted. Only Managers and Administrators may log in through this portal.",
+      });
+    }
+
+    // Password verification
+    const accountPassword = targetAccount.password || targetAccount.password_hash;
+    const isMatch = await bcrypt.compare(password, accountPassword);
+    if (!isMatch) {
+      return res.status(401).json({
+        success: false,
+        message: "Invalid credentials. Please verify your password.",
+      });
+    }
+
+    // Issue secure HTTP-only cookie and return session profile
+    const token = jwt.sign(
+      {
+        id: (targetAccount._id || targetAccount.id).toString(),
+        userId: (targetAccount._id || targetAccount.id).toString(),
+        role: targetAccount.role,
+        organizationId: targetAccount.organizationId,
+        email: targetAccount.email,
+        fullName: targetAccount.fullName || targetAccount.full_name || "Administrator",
+      },
+      getJwtSecret(),
+      { expiresIn: "7d" }
+    );
+
+    const isHttps =
+      (req && (req.secure || req.headers["x-forwarded-proto"] === "https")) ||
+      process.env.NODE_ENV === "production";
+
+    const remember = Boolean(req.body.rememberMe || req.body.rememberDevice);
     const cookieOptions = {
       httpOnly: true,
       secure: isHttps,
       sameSite: isHttps ? "none" : "lax",
-      maxAge: 7 * 24 * 60 * 60 * 1000,
+      maxAge: remember ? 30 * 24 * 60 * 60 * 1000 : 7 * 24 * 60 * 60 * 1000,
       path: "/",
     };
 
-    // 4. Set HTTP-only Cookies
     res.cookie("auth_token", token, cookieOptions);
     res.cookie("token", token, cookieOptions);
 
-    const safeAdmin = {
-      _id: dbAdmin._id.toString(),
-      id: dbAdmin._id.toString(),
-      name: dbAdmin.full_name,
-      fullName: dbAdmin.full_name,
-      full_name: dbAdmin.full_name,
-      email: dbAdmin.email,
-      role: dbAdmin.role || "admin",
-      department: "Executive Management",
-      position: dbAdmin.role === "super_admin" ? "Super Admin" : "Administrator",
-      avatar: dbAdmin.profile_image_url || "",
-      profile_image_url: dbAdmin.profile_image_url || "",
+    const safeProfile = {
+      _id: (targetAccount._id || targetAccount.id).toString(),
+      id: (targetAccount._id || targetAccount.id).toString(),
+      name: targetAccount.fullName || targetAccount.full_name || "Administrator",
+      fullName: targetAccount.fullName || targetAccount.full_name || "Administrator",
+      email: targetAccount.email,
+      role: targetAccount.role,
+      department: targetAccount.department || "Executive Management",
+      position: targetAccount.position || (targetAccount.role === "manager" ? "Manager" : "Administrator"),
+      avatar: targetAccount.avatar || targetAccount.profile_image_url || "",
+      organizationId: targetAccount.organizationId,
     };
 
     return res.status(200).json({
       success: true,
       token,
-      message: "Admin login successful.",
-      user: safeAdmin,
-      admin: safeAdmin,
+      message: "Management login successful.",
+      user: safeProfile,
+      admin: safeProfile,
     });
   } catch (error) {
     console.error("Admin login error:", error);
     return res.status(500).json({
       success: false,
-      message: error.message || "Internal server error during admin login.",
+      message: "Server error during authentication.",
+      error: error.message,
     });
   }
 };

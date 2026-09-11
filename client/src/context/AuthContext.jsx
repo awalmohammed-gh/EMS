@@ -89,8 +89,8 @@ export const AuthProvider = ({ children }) => {
     }
   };
 
-  // Logout handler clearing cookies and local tokens
-  const logout = async () => {
+  // Logout handler clearing cookies, local tokens, and redirecting strictly to /welcome
+  const logout = async (redirectTarget = "/welcome") => {
     try {
       await api.post("/auth/logout").catch(() => {});
       if (user?.role === "admin") {
@@ -103,6 +103,19 @@ export const AuthProvider = ({ children }) => {
     } finally {
       apiService.clearToken();
       setUser(null);
+      // Strict Redirection: Do NOT redirect to generic root landing page (/#/).
+      // Redirect directly to the organization's Welcome Gateway (/#/welcome),
+      // preserving company logo, dynamic background image, and portal choice buttons.
+      if (typeof window !== "undefined" && redirectTarget) {
+        const hashTarget = redirectTarget.startsWith("#")
+          ? redirectTarget
+          : redirectTarget.startsWith("/")
+          ? `#${redirectTarget}`
+          : `/#/${redirectTarget}`;
+        if (window.location.hash !== hashTarget) {
+          window.location.hash = hashTarget;
+        }
+      }
     }
   };
 

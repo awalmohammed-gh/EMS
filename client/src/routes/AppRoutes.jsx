@@ -1,9 +1,9 @@
 import { Routes, Route, Navigate } from "react-router-dom";
 import EmployeeLoginPage from "../pages/Auth/EmployeeLoginPage";
-import AdminLoginPage from "../pages/Auth/AdminLoginPage";
-import AdminRegister from "../pages/Auth/AdminRegister";
-import SetupCompanyPage from "../pages/Auth/SetupCompanyPage";
-import WelcomePage from "../pages/WelcomePage";
+import ManagementLoginPage from "../pages/Auth/ManagementLoginPage";
+import RegisterOrganizationPage from "../pages/Auth/RegisterOrganizationPage";
+import WelcomePortalsPage from "../pages/WelcomePortalsPage";
+import LandingPage from "../pages/LandingPage";
 import ProtectedRoute from "./ProtectedRoute";
 import OnboardingGate from "./OnboardingGate";
 import AdminLayout from "../layout/AdminLayout";
@@ -29,12 +29,20 @@ import EmployeeSettings from "../pages/Employees/EmployeeSettings";
 export const AppRoutes = () => {
   return (
     <Routes>
-      {/* Initial Setup & Onboarding Wizard Route */}
+      {/* Organization Registration Routes */}
+      <Route
+        path="/register-organization"
+        element={
+          <OnboardingGate>
+            <RegisterOrganizationPage />
+          </OnboardingGate>
+        }
+      />
       <Route
         path="/setup"
         element={
           <OnboardingGate>
-            <SetupCompanyPage />
+            <RegisterOrganizationPage />
           </OnboardingGate>
         }
       />
@@ -42,7 +50,7 @@ export const AppRoutes = () => {
         path="/setup-company"
         element={
           <OnboardingGate>
-            <SetupCompanyPage />
+            <RegisterOrganizationPage />
           </OnboardingGate>
         }
       />
@@ -50,18 +58,41 @@ export const AppRoutes = () => {
         path="/setup-admin"
         element={
           <OnboardingGate>
-            <SetupCompanyPage />
+            <RegisterOrganizationPage />
           </OnboardingGate>
         }
       />
 
       {/* Public Landing */}
-      <Route path="/" element={<Navigate to="/welcome" replace />} />
+      <Route
+        path="/"
+        element={
+          <OnboardingGate>
+            <LandingPage />
+          </OnboardingGate>
+        }
+      />
+      <Route
+        path="/landing"
+        element={
+          <OnboardingGate>
+            <LandingPage />
+          </OnboardingGate>
+        }
+      />
       <Route
         path="/welcome"
         element={
           <OnboardingGate>
-            <WelcomePage />
+            <WelcomePortalsPage />
+          </OnboardingGate>
+        }
+      />
+      <Route
+        path="/:orgSlug/welcome"
+        element={
+          <OnboardingGate>
+            <WelcomePortalsPage />
           </OnboardingGate>
         }
       />
@@ -89,7 +120,15 @@ export const AppRoutes = () => {
         path="/admin/login"
         element={
           <OnboardingGate>
-            <AdminLoginPage />
+            <ManagementLoginPage />
+          </OnboardingGate>
+        }
+      />
+      <Route
+        path="/management/login"
+        element={
+          <OnboardingGate>
+            <ManagementLoginPage />
           </OnboardingGate>
         }
       />
@@ -98,11 +137,11 @@ export const AppRoutes = () => {
         path="/admin/register"
         element={
           <OnboardingGate>
-            <AdminRegister />
+            <RegisterOrganizationPage />
           </OnboardingGate>
         }
       />
-      <Route path="/register/admin" element={<Navigate to="/admin/register" replace />} />
+      <Route path="/register/admin" element={<Navigate to="/register-organization" replace />} />
 
       {/* Admin Protected Routes */}
       <Route element={<ProtectedRoute allowRole="admin" />}>

@@ -28,6 +28,12 @@ const userSchema = new mongoose.Schema(
       default: "employee",
     },
 
+    organizationId: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: "CompanySettings",
+      default: null,
+    },
+
     status: {
       type: String,
       enum: ["active", "inactive", "suspended", "on leave", "on-leave", "terminated"],

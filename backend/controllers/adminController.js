@@ -12,6 +12,7 @@ import { AuditLog } from "../models/AuditLog.js";
 import { User } from "../models/userModel.js";
 import { livePayrollStore } from "./payrollController.js";
 import { liveLeaveStore } from "./leaveController.js";
+import { CompanySettings } from "../models/CompanySettings.js";
 
 // Function for creating admin account (Admin-only restricted)
 export const createAdminAccount = async (req, res) => {
@@ -90,70 +91,134 @@ export const createAdminAccount = async (req, res) => {
 
 export const adminLogin = async (req, res) => {
   try {
-    const { email, password } = req.body;
+    const { identifier, email, password, rememberMe, rememberDevice } = req.body;
+    const inputIdentifier = (identifier || email || "").trim();
 
-    if (!email || !password) {
+    if (!inputIdentifier || !password) {
       return res.status(400).json({
         success: false,
-        message: "All fields are required.",
+        message: "Please provide your email address or company identifier and password.",
       });
     }
 
-    const cleanEmail = email.toLowerCase().trim();
+    const cleanIdentifier = inputIdentifier.toLowerCase();
     const jwtSecret = process.env.JWT_SECRET || "default_jwt_secret_key_12345";
-    let authenticatedAdmin = null;
 
-    // 1. Check MongoDB Admin collection
-    const dbAdmin = await Admin.findOne({ email: cleanEmail });
-    if (!dbAdmin || !dbAdmin.password_hash) {
+    // 1. First look up the user by personal email (in User or Admin collections)
+    let user = await User.findOne({ email: cleanIdentifier });
+    let dbAdmin = null;
+
+    if (!user) {
+      dbAdmin = await Admin.findOne({ email: cleanIdentifier });
+    }
+
+    // 2. Fallback: If no match is found, look up the organization by the identifier and find the associated primary manager/admin
+    if (!user && !dbAdmin) {
+      const matchingCompany = await CompanySettings.findOne({
+        $or: [
+          { companyEmail: cleanIdentifier },
+          { contactEmail: cleanIdentifier },
+          { email: cleanIdentifier },
+          { slug: cleanIdentifier },
+          { companyName: new RegExp(`^${cleanIdentifier.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}$`, "i") },
+        ],
+      });
+
+      if (matchingCompany) {
+        if (matchingCompany._id) {
+          user = await User.findOne({
+            organizationId: matchingCompany._id,
+            role: { $in: ["admin", "manager", "super_admin"] },
+          });
+        }
+        if (!user) {
+          user = await User.findOne({
+            role: { $in: ["admin", "manager", "super_admin"] },
+          });
+        }
+        if (!user) {
+          dbAdmin = await Admin.findOne({
+            role: { $in: ["admin", "super_admin"] },
+          });
+        }
+      }
+    }
+
+    // 3. If still not matched, check Employee collection to intercept staff attempting management login
+    if (!user && !dbAdmin) {
+      const emp = await Employee.findOne({
+        $or: [{ email: cleanIdentifier }, { employeeId: inputIdentifier }],
+      });
+      if (emp && emp.password) {
+        const isEmpMatch = await bcrypt.compare(password, emp.password);
+        if (isEmpMatch) {
+          return res.status(403).json({
+            success: false,
+            message: "Access restricted. Only Managers and Administrators may log in through this portal.",
+          });
+        }
+      }
+
       return res.status(401).json({
         success: false,
-        message: "Invalid email or password credentials.",
+        message: "Invalid credentials. No administrator account found matching this identifier.",
       });
     }
 
-    const isMatch = await bcrypt.compare(password, dbAdmin.password_hash);
+    // Unify matched target account
+    const targetAccount = user || {
+      _id: dbAdmin._id,
+      id: dbAdmin._id.toString(),
+      fullName: dbAdmin.full_name || dbAdmin.fullName || "Administrator",
+      full_name: dbAdmin.full_name || dbAdmin.fullName || "Administrator",
+      email: dbAdmin.email,
+      role: dbAdmin.role || "admin",
+      password: dbAdmin.password_hash,
+      department: dbAdmin.department || "Executive Management",
+      position: dbAdmin.position || (dbAdmin.role === "super_admin" ? "Super Admin" : "Administrator"),
+      avatar: dbAdmin.avatar || dbAdmin.profile_image_url || "",
+      profile_image_url: dbAdmin.avatar || dbAdmin.profile_image_url || "",
+      organizationId: dbAdmin.organizationId,
+    };
+
+    // Strict role verification: only admin or manager allowed
+    if (targetAccount.role !== "admin" && targetAccount.role !== "manager" && targetAccount.role !== "super_admin") {
+      return res.status(403).json({
+        success: false,
+        message: "Access restricted. Only Managers and Administrators may log in through this portal.",
+      });
+    }
+
+    // Password verification
+    const accountPassword = targetAccount.password || targetAccount.password_hash;
+    const isMatch = await bcrypt.compare(password, accountPassword);
     if (!isMatch) {
       return res.status(401).json({
         success: false,
-        message: "Invalid email or password credentials.",
-      });
-    }
-
-    authenticatedAdmin = {
-      id: String(dbAdmin._id),
-      _id: String(dbAdmin._id),
-      fullName: dbAdmin.full_name,
-      full_name: dbAdmin.full_name,
-      email: dbAdmin.email,
-      role: dbAdmin.role || "admin",
-      profile_image_url: dbAdmin.profile_image_url || "",
-    };
-
-    if (!authenticatedAdmin) {
-      return res.status(401).json({
-        success: false,
-        message: "Invalid email or password credentials.",
+        message: "Invalid credentials. Please verify your password.",
       });
     }
 
     const token = jwt.sign(
       {
-        id: authenticatedAdmin.id,
-        email: authenticatedAdmin.email,
-        role: authenticatedAdmin.role,
-        fullName: authenticatedAdmin.fullName,
+        id: (targetAccount._id || targetAccount.id).toString(),
+        userId: (targetAccount._id || targetAccount.id).toString(),
+        email: targetAccount.email,
+        role: targetAccount.role,
+        fullName: targetAccount.fullName || targetAccount.full_name,
+        organizationId: targetAccount.organizationId,
       },
       jwtSecret,
       { expiresIn: "7d" }
     );
 
     const isHttps = req.secure || req.headers["x-forwarded-proto"] === "https" || process.env.NODE_ENV === "production";
+    const remember = Boolean(rememberMe || rememberDevice);
     const cookieOptions = {
       httpOnly: true,
       secure: isHttps,
       sameSite: isHttps ? "none" : "lax",
-      maxAge: 7 * 24 * 60 * 60 * 1000,
+      maxAge: remember ? 30 * 24 * 60 * 60 * 1000 : 7 * 24 * 60 * 60 * 1000,
       path: "/",
     };
 
@@ -161,23 +226,24 @@ export const adminLogin = async (req, res) => {
     res.cookie("token", token, cookieOptions);
 
     const safeAdmin = {
-      _id: authenticatedAdmin._id.toString(),
-      id: authenticatedAdmin._id.toString(),
-      name: authenticatedAdmin.fullName || authenticatedAdmin.full_name,
-      fullName: authenticatedAdmin.fullName || authenticatedAdmin.full_name,
-      full_name: authenticatedAdmin.fullName || authenticatedAdmin.full_name,
-      email: authenticatedAdmin.email,
-      role: authenticatedAdmin.role || "admin",
-      department: authenticatedAdmin.department || "Executive Management",
-      position: authenticatedAdmin.role === "super_admin" ? "Super Admin" : "Administrator",
-      avatar: authenticatedAdmin.avatar || authenticatedAdmin.profile_image_url || "",
-      profile_image_url: authenticatedAdmin.avatar || authenticatedAdmin.profile_image_url || "",
+      _id: (targetAccount._id || targetAccount.id).toString(),
+      id: (targetAccount._id || targetAccount.id).toString(),
+      name: targetAccount.fullName || targetAccount.full_name,
+      fullName: targetAccount.fullName || targetAccount.full_name,
+      full_name: targetAccount.fullName || targetAccount.full_name,
+      email: targetAccount.email,
+      role: targetAccount.role || "admin",
+      department: targetAccount.department || "Executive Management",
+      position: targetAccount.position || (targetAccount.role === "manager" ? "Manager" : targetAccount.role === "super_admin" ? "Super Admin" : "Administrator"),
+      avatar: targetAccount.avatar || targetAccount.profile_image_url || "",
+      profile_image_url: targetAccount.avatar || targetAccount.profile_image_url || "",
+      organizationId: targetAccount.organizationId,
     };
 
     return res.status(200).json({
       success: true,
       token,
-      message: "Login successful.",
+      message: "Management login successful.",
       user: safeAdmin,
       admin: safeAdmin,
     });

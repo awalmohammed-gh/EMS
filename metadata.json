@@ -1,6 +1,6 @@
 {
-  "name": "Employee Management System",
-  "description": "Comprehensive employee management system featuring automated attendance penalty & deduction alerts, payroll cycle tracking, interactive Recharts workforce health trends, leave workflows, and staff administration.",
+  "name": "WorkPulse",
+  "description": "WorkPulse — Everything Your Business Needs to Manage Its Workforce. Multi-tenant workforce management with automated 08:00 AM – 07:00 PM shifts, auto-finalized attendance, and seamless payroll processing.",
   "requestFramePermissions": [],
   "majorCapabilities": [
     "MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"

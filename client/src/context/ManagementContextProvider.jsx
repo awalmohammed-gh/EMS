@@ -180,6 +180,10 @@ export const ManagementContextProvider = ({ children }) => {
         message: "You have been logged out successfully.",
         type: "success",
       });
+      // Strict Redirection: Always redirect directly to the tenant's Welcome Gateway (#/welcome)
+      if (typeof window !== "undefined") {
+        window.location.hash = "#/welcome";
+      }
     }
   };
 

@@ -33,6 +33,7 @@ import {
   CartesianGrid,
 } from "recharts";
 import ErrorMessage from "../../ui/ErrorMessage";
+import WorkforceAnalyticsDashboard from "../../components/WorkforceAnalyticsDashboard";
 import DepartmentStatusVisualizer from "../../components/DepartmentStatusVisualizer";
 import AnnouncementBoard from "../../components/AnnouncementBoard";
 import DashboardMetricsSkeleton from "../../components/DashboardMetricsSkeleton";
@@ -567,6 +568,9 @@ const AdminDashboard = () => {
 
       {/* Company Announcement Board (Admin Management) */}
       <AnnouncementBoard role="admin" />
+
+      {/* WORKFORCE INTELLIGENCE & TELEMETRY: Recharts for Attendance Trends, Average Shift Completion Times, and Payroll Distribution Over Time */}
+      <WorkforceAnalyticsDashboard dashboardData={dashboardData} />
 
       {/* RECHARTS SECTION 1: Attendance Trends & Leave Status Breakdown */}
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">

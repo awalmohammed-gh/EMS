@@ -14,6 +14,7 @@ import {
 import eyenitLogo from "../../assets/eyenit_logo.png";
 import { adminRegister, checkAdminExists } from "../../apis/fontApis";
 import { useManagement } from "../../context/ManagementContextProvider";
+import { MotionSpinner } from "../../components/ui/MotionSpinner";
 import ErrorMessage from "../../ui/ErrorMessage";
 import Loading from "../../ui/Loading";
 
@@ -352,10 +353,20 @@ export const AdminRegister = () => {
             <button
               id="admin-register-submit-btn"
               type="submit"
-              className="w-full bg-[#002185] hover:bg-[#001760] text-white font-bold py-3 px-4 rounded-xl shadow-md transition-all flex items-center justify-center gap-2 cursor-pointer mt-2"
+              disabled={isLoading}
+              className="w-full bg-[#002185] hover:bg-[#001760] text-white font-bold py-3 px-4 rounded-xl shadow-md transition-all flex items-center justify-center gap-2 cursor-pointer mt-2 disabled:opacity-60"
             >
-              <ShieldCheck className="w-4 h-4" />
-              Create Admin Account
+              {isLoading ? (
+                <>
+                  <MotionSpinner size="sm" className="text-white" />
+                  <span>Creating Account...</span>
+                </>
+              ) : (
+                <>
+                  <ShieldCheck className="w-4 h-4" />
+                  <span>Create Admin Account</span>
+                </>
+              )}
             </button>
           </form>
 

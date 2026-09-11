@@ -253,57 +253,120 @@ export const getInitStatus = async (req, res) => {
 
 /**
  * POST /api/company/register-organization
- * Handles multipart/form-data with fields:
- * companyName, adminName, adminEmail, password, logo, welcomeBackground, contactEmail, contactPhone
+ * Unified 2-section Organization and Manager registration endpoint:
+ * Captures Organization Information and Manager/Admin Information,
+ * creates tenant & master admin, issues persistent auth cookie, and auto-authenticates.
  */
 export const registerOrganization = async (req, res) => {
   try {
     const {
+      // Section 1: Organization Information
       companyName,
+      companyEmail,
+      contactEmail,
+      companyPhone,
+      contactPhone,
+      companyAddress,
+      address,
+      industry,
+      numberOfEmployees,
+
+      // Section 2: Manager / Admin Information
+      fullName,
       adminName,
       adminFullName,
-      fullName,
+      name,
+      workEmail,
       adminEmail,
       email,
+      phone,
+      phoneNumber,
+      adminPhone,
       password,
       adminPassword,
-      contactEmail,
-      contactPhone,
-      phone,
+      confirmPassword,
+
+      // Optional branding assets/colors
       primaryColor,
       logoUrl: explicitLogoUrl,
       welcomeBackgroundUrl: explicitBgUrl,
     } = req.body;
 
+    // Resolve Organization Information
     const finalCompanyName = (companyName || "").trim();
-    const finalAdminName = (adminName || adminFullName || fullName || "").trim();
-    const finalAdminEmail = (adminEmail || email || "").toLowerCase().trim();
-    const finalPassword = password || adminPassword;
-    const finalContactEmail = (contactEmail || finalAdminEmail).toLowerCase().trim();
-    const finalPhone = (contactPhone || phone || "").trim();
+    const finalCompanyEmail = (companyEmail || contactEmail || "").toLowerCase().trim();
+    const finalCompanyPhone = (companyPhone || contactPhone || "").trim();
+    const finalCompanyAddress = (companyAddress || address || "").trim();
+    const finalIndustry = (industry || "Technology").trim();
+    const finalNumberOfEmployees = (numberOfEmployees || "11-50").trim();
 
+    // Resolve Manager / Admin Information
+    const finalAdminName = (fullName || adminName || adminFullName || name || "").trim();
+    const finalAdminEmail = (workEmail || adminEmail || email || "").toLowerCase().trim();
+    const finalAdminPhone = (phone || phoneNumber || adminPhone || "").trim();
+    const finalPassword = password || adminPassword;
+
+    // 1. Validation for Section 1: Organization Information
     if (!finalCompanyName) {
       return res.status(400).json({
         success: false,
-        message: "Company / Organization name is required.",
+        message: "Company name is required.",
+      });
+    }
+    if (!finalCompanyEmail) {
+      return res.status(400).json({
+        success: false,
+        message: "Company email is required.",
+      });
+    }
+    if (!finalCompanyPhone) {
+      return res.status(400).json({
+        success: false,
+        message: "Company phone is required.",
+      });
+    }
+    if (!finalCompanyAddress) {
+      return res.status(400).json({
+        success: false,
+        message: "Company address is required.",
       });
     }
 
-    if (!finalAdminName || !finalAdminEmail || !finalPassword) {
+    // 2. Validation for Section 2: Manager / Admin Information
+    if (!finalAdminName) {
       return res.status(400).json({
         success: false,
-        message: "Master administrator full name, email, and password are required.",
+        message: "Manager full name is required.",
+      });
+    }
+    if (!finalAdminEmail) {
+      return res.status(400).json({
+        success: false,
+        message: "Manager work email address is required.",
+      });
+    }
+    if (!finalPassword) {
+      return res.status(400).json({
+        success: false,
+        message: "Manager password is required.",
       });
     }
 
     if (finalPassword.length < 6) {
       return res.status(400).json({
         success: false,
-        message: "Admin password must be at least 6 characters long.",
+        message: "Password must be at least 6 characters long.",
       });
     }
 
-    // 1. Validate that the admin email is unique
+    if (confirmPassword && finalPassword !== confirmPassword) {
+      return res.status(400).json({
+        success: false,
+        message: "Passwords do not match. Please verify and confirm password.",
+      });
+    }
+
+    // 3. Check for existing administrator email
     const existingAdmin = await Admin.findOne({ email: finalAdminEmail });
     const existingUser = await User.findOne({ email: finalAdminEmail });
     if (existingAdmin || existingUser) {
@@ -313,31 +376,54 @@ export const registerOrganization = async (req, res) => {
       });
     }
 
-    // 2. Process and save uploaded logo and background files
+    // 4. Process and save uploaded logo and background files
     const logoFile = req.files?.logo?.[0];
     const bgFile = req.files?.welcomeBackground?.[0];
 
-    let finalLogoUrl = explicitLogoUrl || DEFAULT_BRANDING.logoUrl;
+    // Enforce mandatory company logo
+    const providedLogo = logoFile || explicitLogoUrl || req.body.logoPreview || req.body.logo;
+    if (!providedLogo) {
+      return res.status(400).json({
+        success: false,
+        message: "Company logo is required to establish your brand identity.",
+      });
+    }
+
+    let finalLogoUrl = explicitLogoUrl || req.body.logoPreview || req.body.logo || "";
     if (logoFile) {
       finalLogoUrl = buildAssetUrl(logoFile);
     }
 
-    let finalBgUrl = explicitBgUrl || "";
+    if (!finalLogoUrl) {
+      return res.status(400).json({
+        success: false,
+        message: "Company logo is required.",
+      });
+    }
+
+    // Welcome background is explicitly optional
+    let finalBgUrl = explicitBgUrl || req.body.backgroundPreview || req.body.welcomeBackgroundUrl || "";
     if (bgFile) {
       finalBgUrl = buildAssetUrl(bgFile);
     }
 
-    // 3. Create or update the CompanySettings document
+    // 5. Create or update CompanySettings / Organization document
     let settingsDoc = await CompanySettings.findOne();
     if (!settingsDoc) {
       settingsDoc = new CompanySettings();
     }
 
     settingsDoc.companyName = finalCompanyName;
+    settingsDoc.companyEmail = finalCompanyEmail;
+    settingsDoc.contactEmail = finalCompanyEmail;
+    settingsDoc.companyPhone = finalCompanyPhone;
+    settingsDoc.contactPhone = finalCompanyPhone;
+    settingsDoc.companyAddress = finalCompanyAddress;
+    settingsDoc.address = finalCompanyAddress;
+    settingsDoc.industry = finalIndustry;
+    settingsDoc.numberOfEmployees = finalNumberOfEmployees;
     settingsDoc.logoUrl = finalLogoUrl;
     settingsDoc.welcomeBackgroundUrl = finalBgUrl;
-    settingsDoc.contactEmail = finalContactEmail;
-    settingsDoc.contactPhone = finalPhone;
     if (primaryColor) {
       settingsDoc.primaryColor = primaryColor.trim();
     }
@@ -346,18 +432,10 @@ export const registerOrganization = async (req, res) => {
 
     const savedSettings = await settingsDoc.save();
 
-    // 4. Hash password with bcrypt and create the master User and Admin with role: 'admin'
+    // 6. Hash password with bcrypt
     const hashedPassword = await bcrypt.hash(finalPassword, 10);
 
-    const createdAdmin = await Admin.create({
-      full_name: finalAdminName,
-      fullName: finalAdminName,
-      email: finalAdminEmail,
-      password_hash: hashedPassword,
-      role: "admin",
-      profile_image_url: "",
-    });
-
+    // 7. Create master User and Admin linked to the organization
     let createdUser;
     try {
       createdUser = await User.create({
@@ -367,10 +445,24 @@ export const registerOrganization = async (req, res) => {
         role: "admin",
         status: "active",
         isActive: true,
+        organizationId: savedSettings._id,
       });
     } catch (userErr) {
       console.warn("[CompanyController] Warning creating User record:", userErr.message);
     }
+
+    const createdAdmin = await Admin.create({
+      full_name: finalAdminName,
+      fullName: finalAdminName,
+      email: finalAdminEmail,
+      password_hash: hashedPassword,
+      role: "admin",
+      phone: finalAdminPhone,
+      position: "Administrator",
+      department: "Executive Management",
+      profile_image_url: "",
+      organizationId: savedSettings._id,
+    });
 
     // Also sync adminSettingsModel
     try {
@@ -387,20 +479,42 @@ export const registerOrganization = async (req, res) => {
       console.warn("[CompanyController] Sync adminSettings notice:", sErr.message);
     }
 
-    // 5. Issue the secure HTTP-only authentication cookie
+    // Audit log
+    try {
+      await AuditLog.create({
+        action: "ORGANIZATION_REGISTERED",
+        category: "Tenant Setup",
+        performedBy: {
+          id: (createdUser?._id || createdAdmin._id).toString(),
+          name: finalAdminName,
+          email: finalAdminEmail,
+          role: "admin",
+        },
+        details: `Organization '${finalCompanyName}' registered. Manager account created with administrative credentials.`,
+        targetModel: "CompanySettings",
+      });
+    } catch (auditErr) {
+      console.warn("[CompanyController] Audit log creation notice:", auditErr.message);
+    }
+
+    // 8. Auto-authenticate the manager: generate JWT and issue persistent HTTP-only cookie
+    const tokenUserId = (createdUser?._id || createdAdmin._id).toString();
     const token = jwt.sign(
       {
-        id: createdAdmin._id.toString(),
-        userId: createdUser ? createdUser._id.toString() : createdAdmin._id.toString(),
-        email: createdAdmin.email,
+        id: tokenUserId,
+        userId: tokenUserId,
+        email: finalAdminEmail,
         role: "admin",
-        fullName: createdAdmin.full_name,
+        fullName: finalAdminName,
       },
       getJwtSecret(),
       { expiresIn: "7d" }
     );
 
-    const isHttps = req.secure || req.headers["x-forwarded-proto"] === "https" || process.env.NODE_ENV === "production";
+    const isHttps =
+      (req && (req.secure || req.headers["x-forwarded-proto"] === "https")) ||
+      process.env.NODE_ENV === "production";
+
     const cookieOptions = {
       httpOnly: true,
       secure: isHttps,
@@ -408,45 +522,34 @@ export const registerOrganization = async (req, res) => {
       maxAge: 7 * 24 * 60 * 60 * 1000,
       path: "/",
     };
+
     res.cookie("auth_token", token, cookieOptions);
     res.cookie("token", token, cookieOptions);
 
-    // Audit log
-    try {
-      await AuditLog.create({
-        action: "INITIAL_TENANT_SETUP",
-        category: "Admin Settings",
-        performedBy: {
-          id: createdAdmin._id.toString(),
-          name: createdAdmin.full_name,
-          email: createdAdmin.email,
-          role: "admin",
-        },
-        details: `Organization '${finalCompanyName}' registered and master administrator initialized.`,
-        targetModel: "CompanySettings",
-      });
-    } catch (auditErr) {
-      console.warn("[CompanyController] Audit log creation notice:", auditErr.message);
-    }
-
-    const safeUser = {
-      _id: createdAdmin._id.toString(),
-      id: createdAdmin._id.toString(),
-      fullName: createdAdmin.full_name,
-      email: createdAdmin.email,
+    const safeProfile = {
+      _id: tokenUserId,
+      id: tokenUserId,
+      name: finalAdminName,
+      fullName: finalAdminName,
+      full_name: finalAdminName,
+      email: finalAdminEmail,
+      phone: finalAdminPhone,
       role: "admin",
       department: "Executive Management",
-      position: "Master Administrator",
+      position: "Administrator",
+      avatar: "",
+      profile_image_url: "",
     };
 
     return res.status(201).json({
       success: true,
-      message: "Organization registered and master administrator initialized successfully.",
       token,
-      user: safeUser,
-      admin: safeUser,
-      companySettings: savedSettings,
+      message: "Organization registered and manager signed in successfully.",
+      user: safeProfile,
+      admin: safeProfile,
+      organization: savedSettings,
       company: savedSettings,
+      redirectUrl: "/#/admin/dashboard",
     });
   } catch (error) {
     console.error("[CompanyController] Error in registerOrganization:", error);
@@ -670,7 +773,7 @@ export const setupInitialCompany = async (req, res) => {
       console.warn("[CompanyController] Audit log creation notice:", auditErr.message);
     }
 
-    if (token) {
+    if (token && adminCount > 0 && isAuthenticated) {
       const isHttps = req.secure || req.headers["x-forwarded-proto"] === "https" || process.env.NODE_ENV === "production";
       const cookieOptions = {
         httpOnly: true,
@@ -685,7 +788,11 @@ export const setupInitialCompany = async (req, res) => {
 
     return res.status(200).json({
       success: true,
-      message: "Organization profile and white-label branding initialized successfully.",
+      message:
+        adminCount === 0
+          ? "Organization profile initialized successfully. Please sign in via the management portal."
+          : "Organization profile and white-label branding initialized successfully.",
+      redirectUrl: adminCount === 0 ? "/#/welcome" : undefined,
       company: {
         companyName: companyDoc.companyName,
         logoUrl: companyDoc.logoUrl,
@@ -694,15 +801,16 @@ export const setupInitialCompany = async (req, res) => {
         contactEmail: companyDoc.contactEmail,
         isConfigured: true,
       },
-      token,
-      admin: adminUser
-        ? {
-            id: adminUser._id.toString(),
-            fullName: adminUser.full_name || adminUser.fullName,
-            email: adminUser.email,
-            role: "admin",
-          }
-        : null,
+      token: adminCount > 0 && isAuthenticated ? token : null,
+      admin:
+        adminCount > 0 && isAuthenticated && adminUser
+          ? {
+              id: adminUser._id.toString(),
+              fullName: adminUser.full_name || adminUser.fullName,
+              email: adminUser.email,
+              role: "admin",
+            }
+          : null,
     });
   } catch (error) {
     console.error("[CompanyController] Setup initial company error:", error);

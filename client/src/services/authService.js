@@ -9,14 +9,17 @@ export const authService = {
   /**
    * Unified login method supporting both Administrator and Employee roles
    */
-  login: async ({ identifier, email, password, role = "admin" }) => {
+  login: async ({ identifier, email, password, role = "admin", rememberMe = false }) => {
     const loginEmail = (identifier || email || "").trim();
     const loginPassword = password ? password.trim() : "";
 
     if (role === "admin") {
       const response = await apiService.post("/auth/admin/login", {
+        identifier: loginEmail.toLowerCase(),
         email: loginEmail.toLowerCase(),
         password: loginPassword,
+        rememberMe: Boolean(rememberMe),
+        rememberDevice: Boolean(rememberMe),
       });
 
       if (response.data?.token) {
@@ -29,6 +32,8 @@ export const authService = {
       const response = await apiService.post("/auth/employee/login", {
         email: loginEmail, // supports both email and employeeId
         password: loginPassword,
+        rememberMe: Boolean(rememberMe),
+        rememberDevice: Boolean(rememberMe),
       });
 
       if (response.data?.token) {
@@ -63,6 +68,20 @@ export const authService = {
 
       return response.data;
     }
+  },
+
+  /**
+   * Registers a new organization with initial admin profile and branding assets
+   */
+  registerOrganization: async (data) => {
+    const isFormData = typeof FormData !== "undefined" && data instanceof FormData;
+    const headers = isFormData ? { "Content-Type": "multipart/form-data" } : {};
+    const response = await apiService.post("/company/register-organization", data, { headers });
+    if (response.data?.token) {
+      apiService.setToken(response.data.token);
+      authService.saveAuthSession(response.data.token, response.data.admin || response.data.user, "admin");
+    }
+    return response.data;
   },
 
   /**

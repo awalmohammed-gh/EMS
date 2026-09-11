@@ -231,34 +231,18 @@ export const SetupCompanyPage = () => {
       const result = await brandingService.registerOrganization(formData);
 
       if (result.success) {
-        if (result.token) {
-          authService.setStoredToken(result.token);
-          authService.saveAuthSession(result.token, result.user || result.admin, "admin");
-        }
-        const activeUser = result.user || result.admin;
-        if (activeUser) {
-          if (typeof contextLogin === "function") {
-            contextLogin(result.token, activeUser);
-          }
-          if (typeof setManagementUser === "function") {
-            setManagementUser(activeUser);
-          }
-          if (typeof setManagementRole === "function") {
-            setManagementRole("admin");
-          }
-        }
-
+        // Refresh branding so assets (logo, background, name) are loaded
         await refreshBranding();
 
         if (typeof setShowToast === "function") {
           setShowToast({
             type: "success",
-            message: `Organization "${companyName}" created and administrator account configured successfully!`,
+            message: `Organization "${companyName}" registered successfully! Please sign in with your management credentials.`,
           });
         }
 
-        // Direct navigation to Management Dashboard
-        navigate("/admin/dashboard", { replace: true });
+        // Per enterprise onboarding lifecycle: redirect immediately to the Welcome / Portal Gateway
+        navigate("/welcome", { replace: true });
       } else {
         setFormError(result.message || "Failed to initialize organization. Please try again.");
       }

@@ -1,4 +1,4 @@
-import { useEffect, useState, useCallback, useMemo, useRef } from "react";
+import { useEffect, useState, useCallback, useRef } from "react";
 import {
   employeeDashboardOverview,
   getEmployeeMe,
@@ -16,7 +16,6 @@ import {
   Eye,
   Download,
   ShieldCheck,
-  RefreshCw,
 } from "lucide-react";
 import Loading from "../../ui/Loading";
 import ErrorMessage from "../../ui/ErrorMessage";
@@ -209,9 +208,15 @@ const EmployeeDashboard = () => {
 
   // Stable refs for background timer watchdogs
   const contextRefreshRef = useRef(contextRefreshAttendance);
-  contextRefreshRef.current = contextRefreshAttendance;
   const fetchDashboardDataRef = useRef(fetchEmployeeDashboardData);
-  fetchDashboardDataRef.current = fetchEmployeeDashboardData;
+
+  useEffect(() => {
+    contextRefreshRef.current = contextRefreshAttendance;
+  }, [contextRefreshAttendance]);
+
+  useEffect(() => {
+    fetchDashboardDataRef.current = fetchEmployeeDashboardData;
+  }, [fetchEmployeeDashboardData]);
 
   // Automated 12:00 AM (Midnight) Workday Reset & Rollover Timer
   useEffect(() => {

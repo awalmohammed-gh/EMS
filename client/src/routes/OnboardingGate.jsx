@@ -13,12 +13,23 @@ export const OnboardingGate = ({ children }) => {
     );
   }
 
-  const isSetupRoute = location.pathname === "/setup" || location.pathname === "/setup-admin";
+  const isSetupOrLandingRoute =
+    location.pathname === "/setup" ||
+    location.pathname === "/setup-admin" ||
+    location.pathname === "/setup-company" ||
+    location.pathname === "/register-organization" ||
+    location.pathname === "/" ||
+    location.pathname === "/landing" ||
+    location.pathname === "/welcome" ||
+    location.pathname === "/admin/login" ||
+    location.pathname === "/management/login" ||
+    location.pathname === "/login" ||
+    location.pathname === "/employee/login";
 
-  // If no company exists or setup is required and user is not on /setup, redirect to /setup
+  // If no company exists or setup is required and user is not on an allowed route, redirect to /register-organization
   const needsInitialization = requiresSetup || !hasExistingCompany || !isConfigured;
-  if (needsInitialization && !isSetupRoute) {
-    return <Navigate to="/setup" replace />;
+  if (needsInitialization && !isSetupOrLandingRoute) {
+    return <Navigate to="/register-organization" replace />;
   }
 
   return children;

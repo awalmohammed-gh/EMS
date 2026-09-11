@@ -10,6 +10,24 @@ const defaultBranding = {
   isConfigured: false,
 };
 
+const getInitialBranding = () => {
+  if (typeof window !== "undefined") {
+    try {
+      const stored =
+        sessionStorage.getItem("org_branding") || localStorage.getItem("org_branding");
+      if (stored) {
+        const parsed = JSON.parse(stored);
+        if (parsed && typeof parsed === "object") {
+          return { ...defaultBranding, ...parsed };
+        }
+      }
+    } catch (e) {
+      console.warn("Error parsing stored branding:", e);
+    }
+  }
+  return defaultBranding;
+};
+
 const BrandingContext = createContext({
   branding: defaultBranding,
   isConfigured: false,
@@ -21,7 +39,7 @@ const BrandingContext = createContext({
 });
 
 export const BrandingProvider = ({ children }) => {
-  const [branding, setBranding] = useState(defaultBranding);
+  const [branding, setBranding] = useState(getInitialBranding);
   const [isConfigured, setIsConfigured] = useState(false);
   const [hasExistingCompany, setHasExistingCompany] = useState(false);
   const [requiresSetup, setRequiresSetup] = useState(false);
@@ -37,14 +55,27 @@ export const BrandingProvider = ({ children }) => {
 
       if (brandRes.status === "fulfilled" && brandRes.value?.success) {
         const comp = brandRes.value.company || brandRes.value;
-        setBranding((prev) => ({
-          ...prev,
-          ...comp,
-          companyName: comp.companyName || comp.name || prev.companyName,
-          logoUrl: comp.logoUrl || comp.logo || prev.logoUrl || "/eyenit_logo.png",
-          welcomeBackgroundUrl: comp.welcomeBackgroundUrl || comp.backgroundUrl || prev.welcomeBackgroundUrl || "",
-          primaryColor: comp.primaryColor || comp.themeColor || comp.themeColors?.primary || prev.primaryColor,
-        }));
+        setBranding((prev) => {
+          const merged = {
+            ...prev,
+            ...comp,
+            companyName: comp.companyName || comp.name || prev.companyName,
+            logoUrl: comp.logoUrl || comp.logo || prev.logoUrl || "/eyenit_logo.png",
+            welcomeBackgroundUrl:
+              comp.welcomeBackgroundUrl || comp.backgroundUrl || prev.welcomeBackgroundUrl || "",
+            primaryColor:
+              comp.primaryColor || comp.themeColor || comp.themeColors?.primary || prev.primaryColor,
+          };
+          if (typeof window !== "undefined") {
+            try {
+              sessionStorage.setItem("org_branding", JSON.stringify(merged));
+              localStorage.setItem("org_branding", JSON.stringify(merged));
+            } catch (err) {
+              console.debug("Failed caching branding:", err);
+            }
+          }
+          return merged;
+        });
       }
 
       if (initRes.status === "fulfilled" && initRes.value?.success) {
