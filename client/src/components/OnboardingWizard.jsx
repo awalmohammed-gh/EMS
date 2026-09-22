@@ -94,7 +94,9 @@ export const OnboardingWizard = ({ onComplete }) => {
         const stepNum = parseInt(saved, 10);
         if (stepNum >= 1 && stepNum <= 3) return stepNum;
       }
-    } catch {}
+    } catch (_err) {
+      // Ignore session storage error
+    }
     return 1;
   });
   const [stepDirection, setStepDirection] = useState(1); // 1 = forward, -1 = back
@@ -114,7 +116,9 @@ export const OnboardingWizard = ({ onComplete }) => {
       if (saved) {
         return { ...defaultData, ...JSON.parse(saved) };
       }
-    } catch {}
+    } catch (_err) {
+      // Ignore session storage error
+    }
     return defaultData;
   });
 
@@ -128,7 +132,9 @@ export const OnboardingWizard = ({ onComplete }) => {
         const parsed = JSON.parse(saved);
         return parsed.logoPreview || null;
       }
-    } catch {}
+    } catch (_err) {
+      // Ignore session storage error
+    }
     return null;
   });
   // Welcome Portal Background is EXPLICITLY OPTIONAL
@@ -140,7 +146,9 @@ export const OnboardingWizard = ({ onComplete }) => {
         const parsed = JSON.parse(saved);
         return parsed.backgroundPreview || null;
       }
-    } catch {}
+    } catch (_err) {
+      // Ignore session storage error
+    }
     return null;
   });
 
@@ -158,7 +166,9 @@ export const OnboardingWizard = ({ onComplete }) => {
       if (saved) {
         return { ...defaultManager, ...JSON.parse(saved) };
       }
-    } catch {}
+    } catch (_err) {
+      // Ignore session storage error
+    }
     return defaultManager;
   });
 
@@ -178,7 +188,9 @@ export const OnboardingWizard = ({ onComplete }) => {
   useEffect(() => {
     try {
       sessionStorage.setItem("workpulse_onboarding_company", JSON.stringify(companyData));
-    } catch {}
+    } catch (_err) {
+      // Ignore session storage error
+    }
   }, [companyData]);
 
   useEffect(() => {
@@ -187,19 +199,25 @@ export const OnboardingWizard = ({ onComplete }) => {
         "workpulse_onboarding_branding",
         JSON.stringify({ logoPreview, backgroundPreview })
       );
-    } catch {}
+    } catch (_err) {
+      // Ignore session storage error
+    }
   }, [logoPreview, backgroundPreview]);
 
   useEffect(() => {
     try {
       sessionStorage.setItem("workpulse_onboarding_manager", JSON.stringify(managerData));
-    } catch {}
+    } catch (_err) {
+      // Ignore session storage error
+    }
   }, [managerData]);
 
   useEffect(() => {
     try {
       sessionStorage.setItem("workpulse_onboarding_step", String(currentStep));
-    } catch {}
+    } catch (_err) {
+      // Ignore session storage error
+    }
   }, [currentStep]);
 
   // Handlers for Step 1 input changes
@@ -396,7 +414,7 @@ export const OnboardingWizard = ({ onComplete }) => {
       payloadFormData.append("password", managerPassword);
       payloadFormData.append("confirmPassword", confirmPassword);
 
-      // Files
+      // Files - ensure images are sent strictly as binary File objects, not raw Base64 text fields
       if (logoFile) {
         payloadFormData.append("logo", logoFile);
       } else if (logoPreview) {
@@ -404,9 +422,6 @@ export const OnboardingWizard = ({ onComplete }) => {
         if (reconstructedLogo) {
           payloadFormData.append("logo", reconstructedLogo);
         }
-      }
-      if (logoPreview) {
-        payloadFormData.append("logoPreview", logoPreview);
       }
 
       if (backgroundFile) {
@@ -416,9 +431,6 @@ export const OnboardingWizard = ({ onComplete }) => {
         if (reconstructedBg) {
           payloadFormData.append("welcomeBackground", reconstructedBg);
         }
-      }
-      if (backgroundPreview) {
-        payloadFormData.append("backgroundPreview", backgroundPreview);
       }
 
       // Try brandingService or authService
@@ -480,7 +492,9 @@ export const OnboardingWizard = ({ onComplete }) => {
           sessionStorage.removeItem("workpulse_onboarding_company");
           sessionStorage.removeItem("workpulse_onboarding_branding");
           sessionStorage.removeItem("workpulse_onboarding_manager");
-        } catch {}
+        } catch (_err) {
+          // Ignore session storage error
+        }
 
         if (typeof onComplete === "function") {
           onComplete(result);

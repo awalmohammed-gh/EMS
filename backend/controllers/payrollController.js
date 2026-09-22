@@ -3,10 +3,12 @@ import jwt from "jsonwebtoken";
 import { Employee } from "../models/employeeModel.js";
 import { User } from "../models/userModel.js";
 import { Payroll } from "../models/payrollModel.js";
+import { Payslip } from "../models/Payslip.js";
 import { Leave } from "../models/leaveModel.js";
 import { Attendance } from "../models/attendanceModel.js";
 import { CompanySettings } from "../models/CompanySettings.js";
 import { AuditLog } from "../models/AuditLog.js";
+import { logAuditAction } from "../utils/auditLogger.js";
 import { liveAttendanceStore } from "./employeeAttendance.js";
 import { liveLeaveStore } from "./leaveController.js";
 import { createNotificationRecord } from "./notificationController.js";
@@ -17,6 +19,7 @@ import {
   getStandardizedLatenessTiers,
   getTierConfiguredFine,
 } from "../utils/latenessPenaltyCalculator.js";
+import { validateOrganizationAccess } from "../utils/validateOrganizationAccess.js";
 
 export { evaluateLatenessPenalty, calculateLatenessPenalty, getStandardizedLatenessTiers, getTierConfiguredFine };
 
@@ -261,8 +264,11 @@ export const calculateMonthlyPayrollSummary = async (req, res) => {
       lateTier6_amount: 0,
     };
 
+    const activeTenantId = req.organizationId || req.companyId || req.user?.organizationId || req.user?.companyId;
     try {
-      const dbSettings = await CompanySettings.findOne().lean();
+      const dbSettings = activeTenantId
+        ? (await CompanySettings.findById(activeTenantId).lean() || await CompanySettings.findOne({ $or: [{ organizationId: activeTenantId }, { companyId: activeTenantId }] }).lean())
+        : (req.user?.role === "super_admin" ? await CompanySettings.findOne().lean() : null);
       if (dbSettings) {
         companySettings = { ...companySettings, ...dbSettings };
       }
@@ -271,14 +277,18 @@ export const calculateMonthlyPayrollSummary = async (req, res) => {
     }
 
     let targetEmployee = null;
+    const orgFilter = (req.user?.role !== "super_admin" && activeTenantId)
+      ? { $or: [{ organizationId: activeTenantId }, { companyId: activeTenantId }] }
+      : (activeTenantId ? { $or: [{ organizationId: activeTenantId }, { companyId: activeTenantId }] } : {});
 
     if (employeeId && employeeId !== "all") {
       try {
         if (isValidObjectId(employeeId)) {
-          targetEmployee = await Employee.findById(employeeId).lean();
+          targetEmployee = await Employee.findOne({ _id: employeeId, ...orgFilter }).lean();
         } else {
           targetEmployee = await Employee.findOne({
             $or: [{ employeeId }, { email: employeeId }],
+            ...orgFilter,
           }).lean();
         }
       } catch (err) {
@@ -286,8 +296,8 @@ export const calculateMonthlyPayrollSummary = async (req, res) => {
       }
     }
 
-    if (!targetEmployee) {
-      targetEmployee = await Employee.findOne({ isActive: true }).lean();
+    if (!targetEmployee && !employeeId) {
+      targetEmployee = await Employee.findOne({ isActive: true, ...orgFilter }).lean();
     }
 
     if (!targetEmployee) {
@@ -1070,10 +1080,17 @@ export const generatePayroll = async (req, res) => {
 
     const payslipNumber = `PAY-${Date.now()}`;
 
+    const orgId = req.organizationId || req.companyId || req.user?.organizationId || req.user?.companyId || req.admin?.organizationId || req.admin?.companyId;
+    const orgScope = (req.user?.role !== "super_admin" && orgId)
+      ? { $or: [{ organizationId: orgId }, { companyId: orgId }] }
+      : {};
+
     let empDoc = null;
     if (isValidObjectId(employee)) {
       try {
-        empDoc = await Employee.findById(employee).select("employeeId fullName email department position bankName accountNumber").lean();
+        empDoc = await Employee.findOne({ _id: employee, ...orgScope })
+          .select("employeeId fullName email department position bankName accountNumber organizationId companyId")
+          .lean();
       } catch (err) {
         console.warn("Could not find employee for payroll generation:", err.message);
       }
@@ -1081,7 +1098,8 @@ export const generatePayroll = async (req, res) => {
       try {
         empDoc = await Employee.findOne({
           $or: [{ employeeId: employee }, { email: employee }],
-        }).select("employeeId fullName email department position bankName accountNumber").lean();
+          ...orgScope,
+        }).select("employeeId fullName email department position bankName accountNumber organizationId companyId").lean();
       } catch (err) {
         console.warn("Could not find employee by identifier for payroll generation:", err.message);
       }
@@ -1090,9 +1108,11 @@ export const generatePayroll = async (req, res) => {
     if (!empDoc) {
       return res.status(404).json({
         success: false,
-        message: "Employee record not found in database.",
+        message: "Employee record not found in database or access denied.",
       });
     }
+
+    validateOrganizationAccess(empDoc, req);
 
     const finalStatus = req.body.status || "Published";
 
@@ -1165,13 +1185,15 @@ export const generatePayroll = async (req, res) => {
     // If valid MongoDB connection, save or update in MongoDB
     if (isValidObjectId(empDoc._id)) {
       try {
+        const targetOrgId = req.organizationId || empDoc?.organizationId || empDoc?.companyId || null;
         const payroll = await Payroll.findOneAndUpdate(
-          { employee: empDoc._id, payMonth },
+          { employee: empDoc._id, payMonth, ...(targetOrgId ? { $or: [{ organizationId: targetOrgId }, { companyId: targetOrgId }] } : {}) },
           {
             employee: empDoc._id,
             payslipNumber,
             payMonth,
             paymentDate,
+            ...(targetOrgId ? { organizationId: targetOrgId, companyId: targetOrgId } : {}),
             basicSalary: finalBaseSalary,
             baseSalary: finalBaseSalary,
             standardWorkingDays,
@@ -1198,6 +1220,85 @@ export const generatePayroll = async (req, res) => {
         ).populate("employee", "employeeId fullName email department position");
 
         newRecord._id = payroll._id;
+
+        // Automated multi-tenant payslip distribution: link directly to target employee User account in workspace
+        try {
+          let targetUserId = null;
+          if (empDoc.email) {
+            const userMatch = await User.findOne({ email: empDoc.email.toLowerCase() }).select("_id").lean();
+            if (userMatch) targetUserId = userMatch._id;
+          }
+          if (!targetUserId && isValidObjectId(empDoc._id)) {
+            targetUserId = empDoc._id;
+          }
+
+          let periodMonth = "September";
+          let periodYear = new Date().getFullYear();
+          if (payMonth) {
+            const parts = String(payMonth).trim().split("-");
+            if (parts.length === 2) {
+              const pYear = parseInt(parts[0], 10);
+              const pMonth = parseInt(parts[1], 10) - 1;
+              if (!isNaN(pYear)) periodYear = pYear;
+              const months = [
+                "January", "February", "March", "April", "May", "June",
+                "July", "August", "September", "October", "November", "December"
+              ];
+              if (!isNaN(pMonth) && pMonth >= 0 && pMonth <= 11) {
+                periodMonth = months[pMonth];
+              }
+            } else {
+              const yearMatch = String(payMonth).match(/\b(20\d\d)\b/);
+              if (yearMatch) periodYear = parseInt(yearMatch[1], 10);
+              const months = [
+                "January", "February", "March", "April", "May", "June",
+                "July", "August", "September", "October", "November", "December"
+              ];
+              const found = months.find((m) => String(payMonth).toLowerCase().includes(m.toLowerCase()));
+              if (found) periodMonth = found;
+            }
+          }
+
+          const otherDeductions = (Number(finalAbsentDeduction) || 0) + (parsedDeductions.reduce((s, d) => s + (Number(d.amount) || 0), 0));
+          const effectiveTax = parsedDeductions.find((d) => (d.name || d.title || "").toLowerCase().includes("tax"))?.amount || 0;
+          const payslipOrgId = targetOrgId || req.organizationId || empDoc.organizationId || empDoc.companyId;
+
+          if (targetUserId && payslipOrgId) {
+            await Payslip.findOneAndUpdate(
+              {
+                $or: [{ organizationId: payslipOrgId }, { companyId: payslipOrgId }],
+                employeeId: targetUserId,
+                "payrollPeriod.month": periodMonth,
+                "payrollPeriod.year": periodYear,
+              },
+              {
+                $set: {
+                  organizationId: payslipOrgId,
+                  companyId: payslipOrgId,
+                  employeeId: targetUserId,
+                  payrollPeriod: {
+                    month: periodMonth,
+                    year: periodYear,
+                  },
+                  baseSalary: finalBaseSalary,
+                  allowances: totalCustomEarnings || 0,
+                  deductions: {
+                    latenessDeductions: finalLatenessDeduction || 0,
+                    tax: effectiveTax || 0,
+                    other: otherDeductions || 0,
+                  },
+                  netPay: calculatedNetPay,
+                  status: finalStatus === "Draft" ? "Draft" : finalStatus === "Paid" ? "Paid" : "Published",
+                  generatedBy: req.admin?.id || req.admin?._id || req.user?._id || null,
+                  generatedAt: new Date(),
+                },
+              },
+              { upsert: true, returnDocument: "after", setDefaultsOnInsert: true }
+            );
+          }
+        } catch (payslipErr) {
+          console.warn("Automated Payslip distribution record creation error:", payslipErr.message);
+        }
       } catch (dbErr) {
         console.warn("DB storage in generatePayroll:", dbErr.message);
       }
@@ -1329,6 +1430,31 @@ export const generatePayroll = async (req, res) => {
       console.warn("Failed to create automated employee payslip notification:", notifErr.message);
     }
 
+    // Record critical user action: Payroll Finalization
+    try {
+      await logAuditAction({
+        req,
+        action: "PAYROLL_FINALIZED",
+        category: "Payroll",
+        target: `${empDoc.fullName} (${empDoc.employeeId || payslipNumber})`,
+        targetModel: "Payroll",
+        summary: `Finalized and generated payroll for ${empDoc.fullName} (${payMonth}). Net Pay: GH₵${calculatedNetPay.toFixed(2)}, Status: ${finalStatus}.`,
+        details: `Base Salary: GH₵${finalBaseSalary.toFixed(2)}, Allowances: GH₵${totalCustomEarnings.toFixed(2)}, Deductions: GH₵${(totalCustomDeductions + totalAttendanceDeductions).toFixed(2)}, Payment Method: ${paymentMethod}.`,
+        metadata: {
+          payslipNumber,
+          employeeId: empDoc.employeeId,
+          employeeName: empDoc.fullName,
+          payMonth,
+          paymentDate,
+          paymentMethod,
+          netPay: calculatedNetPay,
+          status: finalStatus,
+        },
+      });
+    } catch (auditErr) {
+      console.warn("Audit log notice in generatePayroll:", auditErr.message);
+    }
+
     return res.status(201).json({
       success: true,
       message: "Payroll generated successfully.",
@@ -1347,24 +1473,23 @@ export const generatePayroll = async (req, res) => {
 export const allPayslips = async (req, res) => {
   try {
     const { month, payMonth, year, status } = req.query;
-    let list = [...livePayrollStore];
+    let list = [];
+    const orgId = req.organizationId || req.companyId || req.user?.organizationId || req.user?.companyId;
+    const orgQuery = orgId
+      ? { $or: [{ organizationId: orgId }, { companyId: orgId }] }
+      : {};
 
     try {
-      const payslips = await Payroll.find({})
-        .populate("employee", "fullName employeeId department position email bankName accountNumber salary baseSalary")
+      const payslips = await Payroll.find(orgQuery)
+        .populate("employee", "fullName employeeId department position email bankName accountNumber salary baseSalary organizationId companyId")
         .sort({ createdAt: -1 })
         .lean();
 
       if (payslips && payslips.length > 0) {
-        // Merge without duplicate IDs
-        payslips.forEach((p) => {
-          if (!list.some((item) => String(item._id) === String(p._id) || item.payslipNumber === p.payslipNumber)) {
-            list.push(p);
-          }
-        });
+        list = payslips;
       }
-    } catch (dbErr) {
-      console.warn("DB fallback for allPayslips:", dbErr.message);
+    } catch (err) {
+      console.warn("DB payroll query in getAllPayslips:", err.message);
     }
 
     // Filter by month/payMonth if supplied (supports "YYYY-MM", "August 2026", "August")
@@ -1417,13 +1542,16 @@ export const allPayslips = async (req, res) => {
 export const buildDetailedPayslipBreakdown = async (foundRecord, employeeId = null) => {
   if (!foundRecord) return null;
 
+  const orgId = foundRecord.organizationId || foundRecord.companyId || foundRecord.employee?.organizationId || foundRecord.employee?.companyId;
+  const orgScope = orgId ? { $or: [{ organizationId: orgId }, { companyId: orgId }] } : {};
+
   // 1. Resolve Employee record
   let emp = foundRecord.employee;
   if (!emp || typeof emp === "string" || !emp.fullName) {
     const lookupId = emp || employeeId || foundRecord.employeeId;
     if (isValidObjectId(lookupId)) {
       try {
-        emp = await Employee.findById(lookupId).lean();
+        emp = await Employee.findOne({ _id: lookupId, ...orgScope }).lean();
       } catch (err) {
         console.warn("DB employee lookup in breakdown helper:", err.message);
       }
@@ -1431,6 +1559,7 @@ export const buildDetailedPayslipBreakdown = async (foundRecord, employeeId = nu
       try {
         emp = await Employee.findOne({
           $or: [{ employeeId: lookupId }, { email: lookupId }],
+          ...orgScope,
         }).lean();
       } catch (err) {
         console.warn("DB employee search by id in breakdown helper:", err.message);
@@ -1450,7 +1579,7 @@ export const buildDetailedPayslipBreakdown = async (foundRecord, employeeId = nu
     lateTier6_amount: 0,
   };
   try {
-    const dbSettings = await CompanySettings.findOne().lean();
+    const dbSettings = await CompanySettings.findOne(orgScope).lean();
     if (dbSettings) {
       settings = { ...settings, ...dbSettings };
     }
@@ -1462,7 +1591,7 @@ export const buildDetailedPayslipBreakdown = async (foundRecord, employeeId = nu
   let attendanceRecords = [];
   if (emp && isValidObjectId(emp._id)) {
     try {
-      attendanceRecords = await Attendance.find({ employee: emp._id }).lean();
+      attendanceRecords = await Attendance.find({ employee: emp._id, ...orgScope }).lean();
     } catch (err) {
       console.warn("Error fetching attendance for payslip breakdown:", err.message);
     }
@@ -1470,6 +1599,10 @@ export const buildDetailedPayslipBreakdown = async (foundRecord, employeeId = nu
 
   // Add active live clock-ins from memory store
   liveAttendanceStore.forEach((liveAtt) => {
+    if (orgId) {
+      const attOrg = liveAtt.organizationId ? String(liveAtt.organizationId) : (liveAtt.companyId ? String(liveAtt.companyId) : null);
+      if (attOrg && attOrg !== String(orgId)) return;
+    }
     if (emp && liveAtt.employee === String(emp._id)) {
       if (!attendanceRecords.some((a) => a.date === liveAtt.date)) {
         attendanceRecords.push(liveAtt);
@@ -1481,7 +1614,7 @@ export const buildDetailedPayslipBreakdown = async (foundRecord, employeeId = nu
   let leaveRecords = [];
   if (emp && isValidObjectId(emp._id)) {
     try {
-      leaveRecords = await Leave.find({ employee: emp._id, status: "Approved" }).lean();
+      leaveRecords = await Leave.find({ employee: emp._id, status: "Approved", ...orgScope }).lean();
     } catch (err) {
       console.warn("Error fetching leaves for payslip breakdown:", err.message);
     }
@@ -1787,9 +1920,12 @@ export const getEmployeeLatestPayslipBreakdown = async (req, res) => {
     const rawEmpId = req.query.employeeId || authEmp?.id || authEmp?._id || authEmp?.employeeId;
     let targetEmployee = null;
 
+    const orgId = req.user?.organizationId || req.user?.companyId || req.organizationId || req.companyId;
+    const orgScope = orgId ? { $or: [{ organizationId: orgId }, { companyId: orgId }] } : {};
+
     if (isValidObjectId(rawEmpId)) {
       try {
-        targetEmployee = await Employee.findById(rawEmpId).lean();
+        targetEmployee = await Employee.findOne({ _id: rawEmpId, ...orgScope }).lean();
       } catch (err) {
         console.warn("DB find employee fallback:", err.message);
       }
@@ -1797,18 +1933,23 @@ export const getEmployeeLatestPayslipBreakdown = async (req, res) => {
       try {
         targetEmployee = await Employee.findOne({
           $or: [{ employeeId: rawEmpId }, { email: rawEmpId }],
+          ...orgScope,
         }).lean();
       } catch (err) {
         console.warn("DB find employee by code fallback:", err.message);
       }
     }
 
-    if (!targetEmployee) {
+    if (!targetEmployee && orgId) {
       try {
-        targetEmployee = await Employee.findOne({ isActive: true }).lean();
+        targetEmployee = await Employee.findOne({ isActive: true, ...orgScope }).lean();
       } catch (err) {
         console.warn("DB find active employee fallback:", err.message);
       }
+    }
+
+    if (targetEmployee) {
+      validateOrganizationAccess(targetEmployee, req);
     }
 
     let latestPayslip = null;
@@ -1819,6 +1960,7 @@ export const getEmployeeLatestPayslipBreakdown = async (req, res) => {
         latestPayslip = await Payroll.findOne({
           employee: targetEmployee._id,
           status: { $in: ["Published", "published", "Paid", "paid"] },
+          ...orgScope,
         })
           .sort({ paymentDate: -1, createdAt: -1 })
           .populate("employee", "fullName employeeId department position email bankName accountNumber phone")
@@ -1831,12 +1973,20 @@ export const getEmployeeLatestPayslipBreakdown = async (req, res) => {
     // Check live in-memory store for published payslips
     if (!latestPayslip && targetEmployee) {
       const match = livePayrollStore.find((p) => {
+        if (orgId) {
+          const pOrg = p.organizationId ? String(p.organizationId) : (p.companyId ? String(p.companyId) : null);
+          if (pOrg && pOrg !== String(orgId)) return false;
+        }
         const pEmpId = String(p.employee?._id || p.employee || "");
         const status = String(p.status || "").toLowerCase();
         const isPublished = status === "published" || status === "paid";
         return isPublished && (pEmpId === String(targetEmployee._id) || p.employeeId === targetEmployee.employeeId);
       });
       if (match) latestPayslip = match;
+    }
+
+    if (latestPayslip) {
+      validateOrganizationAccess(latestPayslip, req);
     }
 
     if (!latestPayslip) {
@@ -1859,7 +2009,8 @@ export const getEmployeeLatestPayslipBreakdown = async (req, res) => {
     });
   } catch (error) {
     console.error("Error in getEmployeeLatestPayslipBreakdown:", error);
-    return res.status(500).json({
+    const statusCode = error.message === "Unauthorized" || error.statusCode === 403 ? 403 : (error.statusCode || 500);
+    return res.status(statusCode).json({
       success: false,
       message: error.message || "Failed to retrieve latest payslip breakdown.",
     });
@@ -1880,23 +2031,58 @@ export const getEmployeePayslipBreakdownById = async (req, res) => {
     if (isValidObjectId(id)) {
       try {
         foundRecord = await Payroll.findById(id)
-          .populate("employee", "fullName employeeId department position email bankName accountNumber phone")
+          .populate("employee", "fullName employeeId department position email bankName accountNumber phone organizationId companyId")
           .lean();
       } catch (dbErr) {
         console.warn("DB search by ID fallback:", dbErr.message);
       }
     }
 
-    // 2. Try finding by payslipNumber or id in MongoDB
+    // 2. Try finding by payslipNumber or employeeId in MongoDB
     if (!foundRecord) {
       try {
         foundRecord = await Payroll.findOne({
-          $or: [{ payslipNumber: id }, { _id: id }],
+          $or: [{ payslipNumber: id }, { employeeId: id }],
         })
-          .populate("employee", "fullName employeeId department position email bankName accountNumber phone")
+          .populate("employee", "fullName employeeId department position email bankName accountNumber phone organizationId companyId")
           .lean();
       } catch (dbErr) {
         console.warn("DB search by payslipNumber fallback:", dbErr.message);
+      }
+    }
+
+    // 2.5 Try finding in Payslip collection if valid ObjectId
+    if (!foundRecord && isValidObjectId(id)) {
+      try {
+        const pDoc = await Payslip.findById(id).populate("employeeId", "fullName employeeId department position email organizationId companyId").lean();
+        if (pDoc) {
+          foundRecord = {
+            _id: pDoc._id,
+            id: pDoc._id,
+            organizationId: pDoc.organizationId,
+            companyId: pDoc.companyId,
+            payslipNumber: `PAY-${pDoc.payrollPeriod?.year || 2026}-${(pDoc.payrollPeriod?.month || "AUG").slice(0, 3).toUpperCase()}`,
+            payMonth: pDoc.payrollPeriod ? `${pDoc.payrollPeriod.month} ${pDoc.payrollPeriod.year}` : "Current Month",
+            paymentDate: pDoc.generatedAt || pDoc.createdAt,
+            basicSalary: pDoc.baseSalary,
+            baseSalary: pDoc.baseSalary,
+            netSalary: pDoc.netPay,
+            netPay: pDoc.netPay,
+            status: pDoc.status,
+            allowances: pDoc.allowances || 0,
+            earnings: pDoc.allowances ? [{ name: "Allowances", amount: pDoc.allowances }] : [],
+            deductions: [
+              ...(pDoc.deductions?.latenessDeductions ? [{ name: "Lateness Deductions", amount: pDoc.deductions.latenessDeductions }] : []),
+              ...(pDoc.deductions?.tax ? [{ name: "Tax", amount: pDoc.deductions.tax }] : []),
+              ...(pDoc.deductions?.other ? [{ name: "Other Deductions", amount: pDoc.deductions.other }] : []),
+            ],
+            latenessDeduction: pDoc.deductions?.latenessDeductions || 0,
+            payrollPeriod: pDoc.payrollPeriod,
+            employee: pDoc.employeeId,
+          };
+        }
+      } catch (dbErr) {
+        console.warn("DB search in Payslip collection by ID fallback:", dbErr.message);
       }
     }
 
@@ -1907,7 +2093,7 @@ export const getEmployeePayslipBreakdownById = async (req, res) => {
           String(p._id) === String(id) ||
           p.id === id ||
           p.payslipNumber === id ||
-          p.employeeId === id,
+          p.employeeId === id
       );
     }
 
@@ -1917,6 +2103,9 @@ export const getEmployeePayslipBreakdownById = async (req, res) => {
         message: `Payroll record with ID ${id} not found.`,
       });
     }
+
+    // Cross-tenant verification: Ensure record belongs to the requester's organization
+    validateOrganizationAccess(foundRecord, req);
 
     // Role-based authorization: Standard employees are strictly restricted to their own payslip
     const authUser = req.user || req.employee || req.admin;
@@ -1949,7 +2138,8 @@ export const getEmployeePayslipBreakdownById = async (req, res) => {
     });
   } catch (error) {
     console.error("Error in getEmployeePayslipBreakdownById:", error);
-    return res.status(500).json({
+    const statusCode = error.message === "Unauthorized" || error.statusCode === 403 ? 403 : (error.statusCode || 500);
+    return res.status(statusCode).json({
       success: false,
       message: error.message || "Failed to retrieve payslip details.",
     });
@@ -1975,24 +2165,40 @@ export const updatePayrollStatus = async (req, res) => {
     }
 
     let updated = null;
+    const orgId = req.user?.organizationId || req.user?.companyId || req.organizationId || req.companyId;
+    const orgScope = orgId ? { $or: [{ organizationId: orgId }, { companyId: orgId }] } : {};
 
     if (isValidObjectId(id)) {
       try {
-        updated = await Payroll.findByIdAndUpdate(
-          id,
+        const existing = await Payroll.findOne({ _id: id, ...orgScope });
+        if (existing) {
+          validateOrganizationAccess(existing, req);
+        }
+        updated = await Payroll.findOneAndUpdate(
+          { _id: id, ...orgScope },
           { status, ...(remarks && { remarks }) },
           { returnDocument: "after" },
-        ).populate("employee", "fullName employeeId department position");
+        ).populate("employee", "fullName employeeId department position organizationId companyId");
       } catch (err) {
+        if (err.message === "Unauthorized" || err.statusCode === 403) throw err;
         console.warn("DB update status fallback:", err.message);
       }
     }
 
     // Update in live memory store
     const inMem = livePayrollStore.find(
-      (p) => String(p._id) === String(id) || p.payslipNumber === id || p.id === id,
+      (p) => {
+        const matchesId = String(p._id) === String(id) || p.payslipNumber === id || p.id === id;
+        if (!matchesId) return false;
+        if (orgId) {
+          const itemOrg = p.organizationId ? String(p.organizationId) : (p.companyId ? String(p.companyId) : null);
+          if (itemOrg && itemOrg !== String(orgId)) return false;
+        }
+        return true;
+      },
     );
     if (inMem) {
+      validateOrganizationAccess(inMem, req);
       inMem.status = status;
       if (remarks) inMem.remarks = remarks;
       if (!updated) updated = inMem;
@@ -2036,13 +2242,43 @@ export const updatePayrollStatus = async (req, res) => {
       }
     }
 
+    // Log payroll status update / finalization action
+    try {
+      const isFinalized = status === "Paid" || status === "Published";
+      await logAuditAction({
+        req,
+        action: isFinalized ? "PAYROLL_FINALIZED" : `PAYROLL_STATUS_${status.toUpperCase()}`,
+        category: "Payroll",
+        target: `${updated?.employee?.fullName || updated?.employeeName || id}`,
+        targetModel: "Payroll",
+        summary: `Updated payroll status for ${updated?.employee?.fullName || updated?.employeeName || id} to "${status}".`,
+        details: remarks ? `Status changed to ${status}. Note: ${remarks}` : `Status transitioned to ${status}.`,
+        metadata: {
+          payrollId: id,
+          status,
+          remarks,
+          payMonth: updated?.payMonth || updated?.month,
+        },
+      });
+    } catch (auditErr) {
+      console.warn("Audit log notice in updatePayrollStatus:", auditErr.message);
+    }
+
+    if (!updated) {
+      return res.status(404).json({
+        success: false,
+        message: "Payroll record not found or access denied.",
+      });
+    }
+
     return res.status(200).json({
       success: true,
       message: `Payroll status updated to ${status}.`,
-      payroll: updated || { _id: id, status, remarks },
+      payroll: updated,
     });
   } catch (error) {
-    return res.status(500).json({
+    const statusCode = error.message === "Unauthorized" || error.statusCode === 403 ? 403 : (error.statusCode || 500);
+    return res.status(statusCode).json({
       success: false,
       message: error.message || "Failed to update payroll status.",
     });
@@ -2062,32 +2298,77 @@ export const deletePayroll = async (req, res) => {
     }
 
     let deletedFromDb = false;
+    const orgId = req.user?.organizationId || req.user?.companyId || req.organizationId || req.companyId;
+    const orgScope = orgId ? { $or: [{ organizationId: orgId }, { companyId: orgId }] } : {};
 
     if (isValidObjectId(id)) {
       try {
-        const deleted = await Payroll.findByIdAndDelete(id);
+        const existing = await Payroll.findOne({ _id: id, ...orgScope });
+        if (existing) {
+          validateOrganizationAccess(existing, req);
+        }
+        const deleted = await Payroll.findOneAndDelete({ _id: id, ...orgScope });
         if (deleted) deletedFromDb = true;
       } catch (err) {
+        if (err.message === "Unauthorized" || err.statusCode === 403) throw err;
         console.warn("DB delete fallback:", err.message);
       }
     }
 
     if (!deletedFromDb) {
       try {
+        const existing = await Payroll.findOne({ payslipNumber: id, ...orgScope });
+        if (existing) {
+          validateOrganizationAccess(existing, req);
+        }
         const deleted = await Payroll.findOneAndDelete({
-          $or: [{ payslipNumber: id }, { _id: id }],
+          payslipNumber: id,
+          ...orgScope,
         });
         if (deleted) deletedFromDb = true;
       } catch (err) {
+        if (err.message === "Unauthorized" || err.statusCode === 403) throw err;
         console.warn("DB delete by payslipNumber fallback:", err.message);
       }
     }
 
     const index = livePayrollStore.findIndex(
-      (p) => String(p._id) === String(id) || p.payslipNumber === id || p.id === id,
+      (p) => {
+        const matchesId = String(p._id) === String(id) || p.payslipNumber === id || p.id === id;
+        if (!matchesId) return false;
+        if (orgId) {
+          const itemOrg = p.organizationId ? String(p.organizationId) : (p.companyId ? String(p.companyId) : null);
+          if (itemOrg && itemOrg !== String(orgId)) return false;
+        }
+        return true;
+      },
     );
     if (index !== -1) {
+      validateOrganizationAccess(livePayrollStore[index], req);
       livePayrollStore.splice(index, 1);
+    }
+
+    if (!deletedFromDb && index === -1) {
+      return res.status(404).json({
+        success: false,
+        message: "Payroll record not found or access denied.",
+      });
+    }
+
+    // Log payroll deletion
+    try {
+      await logAuditAction({
+        req,
+        action: "PAYROLL_DELETED",
+        category: "Payroll",
+        target: `Payroll ID: ${id}`,
+        targetModel: "Payroll",
+        summary: `Deleted payroll record ID: ${id}.`,
+        details: `Deleted from persistent storage by ${req.admin?.fullName || "Administrator"}.`,
+        metadata: { id },
+      });
+    } catch (auditErr) {
+      console.warn("Audit log notice in deletePayroll:", auditErr.message);
     }
 
     return res.status(200).json({
@@ -2096,7 +2377,8 @@ export const deletePayroll = async (req, res) => {
       id,
     });
   } catch (error) {
-    return res.status(500).json({
+    const statusCode = error.message === "Unauthorized" || error.statusCode === 403 ? 403 : (error.statusCode || 500);
+    return res.status(statusCode).json({
       success: false,
       message: error.message || "Failed to delete payroll record.",
     });
@@ -2107,11 +2389,15 @@ export const deletePayroll = async (req, res) => {
 export const exportPayrollReport = async (req, res) => {
   try {
     const { month, format } = req.query;
-    let records = [...livePayrollStore];
+    let records = [];
+    const orgId = req.organizationId || req.companyId || req.user?.organizationId || req.user?.companyId;
+    const orgQuery = orgId
+      ? { $or: [{ organizationId: orgId }, { companyId: orgId }] }
+      : {};
 
     try {
-      const dbRecords = await Payroll.find({})
-        .populate("employee", "fullName employeeId department position bankName accountNumber")
+      const dbRecords = await Payroll.find(orgQuery)
+        .populate("employee", "fullName employeeId department position bankName accountNumber organizationId companyId")
         .lean();
       if (dbRecords && dbRecords.length > 0) {
         records = dbRecords;
@@ -2228,12 +2514,18 @@ export const employeePayslips = async (req, res) => {
     const rawEmployeeId = req.employee?.id || req.employee?._id || req.employee?.employeeId;
     let validObjectId = null;
 
+    const orgId = req.organizationId || req.companyId || req.user?.organizationId || req.user?.companyId || req.employee?.organizationId;
+    const orgScope = (req.user?.role !== "super_admin" && orgId)
+      ? { $or: [{ organizationId: orgId }, { companyId: orgId }] }
+      : (orgId ? { $or: [{ organizationId: orgId }, { companyId: orgId }] } : {});
+
     if (isValidObjectId(rawEmployeeId)) {
       validObjectId = rawEmployeeId;
     } else if (rawEmployeeId) {
       try {
         const emp = await Employee.findOne({
           $or: [{ employeeId: rawEmployeeId }, { email: rawEmployeeId }],
+          ...orgScope,
         }).select("_id").lean();
         if (emp) validObjectId = emp._id.toString();
       } catch (err) {
@@ -2247,8 +2539,9 @@ export const employeePayslips = async (req, res) => {
       try {
         const payslips = await Payroll.find({
           employee: validObjectId,
+          ...orgScope,
         })
-          .populate("employee", "employeeId fullName department position email bankName accountNumber phone")
+          .populate("employee", "employeeId fullName department position email bankName accountNumber phone organizationId companyId")
           .sort({ paymentDate: -1, createdAt: -1 })
           .lean();
 
@@ -2260,9 +2553,61 @@ export const employeePayslips = async (req, res) => {
       }
     }
 
+    // Also query the Payslip collection for distributed multi-tenant payslips
+    try {
+      const activeEmpIds = [validObjectId, rawEmployeeId, req.user?._id, req.user?.id].filter(Boolean);
+      const payslipDocs = await Payslip.find({
+        employeeId: { $in: activeEmpIds },
+        status: { $in: ["Published", "Paid"] },
+        ...orgScope,
+      })
+        .populate("organizationId", "name companyName")
+        .sort({ "payrollPeriod.year": -1, createdAt: -1 })
+        .lean();
+
+      for (const doc of payslipDocs) {
+        const payslipMonthStr = `${doc.payrollPeriod.month} ${doc.payrollPeriod.year}`;
+        const exists = foundPayslips.some(
+          (p) =>
+            (p.payMonth && p.payMonth.toLowerCase().includes(doc.payrollPeriod.month.toLowerCase())) ||
+            (p.payrollPeriod && p.payrollPeriod.month === doc.payrollPeriod.month && p.payrollPeriod.year === doc.payrollPeriod.year)
+        );
+        if (!exists) {
+          foundPayslips.push({
+            _id: doc._id,
+            id: doc._id,
+            payslipNumber: `PAY-${doc.payrollPeriod.year}-${doc.payrollPeriod.month.slice(0, 3).toUpperCase()}`,
+            payMonth: payslipMonthStr,
+            paymentDate: doc.generatedAt || doc.createdAt,
+            basicSalary: doc.baseSalary,
+            baseSalary: doc.baseSalary,
+            netSalary: doc.netPay,
+            netPay: doc.netPay,
+            status: doc.status,
+            allowances: doc.allowances || 0,
+            earnings: doc.allowances ? [{ name: "Allowances", amount: doc.allowances }] : [],
+            deductions: [
+              ...(doc.deductions?.latenessDeductions ? [{ name: "Lateness Deductions", amount: doc.deductions.latenessDeductions }] : []),
+              ...(doc.deductions?.tax ? [{ name: "Tax", amount: doc.deductions.tax }] : []),
+              ...(doc.deductions?.other ? [{ name: "Other Deductions", amount: doc.deductions.other }] : []),
+            ],
+            latenessDeduction: doc.deductions?.latenessDeductions || 0,
+            payrollPeriod: doc.payrollPeriod,
+            employee: validObjectId,
+          });
+        }
+      }
+    } catch (payslipErr) {
+      console.warn("Error querying Payslip model in employeePayslips:", payslipErr.message);
+    }
+
     // Merge live generated store records matching this employee
     if (livePayrollStore.length > 0 && (rawEmployeeId || validObjectId)) {
       const liveMatches = livePayrollStore.filter((p) => {
+        if (orgId) {
+          const pOrg = p.organizationId ? String(p.organizationId) : (p.companyId ? String(p.companyId) : null);
+          if (pOrg && pOrg !== String(orgId)) return false;
+        }
         const pEmpId = String(p.employee?._id || p.employee || "");
         return pEmpId === String(validObjectId) || pEmpId === String(rawEmployeeId) || p.employeeId === rawEmployeeId;
       });
@@ -2309,32 +2654,32 @@ export const getPayrollAnalytics = async (req, res) => {
   try {
     const targetYear = parseInt(req.query.year, 10) || 2026;
     const targetDept = req.query.department || "All";
+    const orgId = req.organizationId || req.companyId || req.user?.organizationId || req.user?.companyId;
+    const orgQuery = orgId
+      ? { $or: [{ organizationId: orgId }, { companyId: orgId }] }
+      : {};
 
     // 1. Fetch all employees to know active headcount and baseline salaries
     let employees = [];
     try {
-      employees = await Employee.find({ isActive: { $ne: false } })
-        .select("fullName employeeId department position salary")
+      employees = await Employee.find({ isActive: { $ne: false }, ...orgQuery })
+        .select("fullName employeeId department position salary organizationId companyId")
         .lean();
     } catch (err) {
       console.warn("DB employee query for analytics:", err.message);
     }
 
-    const totalHeadcount = employees.length || 15;
-    const baseSalariesSum = employees.reduce((sum, e) => sum + (Number(e.salary) || 4000), 0) || (totalHeadcount * 4200);
+    const totalHeadcount = employees.length;
+    const baseSalariesSum = employees.reduce((sum, e) => sum + (Number(e.salary) || 0), 0);
 
     // 2. Fetch all payroll documents
-    let allRecords = [...livePayrollStore];
+    let allRecords = [];
     try {
-      const dbRecords = await Payroll.find({})
-        .populate("employee", "fullName employeeId department position salary")
+      const dbRecords = await Payroll.find(orgQuery)
+        .populate("employee", "fullName employeeId department position salary organizationId companyId")
         .lean();
       if (dbRecords && dbRecords.length > 0) {
-        dbRecords.forEach((p) => {
-          if (!allRecords.some((item) => String(item._id) === String(p._id) || item.payslipNumber === p.payslipNumber)) {
-            allRecords.push(p);
-          }
-        });
+        allRecords = dbRecords;
       }
     } catch (err) {
       console.warn("DB payroll query for analytics:", err.message);
@@ -2397,9 +2742,7 @@ export const getPayrollAnalytics = async (req, res) => {
           absenteeismDeductions += absD;
           netSalary += net;
 
-          // Process tax & statutory deductions
           const gross = bSal + allw;
-          // Standard statutory deductions: PAYE Tax ~ 10-12%, SSNIT/Pension ~ 5.5%, NHIS ~ 2.5%
           const estimatedTax = parseFloat((gross * 0.11).toFixed(2));
           const estimatedSSNIT = parseFloat((gross * 0.055).toFixed(2));
           const estimatedNHIS = parseFloat((gross * 0.025).toFixed(2));
@@ -2408,20 +2751,18 @@ export const getPayrollAnalytics = async (req, res) => {
           socialSecurity += estimatedSSNIT;
           healthInsurance += estimatedNHIS;
         });
-      } else {
-        // Synthesize dynamic data proportional to active employees for historical chart completeness
-        // Seasonal variation coefficient for realistic business trend
+      } else if (totalHeadcount > 0 && baseSalariesSum > 0) {
         const seasonality = 1 + Math.sin((idx / 12) * Math.PI * 2) * 0.08 + (idx >= 7 ? 0.05 : 0);
-        headcount = targetDept !== "All" ? Math.max(2, Math.round(totalHeadcount / 4)) : totalHeadcount;
+        headcount = targetDept !== "All" ? Math.max(1, Math.round(totalHeadcount / 4)) : totalHeadcount;
         const deptRatio = targetDept !== "All" ? 0.25 : 1;
 
         baseSalary = Math.round(baseSalariesSum * deptRatio * seasonality);
         allowances = Math.round(baseSalary * (0.08 + (idx % 3) * 0.02));
         const gross = baseSalary + allowances;
 
-        taxDeductions = Math.round(gross * 0.115); // PAYE Income Tax (11.5%)
-        socialSecurity = Math.round(gross * 0.055); // SSNIT / PF (5.5%)
-        healthInsurance = Math.round(gross * 0.025); // NHIS / Medical (2.5%)
+        taxDeductions = Math.round(gross * 0.115);
+        socialSecurity = Math.round(gross * 0.055);
+        healthInsurance = Math.round(gross * 0.025);
         absenteeismDeductions = Math.round(baseSalary * 0.015 * ((idx % 2) + 0.5));
 
         const totalDeductions = taxDeductions + socialSecurity + healthInsurance + absenteeismDeductions;
@@ -2447,18 +2788,33 @@ export const getPayrollAnalytics = async (req, res) => {
         totalTaxAndStatutory: Math.round(totalTaxAndStatutory),
         totalDeductions: Math.round(totalDeductions),
         headcount,
-        effectiveTaxRate: grossSalary > 0 ? parseFloat(((taxDeductions / grossSalary) * 100).toFixed(1)) : 11.5,
+        effectiveTaxRate: grossSalary > 0 ? parseFloat(((taxDeductions / grossSalary) * 100).toFixed(1)) : 0,
       };
     });
 
     // Compute Departmental Breakdown
     const departmentDisbursements = departmentList.map((deptName) => {
-      // Find employees in this dept
       const deptEmployees = employees.filter((e) => (e.department || "").toLowerCase().includes(deptName.toLowerCase()) || deptName.toLowerCase().includes((e.department || "").toLowerCase()));
-      const count = deptEmployees.length > 0 ? deptEmployees.length : Math.floor(Math.random() * 3) + 2;
-      const avgSalary = deptName.includes("Engineering") || deptName.includes("Finance") ? 5800 : 4200;
+      const count = deptEmployees.length;
 
-      const base = deptEmployees.reduce((sum, e) => sum + (Number(e.salary) || avgSalary), 0) || (count * avgSalary);
+      if (count === 0) {
+        return {
+          department: deptName,
+          shortName: deptName.length > 12 ? deptName.split(" ")[0] : deptName,
+          employeeCount: 0,
+          baseSalary: 0,
+          allowances: 0,
+          grossSalary: 0,
+          netSalary: 0,
+          taxDeductions: 0,
+          socialSecurity: 0,
+          healthInsurance: 0,
+          totalDeductions: 0,
+          effectiveTaxRate: 0,
+        };
+      }
+
+      const base = deptEmployees.reduce((sum, e) => sum + (Number(e.salary) || 0), 0);
       const allow = Math.round(base * 0.12);
       const gross = base + allow;
       const tax = Math.round(gross * 0.115);
@@ -2479,7 +2835,7 @@ export const getPayrollAnalytics = async (req, res) => {
         socialSecurity: ssnit,
         healthInsurance: health,
         totalDeductions: totalDed,
-        effectiveTaxRate: parseFloat(((tax / gross) * 100).toFixed(1)),
+        effectiveTaxRate: gross > 0 ? parseFloat(((tax / gross) * 100).toFixed(1)) : 0,
       };
     });
 
@@ -2491,23 +2847,28 @@ export const getPayrollAnalytics = async (req, res) => {
     const totalAllDeductions = totalTaxPAYE + totalSSNIT + totalNHIS + totalAbsenceDeductions;
 
     const taxCategoryBreakdown = [
-      { name: "Income Tax (PAYE)", amount: totalTaxPAYE, percentage: totalAllDeductions > 0 ? parseFloat(((totalTaxPAYE / totalAllDeductions) * 100).toFixed(1)) : 58.5, fill: "#6366F1" },
-      { name: "SSNIT / Pension (5.5%)", amount: totalSSNIT, percentage: totalAllDeductions > 0 ? parseFloat(((totalSSNIT / totalAllDeductions) * 100).toFixed(1)) : 28.0, fill: "#002185" },
-      { name: "Health Insurance (NHIS)", amount: totalNHIS, percentage: totalAllDeductions > 0 ? parseFloat(((totalNHIS / totalAllDeductions) * 100).toFixed(1)) : 10.5, fill: "#06B6D4" },
-      { name: "Absence Deductions", amount: totalAbsenceDeductions, percentage: totalAllDeductions > 0 ? parseFloat(((totalAbsenceDeductions / totalAllDeductions) * 100).toFixed(1)) : 3.0, fill: "#DC2626" },
+      { name: "Income Tax (PAYE)", amount: totalTaxPAYE, percentage: totalAllDeductions > 0 ? parseFloat(((totalTaxPAYE / totalAllDeductions) * 100).toFixed(1)) : 0, fill: "#6366F1" },
+      { name: "SSNIT / Pension (5.5%)", amount: totalSSNIT, percentage: totalAllDeductions > 0 ? parseFloat(((totalSSNIT / totalAllDeductions) * 100).toFixed(1)) : 0, fill: "#002185" },
+      { name: "Health Insurance (NHIS)", amount: totalNHIS, percentage: totalAllDeductions > 0 ? parseFloat(((totalNHIS / totalAllDeductions) * 100).toFixed(1)) : 0, fill: "#06B6D4" },
+      { name: "Absence Deductions", amount: totalAbsenceDeductions, percentage: totalAllDeductions > 0 ? parseFloat(((totalAbsenceDeductions / totalAllDeductions) * 100).toFixed(1)) : 0, fill: "#DC2626" },
     ];
 
     // Summary KPIs
     const currentMonthIndex = new Date().getMonth();
-    const currentMonthData = monthlyDisbursements[currentMonthIndex] || monthlyDisbursements[7];
+    const currentMonthData = monthlyDisbursements[currentMonthIndex] || monthlyDisbursements[0] || {
+      netSalary: 0,
+      taxDeductions: 0,
+      grossSalary: 0,
+      allowances: 0,
+    };
 
     const totalNetDisbursedYear = monthlyDisbursements.reduce((sum, m) => sum + m.netSalary, 0);
     const totalTaxDeductedYear = totalTaxPAYE;
     const totalGrossYear = monthlyDisbursements.reduce((sum, m) => sum + m.grossSalary, 0);
     const totalAllowancesYear = monthlyDisbursements.reduce((sum, m) => sum + m.allowances, 0);
     const avgMonthlyNetDisbursement = Math.round(totalNetDisbursedYear / 12);
-    const avgNetSalaryPerEmployee = totalHeadcount > 0 ? Math.round(currentMonthData.netSalary / totalHeadcount) : 3800;
-    const effectiveTaxRate = totalGrossYear > 0 ? parseFloat(((totalTaxDeductedYear / totalGrossYear) * 100).toFixed(1)) : 11.5;
+    const avgNetSalaryPerEmployee = totalHeadcount > 0 ? Math.round(currentMonthData.netSalary / totalHeadcount) : 0;
+    const effectiveTaxRate = totalGrossYear > 0 ? parseFloat(((totalTaxDeductedYear / totalGrossYear) * 100).toFixed(1)) : 0;
 
     return res.status(200).json({
       success: true,
@@ -2543,18 +2904,19 @@ export const getPayrollAnalytics = async (req, res) => {
 // Retrieve Processed Payroll Cycle History with status, expenditure & penalty totals
 export const getPayrollCycles = async (req, res) => {
   try {
-    let allRecords = [...livePayrollStore];
+    let allRecords = [];
+    const orgId = req.organizationId || req.companyId || req.user?.organizationId || req.user?.companyId;
+    const orgQuery = orgId
+      ? { $or: [{ organizationId: orgId }, { companyId: orgId }] }
+      : {};
+
     try {
-      const dbRecords = await Payroll.find({})
-        .populate("employee", "fullName employeeId department position")
+      const dbRecords = await Payroll.find(orgQuery)
+        .populate("employee", "fullName employeeId department position organizationId companyId")
         .sort({ paymentDate: -1, createdAt: -1 })
         .lean();
       if (dbRecords && dbRecords.length > 0) {
-        dbRecords.forEach((p) => {
-          if (!allRecords.some((item) => String(item._id) === String(p._id) || item.payslipNumber === p.payslipNumber)) {
-            allRecords.push(p);
-          }
-        });
+        allRecords = dbRecords;
       }
     } catch (err) {
       console.warn("DB query for payroll cycles fallback:", err.message);
@@ -2734,15 +3096,21 @@ export const getSalaryProjection = async (req, res) => {
       employeeId = req.employee.id || req.employee._id || req.employee.employeeId;
     }
 
+    const activeTenantId = req.organizationId || req.companyId || req.user?.organizationId || req.user?.companyId || req.employee?.organizationId;
+    const orgScope = (req.user?.role !== "super_admin" && activeTenantId)
+      ? { $or: [{ organizationId: activeTenantId }, { companyId: activeTenantId }] }
+      : (activeTenantId ? { $or: [{ organizationId: activeTenantId }, { companyId: activeTenantId }] } : {});
+
     // Target employee lookup from Employee and User collections
     let targetEmployee = null;
     if (employeeId && employeeId !== "all") {
       try {
         if (isValidObjectId(employeeId)) {
-          targetEmployee = await Employee.findById(employeeId).lean();
+          targetEmployee = await Employee.findOne({ _id: employeeId, ...orgScope }).lean();
         } else {
           targetEmployee = await Employee.findOne({
             $or: [{ employeeId }, { email: employeeId }],
+            ...orgScope,
           }).lean();
         }
       } catch (err) {
@@ -2750,14 +3118,14 @@ export const getSalaryProjection = async (req, res) => {
       }
     }
 
-    if (!targetEmployee) {
-      targetEmployee = await Employee.findOne({ isActive: true }).lean();
+    if (!targetEmployee && !employeeId) {
+      targetEmployee = await Employee.findOne({ isActive: true, ...orgScope }).lean();
     }
 
     // If still not found, check User collection
-    if (!targetEmployee) {
+    if (!targetEmployee && !employeeId) {
       try {
-        const targetUser = await User.findOne({ role: "employee" }).lean();
+        const targetUser = await User.findOne({ role: "employee", ...orgScope }).lean();
         if (targetUser) {
           targetEmployee = {
             _id: targetUser._id,
@@ -2782,6 +3150,8 @@ export const getSalaryProjection = async (req, res) => {
         message: "No active employee found for salary projection.",
       });
     }
+
+    validateOrganizationAccess(targetEmployee, req);
 
     // Target Month / Year parsing
     const monthNames = [
@@ -2885,7 +3255,7 @@ export const getSalaryProjection = async (req, res) => {
     let attendanceRecords = [];
     if (isValidObjectId(targetEmployee._id)) {
       try {
-        const dbAtt = await Attendance.find({ employee: targetEmployee._id }).lean();
+        const dbAtt = await Attendance.find({ employee: targetEmployee._id, ...orgScope }).lean();
         if (dbAtt) attendanceRecords = dbAtt;
       } catch (err) {
         console.warn("DB attendance query in getSalaryProjection:", err.message);
@@ -2893,6 +3263,10 @@ export const getSalaryProjection = async (req, res) => {
     }
 
     liveAttendanceStore.forEach((liveAtt) => {
+      if (activeTenantId) {
+        const attOrg = liveAtt.organizationId ? String(liveAtt.organizationId) : (liveAtt.companyId ? String(liveAtt.companyId) : null);
+        if (attOrg && attOrg !== String(activeTenantId)) return;
+      }
       if (String(liveAtt.employee) === String(targetEmployee._id)) {
         if (!attendanceRecords.some((a) => a.date === liveAtt.date)) {
           attendanceRecords.push(liveAtt);
@@ -2970,7 +3344,7 @@ export const getSalaryProjection = async (req, res) => {
     let allEmployeeLeaves = [];
     if (isValidObjectId(targetEmployee._id)) {
       try {
-        const dbLeaves = await Leave.find({ employee: targetEmployee._id }).lean();
+        const dbLeaves = await Leave.find({ employee: targetEmployee._id, ...orgScope }).lean();
         if (dbLeaves) allEmployeeLeaves = dbLeaves;
       } catch (err) {
         console.warn("DB leave query in getSalaryProjection:", err.message);
@@ -3374,7 +3748,8 @@ export const getSalaryProjection = async (req, res) => {
     });
   } catch (error) {
     console.error("Error in getSalaryProjection:", error);
-    return res.status(500).json({
+    const statusCode = error.message === "Unauthorized" || error.statusCode === 403 ? 403 : (error.statusCode || 500);
+    return res.status(statusCode).json({
       success: false,
       message: error.message || "Failed to calculate salary projection.",
     });
@@ -3427,8 +3802,20 @@ export const getEmployeeLivePayrollSummary = async (req, res) => {
       }
     }
 
+    if (!rawEmployeeId) {
+      return res.status(401).json({
+        success: false,
+        message: "Authentication required to view payroll summary.",
+      });
+    }
+
+    const orgId = req.organizationId || req.companyId || req.user?.organizationId || req.user?.companyId || req.employee?.organizationId;
+    const orgScope = (req.user?.role !== "super_admin" && orgId)
+      ? { $or: [{ organizationId: orgId }, { companyId: orgId }] }
+      : (orgId ? { $or: [{ organizationId: orgId }, { companyId: orgId }] } : {});
+
     const calculation = await calculateEmployeeMonthPayroll({
-      employeeInput: rawEmployeeId || "emp_default_01",
+      employeeInput: rawEmployeeId,
       month: month || req.query.monthStr,
       year,
       isFullMonthAudit: false,
@@ -3441,6 +3828,7 @@ export const getEmployeeLivePayrollSummary = async (req, res) => {
         publishedPayslip = await Payroll.findOne({
           employee: rawEmployeeId,
           status: { $in: ["Published", "published", "Paid", "paid"] },
+          ...orgScope,
         })
           .sort({ paymentDate: -1, createdAt: -1 })
           .lean();
@@ -3454,6 +3842,7 @@ export const getEmployeeLivePayrollSummary = async (req, res) => {
         publishedPayslip = await Payroll.findOne({
           employee: calculation.employee._id,
           status: { $in: ["Published", "published", "Paid", "paid"] },
+          ...orgScope,
         })
           .sort({ paymentDate: -1, createdAt: -1 })
           .lean();
@@ -3464,6 +3853,10 @@ export const getEmployeeLivePayrollSummary = async (req, res) => {
 
     if (!publishedPayslip) {
       const match = livePayrollStore.find((p) => {
+        if (orgId) {
+          const pOrg = p.organizationId ? String(p.organizationId) : (p.companyId ? String(p.companyId) : null);
+          if (pOrg && pOrg !== String(orgId)) return false;
+        }
         const pEmpId = String(p.employee?._id || p.employee || p.employeeId || "");
         const status = String(p.status || "").toLowerCase();
         const isPublished = status === "published" || status === "paid";
@@ -3534,7 +3927,13 @@ export const getEmployeeLivePayrollSummary = async (req, res) => {
 export const getMonthlyPayrollRun = async (req, res) => {
   try {
     const { month, year } = req.query;
-    const runResult = await calculateAllEmployeesMonthlyRun({ month, year });
+    const organizationId = req.organizationId || req.companyId || req.user?.organizationId || req.user?.companyId;
+
+    const runResult = await calculateAllEmployeesMonthlyRun({
+      month,
+      year,
+      organizationId: organizationId || null,
+    });
 
     return res.status(200).json({
       success: true,

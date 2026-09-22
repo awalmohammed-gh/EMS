@@ -14,8 +14,8 @@ import {
   ShieldCheck,
   User,
 } from "lucide-react";
-import eyenitLogo from "../assets/eyenit_logo.png";
 import { useManagement } from "../context/ManagementContextProvider";
+import { useBranding } from "../context/BrandingContext";
 
 /**
  * ResponsiveSidebar Component
@@ -32,6 +32,7 @@ export const ResponsiveSidebar = ({
   const { pathname } = useLocation();
   const navigate = useNavigate();
   const { user, role: contextRole, logout } = useManagement();
+  const { companyName, logoUrl } = useBranding();
   const [internalMobileOpen, setInternalMobileOpen] = useState(false);
 
   const effectiveMobileOpen = onMobileClose !== undefined ? isMobileOpen : internalMobileOpen;
@@ -49,9 +50,7 @@ export const ResponsiveSidebar = ({
     (contextRole === "admin" && !pathname.startsWith("/employee"));
 
   const userRoleTitle = isAdmin
-    ? user?.role === "super_admin"
-      ? "Super Admin"
-      : "Administrator"
+    ? "Administrator"
     : user?.position || "Staff Member";
 
   const adminLinks = [
@@ -79,7 +78,7 @@ export const ResponsiveSidebar = ({
     if (logout) {
       await logout(isAdmin ? "admin" : "employee");
     }
-    navigate("/welcome");
+    navigate("/admin/login");
   };
 
   const isLinkActive = (itemPath) => {
@@ -108,16 +107,38 @@ export const ResponsiveSidebar = ({
         id="responsive-desktop-sidebar"
         className="hidden lg:flex flex-col h-full w-64 bg-white dark:bg-slate-900 border-r border-[#E2E8F0] dark:border-slate-800 shadow-xs shrink-0 z-10 transition-colors duration-200"
       >
-        {/* Brand Header */}
-        <div className="px-5 pt-5 pb-4 border-b border-[#E2E8F0] dark:border-slate-800">
-          <div className="flex items-center gap-3">
-            <div className="w-12 h-12 rounded-xl bg-white dark:bg-slate-800 flex items-center justify-center p-1 border border-[#E2E8F0] dark:border-slate-700 shadow-2xs">
-              <img className="w-full h-full object-contain" src={eyenitLogo} alt="Eyenit" />
+        {/* Sidebar Brand Header */}
+        <div className="h-16 px-5 border-b border-slate-200/80 dark:border-slate-800 flex items-center gap-3">
+          {logoUrl ? (
+            <div className="w-10 h-10 rounded-xl bg-white dark:bg-slate-800 border border-slate-200/80 dark:border-slate-700 shadow-xs flex items-center justify-center p-1 overflow-hidden shrink-0">
+              <img
+                src={logoUrl}
+                alt={companyName || "Company Logo"}
+                className="w-full h-full object-contain"
+                onError={(e) => {
+                  e.target.style.display = "none";
+                  if (e.target.nextSibling) {
+                    e.target.nextSibling.style.display = "flex";
+                  }
+                }}
+              />
+              <div className="hidden w-full h-full items-center justify-center bg-[#0B1E48] text-white font-bold text-sm rounded-lg">
+                {companyName ? companyName.charAt(0).toUpperCase() : "W"}
+              </div>
             </div>
-            <div>
-              <p className="text-sm font-bold text-[#002185] dark:text-blue-400 tracking-tight">Eyenit</p>
-              <p className="text-[11px] font-medium text-[#64748B] dark:text-slate-400">Management System</p>
+          ) : (
+            <div className="w-10 h-10 rounded-xl bg-[#0B1E48] text-white flex items-center justify-center font-bold text-sm shadow-xs shrink-0">
+              {companyName ? companyName.charAt(0).toUpperCase() : "W"}
             </div>
+          )}
+
+          <div className="flex flex-col min-w-0">
+            <span className="text-sm font-bold text-slate-900 dark:text-slate-100 truncate">
+              {companyName || "WorkPulse"}
+            </span>
+            <span className="text-[10px] font-semibold text-slate-400 uppercase tracking-wider">
+              Workforce Suite
+            </span>
           </div>
         </div>
 
@@ -181,19 +202,42 @@ export const ResponsiveSidebar = ({
             <div>
               {/* Header */}
               <div className="flex justify-between items-center pb-3 border-b border-gray-200 dark:border-slate-800">
-                <div className="flex items-center gap-2.5">
-                  <div className="w-9 h-9 rounded-lg bg-white dark:bg-slate-800 flex items-center justify-center p-1 border border-gray-200 dark:border-slate-700">
-                    <img className="w-full h-full object-contain" src={eyenitLogo} alt="Eyenit" />
-                  </div>
-                  <div>
-                    <span className="font-bold text-sm text-[#002185] dark:text-blue-400 block">Eyenit</span>
-                    <span className="text-[10px] text-gray-500 dark:text-slate-400 block font-medium">Management</span>
+                <div className="flex items-center gap-2.5 min-w-0">
+                  {logoUrl ? (
+                    <div className="w-9 h-9 rounded-lg bg-white dark:bg-slate-800 flex items-center justify-center p-1 border border-gray-200 dark:border-slate-700 overflow-hidden shrink-0">
+                      <img
+                        className="w-full h-full object-contain"
+                        src={logoUrl}
+                        alt={companyName || "Company Logo"}
+                        onError={(e) => {
+                          e.target.style.display = "none";
+                          if (e.target.nextSibling) {
+                            e.target.nextSibling.style.display = "flex";
+                          }
+                        }}
+                      />
+                      <div className="hidden w-full h-full items-center justify-center bg-[#0B1E48] text-white font-bold text-xs rounded-md">
+                        {companyName ? companyName.charAt(0).toUpperCase() : "W"}
+                      </div>
+                    </div>
+                  ) : (
+                    <div className="w-9 h-9 rounded-lg bg-[#0B1E48] text-white flex items-center justify-center font-bold text-xs shrink-0">
+                      {companyName ? companyName.charAt(0).toUpperCase() : "W"}
+                    </div>
+                  )}
+                  <div className="min-w-0">
+                    <span className="font-bold text-sm text-slate-900 dark:text-slate-100 block truncate">
+                      {companyName || "WorkPulse"}
+                    </span>
+                    <span className="text-[10px] text-gray-500 dark:text-slate-400 block font-medium">
+                      Workforce Suite
+                    </span>
                   </div>
                 </div>
                 <button
                   type="button"
                   onClick={handleClose}
-                  className="p-1.5 text-gray-500 hover:text-gray-900 dark:text-slate-400 dark:hover:text-white rounded-lg hover:bg-gray-100 dark:hover:bg-slate-800"
+                  className="p-1.5 text-gray-500 hover:text-gray-900 dark:text-slate-400 dark:hover:text-white rounded-lg hover:bg-gray-100 dark:hover:bg-slate-800 shrink-0"
                 >
                   <X className="w-4 h-4" />
                 </button>

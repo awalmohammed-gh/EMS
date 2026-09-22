@@ -10,7 +10,6 @@ import {
   Clock,
   AlertTriangle,
   CheckCircle2,
-  DollarSign,
   ShieldCheck,
   Loader2,
 } from "lucide-react";
@@ -27,7 +26,7 @@ export const AttendanceExportModal = ({
   allRecords = [],
   periodLabel = "Current Period",
   departmentFilter = "All",
-  companyName = "Enterprise Organization",
+  companyName = "",
   logoUrl,
   primaryColor = "#0B1E48",
   onOpenPrintReport,

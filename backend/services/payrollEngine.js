@@ -50,6 +50,11 @@ export async function calculateMonthlyPenalties(employeeId, year, monthIndex, op
   const currentYear = year || new Date().getFullYear();
   const currentMonthIdx = monthIndex !== undefined ? monthIndex : new Date().getMonth();
 
+  const orgId = options?.orgId || options?.organizationId || options?.companyId ||
+    options?.req?.organizationId || options?.req?.companyId ||
+    options?.req?.user?.organizationId || options?.req?.user?.companyId;
+  const orgScope = orgId ? { $or: [{ organizationId: orgId }, { companyId: orgId }] } : {};
+
   // Start and End of selected month in UTC/Local bounds
   const startDate = new Date(Date.UTC(currentYear, currentMonthIdx, 1, 0, 0, 0));
   const endDate = new Date(Date.UTC(currentYear, currentMonthIdx + 1, 0, 23, 59, 59, 999));
@@ -74,7 +79,7 @@ export async function calculateMonthlyPenalties(employeeId, year, monthIndex, op
   };
 
   try {
-    const dbSettings = await CompanySettings.findOne().lean();
+    const dbSettings = await CompanySettings.findOne(orgScope).lean();
     if (dbSettings) {
       settings = {
         ...settings,
@@ -94,18 +99,20 @@ export async function calculateMonthlyPenalties(employeeId, year, monthIndex, op
   if (employeeId && employeeId !== "all") {
     try {
       if (isValidObjectId(employeeId)) {
-        targetEmployee = await Employee.findById(employeeId).lean();
+        targetEmployee = await Employee.findOne({ _id: employeeId, ...orgScope }).lean();
         targetObjectId = employeeId;
         if (!targetEmployee) {
-          targetEmployee = await User.findById(employeeId).lean();
+          targetEmployee = await User.findOne({ _id: employeeId, ...orgScope }).lean();
         }
       } else {
         targetEmployee = await Employee.findOne({
           $or: [{ employeeId }, { email: employeeId }],
+          ...orgScope,
         }).lean();
         if (!targetEmployee) {
           targetEmployee = await User.findOne({
             $or: [{ employeeId }, { email: employeeId }],
+            ...orgScope,
           }).lean();
         }
       }
@@ -114,11 +121,11 @@ export async function calculateMonthlyPenalties(employeeId, year, monthIndex, op
     }
   }
 
-  if (!targetEmployee) {
+  if (!targetEmployee && orgId) {
     try {
-      targetEmployee = await Employee.findOne({ isActive: true }).lean();
+      targetEmployee = await Employee.findOne({ isActive: true, ...orgScope }).lean();
       if (!targetEmployee) {
-        targetEmployee = await User.findOne({ role: "employee" }).lean();
+        targetEmployee = await User.findOne({ role: "employee", ...orgScope }).lean();
       }
     } catch (e) {
       // fallback
@@ -155,6 +162,7 @@ export async function calculateMonthlyPenalties(employeeId, year, monthIndex, op
   try {
     const query = {
       $and: [
+        ...(orgId ? [orgScope] : []),
         empMatchOr.length > 0 ? { $or: empMatchOr } : {},
         {
           $or: [
@@ -175,6 +183,10 @@ export async function calculateMonthlyPenalties(employeeId, year, monthIndex, op
   // Merge live attendance store if in-memory clock-in exists
   if (Array.isArray(liveAttendanceStore)) {
     liveAttendanceStore.forEach((liveAtt) => {
+      if (orgId) {
+        const itemOrg = liveAtt.organizationId || liveAtt.companyId;
+        if (itemOrg && String(itemOrg) !== String(orgId)) return;
+      }
       const matchEmp =
         String(liveAtt.employee) === String(targetObjectId) ||
         String(liveAtt.employee?._id) === String(targetObjectId) ||
@@ -244,6 +256,7 @@ export async function calculateMonthlyPenalties(employeeId, year, monthIndex, op
   try {
     const leaves = await Leave.find({
       $and: [
+        ...(orgId ? [orgScope] : []),
         empMatchOr.length > 0 ? { $or: empMatchOr } : {},
         { status: "Approved" },
         {

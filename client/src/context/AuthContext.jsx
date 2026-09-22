@@ -5,24 +5,70 @@ import { adminLogout, employeeLogout } from "../apis/fontApis";
 const AuthContext = createContext(null);
 
 /**
+ * Explicitly clears all authentication session data, tokens, and persistent local keys.
+ */
+export const clearAllAuthSessionData = () => {
+  if (typeof window === "undefined") return;
+  try {
+    apiService.clearToken();
+    // Tokens
+    localStorage.removeItem("token");
+    localStorage.removeItem("auth_token");
+    localStorage.removeItem("adminToken");
+    localStorage.removeItem("employeeToken");
+    // User profile and session keys
+    localStorage.removeItem("adminData");
+    localStorage.removeItem("employeeData");
+    localStorage.removeItem("app_user");
+    localStorage.removeItem("user");
+    localStorage.removeItem("admin");
+    localStorage.removeItem("employee");
+    localStorage.removeItem("userRole");
+    localStorage.removeItem("isLoggedIn");
+    localStorage.removeItem("companyName");
+    // Session storage
+    sessionStorage.removeItem("token");
+    sessionStorage.removeItem("auth_token");
+    sessionStorage.removeItem("adminToken");
+    sessionStorage.removeItem("employeeToken");
+    sessionStorage.removeItem("adminData");
+    sessionStorage.removeItem("employeeData");
+    sessionStorage.removeItem("app_user");
+    sessionStorage.removeItem("user");
+    sessionStorage.removeItem("userRole");
+    sessionStorage.removeItem("isLoggedIn");
+    sessionStorage.clear();
+  } catch (err) {
+    console.warn("Failed to clear local auth session keys:", err);
+  }
+};
+
+/**
  * Authentication Context Provider
- * Strictly uses HTTP-only cookie-based authentication with zero localStorage usage.
- * Automatically hydratres user session from /api/auth/me on initial page load and refresh.
+ * Uses HTTP-only cookies and in-memory context state.
+ * Automatically hydrates user session via persistent checkSession effect on initial load and refresh.
+ * Provides isInitializing state so ProtectedRoute can wait before deciding to redirect,
+ * preserving the current route and eliminating redirection flicker.
  */
 export const AuthProvider = ({ children }) => {
   const [user, setUser] = useState(null);
-  const [loading, setLoading] = useState(true);
+  const [isInitializing, setIsInitializing] = useState(true);
 
-  // Dedicated Session Hydration
-  const checkAuthSession = useCallback(async () => {
+  // Persistent Session Hydration restoring user session data from API call
+  const checkSession = useCallback(async () => {
     try {
       const res = await api.get("/auth/me");
-      if (res.data?.success && res.data?.user) {
-        const fetchedUser = res.data.user;
-        setUser(fetchedUser);
+      if (res.data?.success && (res.data?.user || res.data?.employee || res.data?.admin)) {
+        const fetchedUser = res.data.user || res.data.employee || res.data.admin;
+        const resolvedRole = res.data.role || fetchedUser.role || (res.data.admin ? "admin" : "employee");
+        const fullUser = {
+          ...fetchedUser,
+          role: resolvedRole,
+        };
+        setUser(fullUser);
 
-        // If employee has an active ongoing shift returned by session endpoint, notify attendance listeners
-        if (res.data.activeShift || res.data.hasActiveShift) {
+        // Notify attendance if shift is active
+        if (res.data.activeShift || res.data.hasActiveShift || res.data.todayRecord) {
           const ongoing = res.data.activeShift || res.data.todayRecord;
           if (ongoing && typeof window !== "undefined") {
             window.dispatchEvent(
@@ -32,7 +78,7 @@ export const AuthProvider = ({ children }) => {
             );
           }
         }
-        return fetchedUser;
+        return fullUser;
       } else {
         setUser(null);
         return null;
@@ -41,20 +87,41 @@ export const AuthProvider = ({ children }) => {
       setUser(null);
       return null;
     } finally {
-      setLoading(false);
+      setIsInitializing(false);
     }
   }, []);
 
+  // Persistent checkSession effect on mount
   useEffect(() => {
-    checkAuthSession();
-  }, [checkAuthSession]);
+    let isMounted = true;
+    const runCheck = async () => {
+      try {
+        await checkSession();
+      } finally {
+        if (isMounted) {
+          setIsInitializing(false);
+        }
+      }
+    };
+    runCheck();
+    return () => {
+      isMounted = false;
+    };
+  }, [checkSession]);
 
-  // Login handler updating in-memory state and tokens
+  // Login handler
   const login = (userData, userRole = "admin", userToken = null, authPayload = null) => {
+    const resolvedRole = userData?.role || userRole;
+
     if (userToken) {
       apiService.setToken(userToken);
+      try {
+        localStorage.setItem("token", userToken);
+        localStorage.setItem("auth_token", userToken);
+      } catch (err) {
+        console.warn("Storage error saving token:", err);
+      }
     }
-    const resolvedRole = userData?.role || userRole;
     const resolvedUser = userData
       ? {
           ...userData,
@@ -63,7 +130,6 @@ export const AuthProvider = ({ children }) => {
       : null;
     setUser(resolvedUser);
 
-    // If attendance information is attached, notify client components
     if (authPayload && typeof window !== "undefined") {
       const activeShift = authPayload.activeShift;
       const todayRec = authPayload.todayRecord || authPayload.attendance;
@@ -89,11 +155,29 @@ export const AuthProvider = ({ children }) => {
     }
   };
 
-  // Logout handler clearing cookies, local tokens, and redirecting strictly to /welcome
-  const logout = async (redirectTarget = "/welcome") => {
+  // Logout handler: explicitly clears session cookies, tokens, and local persistent keys,
+  // then navigates the user to the Welcome Page to ensure a clean state
+  const logout = async (customRedirectTarget = null) => {
+    let redirectTarget = "/welcome";
+    let roleToLogout = user?.role || "admin";
+
+    if (
+      customRedirectTarget === "admin" ||
+      customRedirectTarget === "employee" ||
+      customRedirectTarget === "manager"
+    ) {
+      roleToLogout = customRedirectTarget;
+      redirectTarget = "/welcome";
+    } else if (
+      typeof customRedirectTarget === "string" &&
+      (customRedirectTarget.startsWith("/") || customRedirectTarget.startsWith("#"))
+    ) {
+      redirectTarget = customRedirectTarget;
+    }
+
     try {
       await api.post("/auth/logout").catch(() => {});
-      if (user?.role === "admin") {
+      if (roleToLogout === "admin" || roleToLogout === "manager") {
         await adminLogout().catch(() => {});
       } else {
         await employeeLogout().catch(() => {});
@@ -101,12 +185,11 @@ export const AuthProvider = ({ children }) => {
     } catch (err) {
       console.warn("Logout error:", err);
     } finally {
-      apiService.clearToken();
+      clearAllAuthSessionData();
       setUser(null);
-      // Strict Redirection: Do NOT redirect to generic root landing page (/#/).
-      // Redirect directly to the organization's Welcome Gateway (/#/welcome),
-      // preserving company logo, dynamic background image, and portal choice buttons.
-      if (typeof window !== "undefined" && redirectTarget) {
+
+      // Navigate to /welcome to ensure a clean state
+      if (typeof window !== "undefined") {
         const hashTarget = redirectTarget.startsWith("#")
           ? redirectTarget
           : redirectTarget.startsWith("/")
@@ -119,12 +202,7 @@ export const AuthProvider = ({ children }) => {
     }
   };
 
-  const role =
-    user?.role ||
-    (typeof window !== "undefined" && window.location.pathname.startsWith("/employee")
-      ? "employee"
-      : "admin");
-
+  const role = user ? user.role : null;
   const isAuthenticated = Boolean(user);
 
   return (
@@ -136,18 +214,23 @@ export const AuthProvider = ({ children }) => {
         setRole: (newRole) => {
           setUser((prev) => (prev ? { ...prev, role: newRole } : prev));
         },
-        token: user ? "cookie-session" : null,
-        setToken: () => {},
+        token: user ? (apiService.getToken() || "cookie-session") : null,
+        setToken: (token) => {
+          if (token) apiService.setToken(token);
+          else apiService.clearToken();
+        },
         isAuthenticated,
-        loading,
-        isLoading: loading,
+        isInitializing,
+        loading: isInitializing,
+        isLoading: isInitializing,
         login,
         logout,
-        refreshUser: checkAuthSession,
-        checkAuthSession,
+        checkSession,
+        checkAuthSession: checkSession,
+        refreshUser: checkSession,
       }}
     >
-      {!loading && children}
+      {children}
     </AuthContext.Provider>
   );
 };

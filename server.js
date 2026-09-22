@@ -7,6 +7,12 @@ import path from "path";
 import fs from "fs";
 import mongoose from "mongoose";
 import { fileURLToPath } from "url";
+import { tenantMiddleware, tenantPlugin } from "./backend/middleware/tenantMiddleware.js";
+import { authorizeCompanyTenant } from "./backend/middleware/authorizeCompanyTenant.js";
+
+// Register global tenant isolation plugin across Mongoose before loading schemas and routes
+mongoose.plugin(tenantPlugin);
+
 import { connectMongodb, closeMongodb } from "./backend/config/mongodb.js";
 import { initSocket } from "./backend/utils/socket.js";
 
@@ -23,6 +29,8 @@ import authRouter from "./backend/routes/authRoutes.js";
 import announcementRouter from "./backend/routes/announcementRoutes.js";
 import userRouter from "./backend/routes/userRoutes.js";
 import companyRouter from "./backend/routes/companyRoutes.js";
+import { verifyWorkspace, getWorkspaceBySlug } from "./backend/controllers/companyController.js";
+import { ensureSuperAdmin } from "./backend/utils/seedSuperAdmin.js";
 import { CompanySettings } from "./backend/models/CompanySettings.js";
 import { logErrorToFile } from "./backend/utils/logger.js";
 import { autoCloseAllStaleShifts } from "./backend/controllers/employeeAttendance.js";
@@ -61,33 +69,8 @@ const loadEnvironment = () => {
 
 loadEnvironment();
 
-// Resolve port dynamically: enforce port 3000 as required by environment architecture
-const parsePort = () => {
-  const portArgIndex = process.argv.indexOf("--port");
-  if (portArgIndex !== -1 && process.argv[portArgIndex + 1]) {
-    const val = parseInt(process.argv[portArgIndex + 1], 10);
-    if (!isNaN(val) && val > 0) {
-      if (val === 5173) {
-        console.warn("[Server Config] Port 5173 detected in arguments; redirecting to port 3000 to avoid proxy conflict.");
-        return 3000;
-      }
-      return val;
-    }
-  }
-  if (process.env.PORT) {
-    const val = parseInt(process.env.PORT, 10);
-    if (!isNaN(val) && val > 0) {
-      if (val === 5173) {
-        console.warn("[Server Config] PORT=5173 detected in environment; enforcing port 3000 for container reverse proxy.");
-        return 3000;
-      }
-      return val;
-    }
-  }
-  return 3000;
-};
-
-const PORT = parsePort();
+// Port 3000 is the ONLY externally accessible port in this environment architecture
+const PORT = 3000;
 
 // Validate critical environment variables during server startup
 const validateEnvironmentVariables = () => {
@@ -197,104 +180,6 @@ app.get("/api/health", (req, res) => {
   });
 });
 
-// Dedicated public branding endpoint: returns configured company name, logo, and theme colors with default values
-app.get("/api/company/public-branding", async (req, res) => {
-  const defaultBranding = {
-    companyName: "Enterprise Organization",
-    logo: "/eyenit_logo.png",
-    logoUrl: "/eyenit_logo.png",
-    welcomeBackgroundUrl: "",
-    primaryColor: "#0B1E48",
-    themeColors: {
-      primary: "#0B1E48",
-      accent: "#ff5500",
-    },
-    contactEmail: "admin@company.com",
-    isConfigured: false,
-  };
-
-  try {
-    let settingsDoc = null;
-    if (mongoose.connection.readyState === 1) {
-      try {
-        settingsDoc = await CompanySettings.findOne().lean();
-      } catch (dbErr) {
-        console.warn("[Server] DB lookup warning for public branding:", dbErr?.message);
-      }
-    }
-
-    if (!settingsDoc) {
-      return res.status(200).json({
-        success: true,
-        name: defaultBranding.companyName,
-        companyName: defaultBranding.companyName,
-        logo: defaultBranding.logo,
-        logoUrl: defaultBranding.logoUrl,
-        backgroundUrl: defaultBranding.welcomeBackgroundUrl,
-        welcomeBackgroundUrl: defaultBranding.welcomeBackgroundUrl,
-        themeColor: defaultBranding.primaryColor,
-        primaryColor: defaultBranding.primaryColor,
-        themeColors: defaultBranding.themeColors,
-        company: defaultBranding,
-        isConfigured: false,
-      });
-    }
-
-    const primaryColor = settingsDoc.primaryColor || defaultBranding.primaryColor;
-    const companyName = settingsDoc.companyName || defaultBranding.companyName;
-    const logoUrl = settingsDoc.logoUrl || defaultBranding.logoUrl;
-    const backgroundUrl = settingsDoc.welcomeBackgroundUrl || "";
-
-    const brandingData = {
-      name: companyName,
-      companyName,
-      logo: logoUrl,
-      logoUrl,
-      backgroundUrl,
-      welcomeBackgroundUrl: backgroundUrl,
-      themeColor: primaryColor,
-      primaryColor,
-      themeColors: {
-        primary: primaryColor,
-        accent: "#ff5500",
-      },
-      contactEmail: settingsDoc.contactEmail || defaultBranding.contactEmail,
-      isConfigured: Boolean(settingsDoc.isConfigured),
-    };
-
-    return res.status(200).json({
-      success: true,
-      name: companyName,
-      companyName,
-      logo: logoUrl,
-      logoUrl,
-      backgroundUrl,
-      welcomeBackgroundUrl: backgroundUrl,
-      themeColor: primaryColor,
-      primaryColor,
-      themeColors: brandingData.themeColors,
-      company: brandingData,
-      isConfigured: brandingData.isConfigured,
-    });
-  } catch (error) {
-    console.error("[Server] Error serving /api/company/public-branding:", error);
-    return res.status(200).json({
-      success: true,
-      name: defaultBranding.companyName,
-      companyName: defaultBranding.companyName,
-      logo: defaultBranding.logo,
-      logoUrl: defaultBranding.logoUrl,
-      backgroundUrl: defaultBranding.welcomeBackgroundUrl,
-      welcomeBackgroundUrl: defaultBranding.welcomeBackgroundUrl,
-      themeColor: defaultBranding.primaryColor,
-      primaryColor: defaultBranding.primaryColor,
-      themeColors: defaultBranding.themeColors,
-      company: defaultBranding,
-      isConfigured: false,
-    });
-  }
-});
-
 // Database readiness guard for API routes (fails fast with 503 instead of buffering/hanging queries)
 app.use("/api", (req, res, next) => {
   if (
@@ -316,9 +201,27 @@ app.use("/api", (req, res, next) => {
   next();
 });
 
-// Mount modular API routers
-app.use("/api/auth", authRouter);
+// Middleware for company-scoped routes
+app.use("/api", tenantMiddleware);
+app.use("/api", authorizeCompanyTenant);
+app.use(authorizeCompanyTenant);
+
+// Dedicated public workspace resolution routes (no auth required)
+app.get("/api/workspaces/:slug", getWorkspaceBySlug);
+app.get("/api/workspace/:slug", getWorkspaceBySlug);
+app.post("/api/workspaces/resolve", (req, res) => {
+  req.query.slug = req.body?.slug || req.query?.slug;
+  return getWorkspaceBySlug(req, res);
+});
+
+// Mount modular API routers with plural and singular aliases
 app.use("/api/company", companyRouter);
+app.use("/api/companies", companyRouter);
+app.use("/api/organization", companyRouter);
+app.use("/api/organizations", companyRouter);
+app.use("/api/workspace", companyRouter);
+app.use("/api/workspaces", companyRouter);
+app.use("/api/auth", authRouter);
 app.use("/api/users", userRouter);
 app.use("/api/user", userRouter);
 app.use("/api/employee", employeeRouter);
@@ -333,6 +236,14 @@ app.use("/api/leave", leaveRouter);
 app.use("/api/settings", settingsRouter);
 app.use("/api/notifications", notificationRouter);
 app.use("/api/announcements", announcementRouter);
+
+// Direct mounts without /api prefix to gracefully handle requests if client baseURL omits /api
+app.use("/company", companyRouter);
+app.use("/companies", companyRouter);
+app.use("/organization", companyRouter);
+app.use("/organizations", companyRouter);
+app.use("/workspace", companyRouter);
+app.use("/workspaces", companyRouter);
 
 // API Error handling middleware (includes MongoDB offline fallback)
 app.use("/api", (err, req, res, next) => {
@@ -359,6 +270,15 @@ app.use("/api", (err, req, res, next) => {
     details: "Root server Express API exception",
   });
   return res.status(500).json({ success: false, message: err.message || "Internal server error" });
+});
+
+// Dedicated API 404 handler: Immediately catch any unhandled /api requests before static/Vite middleware
+app.use("/api", (req, res) => {
+  console.error(`[404 NOT FOUND] ${req.method} ${req.originalUrl}`);
+  res.status(404).json({
+    success: false,
+    message: `Route ${req.method} ${req.originalUrl} not found on server.`,
+  });
 });
 
 // Client serving: Integrate Vite dev middleware in development or serve static dist in production
@@ -425,23 +345,30 @@ app.use(async (req, res, next) => {
   next();
 });
 
-// Start Express and Socket.IO server: bind immediately so port is open without delay
-server.listen(PORT, "0.0.0.0", () => {
-  console.log(`[Server] ========================================================`);
-  console.log(`[Server] Server running on http://localhost:${PORT}`);
-  console.log(`[Server] Backend API listening on http://0.0.0.0:${PORT}/api`);
-  console.log(`[Server] Vite middleware ready at http://localhost:${PORT}`);
-  console.log(`[Server] Environment: ${process.env.NODE_ENV || "development"}`);
-  console.log(`[Server] ========================================================`);
+// Catch-all 404 handler to help diagnose dead URLs immediately
+app.use((req, res) => {
+  console.error(`[404 NOT FOUND] ${req.method} ${req.originalUrl}`);
+  res.status(404).json({
+    success: false,
+    message: `Route ${req.method} ${req.originalUrl} not found on server.`,
+  });
 });
 
-// Initialize database connection asynchronously in the background
-const initDatabase = async () => {
+// Initialize database connection with async/await and ensure full initialization before listening
+const startServer = async () => {
   try {
-    console.log("[Server] Initializing database connection...");
+    console.log("[Server] Initializing MongoDB connection with async/await...");
     await connectMongodb();
+
     if (mongoose.connection.readyState === 1) {
-      console.log("[Server] Database ready for incoming requests.");
+      console.log("[Server] Database connection fully initialized and verified.");
+
+      // Ensure Platform Super Administrator exists
+      try {
+        await ensureSuperAdmin();
+      } catch (saErr) {
+        console.warn("[Server] Super Admin initialization notice:", saErr.message);
+      }
 
       // Run initial auto-close sweep for unclosed shifts from prior calendar days
       try {
@@ -464,11 +391,21 @@ const initDatabase = async () => {
       console.warn("[Server] Running in degraded mode: database is disconnected or offline.");
     }
   } catch (error) {
-    console.warn("[Server] Notice: Database connection not established:", error.message);
+    console.warn("[Server] Notice: Database connection error:", error.message);
   }
+
+  // Ensure Express and Socket.IO begin listening only after MongoDB initialization step has completed
+  server.listen(PORT, "0.0.0.0", () => {
+    console.log(`[Server] ========================================================`);
+    console.log(`[Server] Server running on http://localhost:${PORT}`);
+    console.log(`[Server] Backend API listening on http://0.0.0.0:${PORT}/api`);
+    console.log(`[Server] Vite middleware ready at http://localhost:${PORT}`);
+    console.log(`[Server] Environment: ${process.env.NODE_ENV || "development"}`);
+    console.log(`[Server] ========================================================`);
+  });
 };
 
-initDatabase();
+startServer();
 
 // Graceful Shutdown & Process Signal Handling (SIGINT/SIGTERM)
 let isShuttingDown = false;

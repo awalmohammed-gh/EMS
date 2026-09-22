@@ -1,5 +1,7 @@
 import { Employee } from "../models/employeeModel.js";
 import mongoose from "mongoose";
+import { validateOrganizationAccess } from "../utils/validateOrganizationAccess.js";
+import { buildTenantScope } from "../utils/tenantScope.js";
 
 // Helper for valid MongoDB ObjectId checking
 const isValidObjectId = (id) =>
@@ -11,10 +13,14 @@ const isValidObjectId = (id) =>
 // Function to get all employees details directly from the database
 export const employeeDetails = async (req, res) => {
   try {
+    const orgId = req.user?.organizationId || req.user?.companyId || req.companyId || req.organizationId;
     let employees = [];
+    const query = orgId
+      ? { $or: [{ organizationId: orgId }, { companyId: orgId }] }
+      : {};
 
     try {
-      employees = await Employee.find({}).select("-password").sort({ createdAt: -1 }).lean();
+      employees = await Employee.find(query).select("-password").sort({ createdAt: -1 }).lean();
     } catch (dbErr) {
       console.warn("DB find in employeeDetails:", dbErr.message);
     }
@@ -32,6 +38,8 @@ export const employeeDetails = async (req, res) => {
       employmentType: emp.employmentType || "Full-time",
       employmentDate: emp.employmentDate || new Date(),
       role: emp.role || "employee",
+      companyId: emp.companyId || emp.organizationId || null,
+      organizationId: emp.organizationId || emp.companyId || null,
       profilePicture: emp.profilePicture || emp.profile_picture || emp.avatar || emp.profile_image_url || "",
       profile_picture: emp.profile_picture || emp.profilePicture || emp.avatar || emp.profile_image_url || "",
       avatar: emp.avatar || emp.profilePicture || emp.profile_image_url || "",
@@ -61,10 +69,14 @@ export const employeeDetails = async (req, res) => {
 // Function to get compact employee name list for dropdowns and filters
 export const employeeNameList = async (req, res) => {
   try {
+    const orgId = req.user?.organizationId || req.user?.companyId || req.companyId || req.organizationId;
     let employees = [];
+    const query = orgId
+      ? { $or: [{ organizationId: orgId }, { companyId: orgId }] }
+      : {};
     try {
-      employees = await Employee.find({})
-        .select("_id employeeId fullName department position email phone baseSalary")
+      employees = await Employee.find(query)
+        .select("_id employeeId fullName department position email phone baseSalary organizationId companyId")
         .sort({ fullName: 1 })
         .lean();
     } catch (dbErr) {
@@ -87,29 +99,38 @@ export const employeeNameList = async (req, res) => {
 export const getEmployeeById = async (req, res) => {
   try {
     const { id } = req.params;
+    const orgId = req.user?.organizationId || req.user?.companyId || req.companyId || req.organizationId;
     let employee = null;
+    const orgQuery = orgId
+      ? { $or: [{ organizationId: orgId }, { companyId: orgId }] }
+      : {};
 
     if (isValidObjectId(id)) {
-      employee = await Employee.findById(id).select("-password").lean();
+      employee = await Employee.findOne({ _id: id, ...orgQuery }).select("-password").lean();
     } else {
       employee = await Employee.findOne({
         $or: [{ employeeId: id }, { email: id }],
+        ...orgQuery,
       }).select("-password").lean();
     }
 
     if (!employee) {
       return res.status(404).json({
         success: false,
-        message: "Employee record not found in database.",
+        message: "Employee record not found in this company workspace.",
       });
     }
+
+    // Validate organization access to prevent cross-tenant data access
+    validateOrganizationAccess(employee, req);
 
     res.status(200).json({
       success: true,
       employee,
     });
   } catch (error) {
-    res.status(500).json({
+    const statusCode = error.message === "Unauthorized" || error.statusCode === 403 ? 403 : (error.statusCode || 500);
+    res.status(statusCode).json({
       success: false,
       message: error.message,
     });
@@ -119,44 +140,39 @@ export const getEmployeeById = async (req, res) => {
 // Get logged-in employee profile for /me endpoint
 export const getCurrentLoggedInEmployee = async (req, res) => {
   try {
-    const rawId = req.employee?.id || req.employee?._id;
+    const rawId = req.employee?.id || req.employee?._id || req.user?._id || req.user?.id;
+    const orgId = req.companyId || req.organizationId || req.employee?.companyId || req.employee?.organizationId;
     let employee = null;
 
+    const orgFilter = orgId
+      ? { $or: [{ organizationId: orgId }, { companyId: orgId }] }
+      : {};
+
     if (isValidObjectId(rawId)) {
-      employee = await Employee.findById(rawId).select("-password").lean();
+      employee = await Employee.findOne({ _id: rawId, ...orgFilter }).select("-password").lean();
     } else if (rawId) {
       employee = await Employee.findOne({
         $or: [{ employeeId: req.employee?.employeeId || rawId }, { email: rawId }],
+        ...orgFilter,
       }).select("-password").lean();
     }
 
-    // If still null, find the active employee from DB
     if (!employee) {
-      employee = await Employee.findOne({ isActive: true }).select("-password").lean();
+      return res.status(404).json({
+        success: false,
+        message: "Employee profile not found in authenticated company workspace.",
+      });
     }
 
-    if (!employee) {
-      // Return default active employee profile
-      employee = {
-        _id: "emp_demo_001",
-        employeeId: "EMP-001",
-        fullName: "Mohammed Awal",
-        email: "awalm8043@gmail.com",
-        phone: "+233 24 123 4567",
-        department: "Engineering",
-        position: "Frontend Developer",
-        role: "employee",
-        status: "active",
-        isActive: true,
-      };
-    }
+    validateOrganizationAccess(employee, req);
 
     res.status(200).json({
       success: true,
       employee,
     });
   } catch (error) {
-    res.status(500).json({
+    const statusCode = error.message === "Unauthorized" || error.statusCode === 403 ? 403 : (error.statusCode || 500);
+    res.status(statusCode).json({
       success: false,
       message: error.message,
     });
@@ -167,17 +183,20 @@ export const getCurrentLoggedInEmployee = async (req, res) => {
 export const updateCurrentEmployee = async (req, res) => {
   try {
     const rawId = req.employee?.id || req.employee?._id;
+    const orgId = req.user?.organizationId || req.user?.companyId || req.companyId || req.organizationId;
+    const orgFilter = orgId ? { $or: [{ organizationId: orgId }, { companyId: orgId }] } : {};
     const { fullName, phone, avatar, profilePicture, profile_picture, profile_image_url } = req.body;
     let filter = {};
 
     if (isValidObjectId(rawId)) {
-      filter = { _id: rawId };
+      filter = { _id: rawId, ...orgFilter };
     } else if (rawId) {
       filter = {
         $or: [{ employeeId: req.employee?.employeeId || rawId }, { email: rawId }],
+        ...orgFilter,
       };
-    } else {
-      const active = await Employee.findOne({ isActive: true });
+    } else if (orgId) {
+      const active = await Employee.findOne({ isActive: true, ...orgFilter });
       if (active) filter = { _id: active._id };
       else {
         return res.status(404).json({
@@ -185,6 +204,11 @@ export const updateCurrentEmployee = async (req, res) => {
           message: "Employee profile not found.",
         });
       }
+    } else {
+      return res.status(403).json({
+        success: false,
+        message: "Access restricted: No company workspace identified for this request.",
+      });
     }
 
     const updates = {};
@@ -209,13 +233,16 @@ export const updateCurrentEmployee = async (req, res) => {
       });
     }
 
+    validateOrganizationAccess(updated, req);
+
     res.status(200).json({
       success: true,
       message: "Profile updated successfully.",
       employee: updated,
     });
   } catch (error) {
-    res.status(500).json({
+    const statusCode = error.message === "Unauthorized" || error.statusCode === 403 ? 403 : (error.statusCode || 500);
+    res.status(statusCode).json({
       success: false,
       message: error.message,
     });

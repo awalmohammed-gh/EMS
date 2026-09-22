@@ -2,19 +2,19 @@ import { createContext, useContext, useState, useEffect, useCallback } from "rea
 import { brandingService } from "../services/brandingService";
 
 const defaultBranding = {
-  companyName: "Enterprise Organization",
-  logoUrl: "/eyenit_logo.png",
+  companyName: "WorkPulse",
+  logoUrl: "",
   welcomeBackgroundUrl: "",
   primaryColor: "#0B1E48",
-  contactEmail: "admin@company.com",
-  isConfigured: false,
+  contactEmail: "",
+  isConfigured: true,
 };
 
 const getInitialBranding = () => {
   if (typeof window !== "undefined") {
     try {
       const stored =
-        sessionStorage.getItem("org_branding") || localStorage.getItem("org_branding");
+        sessionStorage.getItem("company_branding") || localStorage.getItem("company_branding");
       if (stored) {
         const parsed = JSON.parse(stored);
         if (parsed && typeof parsed === "object") {
@@ -29,47 +29,65 @@ const getInitialBranding = () => {
 };
 
 const BrandingContext = createContext({
+  companyName: "WorkPulse",
+  logoUrl: "",
+  welcomeBackgroundUrl: "",
+  primaryColor: "#0B1E48",
   branding: defaultBranding,
-  isConfigured: false,
-  hasExistingCompany: false,
+  isConfigured: true,
+  hasExistingCompany: true,
   requiresSetup: false,
-  isLoading: true,
+  isLoading: false,
   refreshBranding: async () => {},
   setBranding: () => {},
 });
 
 export const BrandingProvider = ({ children }) => {
   const [branding, setBranding] = useState(getInitialBranding);
-  const [isConfigured, setIsConfigured] = useState(false);
-  const [hasExistingCompany, setHasExistingCompany] = useState(false);
+  const [isConfigured, setIsConfigured] = useState(true);
+  const [hasExistingCompany, setHasExistingCompany] = useState(true);
   const [requiresSetup, setRequiresSetup] = useState(false);
-  const [isLoading, setIsLoading] = useState(true);
+  const [isLoading, setIsLoading] = useState(false);
 
   const refreshBranding = useCallback(async () => {
     try {
-      const [brandRes, initRes, statusRes] = await Promise.allSettled([
+      // Fetch public company configuration from single-company endpoint
+      const [brandRes, initRes] = await Promise.allSettled([
         brandingService.getPublicBranding(),
         brandingService.getInitStatus(),
-        brandingService.getCompanyStatus(),
       ]);
 
+      let comp = null;
       if (brandRes.status === "fulfilled" && brandRes.value?.success) {
-        const comp = brandRes.value.company || brandRes.value;
+        comp = brandRes.value.company || brandRes.value;
+      }
+
+      if (comp && (comp.companyName || comp.name)) {
         setBranding((prev) => {
+          const resolvedLogo =
+            comp.logoUrl !== undefined
+              ? comp.logoUrl
+              : comp.logo !== undefined
+              ? comp.logo
+              : prev.logoUrl;
+
+          const resolvedName = comp.companyName || comp.name || prev.companyName || "WorkPulse";
+
           const merged = {
             ...prev,
             ...comp,
-            companyName: comp.companyName || comp.name || prev.companyName,
-            logoUrl: comp.logoUrl || comp.logo || prev.logoUrl || "/eyenit_logo.png",
+            companyName: resolvedName,
+            logoUrl: resolvedLogo || "",
             welcomeBackgroundUrl:
               comp.welcomeBackgroundUrl || comp.backgroundUrl || prev.welcomeBackgroundUrl || "",
             primaryColor:
-              comp.primaryColor || comp.themeColor || comp.themeColors?.primary || prev.primaryColor,
+              comp.primaryColor || comp.themeColor || comp.themeColors?.primary || prev.primaryColor || "#0B1E48",
           };
+
           if (typeof window !== "undefined") {
             try {
-              sessionStorage.setItem("org_branding", JSON.stringify(merged));
-              localStorage.setItem("org_branding", JSON.stringify(merged));
+              sessionStorage.setItem("company_branding", JSON.stringify(merged));
+              localStorage.setItem("company_branding", JSON.stringify(merged));
             } catch (err) {
               console.debug("Failed caching branding:", err);
             }
@@ -84,11 +102,6 @@ export const BrandingProvider = ({ children }) => {
         setHasExistingCompany(hasExisting);
         setIsConfigured(configured);
         setRequiresSetup(!hasExisting || !configured);
-      } else if (statusRes.status === "fulfilled" && statusRes.value?.success) {
-        const configured = Boolean(statusRes.value.isConfigured);
-        setIsConfigured(configured);
-        setHasExistingCompany(configured);
-        setRequiresSetup(Boolean(statusRes.value.requiresSetup));
       }
     } catch (err) {
       console.warn("[BrandingProvider] Refresh branding warning:", err.message);
@@ -107,21 +120,40 @@ export const BrandingProvider = ({ children }) => {
       if (branding.primaryColor) {
         document.documentElement.style.setProperty("--brand-primary", branding.primaryColor);
       }
-      if (branding.companyName && branding.companyName !== "Enterprise Organization") {
-        document.title = `${branding.companyName} | Management System`;
+      if (branding.companyName) {
+        document.title = `${branding.companyName} | WorkPulse`;
       }
     }
   }, [branding.primaryColor, branding.companyName]);
 
+  const clearBranding = useCallback(() => {
+    setBranding(defaultBranding);
+    if (typeof window !== "undefined") {
+      localStorage.removeItem("company_branding");
+      sessionStorage.removeItem("company_branding");
+    }
+  }, []);
+
+  const activeCompanyName = branding.companyName || "WorkPulse";
+  const activeLogoUrl = branding.logoUrl || "";
+  const activeWelcomeBackgroundUrl = branding.welcomeBackgroundUrl || "";
+  const activePrimaryColor = branding.primaryColor || "#0B1E48";
+
   return (
     <BrandingContext.Provider
       value={{
+        companyName: activeCompanyName,
+        logoUrl: activeLogoUrl,
+        welcomeBackgroundUrl: activeWelcomeBackgroundUrl,
+        primaryColor: activePrimaryColor,
         branding,
         isConfigured,
         hasExistingCompany,
         requiresSetup,
         isLoading,
+        loading: isLoading,
         refreshBranding,
+        clearBranding,
         setBranding,
       }}
     >

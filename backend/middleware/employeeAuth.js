@@ -7,7 +7,7 @@ import { protect, authorize } from "./authMiddleware.js";
 export const employeeAuth = (req, res, next) => {
   protect(req, res, (err) => {
     if (err) return next(err);
-    return authorize("employee", "manager", "hr", "admin", "super_admin")(req, res, next);
+    return authorize("employee", "manager", "hr", "admin", "company_admin")(req, res, next);
   });
 };
 

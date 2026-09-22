@@ -10,9 +10,39 @@ const auditLogSchema = new mongoose.Schema(
     },
     category: {
       type: String,
-      enum: ["Penalties & Deductions", "Admin Settings", "Payroll", "Attendance", "Leave", "Employees", "Security"],
-      default: "Penalties & Deductions",
+      enum: [
+        "Penalties & Deductions",
+        "Admin Settings",
+        "Payroll",
+        "Attendance",
+        "Leave",
+        "Employees",
+        "Security",
+        "Authentication",
+        "Companies",
+        "Departments",
+        "Settings",
+        "Platform",
+        "Tenant Setup",
+        "Organization Setup",
+        "Tenant Lifecycle",
+        "Workspace Management",
+        "System Administration",
+      ],
+      default: "System Administration",
       index: true,
+    },
+    organizationId: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: "Organization",
+      index: true,
+      default: null,
+    },
+    companyId: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: "Organization",
+      index: true,
+      default: null,
     },
     performedBy: {
       id: { type: String, default: "" },
@@ -24,10 +54,20 @@ const auditLogSchema = new mongoose.Schema(
       type: String,
       default: "Global Settings",
     },
+    targetModel: {
+      type: String,
+      default: "",
+    },
     summary: {
       type: String,
-      required: true,
+      default: function () {
+        return this.details || this.action || "System event logged";
+      },
       trim: true,
+    },
+    details: {
+      type: String,
+      default: "",
     },
     changes: [
       {
@@ -55,6 +95,20 @@ const auditLogSchema = new mongoose.Schema(
   }
 );
 
+auditLogSchema.pre("validate", function () {
+  if (!this.summary) {
+    this.summary = this.details || this.action || "System event logged";
+  }
+  if (!this.organizationId && this.companyId) this.organizationId = this.companyId;
+  if (!this.companyId && this.organizationId) this.companyId = this.organizationId;
+});
+
+auditLogSchema.index({ companyId: 1, _id: 1 });
+auditLogSchema.index({ organizationId: 1, _id: 1 });
+auditLogSchema.index({ organizationId: 1, createdAt: -1 });
+auditLogSchema.index({ companyId: 1, createdAt: -1 });
+auditLogSchema.index({ organizationId: 1, category: 1 });
+auditLogSchema.index({ companyId: 1, category: 1 });
 auditLogSchema.index({ createdAt: -1 });
 
 export const AuditLog =

@@ -4,10 +4,12 @@ import {
   getCompanyStatus,
   getInitStatus,
   setupInitialCompany,
-  registerOrganization,
   getAdminBranding,
   updateBranding,
   uploadBrandAssets,
+  getCurrentWorkspace,
+  getWorkspaceBySlug,
+  verifyWorkspace,
 } from "../controllers/companyController.js";
 import { verifyAdmin } from "../middleware/authAdmin.js";
 import {
@@ -18,12 +20,28 @@ import {
 
 const companyRouter = express.Router();
 
-// Publicly accessible routes (no token required)
+// CORS preflight
+companyRouter.use((req, res, next) => {
+  if (req.method === "OPTIONS") {
+    return res.sendStatus(204);
+  }
+  next();
+});
+
+// Public endpoints
 companyRouter.get("/public-branding", getPublicBranding);
+companyRouter.get("/public-branding/:slug", getPublicBranding);
 companyRouter.get("/status", getCompanyStatus);
 companyRouter.get("/init-status", getInitStatus);
 
-// Standalone brand assets upload & optimization endpoint
+// Compatibility fallbacks for existing links/clients
+companyRouter.get("/current-workspace", getCurrentWorkspace);
+companyRouter.get("/workspace/:slug", getWorkspaceBySlug);
+companyRouter.get("/workspaces/:slug", getWorkspaceBySlug);
+companyRouter.get("/verify-workspace", verifyWorkspace);
+companyRouter.post("/verify-workspace", verifyWorkspace);
+
+// Upload assets
 companyRouter.post(
   "/upload-assets",
   uploadBranding,
@@ -32,25 +50,16 @@ companyRouter.post(
   uploadBrandAssets
 );
 
-// Register New Organization endpoint (handles multipart form data with logo and welcomeBackground)
+// Initial setup wizard
 companyRouter.post(
-  "/register-organization",
-  uploadBranding,
-  processAndOptimizeBranding,
-  handleBrandingUploadError,
-  registerOrganization
-);
-
-// Initial setup wizard route (handles multipart form data with logo and welcomeBackground files)
-companyRouter.post(
-  "/setup",
+  ["/setup", "/setup-initial"],
   uploadBranding,
   processAndOptimizeBranding,
   handleBrandingUploadError,
   setupInitialCompany
 );
 
-// Protected Admin branding management routes
+// Protected Admin branding management
 companyRouter.get("/branding", verifyAdmin, getAdminBranding);
 companyRouter.put(
   "/branding",

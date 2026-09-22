@@ -9,6 +9,7 @@ import {
   History,
 } from "lucide-react";
 import { useManagement } from "../../../context/ManagementContextProvider";
+import { useBranding } from "../../../context/BrandingContext";
 import { getPenaltySettings, updatePenaltySettings } from "../../../apis/fontApis";
 import AuditLogView from "../../../components/AuditLogView";
 
@@ -155,12 +156,15 @@ const PenaltySettings = ({ onSaveSuccess }) => {
     }
   };
 
+  const { companyName } = useBranding() || {};
+
   if (isLoading) {
+    const displayName = companyName || "Workspace";
     return (
       <div className="flex flex-col items-center justify-center p-12 bg-white dark:bg-slate-900 rounded-3xl border border-slate-200/80 dark:border-slate-800 text-center">
         <RefreshCw className="h-8 w-8 text-[#002185] dark:text-blue-400 animate-spin mb-3" />
         <p className="text-sm font-semibold text-slate-700 dark:text-slate-300">
-          Loading company deduction and penalty configuration...
+          Loading {displayName} deduction and penalty configuration...
         </p>
       </div>
     );

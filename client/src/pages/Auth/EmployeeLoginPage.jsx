@@ -1,29 +1,29 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import {
-  Users,
   Lock,
   Eye,
   EyeOff,
   ArrowLeft,
   AlertCircle,
-  Sparkles,
+  ArrowRight,
   UserCheck,
+  User,
 } from "lucide-react";
-import eyenitLogo from "../../assets/eyenit_logo.png";
 import { authService } from "../../services/authService";
+import { brandingService } from "../../services/brandingService";
 import { useManagement } from "../../context/ManagementContextProvider";
 import { useAuth } from "../../context/AuthContext";
 import { useAttendance } from "../../context/AttendanceContext";
-import { useCompanyBranding } from "../../hooks/useCompanyBranding";
 import { MotionSpinner } from "../../components/ui/MotionSpinner";
 
 export const EmployeeLoginPage = () => {
   const navigate = useNavigate();
-  const { branding, logoUrl, primaryColor } = useCompanyBranding();
-  const [logoLoadError, setLogoLoadError] = useState(false);
 
-  const activeLogo = logoLoadError || !logoUrl ? eyenitLogo : logoUrl;
+  const [branding, setBranding] = useState({
+    companyName: "WorkPulse",
+    logoUrl: "",
+  });
 
   const [formData, setFormData] = useState({
     identifier: "",
@@ -39,22 +39,33 @@ export const EmployeeLoginPage = () => {
   const { login: contextLogin } = useAuth();
   const { autoPopulateFromAuth } = useAttendance();
 
+  // Load single company deployment branding
+  useEffect(() => {
+    let isMounted = true;
+    brandingService
+      .getPublicBranding()
+      .then((res) => {
+        if (!isMounted) return;
+        const brand = res?.branding || res?.company || res || {};
+        const companyName = brand.companyName || brand.name || "WorkPulse";
+        const logoUrl = brand.logoUrl || brand.logo || "";
+        setBranding({ companyName, logoUrl });
+        if (typeof document !== "undefined") {
+          document.title = `${companyName} | Employee Portal`;
+        }
+      })
+      .catch(() => {});
+    return () => {
+      isMounted = false;
+    };
+  }, []);
+
   const handleInputChange = (e) => {
     const { name, value, type, checked } = e.target;
     setFormData((prev) => ({
       ...prev,
       [name]: type === "checkbox" ? checked : value,
     }));
-  };
-
-  // Quick fill helper for QA/testing
-  const handleQuickFill = (identifier = "employee@eyenit.com") => {
-    setError(null);
-    setFormData({
-      identifier,
-      password: "password123",
-      rememberMe: true,
-    });
   };
 
   const handleSubmit = async (e) => {
@@ -74,15 +85,26 @@ export const EmployeeLoginPage = () => {
 
       const result = await authService.login({
         identifier,
+        email: identifier,
         password,
         role: "employee",
+        rememberMe: formData.rememberMe,
       });
 
       if (result?.success) {
         const userObj = result.employee || result.user;
+        const userRole = (userObj?.role || "employee").toLowerCase();
+
+        if (userRole === "admin" || userRole === "manager") {
+          setError(
+            "Access restricted. Only Employees may log in through the Employee portal. Administrators must use the Admin portal."
+          );
+          setIsLoading(false);
+          return;
+        }
+
         const userToken = result.token;
 
-        // Auto-populate attendance context immediately with active shift or today's record
         if (typeof autoPopulateFromAuth === "function") {
           autoPopulateFromAuth(result);
         }
@@ -97,27 +119,13 @@ export const EmployeeLoginPage = () => {
           setManagementRole("employee");
         }
 
-        const hasActiveShift = Boolean(result.hasActiveShift || result.activeShift);
-        const shiftClockIn = result.activeShift?.clockIn || result.activeShift?.clockInTime;
-        let formattedTime = "";
-        if (shiftClockIn) {
-          try {
-            formattedTime = new Date(shiftClockIn).toLocaleTimeString([], {
-              hour: "2-digit",
-              minute: "2-digit",
-            });
-          } catch {
-            // ignore
-          }
+        if (typeof setShowToast === "function") {
+          setShowToast({
+            show: true,
+            message: `Welcome back, ${userObj.firstName || userObj.name || userObj.full_name || "Employee"}! Signed in to Employee Portal.`,
+            type: "success",
+          });
         }
-
-        setShowToast({
-          show: true,
-          message: hasActiveShift
-            ? `Welcome back, ${userObj?.fullName || "Employee"}! Ongoing shift${formattedTime ? ` from ${formattedTime}` : ""} restored.`
-            : `Welcome back, ${userObj?.fullName || "Employee"}!`,
-          type: "success",
-        });
 
         navigate("/employee/dashboard", {
           replace: true,
@@ -142,89 +150,94 @@ export const EmployeeLoginPage = () => {
   };
 
   return (
-    <div className="min-h-screen bg-[#F4F7FB] flex flex-col justify-center items-center px-4 py-8 relative selection:bg-[#0B1E48]/10 selection:text-[#0B1E48]">
-      {/* Background image container if configured */}
-      {branding?.welcomeBackgroundUrl && (
-        <div
-          className="absolute inset-0 bg-cover bg-center -z-10"
-          style={{ backgroundImage: `url(${branding.welcomeBackgroundUrl})` }}
+    <div
+      id="employee-login-page"
+      className="min-h-screen w-full bg-[#F4F7FB] dark:bg-slate-950 flex flex-col justify-between items-center px-4 py-6 font-sans selection:bg-emerald-500/10 selection:text-emerald-700"
+    >
+      {/* Header */}
+      <header className="w-full max-w-md flex items-center justify-between py-2">
+        <Link
+          to="/welcome"
+          id="link-employee-back-welcome"
+          className="inline-flex items-center gap-2 text-xs font-semibold text-slate-600 dark:text-slate-400 hover:text-[#0B1E48] dark:hover:text-white transition-colors"
         >
-          <div className="absolute inset-0 bg-white/70 backdrop-blur-xs" />
-        </div>
-      )}
+          <div className="w-7 h-7 rounded-lg bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 shadow-2xs flex items-center justify-center">
+            <ArrowLeft className="w-3.5 h-3.5" />
+          </div>
+          <span>Back to Welcome</span>
+        </Link>
 
-      {/* Return to Portal Selection */}
-      <Link
-        id="employee-back-to-portals-btn"
-        to="/welcome"
-        className="absolute top-6 left-6 inline-flex items-center gap-2 px-3 py-1.5 text-xs font-semibold text-slate-700 bg-white border border-slate-200/80 rounded-xl shadow-xs hover:bg-slate-50 transition-colors z-10"
-      >
-        <ArrowLeft className="w-3.5 h-3.5" />
-        <span>Portals</span>
-      </Link>
+        <Link
+          to="/"
+          id="link-employee-overview"
+          className="text-xs font-semibold text-slate-500 dark:text-slate-400 hover:text-[#0B1E48] dark:hover:text-white"
+        >
+          Overview
+        </Link>
+      </header>
 
-      {/* Main Centered Login Container */}
-      <div className="w-full max-w-md mx-auto relative z-10">
-        {/* Brand Header */}
-        <div className="text-center mb-6">
-          {/* Prominent Logo */}
-          <div className="mb-4 flex items-center justify-center">
-            <img
-              src={activeLogo}
-              alt={branding?.companyName || "Organization Logo"}
-              onError={() => setLogoLoadError(true)}
-              className="h-16 w-auto max-w-[180px] object-contain drop-shadow-xs"
-            />
+      {/* Main Authentication Card */}
+      <main className="w-full max-w-md my-auto py-4">
+        <div className="bg-white dark:bg-slate-900 rounded-2xl border border-slate-200/90 dark:border-slate-800 shadow-xl p-6 sm:p-8">
+          {/* Company Brand & Portal Icon */}
+          <div className="text-center mb-6">
+            <div className="mx-auto mb-3 flex items-center justify-center">
+              {branding.logoUrl ? (
+                <div className="w-14 h-14 rounded-2xl bg-white dark:bg-slate-800 p-1.5 shadow-md border border-slate-200/80 dark:border-slate-700 flex items-center justify-center overflow-hidden">
+                  <img
+                    src={branding.logoUrl}
+                    alt={branding.companyName}
+                    className="w-full h-full object-contain"
+                    onError={(e) => {
+                      e.target.style.display = "none";
+                      if (e.target.nextSibling) {
+                        e.target.nextSibling.style.display = "flex";
+                      }
+                    }}
+                  />
+                  <div className="hidden w-full h-full items-center justify-center bg-emerald-700 text-white font-bold text-base rounded-xl">
+                    {branding.companyName.charAt(0).toUpperCase()}
+                  </div>
+                </div>
+              ) : (
+                <div className="w-14 h-14 rounded-2xl bg-emerald-600 text-white p-3 shadow-md flex items-center justify-center border border-emerald-600">
+                  <UserCheck className="w-8 h-8 text-emerald-100" />
+                </div>
+              )}
+            </div>
+
+            <h1 className="text-xl sm:text-2xl font-black tracking-tight text-[#0B1E48] dark:text-white">
+              {branding.companyName}
+            </h1>
+            <p className="text-xs font-bold uppercase tracking-wider text-emerald-600 dark:text-emerald-400 mt-0.5">
+              Employee Portal Login
+            </p>
           </div>
 
-          {/* Title */}
-          <h1 className="text-2xl sm:text-3xl font-extrabold tracking-tight text-[#0B1E48] dark:text-slate-900 text-center">
-            Employee Portal Login
-          </h1>
-
-          {/* Subtitle */}
-          <p className="text-xs sm:text-sm text-slate-600 dark:text-slate-600 font-medium text-center max-w-sm mx-auto mt-2 leading-relaxed">
-            Access your daily shifts, attendance clock, and monthly payslips
-          </p>
-        </div>
-
-        {/* Minimal Enterprise Card */}
-        <div className="w-full max-w-md mx-auto bg-white dark:bg-[#111927] border border-slate-200/70 dark:border-slate-800 rounded-2xl shadow-sm p-6 sm:p-8">
           {/* Error Banner */}
           {error && (
             <div
-              id="employee-login-error"
-              className="mb-5 p-3.5 rounded-xl bg-red-50 dark:bg-red-950/40 border border-red-200 dark:border-red-900/50 flex items-start gap-2.5 text-xs text-red-700 dark:text-red-300"
+              id="employee-error-banner"
+              className="mb-5 p-3.5 bg-rose-50 dark:bg-rose-950/40 border border-rose-200 dark:border-rose-900/60 rounded-xl flex items-start gap-2.5 text-xs text-rose-700 dark:text-rose-300"
             >
-              <AlertCircle className="w-4 h-4 text-red-600 dark:text-red-400 shrink-0 mt-0.5" />
-              <div className="flex-1">
-                <p className="font-semibold">Sign in failed</p>
-                <p className="mt-0.5 leading-relaxed">{error}</p>
-              </div>
-              <button
-                type="button"
-                onClick={() => setError(null)}
-                className="text-red-400 hover:text-red-700 dark:hover:text-red-200 cursor-pointer font-bold text-xs"
-              >
-                ✕
-              </button>
+              <AlertCircle className="w-4 h-4 shrink-0 mt-0.5 text-rose-500" />
+              <div className="flex-1 leading-relaxed font-medium">{error}</div>
             </div>
           )}
 
           {/* Form */}
-          <form onSubmit={handleSubmit} className="space-y-4" noValidate>
-            {/* Identifier Field */}
+          <form onSubmit={handleSubmit} className="space-y-4">
+            {/* WORK EMAIL OR EMPLOYEE ID */}
             <div>
               <label
                 htmlFor="employee-identifier-input"
-                className="block text-xs font-bold text-slate-800 dark:text-slate-200 uppercase tracking-wider mb-1.5"
+                className="block text-[11px] font-bold tracking-wider text-slate-600 dark:text-slate-300 uppercase mb-1.5"
               >
-                Work Email or Employee ID
-                <span className="text-red-500 ml-1">*</span>
+                Work Email or Employee ID <span className="text-rose-500">*</span>
               </label>
               <div className="relative">
-                <div className="absolute inset-y-0 left-0 pl-3.5 flex items-center pointer-events-none text-slate-400 dark:text-slate-500">
-                  <UserCheck className="h-4 w-4" />
+                <div className="absolute inset-y-0 left-0 pl-3.5 flex items-center pointer-events-none text-slate-400">
+                  <User className="w-4 h-4" />
                 </div>
                 <input
                   id="employee-identifier-input"
@@ -233,28 +246,27 @@ export const EmployeeLoginPage = () => {
                   autoComplete="username"
                   value={formData.identifier}
                   onChange={handleInputChange}
-                  placeholder="e.g., EMP-001 or staff@eyenitgh.com"
+                  placeholder="employee@company.com or EMP-001"
                   required
                   disabled={isLoading}
-                  className="w-full pl-10 pr-3.5 py-2.5 bg-slate-50 dark:bg-slate-900/60 border border-slate-200/80 dark:border-slate-700 rounded-xl text-slate-900 dark:text-slate-100 text-sm sm:text-base placeholder-slate-400 dark:placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-[#0B1E48]/20 focus:border-[#0B1E48] dark:focus:ring-blue-500/20 dark:focus:border-blue-500 transition-all disabled:opacity-60"
+                  className="w-full pl-10 pr-3.5 py-2.5 bg-slate-50/60 dark:bg-slate-800/60 focus:bg-white dark:focus:bg-slate-800 text-slate-900 dark:text-white placeholder:text-slate-400 text-sm rounded-xl border border-slate-200/90 dark:border-slate-700 focus:border-emerald-600 focus:ring-2 focus:ring-emerald-600/10 transition-all outline-none disabled:opacity-60"
                 />
               </div>
             </div>
 
-            {/* Password Field */}
+            {/* PASSWORD */}
             <div>
               <div className="flex items-center justify-between mb-1.5">
                 <label
                   htmlFor="employee-password-input"
-                  className="block text-xs font-bold text-slate-800 dark:text-slate-200 uppercase tracking-wider"
+                  className="block text-[11px] font-bold tracking-wider text-slate-600 dark:text-slate-300 uppercase"
                 >
-                  Password
-                  <span className="text-red-500 ml-1">*</span>
+                  Password <span className="text-rose-500">*</span>
                 </label>
               </div>
               <div className="relative">
-                <div className="absolute inset-y-0 left-0 pl-3.5 flex items-center pointer-events-none text-slate-400 dark:text-slate-500">
-                  <Lock className="h-4 w-4" />
+                <div className="absolute inset-y-0 left-0 pl-3.5 flex items-center pointer-events-none text-slate-400">
+                  <Lock className="w-4 h-4" />
                 </div>
                 <input
                   id="employee-password-input"
@@ -263,114 +275,85 @@ export const EmployeeLoginPage = () => {
                   autoComplete="current-password"
                   value={formData.password}
                   onChange={handleInputChange}
-                  placeholder="Enter your account password"
+                  placeholder="••••••••"
                   required
                   disabled={isLoading}
-                  className="w-full pl-10 pr-11 py-2.5 bg-slate-50 dark:bg-slate-900/60 border border-slate-200/80 dark:border-slate-700 rounded-xl text-slate-900 dark:text-slate-100 text-sm sm:text-base placeholder-slate-400 dark:placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-[#0B1E48]/20 focus:border-[#0B1E48] dark:focus:ring-blue-500/20 dark:focus:border-blue-500 transition-all disabled:opacity-60"
+                  className="w-full pl-10 pr-10 py-2.5 bg-slate-50/60 dark:bg-slate-800/60 focus:bg-white dark:focus:bg-slate-800 text-slate-900 dark:text-white placeholder:text-slate-400 text-sm rounded-xl border border-slate-200/90 dark:border-slate-700 focus:border-emerald-600 focus:ring-2 focus:ring-emerald-600/10 transition-all outline-none disabled:opacity-60"
                 />
                 <button
                   type="button"
+                  id="btn-toggle-employee-password"
                   onClick={() => setShowPassword((prev) => !prev)}
                   className="absolute inset-y-0 right-0 pr-3.5 flex items-center text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 cursor-pointer"
                   tabIndex={-1}
                   aria-label={showPassword ? "Hide password" : "Show password"}
                 >
-                  {showPassword ? (
-                    <EyeOff className="w-4 h-4" />
-                  ) : (
-                    <Eye className="w-4 h-4" />
-                  )}
+                  {showPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
                 </button>
               </div>
             </div>
 
             {/* Remember Me */}
-            <div className="flex items-center justify-between text-xs pt-1">
-              <label className="inline-flex items-center gap-2 cursor-pointer text-slate-600 dark:text-slate-400 select-none">
+            <div className="flex items-center justify-between pt-1">
+              <label className="flex items-center gap-2 cursor-pointer select-none">
                 <input
                   type="checkbox"
+                  id="employee-remember-me"
                   name="rememberMe"
                   checked={formData.rememberMe}
                   onChange={handleInputChange}
-                  className="rounded border-slate-300 dark:border-slate-700 text-[#0B1E48] focus:ring-[#0B1E48]/20 w-3.5 h-3.5 cursor-pointer"
+                  className="w-4 h-4 rounded border-slate-300 text-emerald-600 focus:ring-emerald-600 cursor-pointer"
                 />
-                <span>Remember this device</span>
+                <span className="text-xs text-slate-600 dark:text-slate-400 font-medium">
+                  Remember this device
+                </span>
               </label>
             </div>
 
             {/* Submit Button */}
-            <button
-              id="employee-submit-btn"
-              type="submit"
-              disabled={isLoading}
-              style={{ backgroundColor: primaryColor || "#0B1E48" }}
-              className="w-full text-white font-bold py-2.5 px-4 rounded-xl shadow-xs transition-all flex items-center justify-center gap-2 cursor-pointer mt-3 hover:brightness-110 active:scale-[0.99] disabled:opacity-70 disabled:cursor-not-allowed"
-            >
-              {isLoading ? (
-                <>
-                  <MotionSpinner size="sm" className="text-white" />
-                  <span>Signing In...</span>
-                </>
-              ) : (
-                <>
-                  <Users className="w-4 h-4" />
-                  <span>Sign In to Self-Service</span>
-                </>
-              )}
-            </button>
+            <div className="pt-2">
+              <button
+                id="employee-submit-btn"
+                type="submit"
+                disabled={isLoading}
+                className="w-full py-3 px-4 rounded-xl text-sm font-bold text-white bg-emerald-600 hover:bg-emerald-700 disabled:opacity-60 shadow-md shadow-emerald-600/20 transition-all flex items-center justify-center gap-2 cursor-pointer"
+              >
+                {isLoading ? (
+                  <>
+                    <MotionSpinner size="sm" className="text-white" />
+                    <span>Verifying Credentials...</span>
+                  </>
+                ) : (
+                  <>
+                    <span>Sign In to Employee Portal</span>
+                    <ArrowRight className="w-4 h-4" />
+                  </>
+                )}
+              </button>
+            </div>
           </form>
 
-          {/* Quick Demo Fill Buttons for Testing */}
-          <div className="mt-5 pt-4 border-t border-slate-100 dark:border-slate-800/80">
-            <div className="flex items-center justify-between mb-2">
-              <span className="text-[11px] font-semibold uppercase tracking-wider text-slate-400 dark:text-slate-500">
-                Quick Test Credentials
-              </span>
-              <Sparkles className="w-3.5 h-3.5 text-slate-400" />
-            </div>
-            <div className="grid grid-cols-2 gap-2">
-              <button
-                type="button"
-                onClick={() => handleQuickFill("employee@eyenit.com")}
-                className="py-1.5 px-2 bg-slate-50 dark:bg-slate-900/60 hover:bg-slate-100 dark:hover:bg-slate-800/60 border border-slate-200 dark:border-slate-800 rounded-lg text-[11px] font-medium text-slate-700 dark:text-slate-300 text-center transition-colors cursor-pointer flex items-center justify-center gap-1"
-              >
-                <UserCheck className="w-3 h-3 text-[#0B1E48] dark:text-blue-400" />
-                Fill Email
-              </button>
-              <button
-                type="button"
-                onClick={() => handleQuickFill("EMP-001")}
-                className="py-1.5 px-2 bg-slate-50 dark:bg-slate-900/60 hover:bg-slate-100 dark:hover:bg-slate-800/60 border border-slate-200 dark:border-slate-800 rounded-lg text-[11px] font-medium text-slate-700 dark:text-slate-300 text-center transition-colors cursor-pointer flex items-center justify-center gap-1"
-              >
-                <Users className="w-3 h-3 text-[#0B1E48] dark:text-blue-400" />
-                Fill ID (EMP-001)
-              </button>
-            </div>
-          </div>
-
-          {/* Footer Navigation Link */}
-          <div className="mt-6 pt-5 border-t border-slate-100 dark:border-slate-800/80 text-center">
-            <Link
-              id="go-to-admin-login-link"
-              to="/admin/login"
-              className="inline-flex items-center gap-1 text-xs font-medium text-slate-500 dark:text-slate-400 hover:text-[#0B1E48] dark:hover:text-blue-400 transition-colors group"
+          {/* Switch Link to Admin */}
+          <div className="mt-6 pt-5 border-t border-slate-100 dark:border-slate-800 flex flex-col items-center gap-2.5 text-center">
+            <button
+              type="button"
+              id="link-switch-to-management"
+              onClick={() => navigate("/admin/auth")}
+              className="text-xs font-semibold text-slate-500 dark:text-slate-400 hover:text-[#0B1E48] dark:hover:text-white inline-flex items-center gap-1.5 cursor-pointer"
             >
-              <span>Are you an administrator? Log in through the Admin Suite</span>
-              <span className="transition-transform group-hover:translate-x-0.5">→</span>
-            </Link>
+              <span>Need the Admin Portal?</span>
+              <span className="text-blue-600 dark:text-blue-400 font-bold hover:underline">
+                Sign in to Admin / Manager Portal &rarr;
+              </span>
+            </button>
           </div>
         </div>
+      </main>
 
-        {/* Security / System Policy Footer */}
-        <div className="mt-6 text-center text-xs text-slate-500 dark:text-slate-400 space-y-1">
-          <p>
-            Employee accounts are provisioned and managed by your HR administration.
-          </p>
-          <p className="text-[11px] text-slate-400 dark:text-slate-500">
-            Eyenit Ghana Employee Management & Payroll System
-          </p>
-        </div>
-      </div>
+      {/* Footer */}
+      <footer className="w-full max-w-md text-center py-2 text-xs text-slate-400 dark:text-slate-500">
+        &copy; {new Date().getFullYear()} {branding.companyName}. Workforce Management System.
+      </footer>
     </div>
   );
 };

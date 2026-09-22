@@ -20,15 +20,15 @@ import { useBranding } from "../../../context/BrandingContext";
 import ThemePreferenceCard from "../../../components/ThemePreferenceCard";
 
 const defaultCompany = {
-  companyName: "Enterprise Organization",
-  logo: "/eyenit_logo.png",
-  logoUrl: "/eyenit_logo.png",
+  companyName: "",
+  logo: "",
+  logoUrl: "",
   welcomeBackgroundUrl: "",
   primaryColor: "#0B1E48",
-  address: "Accra, Ghana",
-  phone: "+233 30 212 3456",
-  email: "info@company.com",
-  website: "https://www.company.com",
+  address: "",
+  phone: "",
+  email: "",
+  website: "",
   workStartTime: "08:00",
   workEndTime: "19:00",
   defaultCurrency: "GHS",

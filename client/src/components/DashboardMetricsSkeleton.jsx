@@ -1,17 +1,36 @@
 import MetricCardSkeleton from "./MetricCardSkeleton";
+import { useBranding } from "../context/BrandingContext";
 
 /**
  * DashboardMetricsSkeleton Component
  * Full skeleton loader displayed while dashboard metrics and analytical data are fetched from the database.
+ * Dynamically displays the registered workspace organization's brand and title.
  */
 export const DashboardMetricsSkeleton = () => {
+  let companyName = "Workspace";
+  try {
+    const branding = useBranding();
+    if (branding?.companyName) companyName = branding.companyName;
+  } catch {
+    // fallback
+  }
+
   return (
     <div className="space-y-8 pb-10 animate-pulse">
-      {/* Header Skeleton */}
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 bg-white dark:bg-slate-800 p-6 rounded-2xl border border-[#E2E8F0] dark:border-slate-700/60 shadow-xs">
-        <div className="space-y-2.5">
-          <div className="h-7 bg-slate-300 dark:bg-slate-700 rounded-lg w-64"></div>
-          <div className="h-4 bg-slate-200 dark:bg-slate-700/60 rounded-md w-96 max-w-full"></div>
+      {/* Dynamic Tenant Loading Header Skeleton */}
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 bg-white dark:bg-slate-800 p-6 rounded-2xl border border-slate-200 dark:border-slate-700/60 shadow-xs">
+        <div className="flex items-center gap-4">
+          <div className="w-10 h-10 rounded-xl bg-blue-50 dark:bg-blue-950/50 border border-blue-100 dark:border-blue-900/50 flex items-center justify-center shrink-0">
+            <div className="w-5 h-5 rounded-full border-2 border-blue-600 border-t-transparent animate-spin" />
+          </div>
+          <div className="space-y-1.5">
+            <h2 className="text-base sm:text-lg font-bold text-slate-800 dark:text-slate-100">
+              Loading {companyName} Analytics & Records...
+            </h2>
+            <p className="text-xs text-slate-500 dark:text-slate-400">
+              Syncing live attendance metrics, department KPIs, and payroll data...
+            </p>
+          </div>
         </div>
         <div className="h-9 bg-slate-200 dark:bg-slate-700 rounded-xl w-36 self-end sm:self-auto"></div>
       </div>

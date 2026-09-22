@@ -5,8 +5,8 @@ import { Admin } from "../models/Admin.js";
 import { Employee } from "../models/employeeModel.js";
 import { User } from "../models/userModel.js";
 import { Attendance } from "../models/attendanceModel.js";
-import { CompanySettings, Organization } from "../models/CompanySettings.js";
 import { liveAttendanceStore, autoCloseUnfinishedShifts } from "./employeeAttendance.js";
+import { logAuditAction } from "../utils/auditLogger.js";
 
 const getJwtSecret = () => process.env.JWT_SECRET || "default_jwt_secret_key_12345";
 
@@ -29,7 +29,7 @@ export const verifyActiveIncompleteShift = async (employee) => {
   endOfToday.setHours(23, 59, 59, 999);
   const todayStr = startOfToday.toISOString().split("T")[0];
 
-  const empId = employee._id ? employee._id.toString() : (employee.id ? employee.id.toString() : null);
+  const empId = employee._id ? employee._id.toString() : employee.id ? employee.id.toString() : null;
   const empCode = employee.employeeId || "";
   const email = employee.email || "";
 
@@ -51,15 +51,11 @@ export const verifyActiveIncompleteShift = async (employee) => {
     ];
 
     if (activeShiftConditions.length > 0) {
-      // Look strictly for today's incomplete active shift
       activeShift = await Attendance.findOne({
         $or: activeShiftConditions,
         $and: [
           {
-            $or: [
-              { date: todayStr },
-              { clockIn: { $gte: startOfToday, $lte: endOfToday } },
-            ],
+            $or: [{ date: todayStr }, { clockIn: { $gte: startOfToday, $lte: endOfToday } }],
           },
           {
             $or: [
@@ -68,16 +64,10 @@ export const verifyActiveIncompleteShift = async (employee) => {
             ],
           },
           {
-            $or: [
-              { clockOut: null },
-              { clockOut: { $exists: false } },
-            ],
+            $or: [{ clockOut: null }, { clockOut: { $exists: false } }],
           },
           {
-            $or: [
-              { clockOutTime: null },
-              { clockOutTime: { $exists: false } },
-            ],
+            $or: [{ clockOutTime: null }, { clockOutTime: { $exists: false } }],
           },
           {
             shiftStatus: { $ne: "Auto-Closed" },
@@ -88,13 +78,9 @@ export const verifyActiveIncompleteShift = async (employee) => {
         .sort({ createdAt: -1 })
         .lean();
 
-      // 2. Query today's attendance record (completed or in progress)
       todayRecord = await Attendance.findOne({
         $or: activeShiftConditions,
-        $or: [
-          { date: todayStr },
-          { clockIn: { $gte: startOfToday, $lte: endOfToday } },
-        ],
+        $or: [{ date: todayStr }, { clockIn: { $gte: startOfToday, $lte: endOfToday } }],
       })
         .populate("employee", "fullName employeeId department position email avatar")
         .sort({ updatedAt: -1, createdAt: -1 })
@@ -104,7 +90,7 @@ export const verifyActiveIncompleteShift = async (employee) => {
     console.warn("Error querying active shift in authController:", err.message);
   }
 
-  // 3. Check and sync with liveAttendanceStore in memory (strictly for today)
+  // Check and sync with liveAttendanceStore in memory
   if (liveAttendanceStore) {
     const keysToCheck = [
       empId ? `${empId}_${todayStr}` : null,
@@ -115,7 +101,13 @@ export const verifyActiveIncompleteShift = async (employee) => {
       const memRec = liveAttendanceStore.get(key);
       if (memRec && (!memRec.date || memRec.date === todayStr)) {
         if (!todayRecord) todayRecord = memRec;
-        if (!activeShift && (memRec.clockIn || memRec.clockInTime) && (!memRec.clockOut && !memRec.clockOutTime) && memRec.shiftStatus !== "Auto-Closed") {
+        if (
+          !activeShift &&
+          (memRec.clockIn || memRec.clockInTime) &&
+          !memRec.clockOut &&
+          !memRec.clockOutTime &&
+          memRec.shiftStatus !== "Auto-Closed"
+        ) {
           activeShift = memRec;
         }
         break;
@@ -133,17 +125,24 @@ export const verifyActiveIncompleteShift = async (employee) => {
   }
 
   const hasActiveShift = Boolean(activeShift && (!activeShift.date || activeShift.date === todayStr));
-  const primaryRecord = (todayRecord && (!todayRecord.date || todayRecord.date === todayStr)) ? todayRecord : (hasActiveShift ? activeShift : null);
+  const primaryRecord =
+    todayRecord && (!todayRecord.date || todayRecord.date === todayStr)
+      ? todayRecord
+      : hasActiveShift
+      ? activeShift
+      : null;
 
   const hasClockedIn = Boolean(
     hasActiveShift ||
-    (primaryRecord && (primaryRecord.clockIn || primaryRecord.clockInTime) && (!primaryRecord.date || primaryRecord.date === todayStr))
+      (primaryRecord &&
+        (primaryRecord.clockIn || primaryRecord.clockInTime) &&
+        (!primaryRecord.date || primaryRecord.date === todayStr))
   );
   const hasClockedOut = Boolean(
     !hasActiveShift &&
-    primaryRecord &&
-    (primaryRecord.clockOut || primaryRecord.clockOutTime) &&
-    (!primaryRecord.date || primaryRecord.date === todayStr)
+      primaryRecord &&
+      (primaryRecord.clockOut || primaryRecord.clockOutTime) &&
+      (!primaryRecord.date || primaryRecord.date === todayStr)
   );
   const isClockedIn = Boolean(hasActiveShift || (hasClockedIn && !hasClockedOut));
   const isClockedOut = hasClockedOut;
@@ -155,8 +154,8 @@ export const verifyActiveIncompleteShift = async (employee) => {
     isClockedIn,
     isClockedOut,
     isActiveShift: isClockedIn,
-    clockIn: isClockedIn || hasClockedOut ? (primaryRecord?.clockIn || primaryRecord?.clockInTime || null) : null,
-    clockOut: hasClockedOut ? (primaryRecord?.clockOut || primaryRecord?.clockOutTime || null) : null,
+    clockIn: isClockedIn || hasClockedOut ? primaryRecord?.clockIn || primaryRecord?.clockInTime || null : null,
+    clockOut: hasClockedOut ? primaryRecord?.clockOut || primaryRecord?.clockOutTime || null : null,
     status: primaryRecord?.status || (hasClockedIn ? "On Time" : "Not Clocked In"),
     workHours: Number(primaryRecord?.workHours || 0),
     delayMinutes: Number(primaryRecord?.delayMinutes ?? primaryRecord?.lateMinutes ?? 0),
@@ -177,18 +176,14 @@ export const verifyActiveIncompleteShift = async (employee) => {
   };
 };
 
-/**
- * Helper to generate JWT token with consistent payload structure
- */
 const generateAuthToken = (userPayload, expiresIn = "7d") => {
   return jwt.sign(userPayload, getJwtSecret(), { expiresIn });
 };
 
 /**
  * GET /api/auth/admin/exists
- * Checks if an administrator account already exists in the system
  */
-export const checkAdminExists = async (req, res) => {
+export const checkAdminExists = async (_req, res) => {
   try {
     const adminCount = await Admin.countDocuments();
     return res.status(200).json({
@@ -207,25 +202,17 @@ export const checkAdminExists = async (req, res) => {
 
 /**
  * POST /api/auth/admin/register
- * Admin Registration: creates a new administrator in the database
- * RESTRICTION: Only one admin account can be created. Subsequent self-registrations are disabled.
+ * Admin account registration for the single-company deployment.
+ * Enforces security: prevents employee accounts from escalating to admin,
+ * rejects duplicate email addresses, and validates password constraints.
  */
 export const adminRegister = async (req, res) => {
   try {
-    // 0. Enforce Single-Admin Restriction Policy
-    const adminCount = await Admin.countDocuments();
-    if (adminCount > 0) {
-      return res.status(403).json({
-        success: false,
-        message: "Admin account already exists. Self-registration is disabled.",
-      });
-    }
-
-    const { fullName, full_name, email, password, confirmPassword } = req.body;
+    const { fullName, full_name, email, phone, password, confirmPassword } = req.body;
     const name = (fullName || full_name || "").trim();
     const cleanEmail = (email || "").toLowerCase().trim();
+    const phoneNumber = (phone || "").trim();
 
-    // 1. Validation
     if (!name || !cleanEmail || !password) {
       return res.status(400).json({
         success: false,
@@ -233,7 +220,6 @@ export const adminRegister = async (req, res) => {
       });
     }
 
-    // Email format validation
     const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
     if (!emailRegex.test(cleanEmail)) {
       return res.status(400).json({
@@ -256,22 +242,30 @@ export const adminRegister = async (req, res) => {
       });
     }
 
-    // 2. Check for duplicate admin email
+    // Security check: Prevent privilege escalation from regular employees
+    const existingEmployee = await Employee.findOne({
+      $or: [{ email: cleanEmail }, { "employee.email": cleanEmail }],
+    });
+    if (existingEmployee) {
+      return res.status(403).json({
+        success: false,
+        message: "Access restricted. This email belongs to an employee account. Employees cannot register as an administrator.",
+      });
+    }
+
     const existingAdmin = await Admin.findOne({ email: cleanEmail });
     if (existingAdmin) {
       return res.status(409).json({
         success: false,
-        message: "An Admin account with this email address already exists.",
+        message: "An Admin account with this email address already exists. Please log in.",
       });
     }
 
-    // 3. Hash password using bcrypt
     const password_hash = await bcrypt.hash(password, 10);
-
-    // 4. Save new Admin directly to MongoDB database with role 'admin'
     const newAdmin = new Admin({
       full_name: name,
       email: cleanEmail,
+      phone: phoneNumber,
       password_hash,
       role: "admin",
       profile_image_url: "",
@@ -279,9 +273,9 @@ export const adminRegister = async (req, res) => {
 
     const savedAdmin = await newAdmin.save();
 
-    // 5. Generate real JWT session token
     const token = generateAuthToken({
       id: savedAdmin._id.toString(),
+      userId: savedAdmin._id.toString(),
       email: savedAdmin.email,
       role: savedAdmin.role || "admin",
       fullName: savedAdmin.full_name,
@@ -296,7 +290,6 @@ export const adminRegister = async (req, res) => {
       path: "/",
     };
 
-    // 6. Set HTTP Cookies (auth_token primary)
     res.cookie("auth_token", token, cookieOptions);
     res.cookie("token", token, cookieOptions);
 
@@ -307,17 +300,41 @@ export const adminRegister = async (req, res) => {
       fullName: savedAdmin.full_name,
       full_name: savedAdmin.full_name,
       email: savedAdmin.email,
+      phone: savedAdmin.phone || phoneNumber,
       role: savedAdmin.role || "admin",
       department: "Executive Management",
       position: "Administrator",
       avatar: savedAdmin.profile_image_url || "",
       profile_image_url: savedAdmin.profile_image_url || "",
+      dashboardUrl: "/admin/dashboard",
+      permittedDashboardUrl: "/admin/dashboard",
       createdAt: savedAdmin.createdAt,
     };
+
+    try {
+      await logAuditAction({
+        req,
+        action: "ADMIN_REGISTER",
+        category: "Authentication",
+        target: "Admin Portal",
+        targetModel: "Admin",
+        summary: `New Administrator account created for '${savedAdmin.email}'.`,
+        performedBy: {
+          id: savedAdmin._id.toString(),
+          name: safeAdmin.name,
+          email: savedAdmin.email,
+          role: "admin",
+        },
+      });
+    } catch (auditErr) {
+      console.warn("[AdminRegister] Audit log notice:", auditErr.message);
+    }
 
     return res.status(201).json({
       success: true,
       token,
+      dashboardUrl: "/admin/dashboard",
+      permittedDashboardUrl: "/admin/dashboard",
       message: "Admin account registered successfully.",
       user: safeAdmin,
       admin: safeAdmin,
@@ -332,66 +349,7 @@ export const adminRegister = async (req, res) => {
 };
 
 /**
- * Helper to issue HTTP-only cookies and return user session profile
- */
-export const sendTokenResponse = (user, statusCode = 200, res, req = null) => {
-  const token = generateAuthToken({
-    id: user._id ? user._id.toString() : user.id,
-    userId: user._id ? user._id.toString() : user.id,
-    email: user.email,
-    role: user.role || "admin",
-    fullName: user.fullName || user.full_name || user.name || "Administrator",
-  });
-
-  const isHttps =
-    (req && (req.secure || req.headers["x-forwarded-proto"] === "https")) ||
-    process.env.NODE_ENV === "production";
-
-  const cookieOptions = {
-    httpOnly: true,
-    secure: isHttps,
-    sameSite: isHttps ? "none" : "lax",
-    maxAge: 7 * 24 * 60 * 60 * 1000,
-    path: "/",
-  };
-
-  res.cookie("auth_token", token, cookieOptions);
-  res.cookie("token", token, cookieOptions);
-
-  const safeProfile = {
-    _id: user._id ? user._id.toString() : user.id,
-    id: user._id ? user._id.toString() : user.id,
-    name: user.fullName || user.full_name || user.name || "Administrator",
-    fullName: user.fullName || user.full_name || user.name || "Administrator",
-    full_name: user.full_name || user.fullName || user.name || "Administrator",
-    email: user.email,
-    role: user.role || "admin",
-    department: user.department || "Executive Management",
-    position:
-      user.position ||
-      (user.role === "manager"
-        ? "Manager"
-        : user.role === "super_admin"
-        ? "Super Admin"
-        : "Administrator"),
-    avatar: user.avatar || user.avatarUrl || user.profile_image_url || "",
-    profile_image_url: user.profile_image_url || user.avatar || "",
-  };
-
-  return res.status(statusCode).json({
-    success: true,
-    token,
-    message: "Management login successful.",
-    user: safeProfile,
-    admin: safeProfile,
-  });
-};
-
-/**
  * POST /api/auth/admin/login
- * Dual-Identifier Management Sign-In:
- * Administrators can authenticate using EITHER their personal admin/manager email
- * OR the registered Organization Company Email along with their password.
  */
 export const adminLogin = async (req, res) => {
   try {
@@ -405,49 +363,12 @@ export const adminLogin = async (req, res) => {
       });
     }
 
-    // 1. Look up the user by their personal email first (in User or Admin models)
-    let user = await User.findOne({ email: loginEmail });
-    let dbAdmin = null;
-
-    if (!user) {
-      dbAdmin = await Admin.findOne({ email: loginEmail });
+    let targetAccount = await Admin.findOne({ email: loginEmail });
+    if (!targetAccount) {
+      targetAccount = await User.findOne({ email: loginEmail });
     }
 
-    // 2. Fallback: If no match is found, look up the organization by the identifier and find the associated primary manager/admin
-    if (!user && !dbAdmin) {
-      const matchingCompany = await CompanySettings.findOne({
-        $or: [
-          { companyEmail: loginEmail },
-          { contactEmail: loginEmail },
-          { email: loginEmail },
-          { slug: loginEmail },
-          { companyName: new RegExp(`^${loginEmail}$`, "i") },
-        ],
-      });
-
-      if (matchingCompany) {
-        // Find the associated primary manager/admin
-        if (matchingCompany._id) {
-          user = await User.findOne({
-            organizationId: matchingCompany._id,
-            role: { $in: ["admin", "manager", "super_admin"] },
-          });
-        }
-        if (!user) {
-          user = await User.findOne({
-            role: { $in: ["admin", "manager", "super_admin"] },
-          });
-        }
-        if (!user) {
-          dbAdmin = await Admin.findOne({
-            role: { $in: ["admin", "super_admin"] },
-          });
-        }
-      }
-    }
-
-    if (!user && !dbAdmin) {
-      // Intercept employee credentials attempting to log in via management portal
+    if (!targetAccount) {
       const emp = await Employee.findOne({
         $or: [{ email: loginEmail }, { employeeId: (identifier || email || "").trim() }],
       });
@@ -467,32 +388,7 @@ export const adminLogin = async (req, res) => {
       });
     }
 
-    // Unify matched target account
-    const targetAccount = user || {
-      _id: dbAdmin._id,
-      id: dbAdmin._id.toString(),
-      fullName: dbAdmin.full_name || dbAdmin.fullName || "Administrator",
-      full_name: dbAdmin.full_name || dbAdmin.fullName || "Administrator",
-      email: dbAdmin.email,
-      role: dbAdmin.role || "admin",
-      password: dbAdmin.password_hash,
-      organizationId: dbAdmin.organizationId,
-      profile_image_url: dbAdmin.profile_image_url || "",
-      avatar: dbAdmin.avatar || "",
-      department: dbAdmin.department || "Executive Management",
-      position: dbAdmin.position || (dbAdmin.role === "manager" ? "Manager" : "Administrator"),
-    };
-
-    // Role safety gate
-    if (targetAccount.role !== "admin" && targetAccount.role !== "manager" && targetAccount.role !== "super_admin") {
-      return res.status(403).json({
-        success: false,
-        message: "Access restricted. Only Managers and Administrators may log in through this portal.",
-      });
-    }
-
-    // Password verification
-    const accountPassword = targetAccount.password || targetAccount.password_hash;
+    const accountPassword = targetAccount.password_hash || targetAccount.password;
     const isMatch = await bcrypt.compare(password, accountPassword);
     if (!isMatch) {
       return res.status(401).json({
@@ -501,24 +397,16 @@ export const adminLogin = async (req, res) => {
       });
     }
 
-    // Issue secure HTTP-only cookie and return session profile
-    const token = jwt.sign(
-      {
-        id: (targetAccount._id || targetAccount.id).toString(),
-        userId: (targetAccount._id || targetAccount.id).toString(),
-        role: targetAccount.role,
-        organizationId: targetAccount.organizationId,
-        email: targetAccount.email,
-        fullName: targetAccount.fullName || targetAccount.full_name || "Administrator",
-      },
-      getJwtSecret(),
-      { expiresIn: "7d" }
-    );
+    const role = (targetAccount.role || "admin").toLowerCase();
+    const token = generateAuthToken({
+      id: targetAccount._id.toString(),
+      userId: targetAccount._id.toString(),
+      role,
+      email: targetAccount.email,
+      fullName: targetAccount.fullName || targetAccount.full_name || "Administrator",
+    });
 
-    const isHttps =
-      (req && (req.secure || req.headers["x-forwarded-proto"] === "https")) ||
-      process.env.NODE_ENV === "production";
-
+    const isHttps = req.secure || req.headers["x-forwarded-proto"] === "https" || process.env.NODE_ENV === "production";
     const remember = Boolean(req.body.rememberMe || req.body.rememberDevice);
     const cookieOptions = {
       httpOnly: true,
@@ -532,21 +420,43 @@ export const adminLogin = async (req, res) => {
     res.cookie("token", token, cookieOptions);
 
     const safeProfile = {
-      _id: (targetAccount._id || targetAccount.id).toString(),
-      id: (targetAccount._id || targetAccount.id).toString(),
+      _id: targetAccount._id.toString(),
+      id: targetAccount._id.toString(),
       name: targetAccount.fullName || targetAccount.full_name || "Administrator",
       fullName: targetAccount.fullName || targetAccount.full_name || "Administrator",
       email: targetAccount.email,
-      role: targetAccount.role,
+      role,
       department: targetAccount.department || "Executive Management",
-      position: targetAccount.position || (targetAccount.role === "manager" ? "Manager" : "Administrator"),
+      position: targetAccount.position || (role === "manager" ? "Manager" : "Administrator"),
       avatar: targetAccount.avatar || targetAccount.profile_image_url || "",
-      organizationId: targetAccount.organizationId,
+      dashboardUrl: "/admin/dashboard",
+      permittedDashboardUrl: "/admin/dashboard",
     };
+
+    try {
+      await logAuditAction({
+        req,
+        action: "MANAGER_LOGIN",
+        category: "Authentication",
+        target: "Admin Portal",
+        targetModel: "Admin",
+        summary: `Administrator '${targetAccount.email}' logged in successfully.`,
+        performedBy: {
+          id: targetAccount._id.toString(),
+          name: safeProfile.name,
+          email: targetAccount.email,
+          role,
+        },
+      });
+    } catch (auditErr) {
+      console.warn("[AdminLogin] Audit log notice:", auditErr.message);
+    }
 
     return res.status(200).json({
       success: true,
       token,
+      dashboardUrl: "/admin/dashboard",
+      permittedDashboardUrl: "/admin/dashboard",
       message: "Management login successful.",
       user: safeProfile,
       admin: safeProfile,
@@ -563,7 +473,6 @@ export const adminLogin = async (req, res) => {
 
 /**
  * POST /api/auth/employee/login
- * Employee Login: verifies credentials and active status against MongoDB database
  */
 export const employeeLogin = async (req, res) => {
   try {
@@ -580,30 +489,22 @@ export const employeeLogin = async (req, res) => {
     const cleanEmail = cleanInput.toLowerCase();
     const cleanPassword = password.trim();
 
-    // 1. Query database for Employee by email or employeeId
     let employee = await Employee.findOne({
       $or: [{ email: cleanEmail }, { employeeId: cleanInput }],
     }).select("+password");
 
-    // Fallback check User collection if needed
     if (!employee) {
       const user = await User.findOne({ email: cleanEmail }).select("+password");
-      if (user) {
-        employee = await Employee.findOne({ email: cleanEmail }).select("+password");
-        if (!employee) {
-          employee = user;
-        }
-      }
+      if (user) employee = user;
     }
 
     if (!employee || !employee.password) {
       return res.status(401).json({
         success: false,
-        message: "Invalid credentials",
+        message: "Invalid credentials.",
       });
     }
 
-    // 2. Check account status
     if (employee.status === "suspended") {
       return res.status(403).json({
         success: false,
@@ -618,21 +519,21 @@ export const employeeLogin = async (req, res) => {
       });
     }
 
-    // 3. Verify password hash using bcrypt
     const isPasswordValid = await bcrypt.compare(cleanPassword, employee.password);
     if (!isPasswordValid) {
       return res.status(401).json({
         success: false,
-        message: "Invalid credentials",
+        message: "Invalid credentials.",
       });
     }
 
-    // 4. Generate real JWT session token
+    const role = employee.role || "employee";
     const token = generateAuthToken({
       id: employee._id.toString(),
+      userId: employee._id.toString(),
       employeeId: employee.employeeId,
       email: employee.email,
-      role: employee.role || "employee",
+      role,
       fullName: employee.fullName,
     });
 
@@ -645,23 +546,44 @@ export const employeeLogin = async (req, res) => {
       path: "/",
     };
 
-    // 5. Set HTTP-only Cookie
     res.cookie("auth_token", token, cookieOptions);
     res.cookie("employeeToken", token, cookieOptions);
     res.cookie("token", token, cookieOptions);
 
-    const safeEmployee = employee.toObject ? employee.toObject() : employee;
+    const safeEmployee = employee.toObject ? employee.toObject() : { ...employee };
     delete safeEmployee.password;
     safeEmployee.id = safeEmployee._id ? safeEmployee._id.toString() : safeEmployee.id;
     safeEmployee.name = safeEmployee.fullName || safeEmployee.name || "";
     safeEmployee.avatar = safeEmployee.avatar || safeEmployee.profilePicture || safeEmployee.profile_image_url || "";
+    safeEmployee.dashboardUrl = "/employee/dashboard";
+    safeEmployee.permittedDashboardUrl = "/employee/dashboard";
 
-    // Verify if employee has an active, incomplete shift in the database immediately upon login
     const shiftVerification = await verifyActiveIncompleteShift(safeEmployee);
+
+    try {
+      await logAuditAction({
+        req,
+        action: "EMPLOYEE_LOGIN",
+        category: "Authentication",
+        target: `Employee: ${safeEmployee.name || safeEmployee.email}`,
+        targetModel: "Employee",
+        summary: `Employee '${safeEmployee.email}' logged in.`,
+        performedBy: {
+          id: safeEmployee.id,
+          name: safeEmployee.name,
+          email: safeEmployee.email,
+          role,
+        },
+      });
+    } catch (auditErr) {
+      console.warn("[EmployeeLogin] Audit log notice:", auditErr.message);
+    }
 
     return res.status(200).json({
       success: true,
       token,
+      dashboardUrl: "/employee/dashboard",
+      permittedDashboardUrl: "/employee/dashboard",
       message: shiftVerification.hasActiveShift
         ? "Employee login successful. You have an active ongoing shift."
         : "Employee login successful.",
@@ -683,9 +605,45 @@ export const employeeLogin = async (req, res) => {
 };
 
 /**
- * POST /api/auth/admin/logout or POST /api/auth/employee/logout or POST /api/auth/logout
+ * POST /api/auth/login
+ * Unified Login Endpoint
  */
-export const authLogout = async (req, res) => {
+export const unifiedLogin = async (req, res) => {
+  try {
+    const { identifier, email, role } = req.body;
+    const cleanEmail = (identifier || email || "").toLowerCase().trim();
+
+    if (role === "employee") {
+      return employeeLogin(req, res);
+    }
+
+    const adminMatch = await Admin.findOne({ email: cleanEmail });
+    if (adminMatch) {
+      return adminLogin(req, res);
+    }
+
+    const empMatch = await Employee.findOne({
+      $or: [{ email: cleanEmail }, { employeeId: (identifier || email || "").trim() }],
+    });
+    if (empMatch) {
+      return employeeLogin(req, res);
+    }
+
+    return adminLogin(req, res);
+  } catch (error) {
+    console.error("Unified login error:", error);
+    return res.status(500).json({
+      success: false,
+      message: "Server error during authentication.",
+      error: error.message,
+    });
+  }
+};
+
+/**
+ * POST /api/auth/logout
+ */
+export const authLogout = async (_req, res) => {
   try {
     const clearOptions = {
       httpOnly: true,
@@ -714,7 +672,6 @@ export const authLogout = async (req, res) => {
 
 /**
  * GET /api/auth/me
- * Retrieves current database profile using verified JWT token from HTTP-only cookie
  */
 export const getAuthMe = async (req, res) => {
   try {
@@ -727,41 +684,10 @@ export const getAuthMe = async (req, res) => {
       req.cookies?.adminToken ||
       bearerToken ||
       req.headers["x-admin-token"] ||
-      req.headers["x-employee-token"];
+      req.headers["x-employee-token"] ||
+      req.headers["x-auth-token"];
 
     if (!token) {
-      if (process.env.NODE_ENV !== "production") {
-        try {
-          const activeEmp =
-            (await Employee.findOne({ status: "active" }).lean()) ||
-            (await Employee.findOne().lean());
-          if (activeEmp) {
-            const empAvatar = activeEmp.avatar || activeEmp.profilePicture || "";
-            const empObj = {
-              _id: activeEmp._id.toString(),
-              id: activeEmp._id.toString(),
-              name: activeEmp.fullName,
-              fullName: activeEmp.fullName,
-              email: activeEmp.email,
-              role: activeEmp.role || "employee",
-              employeeId: activeEmp.employeeId,
-              department: activeEmp.department,
-              position: activeEmp.position,
-              avatar: empAvatar,
-              profilePicture: empAvatar,
-            };
-            return res.status(200).json({
-              success: true,
-              role: empObj.role,
-              user: empObj,
-              employee: empObj,
-            });
-          }
-        } catch (fbErr) {
-          console.warn("[getAuthMe] Fallback error:", fbErr.message);
-        }
-      }
-
       return res.status(401).json({
         success: false,
         message: "No active session token found.",
@@ -787,31 +713,26 @@ export const getAuthMe = async (req, res) => {
 
     const userId = decoded.id || decoded._id;
 
-    if (decoded.role === "admin" || decoded.role === "super_admin") {
+    if (decoded.role === "admin" || decoded.role === "manager" || decoded.role === "company_admin") {
       if (mongoose.Types.ObjectId.isValid(userId)) {
         const dbAdmin = await Admin.findById(userId).select("-password_hash").lean();
         if (dbAdmin) {
-          const adminAvatar = dbAdmin.avatarUrl || dbAdmin.profile_image_url || dbAdmin.avatar || dbAdmin.profilePicture || "";
+          const adminAvatar = dbAdmin.avatarUrl || dbAdmin.profile_image_url || dbAdmin.avatar || "";
           const adminObj = {
             _id: dbAdmin._id.toString(),
             id: dbAdmin._id.toString(),
             name: dbAdmin.full_name,
             fullName: dbAdmin.full_name,
-            full_name: dbAdmin.full_name,
             email: dbAdmin.email,
             role: dbAdmin.role || "admin",
             department: "Executive Management",
-            position: dbAdmin.role === "super_admin" ? "Super Admin" : "Administrator",
+            position: dbAdmin.role === "manager" ? "Manager" : "Administrator",
             avatar: adminAvatar,
             avatarUrl: adminAvatar,
-            avatar_url: adminAvatar,
-            profilePicture: adminAvatar,
-            profile_picture: adminAvatar,
-            profile_image_url: adminAvatar,
           };
           return res.status(200).json({
             success: true,
-            role: "admin",
+            role: dbAdmin.role || "admin",
             user: adminObj,
             admin: adminObj,
           });
@@ -823,7 +744,6 @@ export const getAuthMe = async (req, res) => {
         id: userId,
         name: decoded.fullName || "Administrator",
         fullName: decoded.fullName || "Administrator",
-        full_name: decoded.fullName || "Administrator",
         email: decoded.email || "",
         role: decoded.role || "admin",
         department: "Executive Management",
@@ -833,12 +753,11 @@ export const getAuthMe = async (req, res) => {
 
       return res.status(200).json({
         success: true,
-        role: "admin",
+        role: decoded.role || "admin",
         user: fallbackAdmin,
         admin: fallbackAdmin,
       });
     } else {
-      // Employee role
       let dbEmp = null;
       if (mongoose.Types.ObjectId.isValid(userId)) {
         dbEmp = await Employee.findById(userId).select("-password").lean();
@@ -849,24 +768,17 @@ export const getAuthMe = async (req, res) => {
       if (!dbEmp && decoded.email) {
         dbEmp = await Employee.findOne({ email: decoded.email.toLowerCase() }).select("-password").lean();
       }
-      if (!dbEmp && mongoose.Types.ObjectId.isValid(userId)) {
-        dbEmp = await User.findById(userId).select("-password").lean();
-      }
 
       if (dbEmp) {
-        const empAvatar = dbEmp.avatarUrl || dbEmp.profilePicture || dbEmp.avatar || dbEmp.profile_picture || dbEmp.profile_image_url || "";
+        const empAvatar = dbEmp.avatarUrl || dbEmp.profilePicture || dbEmp.avatar || "";
         const safeEmp = {
           ...dbEmp,
           _id: dbEmp._id.toString(),
           id: dbEmp._id.toString(),
-          name: dbEmp.fullName || dbEmp.full_name || dbEmp.name || "",
-          fullName: dbEmp.fullName || dbEmp.full_name || "",
+          name: dbEmp.fullName || dbEmp.name || "",
+          fullName: dbEmp.fullName || "",
           avatar: empAvatar,
           avatarUrl: empAvatar,
-          avatar_url: empAvatar,
-          profilePicture: empAvatar,
-          profile_picture: empAvatar,
-          profile_image_url: empAvatar,
           role: dbEmp.role || "employee",
         };
 
@@ -897,4 +809,15 @@ export const getAuthMe = async (req, res) => {
       message: error.message || "Server error resolving auth session.",
     });
   }
+};
+
+export default {
+  adminRegister,
+  adminLogin,
+  employeeLogin,
+  unifiedLogin,
+  authLogout,
+  getAuthMe,
+  checkAdminExists,
+  verifyActiveIncompleteShift,
 };

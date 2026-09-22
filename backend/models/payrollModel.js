@@ -8,10 +8,23 @@ const payrollSchema = new mongoose.Schema(
       required: true,
     },
 
+    organizationId: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: "CompanySettings",
+      index: true,
+      default: null,
+    },
+
+    companyId: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: "CompanySettings",
+      default: null,
+      index: true,
+    },
+
     payslipNumber: {
       type: String,
       required: true,
-      unique: true,
     },
 
     payMonth: {
@@ -160,7 +173,13 @@ const payrollSchema = new mongoose.Schema(
   },
 );
 
-// Compound indexes for multi-user scaling, fast payMonth lookups, and duplicate prevention
+payrollSchema.pre("validate", function () {
+  if (!this.organizationId && this.companyId) this.organizationId = this.companyId;
+  if (!this.companyId && this.organizationId) this.companyId = this.organizationId;
+});
+
+// Unique payslip and month indexes
+payrollSchema.index({ payslipNumber: 1 }, { unique: true });
 payrollSchema.index({ employee: 1, payMonth: 1 }, { unique: true });
 payrollSchema.index({ employee: 1, status: 1 });
 payrollSchema.index({ payMonth: 1, status: 1 });

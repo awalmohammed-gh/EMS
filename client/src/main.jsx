@@ -9,15 +9,15 @@ import { BrandingProvider } from './context/BrandingContext.jsx'
 
 createRoot(document.getElementById("root")).render(
   <ThemeContextProvider>
-    <AuthProvider>
-      <ManagementContextProvider>
-        <AttendanceProvider>
-          <BrandingProvider>
+    <BrandingProvider>
+      <AuthProvider>
+        <ManagementContextProvider>
+          <AttendanceProvider>
             <App />
-          </BrandingProvider>
-        </AttendanceProvider>
-      </ManagementContextProvider>
-    </AuthProvider>
+          </AttendanceProvider>
+        </ManagementContextProvider>
+      </AuthProvider>
+    </BrandingProvider>
   </ThemeContextProvider>,
 );
 

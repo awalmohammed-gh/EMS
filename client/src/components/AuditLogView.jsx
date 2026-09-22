@@ -25,6 +25,7 @@ export const AuditLogView = ({ filterCategory = null, isModal = false, onClose =
     "All",
     "Penalties & Deductions",
     "Admin Settings",
+    "Tenant Setup",
     "Payroll",
     "Attendance",
     "Employees",

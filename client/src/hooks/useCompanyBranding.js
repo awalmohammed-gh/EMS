@@ -3,13 +3,30 @@ import { api } from "../apis/axios";
 import eyenitLogo from "../assets/eyenit_logo.png";
 
 const DEFAULT_BRANDING = {
-  companyName: "Enterprise Organization",
+  companyName: "",
   logoUrl: "/eyenit_logo.png",
   welcomeBackgroundUrl: "",
   primaryColor: "#0B1E48",
   accentColor: "#ff5500",
-  contactEmail: "admin@company.com",
+  contactEmail: "",
   isConfigured: false,
+};
+
+const getCachedBranding = () => {
+  if (typeof window !== "undefined") {
+    try {
+      const stored = localStorage.getItem("org_branding") || sessionStorage.getItem("org_branding");
+      if (stored) {
+        const parsed = JSON.parse(stored);
+        if (parsed && typeof parsed === "object") {
+          return { ...DEFAULT_BRANDING, ...parsed };
+        }
+      }
+    } catch {
+      return DEFAULT_BRANDING;
+    }
+  }
+  return DEFAULT_BRANDING;
 };
 
 /**
@@ -18,15 +35,17 @@ const DEFAULT_BRANDING = {
  * and assets (logo, colors, background) across authentication views.
  */
 export const useCompanyBranding = () => {
-  const [branding, setBranding] = useState(DEFAULT_BRANDING);
-  const [isLoading, setIsLoading] = useState(true);
+  const [branding, setBranding] = useState(getCachedBranding);
+  const [isLoading, setIsLoading] = useState(!branding.companyName);
   const [error, setError] = useState(null);
 
   const fetchBranding = useCallback(async () => {
     setIsLoading(true);
     setError(null);
     try {
-      const response = await api.get("/company/public-branding");
+      const slug = typeof window !== "undefined" ? localStorage.getItem("workpulse_last_org_slug") : null;
+      const url = slug ? `/company/public-branding/${encodeURIComponent(slug)}` : "/company/public-branding";
+      const response = await api.get(url);
       const data = response?.data;
 
       if (data) {

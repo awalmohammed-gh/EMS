@@ -1,6 +1,7 @@
 import { useState, useEffect, useCallback } from "react";
 import { checkAdminExists, getAdminMe } from "../apis/fontApis";
 import { useManagement } from "../context/ManagementContextProvider";
+import { useAuth } from "../context/AuthContext";
 
 /**
  * Custom React hook that verifies the existence of an admin account on mount
@@ -8,19 +9,46 @@ import { useManagement } from "../context/ManagementContextProvider";
  * Relies strictly on HTTP-only cookies and in-memory context state with zero localStorage.
  */
 export const useAdminAuth = () => {
+  const auth = useAuth();
+  const { user: mgmtUser, role: mgmtRole, setUser, setRole } = useManagement();
+
+  const user = auth?.user || mgmtUser;
+  const role = auth?.role || mgmtRole || user?.role;
+  const isAuthInitializing = auth?.isInitializing;
+
   const [isLoading, setIsLoading] = useState(true);
   const [adminExists, setAdminExists] = useState(null);
   const [isAuthorized, setIsAuthorized] = useState(false);
   const [error, setError] = useState(null);
 
-  const { user, role, setUser, setRole } = useManagement();
-
   const verifyAdminStatus = useCallback(async () => {
+    // If auth is still initializing session in AuthContext, do not evaluate
+    if (isAuthInitializing) {
+      setIsLoading(true);
+      return;
+    }
+
     setIsLoading(true);
     setError(null);
 
     try {
-      // 1. Check if an admin account exists in the database
+      // 1. If active user in AuthContext is already an admin, authorize immediately
+      if (user && (user.role === "admin" || user.role === "super_admin" || role === "admin" || role === "super_admin")) {
+        setIsAuthorized(true);
+        setAdminExists(true);
+        setIsLoading(false);
+        return { adminExists: true, isAuthorized: true };
+      }
+
+      // If user is actively logged in as employee, deny admin access
+      if (user && user.role === "employee" && !user.role?.includes("admin")) {
+        setIsAuthorized(false);
+        setAdminExists(true);
+        setIsLoading(false);
+        return { adminExists: true, isAuthorized: false };
+      }
+
+      // 2. Check if an admin account exists in the database
       const existsRes = await checkAdminExists();
       const exists = Boolean(existsRes.data?.exists);
       setAdminExists(exists);
@@ -32,20 +60,6 @@ export const useAdminAuth = () => {
         return { adminExists: false, isAuthorized: false };
       }
 
-      // 2. Check context user role
-      if (user && (user.role === "admin" || user.role === "super_admin" || role === "admin")) {
-        setIsAuthorized(true);
-        setIsLoading(false);
-        return { adminExists: true, isAuthorized: true };
-      }
-
-      // If user is actively logged in as employee, deny admin access
-      if (user && user.role === "employee" && !user.role?.includes("admin")) {
-        setIsAuthorized(false);
-        setIsLoading(false);
-        return { adminExists: true, isAuthorized: false };
-      }
-
       // 3. Attempt server verification via HTTP-only cookie
       try {
         const profileRes = await getAdminMe();
@@ -53,6 +67,7 @@ export const useAdminAuth = () => {
           const adminUser = profileRes.data.admin;
           if (setUser) setUser(adminUser);
           if (setRole) setRole("admin");
+          if (auth?.setUser) auth.setUser(adminUser);
           setIsAuthorized(true);
           setIsLoading(false);
           return { adminExists: true, isAuthorized: true };
@@ -72,7 +87,7 @@ export const useAdminAuth = () => {
       setIsLoading(false);
       return { adminExists: true, isAuthorized: hasAdminAuth };
     }
-  }, [user, role, setUser, setRole]);
+  }, [user, role, setUser, setRole, isAuthInitializing, auth]);
 
   useEffect(() => {
     let isMounted = true;
@@ -86,9 +101,11 @@ export const useAdminAuth = () => {
     };
   }, [verifyAdminStatus]);
 
+  const effectiveLoading = isLoading || Boolean(isAuthInitializing);
+
   return {
-    isLoading,
-    loading: isLoading,
+    isLoading: effectiveLoading,
+    loading: effectiveLoading,
     adminExists,
     isAuthorized,
     isAuthenticated: isAuthorized,

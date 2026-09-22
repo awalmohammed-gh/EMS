@@ -4,6 +4,8 @@ import { Employee } from "../models/employeeModel.js";
 import { Notification } from "../models/notificationModel.js";
 import { createNotificationRecord } from "./notificationController.js";
 import { emitToEmployee, emitToAll } from "../utils/socket.js";
+import { logAuditAction } from "../utils/auditLogger.js";
+import { validateOrganizationAccess } from "../utils/validateOrganizationAccess.js";
 
 const isValidObjectId = (id) =>
   id &&
@@ -15,15 +17,17 @@ const isValidObjectId = (id) =>
 export const liveLeaveStore = [];
 
 // Helper to get employee info directly from Database
-const resolveEmployeeInfo = async (employeeIdOrObj) => {
+const resolveEmployeeInfo = async (employeeIdOrObj, orgId = null) => {
   try {
+    const orgScope = orgId ? { $or: [{ organizationId: orgId }, { companyId: orgId }] } : {};
     if (employeeIdOrObj && typeof employeeIdOrObj === "string" && isValidObjectId(employeeIdOrObj)) {
-      const emp = await Employee.findById(employeeIdOrObj).select("fullName employeeId department position email usedLeaveDays totalLeaveDays leaveBalance").lean();
+      const emp = await Employee.findOne({ _id: employeeIdOrObj, ...orgScope }).select("fullName employeeId department position email usedLeaveDays totalLeaveDays leaveBalance organizationId companyId").lean();
       if (emp) return emp;
     } else if (employeeIdOrObj) {
       const emp = await Employee.findOne({
         $or: [{ employeeId: employeeIdOrObj }, { email: employeeIdOrObj }],
-      }).select("fullName employeeId department position email usedLeaveDays totalLeaveDays leaveBalance").lean();
+        ...orgScope,
+      }).select("fullName employeeId department position email usedLeaveDays totalLeaveDays leaveBalance organizationId companyId").lean();
       if (emp) return emp;
     }
   } catch (err) {
@@ -66,7 +70,8 @@ export const applyLeave = async (req, res) => {
     const days = Math.ceil(diffTime / (1000 * 60 * 60 * 24)) + 1;
 
     const employeeId = req.employee?.id || req.employee?._id;
-    const employeeInfo = await resolveEmployeeInfo(employeeId);
+    const requestOrgId = req.organizationId || req.companyId || req.user?.organizationId || req.user?.companyId || req.employee?.organizationId;
+    const employeeInfo = await resolveEmployeeInfo(employeeId, requestOrgId);
 
     if (!employeeInfo) {
       return res.status(401).json({
@@ -74,8 +79,11 @@ export const applyLeave = async (req, res) => {
         message: "Employee profile not found. Please log in again.",
       });
     }
+    validateOrganizationAccess(employeeInfo, req);
 
     let savedLeave = null;
+
+    const resolvedOrgId = req.organizationId || employeeInfo.organizationId || employeeInfo.companyId || req.employee?.organizationId || req.user?.organizationId || null;
 
     // 1. Attempt writing to MongoDB if valid ObjectId
     if (isValidObjectId(employeeInfo._id)) {
@@ -88,6 +96,7 @@ export const applyLeave = async (req, res) => {
           totalDays: days,
           reason,
           status: "Pending",
+          ...(resolvedOrgId ? { organizationId: resolvedOrgId, companyId: resolvedOrgId } : {}),
         });
 
         if (doc) {
@@ -110,11 +119,16 @@ export const applyLeave = async (req, res) => {
         totalDays: days,
         reason,
         status: "Pending",
+        ...(resolvedOrgId ? { organizationId: resolvedOrgId, companyId: resolvedOrgId } : {}),
         createdAt: new Date().toISOString(),
         updatedAt: new Date().toISOString(),
       };
     } else {
       savedLeave.employee = employeeInfo;
+      if (resolvedOrgId) {
+        savedLeave.organizationId = resolvedOrgId;
+        savedLeave.companyId = resolvedOrgId;
+      }
     }
 
     // Prepend to in-memory reactive store
@@ -171,9 +185,14 @@ export const applyLeave = async (req, res) => {
 export const getAllLeaves = async (req, res) => {
   try {
     let leaves = [];
+    const orgId = req.organizationId || req.companyId || req.user?.organizationId || req.user?.companyId;
+    const orgQuery = orgId
+      ? { $or: [{ organizationId: orgId }, { companyId: orgId }] }
+      : {};
+
     try {
-      const dbLeaves = await Leave.find({})
-        .populate("employee", "fullName department position employeeId email usedLeaveDays totalLeaveDays leaveBalance")
+      const dbLeaves = await Leave.find(orgQuery)
+        .populate("employee", "fullName department position employeeId email usedLeaveDays totalLeaveDays leaveBalance organizationId companyId")
         .sort({ createdAt: -1 })
         .lean();
 
@@ -189,6 +208,10 @@ export const getAllLeaves = async (req, res) => {
     const merged = [...leaves];
 
     liveLeaveStore.forEach((liveItem) => {
+      if (orgId) {
+        const itemOrg = String(liveItem.organizationId || liveItem.companyId || liveItem.employee?.organizationId || liveItem.employee?.companyId || "");
+        if (itemOrg && itemOrg !== String(orgId)) return;
+      }
       if (!existingIds.has(String(liveItem._id))) {
         merged.unshift(liveItem);
       }
@@ -246,9 +269,12 @@ export const updateLeaveStatus = async (req, res) => {
     let endDateFormatted = "";
     let leaveTypeFormatted = "Leave";
 
+    const orgId = req.user?.organizationId || req.user?.companyId || req.organizationId || req.companyId;
+
     // 1. Update in live store
     const storeItem = liveLeaveStore.find((l) => String(l._id) === String(id) || String(l.id) === String(id));
     if (storeItem) {
+      validateOrganizationAccess(storeItem, req);
       storeItem.status = normalizedStatus;
       storeItem.adminNotes = adminNotes;
       storeItem.adminRemark = adminNotes;
@@ -269,8 +295,10 @@ export const updateLeaveStatus = async (req, res) => {
     let dbUpdatedLeave = null;
     try {
       if (isValidObjectId(id)) {
-        const leaveDoc = await Leave.findById(id).populate("employee");
+        const orgQuery = orgId ? { $or: [{ organizationId: orgId }, { companyId: orgId }] } : {};
+        const leaveDoc = await Leave.findOne({ _id: id, ...orgQuery }).populate("employee");
         if (leaveDoc) {
+          validateOrganizationAccess(leaveDoc, req);
           leaveDoc.status = normalizedStatus;
           leaveDoc.adminNotes = adminNotes;
           leaveDoc.adminRemark = adminNotes;
@@ -290,8 +318,9 @@ export const updateLeaveStatus = async (req, res) => {
           // Update Employee Leave Balance: Deduct approved working days from employee's leave balance
           if (normalizedStatus === "Approved" && targetEmployeeId) {
             try {
-              const empDoc = await Employee.findById(targetEmployeeId);
+              const empDoc = await Employee.findOne({ _id: targetEmployeeId, ...orgQuery });
               if (empDoc) {
+                validateOrganizationAccess(empDoc, req);
                 const prevUsed = Number(empDoc.usedLeaveDays) || 0;
                 const totalAllowed = Number(empDoc.totalLeaveDays) || 20;
                 empDoc.usedLeaveDays = prevUsed + daysCount;
@@ -308,15 +337,14 @@ export const updateLeaveStatus = async (req, res) => {
       console.warn("DB fallback for updateLeaveStatus:", dbErr.message);
     }
 
-    const finalLeave = targetLeaveRecord || {
-      _id: id,
-      status: normalizedStatus,
-      adminNotes,
-      adminRemark: adminNotes,
-      approvedBy: reviewerName,
-      reviewedAt: reviewedAtDate.toISOString(),
-      approvedAt: reviewedAtDate.toISOString(),
-    };
+    if (!targetLeaveRecord) {
+      return res.status(404).json({
+        success: false,
+        message: "Leave request not found or access denied.",
+      });
+    }
+
+    const finalLeave = targetLeaveRecord;
 
     // Format start & end date strings if missing
     if (!startDateFormatted && finalLeave.startDate) {
@@ -397,6 +425,34 @@ export const updateLeaveStatus = async (req, res) => {
       console.warn("WebSocket leave event error:", wsErr.message);
     }
 
+    // 5. Compliance Audit Logging
+    try {
+      if (normalizedStatus === "Approved") {
+        const empName = finalLeave.employee?.fullName || finalLeave.employeeName || "Employee";
+        await logAuditAction({
+          req,
+          action: "APPROVE_LEAVE",
+          category: "Leave",
+          organizationId: finalLeave.organizationId || finalLeave.companyId || req.organizationId || null,
+          companyId: finalLeave.organizationId || finalLeave.companyId || req.organizationId || null,
+          target: `Employee: ${empName}`,
+          targetModel: "Leave",
+          summary: `Approved ${leaveTypeFormatted} request for ${empName} (${daysCount} day${daysCount > 1 ? "s" : ""}, ${startDateFormatted} to ${endDateFormatted}).`,
+          details: `Leave application ID '${id}' was reviewed and approved by ${reviewerName}.${adminNotes ? ` Remark: "${adminNotes}"` : ""}`,
+          metadata: {
+            leaveId: id,
+            leaveType: leaveTypeFormatted,
+            totalDays: daysCount,
+            startDate: startDateFormatted,
+            endDate: endDateFormatted,
+            reviewerName,
+          },
+        });
+      }
+    } catch (auditErr) {
+      console.warn("Leave review audit logging notice:", auditErr.message);
+    }
+
     return res.status(200).json({
       success: true,
       message: `Leave request ${normalizedStatus.toLowerCase()} successfully`,
@@ -405,7 +461,8 @@ export const updateLeaveStatus = async (req, res) => {
     });
   } catch (error) {
     console.error("Error in updateLeaveStatus:", error);
-    return res.status(500).json({
+    const statusCode = error.message === "Unauthorized" || error.statusCode === 403 ? 403 : (error.statusCode || 500);
+    return res.status(statusCode).json({
       success: false,
       message: error.message || "Failed to update leave status.",
     });
@@ -416,6 +473,8 @@ export const updateLeaveStatus = async (req, res) => {
 export const getEmployeeLeave = async (req, res) => {
   try {
     const rawEmployeeId = req.employee?.id || req.employee?._id || req.user?.id || req.user?._id;
+    const orgId = req.user?.organizationId || req.user?.companyId || req.organizationId || req.companyId;
+    const orgScope = orgId ? { $or: [{ organizationId: orgId }, { companyId: orgId }] } : {};
     let validObjectId = null;
 
     if (isValidObjectId(rawEmployeeId)) {
@@ -424,8 +483,12 @@ export const getEmployeeLeave = async (req, res) => {
       try {
         const emp = await Employee.findOne({
           $or: [{ employeeId: rawEmployeeId }, { email: rawEmployeeId }],
-        }).select("_id usedLeaveDays totalLeaveDays leaveBalance").lean();
-        if (emp) validObjectId = emp._id.toString();
+          ...orgScope,
+        }).select("_id usedLeaveDays totalLeaveDays leaveBalance organizationId companyId").lean();
+        if (emp) {
+          validateOrganizationAccess(emp, req);
+          validObjectId = emp._id.toString();
+        }
       } catch (err) {
         console.warn("DB employee lookup in getEmployeeLeave:", err.message);
       }
@@ -437,8 +500,9 @@ export const getEmployeeLeave = async (req, res) => {
       try {
         const dbLeaves = await Leave.find({
           employee: validObjectId,
+          ...orgScope,
         })
-          .populate("employee", "fullName employeeId department position usedLeaveDays totalLeaveDays leaveBalance")
+          .populate("employee", "fullName employeeId department position usedLeaveDays totalLeaveDays leaveBalance organizationId companyId")
           .sort({ createdAt: -1 })
           .lean();
 
@@ -454,6 +518,10 @@ export const getEmployeeLeave = async (req, res) => {
     if (liveLeaveStore.length > 0 && (rawEmployeeId || validObjectId)) {
       const existingIds = new Set(leaves.map((l) => String(l._id)));
       liveLeaveStore.forEach((liveItem) => {
+        if (orgId) {
+          const itemOrg = String(liveItem.organizationId || liveItem.companyId || liveItem.employee?.organizationId || liveItem.employee?.companyId || "");
+          if (itemOrg && itemOrg !== String(orgId)) return;
+        }
         const isMatch =
           String(liveItem.employee?._id) === String(validObjectId) ||
           String(liveItem.employee?._id) === String(rawEmployeeId) ||
@@ -471,7 +539,10 @@ export const getEmployeeLeave = async (req, res) => {
     let employeeData = null;
     if (validObjectId) {
       try {
-        employeeData = await Employee.findById(validObjectId).select("usedLeaveDays totalLeaveDays leaveBalance fullName").lean();
+        employeeData = await Employee.findOne({ _id: validObjectId, ...orgScope }).select("usedLeaveDays totalLeaveDays leaveBalance fullName organizationId companyId").lean();
+        if (employeeData) {
+          validateOrganizationAccess(employeeData, req);
+        }
       } catch {
         // ignore
       }
@@ -516,12 +587,16 @@ export const deleteLeave = async (req, res) => {
     );
     const requestingEmpId = req.employee?._id || req.employee?.id || req.user?._id || req.user?.id;
 
+    const orgId = req.user?.organizationId || req.user?.companyId || req.organizationId || req.companyId;
+    const orgScope = orgId ? { $or: [{ organizationId: orgId }, { companyId: orgId }] } : {};
+
     // 1. Remove from in-memory reactive store
     const storeIdx = liveLeaveStore.findIndex(
       (l) => String(l._id) === String(id) || String(l.id) === String(id)
     );
     if (storeIdx !== -1) {
       const liveItem = liveLeaveStore[storeIdx];
+      validateOrganizationAccess(liveItem, req);
       // Permission check if employee
       if (!isAdmin && requestingEmpId) {
         const itemEmpId = String(liveItem.employee?._id || liveItem.employee?.id || liveItem.employee?.employeeId || "");
@@ -539,21 +614,36 @@ export const deleteLeave = async (req, res) => {
     let deletedDoc = null;
     try {
       if (isValidObjectId(id)) {
+        const existingDoc = await Leave.findOne({ _id: id, ...orgScope });
+        if (existingDoc) {
+          validateOrganizationAccess(existingDoc, req);
+        }
         if (isAdmin) {
-          deletedDoc = await Leave.findByIdAndDelete(id);
+          deletedDoc = await Leave.findOneAndDelete({ _id: id, ...orgScope });
         } else if (requestingEmpId && isValidObjectId(requestingEmpId)) {
           deletedDoc = await Leave.findOneAndDelete({
             _id: id,
             employee: requestingEmpId,
+            ...orgScope,
           });
         } else {
-          deletedDoc = await Leave.findByIdAndDelete(id);
+          deletedDoc = await Leave.findOneAndDelete({ _id: id, ...orgScope });
         }
       } else {
-        deletedDoc = await Leave.findOneAndDelete({ _id: id });
+        deletedDoc = await Leave.findOneAndDelete({ _id: id, ...orgScope });
       }
     } catch (dbErr) {
+      if (dbErr.message === "Unauthorized" || dbErr.statusCode === 403) {
+        throw dbErr;
+      }
       console.warn("DB delete leave error:", dbErr.message);
+    }
+
+    if (storeIdx === -1 && !deletedDoc) {
+      return res.status(404).json({
+        success: false,
+        message: "Leave request not found or access denied.",
+      });
     }
 
     // 3. Cascade delete any notifications referencing this leave request
@@ -576,7 +666,8 @@ export const deleteLeave = async (req, res) => {
     });
   } catch (error) {
     console.error("Error in deleteLeave:", error);
-    return res.status(500).json({
+    const statusCode = error.message === "Unauthorized" || error.statusCode === 403 ? 403 : (error.statusCode || 500);
+    return res.status(statusCode).json({
       success: false,
       message: error.message || "Failed to delete leave request.",
     });
@@ -592,6 +683,9 @@ export const getLeaveEmployeeStats = async (req, res) => {
       req.employee?._id ||
       req.employee?.id;
 
+    const orgId = req.user?.organizationId || req.user?.companyId || req.organizationId || req.companyId;
+    const orgScope = orgId ? { $or: [{ organizationId: orgId }, { companyId: orgId }] } : {};
+
     let employeeObjectId = null;
 
     if (isValidObjectId(rawUserId)) {
@@ -600,10 +694,12 @@ export const getLeaveEmployeeStats = async (req, res) => {
       try {
         const emp = await Employee.findOne({
           $or: [{ employeeId: rawUserId }, { email: rawUserId }],
+          ...orgScope,
         })
-          .select("_id")
+          .select("_id organizationId companyId")
           .lean();
         if (emp && isValidObjectId(emp._id)) {
+          validateOrganizationAccess(emp, req);
           employeeObjectId = new mongoose.Types.ObjectId(emp._id);
         }
       } catch (err) {
@@ -625,8 +721,24 @@ export const getLeaveEmployeeStats = async (req, res) => {
 
     let aggregationResult = [];
     try {
+      const userOrgId = req.user?.organizationId || req.user?.companyId || req.organizationId || req.companyId;
+      const orgFilter = userOrgId
+        ? {
+            $or: [
+              { organizationId: String(userOrgId) },
+              ...(isValidObjectId(userOrgId) ? [{ organizationId: new mongoose.Types.ObjectId(userOrgId) }] : []),
+              { companyId: String(userOrgId) },
+              ...(isValidObjectId(userOrgId) ? [{ companyId: new mongoose.Types.ObjectId(userOrgId) }] : []),
+            ],
+          }
+        : orgScope;
+
+      const startMatch = {
+        employee: employeeObjectId,
+        ...orgFilter,
+      };
       aggregationResult = await Leave.aggregate([
-        { $match: { employee: employeeObjectId } },
+        { $match: startMatch },
         {
           $group: {
             _id: "$leaveType",
@@ -641,10 +753,17 @@ export const getLeaveEmployeeStats = async (req, res) => {
     // Merge any live in-memory store records for this employee
     if (liveLeaveStore.length > 0) {
       const inMemoryMatching = liveLeaveStore.filter(
-        (l) =>
-          String(l.employee?._id) === String(employeeObjectId) ||
-          String(l.employee?._id) === String(rawUserId) ||
-          l.employee?.employeeId === rawUserId
+        (l) => {
+          if (orgId) {
+            const itemOrg = String(l.organizationId || l.companyId || l.employee?.organizationId || l.employee?.companyId || "");
+            if (itemOrg && itemOrg !== String(orgId)) return false;
+          }
+          return (
+            String(l.employee?._id) === String(employeeObjectId) ||
+            String(l.employee?._id) === String(rawUserId) ||
+            l.employee?.employeeId === rawUserId
+          );
+        }
       );
 
       if (inMemoryMatching.length > 0) {

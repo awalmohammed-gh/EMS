@@ -1,37 +1,51 @@
 import { Navigate, Outlet, useLocation } from "react-router-dom";
 import { useAdminAuth } from "../hooks/useAdminAuth";
 import { useAuth } from "../context/AuthContext";
-import Loading from "../ui/Loading";
+import WorkspaceLoader from "../components/ui/WorkspaceLoader";
 
 const ProtectedRoute = ({ allowRole }) => {
   const location = useLocation();
+  const { user, role: authRole, isLoading: isAuthLoading, isInitializing } = useAuth();
   const { isLoading: isAdminLoading, adminExists, isAuthorized } = useAdminAuth();
-  const { user, role: authRole, isLoading: isAuthLoading } = useAuth();
 
   const effectiveRole = authRole || user?.role || null;
 
-  // Await full hydration before any redirect evaluation
-  if (isAuthLoading || (allowRole === "admin" && isAdminLoading)) {
-    return <Loading />;
+  // Ensure that when a user refreshes the page, the application waits for the session check
+  // to complete before deciding to redirect, thus preserving the current route
+  if (isInitializing || isAuthLoading || (allowRole === "admin" && isAdminLoading)) {
+    return (
+      <WorkspaceLoader
+        fullScreen
+        mode="auto"
+      />
+    );
+  }
+
+  // Session check completed. If there is no authenticated user, redirect to Admin Auth
+  if (!user) {
+    return <Navigate to="/admin/auth" replace state={{ from: location }} />;
   }
 
   // If protecting an Admin route
   if (allowRole === "admin") {
     if (adminExists === false) {
-      return <Navigate to="/admin/register" replace state={{ from: location }} />;
+      return <Navigate to="/admin/auth" replace state={{ from: location }} />;
     }
 
     // Explicitly reject logged-in employees attempting to access admin routes
-    if (user && effectiveRole === "employee" && !isAuthorized) {
+    if (effectiveRole === "employee" && !isAuthorized && user?.role !== "admin") {
       return <Navigate to="/employee/dashboard" replace state={{ from: location }} />;
     }
 
     const isAdminUser =
-      Boolean(user) &&
-      (effectiveRole === "admin" || effectiveRole === "super_admin" || isAuthorized);
+      effectiveRole === "admin" ||
+      effectiveRole === "company_admin" ||
+      effectiveRole === "manager" ||
+      isAuthorized ||
+      user?.role === "admin";
 
     if (!isAdminUser) {
-      return <Navigate to="/admin/login" replace state={{ from: location }} />;
+      return <Navigate to="/admin/auth" replace state={{ from: location }} />;
     }
 
     return <Outlet />;
@@ -40,15 +54,15 @@ const ProtectedRoute = ({ allowRole }) => {
   // If protecting an Employee route
   if (allowRole === "employee") {
     const isEmployeeAuthenticated =
-      Boolean(user) &&
-      (effectiveRole === "employee" ||
-        effectiveRole === "admin" ||
-        effectiveRole === "super_admin" ||
-        isAuthorized ||
-        Boolean(user?.employeeId));
+      effectiveRole === "employee" ||
+      effectiveRole === "admin" ||
+      effectiveRole === "manager" ||
+      isAuthorized ||
+      Boolean(user?.employeeId) ||
+      Boolean(user?._id || user?.id);
 
     if (!isEmployeeAuthenticated) {
-      return <Navigate to="/employee/login" replace state={{ from: location }} />;
+      return <Navigate to="/admin/auth" replace state={{ from: location }} />;
     }
 
     return <Outlet />;

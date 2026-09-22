@@ -1,5 +1,6 @@
 import { createContext, useContext, useState, useEffect, useCallback } from "react";
 import { getAuthMe, getAdminMe, getEmployee, authLogout, adminLogout, employeeLogout, getSettings } from "../apis/fontApis";
+import { useAuth, clearAllAuthSessionData } from "./AuthContext";
 import { notificationService } from "../services/notificationService";
 import Toaster from "../ui/Toaster";
 
@@ -8,7 +9,7 @@ const ManagementContext = createContext();
 /**
  * Helper to safely decode a JWT payload in the browser
  */
-const parseJwt = (token) => {
+const _parseJwt = (token) => {
   try {
     if (!token || typeof token !== "string") return null;
     const base64Url = token.split(".")[1];
@@ -27,6 +28,7 @@ const parseJwt = (token) => {
 };
 
 export const ManagementContextProvider = ({ children }) => {
+  const auth = useAuth();
   const [showEmployeeModal, setShowEmployeeModal] = useState(false);
   const [showPayslipsModal, setShowPayslipsModal] = useState(false);
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
@@ -42,13 +44,26 @@ export const ManagementContextProvider = ({ children }) => {
 
   // Role and User state derived dynamically from active session (zero localStorage)
   const [role, setRole] = useState(() => {
-    if (typeof window !== "undefined" && window.location.pathname.startsWith("/employee")) {
+    if (auth?.role) return auth.role;
+    if (
+      typeof window !== "undefined" &&
+      (window.location.hash.includes("/employee") ||
+        window.location.pathname.startsWith("/employee"))
+    ) {
       return "employee";
     }
     return "admin";
   });
 
-  const [user, setUser] = useState(null);
+  const [user, setUser] = useState(auth?.user || null);
+
+  // Sync with AuthContext in real-time
+  useEffect(() => {
+    if (auth?.user) {
+      setUser(auth.user);
+      if (auth.role) setRole(auth.role);
+    }
+  }, [auth?.user, auth?.role]);
 
   const [isLoadingUser, setIsLoadingUser] = useState(false);
 
@@ -159,28 +174,30 @@ export const ManagementContextProvider = ({ children }) => {
     fetchSettings();
   }, [fetchCurrentUser, fetchSettings]);
 
-  // Logout handler
+  // Logout handler: explicitly clears all authentication session data, tokens, and local persistent keys,
+  // then navigates the user to the public Welcome page to ensure a clean state
   const handleUserLogout = async (targetRole = role) => {
     try {
-      await authLogout();
-    } catch {
-      try {
-        if (targetRole === "admin") {
-          await adminLogout();
-        } else {
-          await employeeLogout();
-        }
-      } catch (err) {
-        console.warn("Logout error:", err.message);
+      await authLogout().catch(() => {});
+      if (targetRole === "admin" || role === "admin") {
+        await adminLogout().catch(() => {});
+      } else {
+        await employeeLogout().catch(() => {});
       }
+    } catch (err) {
+      console.warn("Logout error:", err.message);
     } finally {
+      clearAllAuthSessionData();
       setUser(null);
+      if (auth?.logout) {
+        await auth.logout("/welcome").catch(() => {});
+      }
       setShowToast({
         show: true,
         message: "You have been logged out successfully.",
         type: "success",
       });
-      // Strict Redirection: Always redirect directly to the tenant's Welcome Gateway (#/welcome)
+      // Navigate to the public Welcome page to ensure a clean state
       if (typeof window !== "undefined") {
         window.location.hash = "#/welcome";
       }

@@ -121,12 +121,30 @@ const settingsSchema = new mongoose.Schema(
         default: 90,
       },
     },
+    organizationId: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: "CompanySettings",
+      index: true,
+      default: null,
+    },
+    companyId: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: "CompanySettings",
+      default: null,
+      index: true,
+    },
   },
   {
     timestamps: true,
   },
 );
 
+settingsSchema.pre("validate", function () {
+  if (!this.organizationId && this.companyId) this.organizationId = this.companyId;
+  if (!this.companyId && this.organizationId) this.companyId = this.organizationId;
+});
+
 export const Settings = mongoose.models.Settings || mongoose.model("Settings", settingsSchema);
+export default Settings;
 
 

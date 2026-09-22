@@ -12,14 +12,12 @@ const employeeSchema = new mongoose.Schema(
     employeeId: {
       type: String,
       required: true,
-      unique: true,
       trim: true,
     },
 
     email: {
       type: String,
       required: true,
-      unique: true,
       lowercase: true,
       trim: true,
     },
@@ -51,6 +49,20 @@ const employeeSchema = new mongoose.Schema(
       type: Date,
       required: true,
       default: Date.now,
+    },
+
+    organizationId: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: "CompanySettings",
+      index: true,
+      default: null,
+    },
+
+    companyId: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: "CompanySettings",
+      default: null,
+      index: true,
     },
 
     baseSalary: {
@@ -124,6 +136,11 @@ const employeeSchema = new mongoose.Schema(
   },
 );
 
+employeeSchema.pre("validate", function () {
+  if (!this.organizationId && this.companyId) this.organizationId = this.companyId;
+  if (!this.companyId && this.organizationId) this.companyId = this.organizationId;
+});
+
 // Pre-save hook for password hashing (prevents double-hashing)
 employeeSchema.pre("save", async function () {
   if (!this.isModified("password")) return;
@@ -194,6 +211,8 @@ employeeSchema.post("findOneAndDelete", async function (doc) {
   }
 });
 
+employeeSchema.index({ email: 1 }, { unique: true });
+employeeSchema.index({ employeeId: 1 }, { unique: true });
 employeeSchema.index({ department: 1, status: 1 });
 employeeSchema.index({ status: 1, role: 1 });
 

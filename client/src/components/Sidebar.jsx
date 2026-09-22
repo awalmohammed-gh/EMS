@@ -1,12 +1,13 @@
 // Sidebar.jsx - Desktop Persistent Navigation Sidebar
 import { useNavigate } from "react-router-dom";
+import { motion } from "framer-motion";
 import {
   LogOut,
   ShieldCheck,
   User,
 } from "lucide-react";
-import eyenitLogo from "../assets/eyenit_logo.png";
 import { useManagement } from "../context/ManagementContextProvider";
+import { useBranding } from "../context/BrandingContext";
 
 export const Sidebar = ({
   children,
@@ -14,15 +15,14 @@ export const Sidebar = ({
 }) => {
   const navigate = useNavigate();
   const { role: contextRole, user, logout } = useManagement();
+  const { companyName, logoUrl } = useBranding();
 
   const isAdmin =
     propRole === "admin" ||
     (contextRole === "admin" && propRole !== "employee");
 
   const userRoleTitle = isAdmin
-    ? user?.role === "super_admin"
-      ? "Super Admin"
-      : "Administrator"
+    ? "Administrator"
     : user?.position || "Staff Member";
 
   const handleLogout = async () => {
@@ -38,20 +38,45 @@ export const Sidebar = ({
       className="hidden md:flex flex-col h-full w-64 bg-white dark:bg-slate-900 border-r border-[#E2E8F0] dark:border-slate-800 shadow-xs shrink-0 z-10 transition-colors duration-200"
     >
       <div className="flex flex-col h-full bg-white dark:bg-slate-900">
-        {/* Brand Header */}
-        <div className="px-5 pt-5 pb-4 border-b border-[#E2E8F0] dark:border-slate-800">
-          <div className="flex items-center gap-3">
-            <div className="w-12 h-12 rounded-xl bg-white dark:bg-slate-800 flex items-center justify-center p-1 border border-[#E2E8F0] dark:border-slate-700 shadow-2xs">
-              <img
-                className="w-full h-full object-contain"
-                src={eyenitLogo}
-                alt="Eyenit"
-              />
-            </div>
-            <div>
-              <p className="text-sm font-bold text-[#002185] dark:text-blue-400 tracking-tight">Eyenit</p>
-              <p className="text-[11px] font-medium text-[#64748B] dark:text-slate-400">Management System</p>
-            </div>
+        {/* Sidebar Brand Header */}
+        <div className="h-16 px-5 border-b border-slate-200/80 dark:border-slate-800 flex items-center gap-3">
+          <motion.div layout key={logoUrl || companyName} className="shrink-0">
+            {logoUrl ? (
+              <div className="w-10 h-10 rounded-xl bg-white dark:bg-slate-800 border border-slate-200/80 dark:border-slate-700 shadow-xs flex items-center justify-center p-1 overflow-hidden shrink-0">
+                <motion.img
+                  layout
+                  src={logoUrl}
+                  alt={companyName || "Company Logo"}
+                  className="w-full h-full object-contain"
+                  onError={(e) => {
+                    // Graceful fallback if image fails to resolve
+                    e.target.style.display = "none";
+                    if (e.target.nextSibling) {
+                      e.target.nextSibling.style.display = "flex";
+                    }
+                  }}
+                />
+                {/* Fallback Icon if custom image fails to load */}
+                <div className="hidden w-full h-full items-center justify-center bg-[#0B1E48] text-white font-bold text-sm rounded-lg">
+                  {companyName ? companyName.charAt(0).toUpperCase() : "W"}
+                </div>
+              </div>
+            ) : (
+              /* Default fallback monogram if no custom logo was provided */
+              <div className="w-10 h-10 rounded-xl bg-[#0B1E48] text-white flex items-center justify-center font-bold text-sm shadow-xs shrink-0">
+                {companyName ? companyName.charAt(0).toUpperCase() : "W"}
+              </div>
+            )}
+          </motion.div>
+
+          {/* Dynamic Company Label */}
+          <div className="flex flex-col min-w-0">
+            <span className="text-sm font-bold text-slate-900 dark:text-slate-100 truncate">
+              {companyName || "WorkPulse"}
+            </span>
+            <span className="text-[10px] font-semibold text-slate-400 uppercase tracking-wider">
+              Workforce Suite
+            </span>
           </div>
         </div>
 

@@ -13,6 +13,20 @@ const attendanceSchema = new mongoose.Schema(
       default: "",
     },
 
+    organizationId: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: "CompanySettings",
+      index: true,
+      default: null,
+    },
+
+    companyId: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: "CompanySettings",
+      default: null,
+      index: true,
+    },
+
     date: {
       type: String, 
       required: true,
@@ -154,9 +168,13 @@ const attendanceSchema = new mongoose.Schema(
   },
 );
 
-// Indexes for multi-user scaling, fast range queries, and unique check-ins
+attendanceSchema.pre("validate", function () {
+  if (!this.organizationId && this.companyId) this.organizationId = this.companyId;
+  if (!this.companyId && this.organizationId) this.companyId = this.organizationId;
+});
+
+// Indexes for fast range queries, employee history, and unique check-ins per day
 attendanceSchema.index({ employee: 1, date: 1 }, { unique: true });
-attendanceSchema.index({ employeeId: 1, date: 1 });
 attendanceSchema.index({ date: 1, status: 1 });
 attendanceSchema.index({ employee: 1, status: 1 });
 attendanceSchema.index({ employee: 1, createdAt: -1 });

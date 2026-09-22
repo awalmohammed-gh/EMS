@@ -6,6 +6,7 @@ import { AuditLog } from "../models/AuditLog.js";
 import { calculateWorkHours, safeDateTime } from "../utils/calculateWorkHours.js";
 import { evaluateLatenessPenalty } from "../utils/latenessPenaltyCalculator.js";
 import { createNotificationRecord } from "./notificationController.js";
+import { validateOrganizationAccess } from "../utils/validateOrganizationAccess.js";
 
 const isValidObjectId = (id) => mongoose.Types.ObjectId.isValid(id);
 
@@ -33,10 +34,13 @@ export const overrideAttendanceRecord = async (req, res) => {
       excuseReason,
     } = req.body;
 
+    const orgId = req.user?.organizationId || req.user?.companyId || req.organizationId || req.companyId;
+    const orgScope = orgId ? { $or: [{ organizationId: orgId }, { companyId: orgId }] } : {};
+
     // 1. Retrieve active shift configurations from CompanySettings (single source of truth)
     let settingsDoc = null;
     try {
-      settingsDoc = await CompanySettings.getSingletonSettings();
+      settingsDoc = await CompanySettings.getSingletonSettings(orgId);
     } catch {
       settingsDoc = {
         workStartTime: "08:00",
@@ -50,7 +54,15 @@ export const overrideAttendanceRecord = async (req, res) => {
     // 2. Identify target record or employee
     let existingRecord = null;
     if (recordId && isValidObjectId(recordId)) {
-      existingRecord = await Attendance.findById(recordId);
+      existingRecord = await Attendance.findOne({ _id: recordId, ...orgScope });
+      if (!existingRecord) {
+        return res.status(404).json({
+          success: false,
+          message: "Attendance record not found in your company workspace.",
+          code: "NOT_FOUND",
+        });
+      }
+      validateOrganizationAccess(existingRecord, req);
     }
 
     const targetDate =
@@ -63,16 +75,18 @@ export const overrideAttendanceRecord = async (req, res) => {
 
     if (!employeeObjectId && targetEmployeeId) {
       if (isValidObjectId(targetEmployeeId)) {
-        const found = await Employee.findById(targetEmployeeId).select("_id employeeId fullName");
+        const found = await Employee.findOne({ _id: targetEmployeeId, ...orgScope }).select("_id employeeId fullName organizationId companyId");
         if (found) {
+          validateOrganizationAccess(found, req);
           employeeObjectId = found._id;
           targetEmployeeId = found.employeeId || targetEmployeeId;
         }
       }
 
       if (!employeeObjectId) {
-        const found = await Employee.findOne({ employeeId: String(targetEmployeeId).trim() }).select("_id employeeId fullName");
+        const found = await Employee.findOne({ employeeId: String(targetEmployeeId).trim(), ...orgScope }).select("_id employeeId fullName organizationId companyId");
         if (found) {
+          validateOrganizationAccess(found, req);
           employeeObjectId = found._id;
         }
       }
@@ -82,7 +96,11 @@ export const overrideAttendanceRecord = async (req, res) => {
       existingRecord = await Attendance.findOne({
         employee: employeeObjectId,
         date: targetDate,
+        ...orgScope,
       });
+      if (existingRecord) {
+        validateOrganizationAccess(existingRecord, req);
+      }
     }
 
     if (!existingRecord && !employeeObjectId) {
@@ -169,14 +187,19 @@ export const overrideAttendanceRecord = async (req, res) => {
       auditLog: auditLogEntry,
     };
 
+    const targetOrgId = req.organizationId || existingRecord?.organizationId || null;
+    if (targetOrgId) {
+      updatePayload.organizationId = targetOrgId;
+    }
+
     if (employeeObjectId) {
       updatePayload.employee = employeeObjectId;
     }
 
     let savedRecord = null;
     if (existingRecord) {
-      savedRecord = await Attendance.findByIdAndUpdate(
-        existingRecord._id,
+      savedRecord = await Attendance.findOneAndUpdate(
+        { _id: existingRecord._id, ...orgScope },
         { $set: updatePayload },
         { returnDocument: "after" }
       )
@@ -184,7 +207,7 @@ export const overrideAttendanceRecord = async (req, res) => {
         .lean();
     } else {
       savedRecord = await Attendance.findOneAndUpdate(
-        { employee: employeeObjectId, date: targetDate },
+        { employee: employeeObjectId, date: targetDate, ...orgScope },
         { $set: updatePayload },
         { upsert: true, returnDocument: "after", setDefaultsOnInsert: true }
       )
@@ -198,6 +221,7 @@ export const overrideAttendanceRecord = async (req, res) => {
       await AuditLog.create({
         action: "ATTENDANCE_MANUAL_OVERRIDE",
         category: "Attendance",
+        organizationId: targetOrgId && mongoose.Types.ObjectId.isValid(targetOrgId) ? new mongoose.Types.ObjectId(targetOrgId) : null,
         performedBy: {
           id: adminId,
           name: adminName,
@@ -300,7 +324,8 @@ export const overrideAttendanceRecord = async (req, res) => {
     });
   } catch (error) {
     console.error("Error in overrideAttendanceRecord:", error);
-    return res.status(500).json({
+    const statusCode = error.message === "Unauthorized" || error.statusCode === 403 ? 403 : (error.statusCode || 500);
+    return res.status(statusCode).json({
       success: false,
       message: error.message || "Failed to process attendance override.",
     });

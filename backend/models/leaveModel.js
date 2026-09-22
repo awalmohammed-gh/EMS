@@ -8,6 +8,20 @@ const leaveSchema = new mongoose.Schema(
       required: true,
     },
 
+    organizationId: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: "CompanySettings",
+      index: true,
+      default: null,
+    },
+
+    companyId: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: "CompanySettings",
+      default: null,
+      index: true,
+    },
+
     leaveType: {
       type: String,
       required: true,
@@ -72,6 +86,11 @@ const leaveSchema = new mongoose.Schema(
     timestamps: true,
   },
 );
+
+leaveSchema.pre("validate", function () {
+  if (!this.organizationId && this.companyId) this.organizationId = this.companyId;
+  if (!this.companyId && this.organizationId) this.companyId = this.organizationId;
+});
 
 leaveSchema.index({ employee: 1, status: 1 });
 leaveSchema.index({ employee: 1, startDate: 1 });

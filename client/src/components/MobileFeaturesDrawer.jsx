@@ -8,6 +8,7 @@ import {
   Banknote,
   Calendar,
   Megaphone,
+  Activity,
   Settings,
   User,
   LogOut,
@@ -90,6 +91,12 @@ export const MobileFeaturesDrawer = ({
       label: "Notices",
       icon: Megaphone,
       tint: "text-purple-600 dark:text-purple-400 bg-purple-50/90 dark:bg-purple-950/40 border border-purple-200/60 dark:border-purple-900/50",
+    },
+    {
+      to: "/admin/dashboard/activity",
+      label: "Activity",
+      icon: Activity,
+      tint: "text-blue-600 dark:text-blue-400 bg-blue-50/90 dark:bg-blue-950/40 border border-blue-200/60 dark:border-blue-900/50",
     },
     {
       to: "/admin/dashboard/settings",

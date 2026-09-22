@@ -20,6 +20,8 @@ import notificationRouter from "./routes/notificationRoutes.js";
 import authRouter from "./routes/authRoutes.js";
 import announcementRouter from "./routes/announcementRoutes.js";
 import userRouter from "./routes/userRoutes.js";
+import companyRouter from "./routes/companyRoutes.js";
+import { CompanySettings } from "./models/CompanySettings.js";
 import { logErrorToFile } from "./utils/logger.js";
 import { autoCloseAllStaleShifts } from "./controllers/employeeAttendance.js";
 
@@ -102,17 +104,19 @@ app.use(express.json({ limit: "25mb", strict: false }));
 app.use(express.urlencoded({ limit: "25mb", extended: true }));
 
 // Ensure upload directories exist for persistent local storage
+const rootUploadsDir = path.resolve(process.cwd(), "uploads");
 const uploadsStaticDir = path.resolve(__dirname, "uploads");
 const avatarsStaticDir = path.resolve(__dirname, "uploads/avatars");
 try {
-  if (!fs.existsSync(avatarsStaticDir)) {
-    fs.mkdirSync(avatarsStaticDir, { recursive: true });
-  }
+  if (!fs.existsSync(rootUploadsDir)) fs.mkdirSync(rootUploadsDir, { recursive: true });
+  if (!fs.existsSync(uploadsStaticDir)) fs.mkdirSync(uploadsStaticDir, { recursive: true });
+  if (!fs.existsSync(avatarsStaticDir)) fs.mkdirSync(avatarsStaticDir, { recursive: true });
 } catch (fsErr) {
   console.warn("[Backend] Note: Error ensuring local upload directory exists:", fsErr.message);
 }
 
-// Serve uploaded profile images and avatars
+// Serve uploaded profile images, branding assets, and registration files
+app.use("/uploads", express.static(rootUploadsDir, { maxAge: "1d", fallthrough: true }));
 app.use("/uploads", express.static(uploadsStaticDir, { maxAge: "1d", fallthrough: true }));
 app.use("/uploads", (req, res) => {
   res.status(404).send("File not found");
@@ -141,6 +145,10 @@ app.use("/api", (req, res, next) => {
   }
   next();
 });
+
+// Single-tenant modular API routers
+app.use("/api/company", companyRouter);
+app.use("/api/companies", companyRouter);
 app.use("/api/auth", authRouter);
 app.use("/api/users", userRouter);
 app.use("/api/user", userRouter);
@@ -156,6 +164,10 @@ app.use("/api/leave", leaveRouter);
 app.use("/api/settings", settingsRouter);
 app.use("/api/notifications", notificationRouter);
 app.use("/api/announcements", announcementRouter);
+
+// Direct mounts without /api prefix to gracefully handle requests if client baseURL omits /api
+app.use("/company", companyRouter);
+app.use("/companies", companyRouter);
 
 // database offline fallback error handler for API routes
 app.use("/api", (err, req, res, next) => {
@@ -184,6 +196,15 @@ app.use("/api", (err, req, res, next) => {
   return res.status(500).json({ success: false, message: err.message || "Internal server error" });
 });
 
+// Dedicated API 404 handler: Immediately catch any unhandled /api requests before static files
+app.use("/api", (req, res) => {
+  console.error(`[404 NOT FOUND] ${req.method} ${req.originalUrl}`);
+  res.status(404).json({
+    success: false,
+    message: `Route ${req.method} ${req.originalUrl} not found on server.`,
+  });
+});
+
 // serve frontend static assets
 const clientDistPath = path.resolve(__dirname, "../client/dist");
 app.use(express.static(clientDistPath));
@@ -200,6 +221,15 @@ app.use((req, res, next) => {
   next();
 });
 
+// Catch-all 404 handler to help diagnose dead URLs immediately
+app.use((req, res) => {
+  console.error(`[404 NOT FOUND] ${req.method} ${req.originalUrl}`);
+  res.status(404).json({
+    success: false,
+    message: `Route ${req.method} ${req.originalUrl} not found on server.`,
+  });
+});
+
 const isMainModule = Boolean(
   process.argv[1] &&
   fileURLToPath(import.meta.url) === path.resolve(process.argv[1])
@@ -212,6 +242,13 @@ const startBackendServer = async () => {
       console.log("[Backend] Initializing MongoDB connection...");
       await connectMongodb();
       console.log("[Backend] Database ready for incoming requests.");
+
+      // Ensure default CompanySettings exist
+      try {
+        await CompanySettings.getSettings();
+      } catch (csErr) {
+        console.warn("[Backend] CompanySettings initialization notice:", csErr.message);
+      }
 
       // Run initial auto-close sweep for unclosed shifts from prior calendar days
       try {

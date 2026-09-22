@@ -14,6 +14,8 @@ import {
 } from "./employeeAttendance.js";
 import { liveLeaveStore } from "./leaveController.js";
 import { getNotifications } from "./notificationController.js";
+import { buildTenantScope, combineTenantScope, getTenantId } from "../utils/tenantScope.js";
+import { validateOrganizationAccess } from "../utils/validateOrganizationAccess.js";
 
 const isValidObjectId = (id) =>
   id &&
@@ -25,6 +27,11 @@ const isValidObjectId = (id) =>
 export const getDashboardOverview = async (req, res) => {
   try {
     const today = new Date().toISOString().split("T")[0];
+
+    const tenantId = getTenantId(req);
+    const tenantScope = buildTenantScope(req);
+    const userId = req.user?._id || req.user?.id || req.admin?._id || req.admin?.id || "unknown";
+    const userOrgId = tenantId || req.user?.organizationId || req.user?.companyId || req.organizationId || "none";
 
     let totalEmployees = 0;
     let dbActiveCount = 0;
@@ -71,38 +78,72 @@ export const getDashboardOverview = async (req, res) => {
     ];
 
     try {
-      totalEmployees = await Employee.countDocuments({});
-      dbActiveCount = await Employee.countDocuments({
-        $or: [{ status: "active" }, { status: { $exists: false }, isActive: { $ne: false } }],
-      });
-      dbInactiveCount = await Employee.countDocuments({ status: "inactive" });
-      dbSuspendedCount = await Employee.countDocuments({ status: "suspended" });
+      totalEmployees = await Employee.countDocuments(tenantScope);
 
-      presentToday = await Attendance.countDocuments({
-        date: today,
-        clockIn: { $ne: null },
-      });
-      lateToday = await Attendance.countDocuments({
-        date: today,
-        status: "Late",
-      });
+      if (totalEmployees === 0) {
+        dbActiveCount = 0;
+        dbInactiveCount = 0;
+        dbSuspendedCount = 0;
+        presentToday = 0;
+        lateToday = 0;
+        onLeave = 0;
+        absentToday = 0;
+      } else {
+        dbActiveCount = await Employee.countDocuments(
+          combineTenantScope(tenantScope, {
+            $or: [{ status: "active" }, { status: { $exists: false }, isActive: { $ne: false } }],
+          })
+        );
+        dbInactiveCount = await Employee.countDocuments(
+          combineTenantScope(tenantScope, { status: "inactive" })
+        );
+        dbSuspendedCount = await Employee.countDocuments(
+          combineTenantScope(tenantScope, { status: "suspended" })
+        );
+        dbActiveCount = Math.min(totalEmployees, dbActiveCount);
 
-      const startOfToday = new Date();
-      startOfToday.setHours(0, 0, 0, 0);
-      const endOfToday = new Date();
-      endOfToday.setHours(23, 59, 59, 999);
+        presentToday = await Attendance.countDocuments(
+          combineTenantScope(tenantScope, {
+            date: today,
+            clockIn: { $ne: null },
+          })
+        );
+        lateToday = await Attendance.countDocuments(
+          combineTenantScope(tenantScope, {
+            date: today,
+            status: "Late",
+          })
+        );
 
-      onLeave = await Leave.countDocuments({
-        status: { $in: ["Approved", "approved"] },
-        startDate: { $lte: endOfToday },
-        endDate: { $gte: startOfToday },
-      });
-      absentToday = Math.max(0, (dbActiveCount || totalEmployees) - presentToday - onLeave);
+        const startOfToday = new Date();
+        startOfToday.setHours(0, 0, 0, 0);
+        const endOfToday = new Date();
+        endOfToday.setHours(23, 59, 59, 999);
 
-      totalRequests = await Leave.countDocuments();
-      approvedLeaves = await Leave.countDocuments({ status: { $in: ["Approved", "approved"] } });
-      pendingLeaves = await Leave.countDocuments({ status: { $in: ["Pending", "pending"] } });
-      rejectedLeaves = await Leave.countDocuments({ status: { $in: ["Rejected", "rejected"] } });
+        onLeave = await Leave.countDocuments(
+          combineTenantScope(tenantScope, {
+            status: { $in: ["Approved", "approved"] },
+            startDate: { $lte: endOfToday },
+            endDate: { $gte: startOfToday },
+          })
+        );
+
+        presentToday = Math.min(totalEmployees, presentToday);
+        lateToday = Math.min(totalEmployees, lateToday);
+        onLeave = Math.min(totalEmployees, onLeave);
+        absentToday = Math.max(0, (dbActiveCount || totalEmployees) - presentToday - onLeave);
+      }
+
+      totalRequests = await Leave.countDocuments(tenantScope);
+      approvedLeaves = await Leave.countDocuments(
+        combineTenantScope(tenantScope, { status: { $in: ["Approved", "approved"] } })
+      );
+      pendingLeaves = await Leave.countDocuments(
+        combineTenantScope(tenantScope, { status: { $in: ["Pending", "pending"] } })
+      );
+      rejectedLeaves = await Leave.countDocuments(
+        combineTenantScope(tenantScope, { status: { $in: ["Rejected", "rejected"] } })
+      );
 
       attendanceTrends = [
         { day: "Mon", present: presentToday, late: lateToday, absent: absentToday, onLeave },
@@ -113,7 +154,9 @@ export const getDashboardOverview = async (req, res) => {
       ];
 
       // Gather real pending leaves for visual approvals tracker
-      const dbPendingLeaves = await Leave.find({ status: "Pending" })
+      const dbPendingLeaves = await Leave.find(
+        combineTenantScope(tenantScope, { status: "Pending" })
+      )
         .populate("employee", "fullName department position employeeId")
         .sort({ createdAt: -1 })
         .limit(6)
@@ -123,8 +166,28 @@ export const getDashboardOverview = async (req, res) => {
         pendingApprovalsList = dbPendingLeaves;
       }
 
-      // Group leave by type
+      // Group leave by type - Ensure pipeline starts with organizationId filter using authenticated user's organization
+      const rawUserOrgId = req.user?.organizationId || req.admin?.organizationId || req.employee?.organizationId || getTenantId(req);
+      const isSuperAdmin =
+        req.user?.role === "super_admin" ||
+        req.user?.role === "superadmin" ||
+        req.admin?.role === "super_admin" ||
+        req.admin?.role === "superadmin";
+
+      const orgFilterStage = {
+        $match: !isSuperAdmin && rawUserOrgId
+          ? {
+              $or: [
+                { organizationId: String(rawUserOrgId) },
+                ...(isValidObjectId(rawUserOrgId) ? [{ organizationId: new mongoose.Types.ObjectId(rawUserOrgId) }] : []),
+                { companyId: String(rawUserOrgId) },
+                ...(isValidObjectId(rawUserOrgId) ? [{ companyId: new mongoose.Types.ObjectId(rawUserOrgId) }] : []),
+              ],
+            }
+          : tenantScope,
+      };
       const leaveTypeCounts = await Leave.aggregate([
+        orgFilterStage,
         { $group: { _id: "$leaveType", count: { $sum: 1 } } },
       ]);
       if (leaveTypeCounts.length > 0) {
@@ -142,7 +205,7 @@ export const getDashboardOverview = async (req, res) => {
       employeesPaidCount = 0;
       pendingCount = 0;
 
-      payrollRecords = await Payroll.find({}).lean() || [];
+      payrollRecords = await Payroll.find(tenantScope).lean() || [];
       if (payrollRecords && payrollRecords.length > 0) {
         payrollRecords.forEach((rec) => {
           const amount = Number(
@@ -178,7 +241,20 @@ export const getDashboardOverview = async (req, res) => {
         totalEmployees: dbActiveCount || totalEmployees,
       };
 
+      const empOrgFilterStage = {
+        $match: !isSuperAdmin && rawUserOrgId
+          ? {
+              $or: [
+                { organizationId: String(rawUserOrgId) },
+                ...(isValidObjectId(rawUserOrgId) ? [{ organizationId: new mongoose.Types.ObjectId(rawUserOrgId) }] : []),
+                { companyId: String(rawUserOrgId) },
+                ...(isValidObjectId(rawUserOrgId) ? [{ companyId: new mongoose.Types.ObjectId(rawUserOrgId) }] : []),
+              ],
+            }
+          : tenantScope,
+      };
       const dbDepartments = await Employee.aggregate([
+        empOrgFilterStage,
         { $group: { _id: "$department", total: { $sum: 1 } } },
         { $sort: { total: -1 } },
       ]);
@@ -187,9 +263,9 @@ export const getDashboardOverview = async (req, res) => {
       }
 
       // Detailed Department & Status Breakdown Aggregation
-      allEmployees = await Employee.find({})
+      allEmployees = (await Employee.find(tenantScope)
         .select("department status isActive salary basicSalary baseSalary")
-        .lean() || [];
+        .lean()) || [];
 
       const deptMap = {};
       totalActive = 0;
@@ -244,18 +320,31 @@ export const getDashboardOverview = async (req, res) => {
       console.warn("DB query for admin dashboard:", dbErr.message);
     }
 
-    // Merge in-memory pending leaves if not in list
-    if (liveLeaveStore && liveLeaveStore.length > 0) {
-      const inMemoryPending = liveLeaveStore.filter((l) => l.status === "Pending");
+    // Merge in-memory pending leaves if not in list (strictly scoped to active tenant)
+    const tenantIdStr = tenantId ? String(tenantId).trim() : null;
+    const scopedLiveLeaves = (liveLeaveStore || []).filter((l) => {
+      if (!tenantIdStr) return false;
+      const lTenant = String(
+        l.organizationId ||
+        l.companyId ||
+        l.employee?.organizationId ||
+        l.employee?.companyId ||
+        ""
+      );
+      return lTenant === tenantIdStr;
+    });
+
+    if (scopedLiveLeaves.length > 0) {
+      const inMemoryPending = scopedLiveLeaves.filter((l) => l.status === "Pending");
       inMemoryPending.forEach((item) => {
         if (!pendingApprovalsList.some((p) => String(p._id) === String(item._id))) {
           pendingApprovalsList.unshift(item);
         }
       });
-      pendingLeaves = liveLeaveStore.filter((l) => l.status === "Pending").length || pendingLeaves;
-      totalRequests = Math.max(totalRequests, liveLeaveStore.length);
-      approvedLeaves = liveLeaveStore.filter((l) => l.status === "Approved").length || approvedLeaves;
-      rejectedLeaves = liveLeaveStore.filter((l) => l.status === "Rejected").length || rejectedLeaves;
+      pendingLeaves = scopedLiveLeaves.filter((l) => l.status === "Pending").length || pendingLeaves;
+      totalRequests = Math.max(totalRequests, scopedLiveLeaves.length);
+      approvedLeaves = scopedLiveLeaves.filter((l) => l.status === "Approved").length || approvedLeaves;
+      rejectedLeaves = scopedLiveLeaves.filter((l) => l.status === "Rejected").length || rejectedLeaves;
     }
 
     // Dynamic leave status breakdown for charts
@@ -296,9 +385,11 @@ export const getDashboardOverview = async (req, res) => {
 
     let historicalAttendance = [];
     try {
-      historicalAttendance = await Attendance.find({
-        date: { $gte: startPeriod, $lte: endPeriod },
-      }).select("date status isExcused latePenalty clockIn clockOut clockOutTime workHours delayMinutes").lean() || [];
+      historicalAttendance = await Attendance.find(
+        combineTenantScope(tenantScope, {
+          date: { $gte: startPeriod, $lte: endPeriod },
+        })
+      ).select("date status isExcused latePenalty clockIn clockOut clockOutTime workHours delayMinutes").lean() || [];
     } catch (e) {
       console.warn("Could not load historical attendance for trends:", e.message);
     }
@@ -311,15 +402,15 @@ export const getDashboardOverview = async (req, res) => {
       attByMonth.get(key).push(att);
     });
 
-    const activeHeadcount = dbActiveCount || totalEmployees || 1;
+    const activeHeadcount = dbActiveCount || totalEmployees || 0;
     const activeEmployees = (allEmployees || []).filter((e) => {
       const st = String(e.status || "active").toLowerCase().trim();
       return st === "active" && e.isActive !== false;
     });
     const activeBaseSalaryEst = activeEmployees.length > 0
       ? activeEmployees.reduce((sum, e) => {
-          const s = Number(e.salary || e.basicSalary || e.baseSalary || 3500);
-          return sum + (isNaN(s) ? 3500 : s);
+          const s = Number(e.salary || e.basicSalary || e.baseSalary || 0);
+          return sum + (isNaN(s) ? 0 : s);
         }, 0)
       : (activeHeadcount * 3500);
 
@@ -371,23 +462,23 @@ export const getDashboardOverview = async (req, res) => {
       const effectivePenalties = penaltiesDeductions > 0 ? penaltiesDeductions : Math.round(effectiveGross * 0.02);
       const effectiveNet = netPayroll > 0 ? netPayroll : Math.max(0, effectiveGross - effectivePenalties - Math.round(effectiveGross * 0.08));
 
-      const effectivePresent = totalLogs > 0 ? presentCount : Math.max(1, Math.round(activeHeadcount * 0.90));
-      const effectiveLate = totalLogs > 0 ? lateCount : Math.max(0, Math.round(activeHeadcount * 0.06));
-      const effectiveAbsent = totalLogs > 0 ? absentCount : Math.max(0, Math.round(activeHeadcount * 0.04));
-      const effectiveOnLeave = totalLogs > 0 ? onLeaveCount : Math.max(0, Math.round(activeHeadcount * 0.02));
+      const effectivePresent = totalLogs > 0 ? presentCount : (activeHeadcount > 0 ? Math.round(activeHeadcount * 0.90) : 0);
+      const effectiveLate = totalLogs > 0 ? lateCount : (activeHeadcount > 0 ? Math.round(activeHeadcount * 0.06) : 0);
+      const effectiveAbsent = totalLogs > 0 ? absentCount : (activeHeadcount > 0 ? Math.round(activeHeadcount * 0.04) : 0);
+      const effectiveOnLeave = totalLogs > 0 ? onLeaveCount : (activeHeadcount > 0 ? Math.round(activeHeadcount * 0.02) : 0);
       const effectiveTotalAtt = totalLogs > 0 ? totalLogs : (effectivePresent + effectiveLate + effectiveAbsent);
 
       const attendanceRate = effectiveTotalAtt > 0
         ? parseFloat(((effectivePresent / effectiveTotalAtt) * 100).toFixed(1))
-        : 95.0;
+        : (activeHeadcount > 0 ? 95.0 : 0);
 
       const punctualityRate = (effectivePresent + effectiveLate) > 0
         ? parseFloat(((effectivePresent / (effectivePresent + effectiveLate)) * 100).toFixed(1))
-        : 94.0;
+        : (activeHeadcount > 0 ? 94.0 : 0);
 
-      const healthScore = Math.min(100, Math.max(0, Math.round(
+      const healthScore = activeHeadcount > 0 ? Math.min(100, Math.max(0, Math.round(
         (attendanceRate * 0.6) + (punctualityRate * 0.3) + 10
-      )));
+      ))) : 0;
 
       return {
         month: m.month,
@@ -416,8 +507,8 @@ export const getDashboardOverview = async (req, res) => {
       const allowances = parseFloat((gross * 0.15).toFixed(2));
       const deductions = item.penaltiesDeductions;
       const netDisbursed = item.netPayroll;
-      const headcount = item.headcount || activeHeadcount || 1;
-      const avgNetPerEmployee = parseFloat((netDisbursed / Math.max(1, headcount)).toFixed(2));
+      const headcount = item.headcount || activeHeadcount || 0;
+      const avgNetPerEmployee = headcount > 0 ? parseFloat((netDisbursed / headcount).toFixed(2)) : 0;
       return {
         month: item.month,
         monthFull: item.monthFull,
@@ -487,18 +578,18 @@ export const getDashboardOverview = async (req, res) => {
         }
       });
 
-      const effectiveP = presentCount > 0 ? presentCount : Math.max(1, Math.round(activeHeadcount * 0.9));
-      const effectiveL = lateCount > 0 ? lateCount : Math.max(0, Math.round(activeHeadcount * 0.06));
-      const effectiveA = absentCount > 0 ? absentCount : Math.max(0, Math.round(activeHeadcount * 0.03));
-      const effectiveOl = onLeaveCount > 0 ? onLeaveCount : Math.max(0, Math.round(activeHeadcount * 0.01));
+      const effectiveP = presentCount > 0 ? presentCount : (activeHeadcount > 0 ? Math.round(activeHeadcount * 0.9) : 0);
+      const effectiveL = lateCount > 0 ? lateCount : (activeHeadcount > 0 ? Math.round(activeHeadcount * 0.06) : 0);
+      const effectiveA = absentCount > 0 ? absentCount : (activeHeadcount > 0 ? Math.round(activeHeadcount * 0.03) : 0);
+      const effectiveOl = onLeaveCount > 0 ? onLeaveCount : (activeHeadcount > 0 ? Math.round(activeHeadcount * 0.01) : 0);
 
       const avgShiftHours = validShiftCount > 0
         ? parseFloat((totalWorkHours / validShiftCount).toFixed(2))
-        : parseFloat((7.85 + ((d * 3) % 7) * 0.08).toFixed(2));
-      const targetHours = 8.0;
+        : (activeHeadcount > 0 ? parseFloat((7.85 + ((d * 3) % 7) * 0.08).toFixed(2)) : 0);
+      const targetHours = activeHeadcount > 0 ? 8.0 : 0;
       const completionRate = validShiftCount > 0
         ? Math.min(100, Math.round((onTimeCount / validShiftCount) * 100))
-        : 94;
+        : (activeHeadcount > 0 ? 94 : 0);
 
       recentWorkDays.push({
         date: dStr,
@@ -517,7 +608,7 @@ export const getDashboardOverview = async (req, res) => {
         absent: effectiveA,
         onLeave: effectiveOl,
         total: activeHeadcount,
-        turnoutRate: activeHeadcount > 0 ? Math.min(100, Math.round(((effectiveP + effectiveL) / activeHeadcount) * 100)) : 95,
+        turnoutRate: activeHeadcount > 0 ? Math.min(100, Math.round(((effectiveP + effectiveL) / activeHeadcount) * 100)) : 0,
       });
     }
 
@@ -536,7 +627,7 @@ export const getDashboardOverview = async (req, res) => {
         return {
           day: wName,
           avgShiftHours: avgHours,
-          targetHours: 8.0,
+          targetHours: activeHeadcount > 0 ? 8.0 : 0,
           completedShifts: Math.round(sumCompleted / matchingDays.length),
           completionRate: avgRate,
           onTimeCount: Math.round(sumOnTime / matchingDays.length),
@@ -546,13 +637,13 @@ export const getDashboardOverview = async (req, res) => {
       }
       return {
         day: wName,
-        avgShiftHours: parseFloat((7.95 + idx * 0.08).toFixed(2)),
-        targetHours: 8.0,
-        completedShifts: Math.max(1, activeHeadcount),
-        completionRate: 92 + (idx % 6),
-        onTimeCount: Math.round(activeHeadcount * 0.88),
-        overtimeCount: Math.round(activeHeadcount * 0.08),
-        earlyCount: Math.round(activeHeadcount * 0.04),
+        avgShiftHours: activeHeadcount > 0 ? parseFloat((7.95 + idx * 0.08).toFixed(2)) : 0,
+        targetHours: activeHeadcount > 0 ? 8.0 : 0,
+        completedShifts: activeHeadcount,
+        completionRate: activeHeadcount > 0 ? (92 + (idx % 6)) : 0,
+        onTimeCount: activeHeadcount > 0 ? Math.round(activeHeadcount * 0.88) : 0,
+        overtimeCount: activeHeadcount > 0 ? Math.round(activeHeadcount * 0.08) : 0,
+        earlyCount: activeHeadcount > 0 ? Math.round(activeHeadcount * 0.04) : 0,
       };
     });
 
@@ -657,20 +748,20 @@ export const getDashboardOverview = async (req, res) => {
         else presentCount++;
       });
 
-      const totalActiveStaff = activeHeadcount || 1;
-      const effectivePresent = presentCount > 0 ? presentCount : (isWeekend ? 0 : Math.max(1, Math.round(totalActiveStaff * 0.9)));
-      const effectiveLate = lateCount > 0 ? lateCount : (isWeekend ? 0 : Math.round(totalActiveStaff * 0.06));
-      const effectiveAbsent = absentCount > 0 ? absentCount : (isWeekend ? 0 : Math.round(totalActiveStaff * 0.04));
+      const totalActiveStaff = activeHeadcount || 0;
+      const effectivePresent = presentCount > 0 ? presentCount : (isWeekend || totalActiveStaff === 0 ? 0 : Math.round(totalActiveStaff * 0.9));
+      const effectiveLate = lateCount > 0 ? lateCount : (isWeekend || totalActiveStaff === 0 ? 0 : Math.round(totalActiveStaff * 0.06));
+      const effectiveAbsent = absentCount > 0 ? absentCount : (isWeekend || totalActiveStaff === 0 ? 0 : Math.round(totalActiveStaff * 0.04));
 
       // Compute performance scores (0 - 100)
       const dayTurnout = effectivePresent + effectiveLate;
-      const punctualityScore = dayTurnout > 0 ? Math.round((effectivePresent / dayTurnout) * 100) : 94;
-      const turnoutRate = totalActiveStaff > 0 ? Math.round((dayTurnout / totalActiveStaff) * 100) : 95;
+      const punctualityScore = dayTurnout > 0 ? Math.round((effectivePresent / dayTurnout) * 100) : 0;
+      const turnoutRate = totalActiveStaff > 0 ? Math.round((dayTurnout / totalActiveStaff) * 100) : 0;
       
       // Slight variation for realistic 30-day curve
       const variance = ((d * 11 + dayNum * 5) % 9) - 4;
-      const overallScore = Math.min(100, Math.max(76, Math.round((punctualityScore * 0.5) + (turnoutRate * 0.4) + 8 + variance)));
-      const shiftCompletionScore = Math.min(100, Math.max(82, Math.round(92 + ((d * 3) % 7) - 3)));
+      const overallScore = totalActiveStaff > 0 ? Math.min(100, Math.max(0, Math.round((punctualityScore * 0.5) + (turnoutRate * 0.4) + 8 + variance))) : 0;
+      const shiftCompletionScore = totalActiveStaff > 0 ? Math.min(100, Math.max(0, Math.round(92 + ((d * 3) % 7) - 3))) : 0;
 
       employeePerformance30Days.push({
         date: dStr,
@@ -686,21 +777,203 @@ export const getDashboardOverview = async (req, res) => {
       });
     }
 
+    // Current Month Detailed Analytics for Attendance & Payroll Expenditure
+    const currentYear = now.getFullYear();
+    const currentMonthIdx = now.getMonth();
+    const currentMonthPrefix = `${currentYear}-${String(currentMonthIdx + 1).padStart(2, "0")}`;
+    const currentMonthName = monthNamesFull[currentMonthIdx];
+    const currentMonthShort = monthNamesShort[currentMonthIdx];
+    const daysInCurrentMonth = new Date(currentYear, currentMonthIdx + 1, 0).getDate();
+    const currentDayNum = now.getDate();
+
+    // 1. Current Month Daily Attendance Trends (All days of current month)
+    const currentMonthAttendanceTrends = [];
+    let currentMonthTotalPresent = 0;
+    let currentMonthTotalLate = 0;
+    let currentMonthTotalAbsent = 0;
+    let currentMonthTotalOnLeave = 0;
+
+    for (let day = 1; day <= daysInCurrentMonth; day++) {
+      const dDate = new Date(currentYear, currentMonthIdx, day);
+      const dStr = `${currentMonthPrefix}-${String(day).padStart(2, "0")}`;
+      const dayNameShort = dDate.toLocaleDateString("en-US", { weekday: "short" });
+      const isWeekend = dDate.getDay() === 0 || dDate.getDay() === 6;
+      const isFuture = day > currentDayNum;
+
+      const dayRecords = shiftRecordsByDate.get(dStr) || [];
+      let p = 0, l = 0, a = 0, ol = 0;
+
+      dayRecords.forEach((rec) => {
+        const st = String(rec.status || "").toLowerCase();
+        if (st === "present" || st === "ontime" || st === "on-time") p++;
+        else if (st === "late") l++;
+        else if (st === "absent") a++;
+        else if (st.includes("leave")) ol++;
+        else p++;
+      });
+
+      const totalTeam = activeHeadcount || totalEmployees || 0;
+      let effPresent = p;
+      let effLate = l;
+      let effAbsent = a;
+      let effOnLeave = ol;
+
+      if (!isFuture && !isWeekend && totalTeam > 0) {
+        if (p === 0 && l === 0 && a === 0) {
+          const varOffset = (day * 7) % 5;
+          effPresent = Math.max(0, Math.round(totalTeam * 0.88) - varOffset);
+          effLate = Math.max(0, Math.round(totalTeam * 0.07) + (varOffset % 2));
+          effAbsent = Math.max(0, totalTeam - effPresent - effLate);
+        }
+        currentMonthTotalPresent += effPresent;
+        currentMonthTotalLate += effLate;
+        currentMonthTotalAbsent += effAbsent;
+        currentMonthTotalOnLeave += effOnLeave;
+      }
+
+      const turnout = effPresent + effLate;
+      const turnoutRate = totalTeam > 0 ? Math.min(100, Math.round((turnout / totalTeam) * 100)) : 0;
+      const punctualityRate = turnout > 0 ? Math.min(100, Math.round((effPresent / turnout) * 100)) : 0;
+
+      currentMonthAttendanceTrends.push({
+        dayNumber: day,
+        date: dStr,
+        dayName: dayNameShort,
+        label: `${currentMonthShort} ${day}`,
+        isWeekend,
+        isFuture,
+        present: effPresent,
+        late: effLate,
+        absent: effAbsent,
+        onLeave: effOnLeave,
+        turnoutRate: isWeekend || isFuture ? 0 : turnoutRate,
+        punctualityRate: isWeekend || isFuture ? 0 : punctualityRate,
+        totalEmployees: totalTeam,
+      });
+    }
+
+    // 2. Current Month Payroll Expenditure Breakdown
+    let currentMonthGross = 0;
+    let currentMonthNet = 0;
+    let currentMonthBasic = 0;
+    let currentMonthAllowances = 0;
+    let currentMonthDeductions = 0;
+    let currentMonthPenalties = 0;
+    let currentMonthPaid = 0;
+    let currentMonthPending = 0;
+    let currentMonthPaidCount = 0;
+    let currentMonthPendingCount = 0;
+
+    if (payrollRecords && payrollRecords.length > 0) {
+      payrollRecords.forEach((pr) => {
+        const pm = String(pr.payMonth || "").toLowerCase();
+        const isCurrent = pm.includes(currentMonthShort.toLowerCase()) ||
+                          pm.includes(currentMonthName.toLowerCase()) ||
+                          pm.includes(currentMonthPrefix);
+        if (isCurrent) {
+          const basic = Number(pr.baseSalary || pr.basicSalary || 0);
+          const allow = Number(pr.allowances || 0);
+          const pen = Number(pr.absentDaysDeduction || pr.absenceDeductions || 0) +
+                      Number(pr.latenessDeduction || pr.latenessPenalties || 0);
+          const ded = Number(pr.taxDeduction || pr.tax || 0) +
+                      Number(pr.ssnitDeduction || pr.pension || 0) + pen;
+          const net = Number(pr.netPay !== undefined ? pr.netPay : (pr.netSalary !== undefined ? pr.netSalary : (basic + allow - ded)));
+          const gross = basic + allow;
+
+          currentMonthGross += gross;
+          currentMonthNet += net;
+          currentMonthBasic += basic;
+          currentMonthAllowances += allow;
+          currentMonthDeductions += ded;
+          currentMonthPenalties += pen;
+
+          const st = (pr.status || "").toLowerCase().trim();
+          if (st === "paid") {
+            currentMonthPaid += net;
+            currentMonthPaidCount++;
+          } else {
+            currentMonthPending += net;
+            currentMonthPendingCount++;
+          }
+        }
+      });
+    }
+
+    if (currentMonthGross === 0 && activeBaseSalaryEst > 0 && activeHeadcount > 0) {
+      currentMonthBasic = parseFloat((activeBaseSalaryEst * 0.85).toFixed(2));
+      currentMonthAllowances = parseFloat((activeBaseSalaryEst * 0.15).toFixed(2));
+      currentMonthGross = activeBaseSalaryEst;
+      currentMonthPenalties = parseFloat((activeBaseSalaryEst * 0.02).toFixed(2));
+      currentMonthDeductions = parseFloat((activeBaseSalaryEst * 0.12).toFixed(2));
+      currentMonthNet = parseFloat((currentMonthGross - currentMonthDeductions).toFixed(2));
+      currentMonthPending = currentMonthNet;
+      currentMonthPendingCount = activeHeadcount;
+    }
+
+    const currentMonthPayrollCategories = [
+      { name: "Base Salaries", amount: currentMonthBasic, fill: "#0B1E48", percentage: currentMonthGross > 0 ? Math.round((currentMonthBasic / currentMonthGross) * 100) : 0 },
+      { name: "Allowances & Benefits", amount: currentMonthAllowances, fill: "#2563EB", percentage: currentMonthGross > 0 ? Math.round((currentMonthAllowances / currentMonthGross) * 100) : 0 },
+      { name: "Statutory Tax & SSNIT", amount: Math.max(0, currentMonthDeductions - currentMonthPenalties), fill: "#F59E0B", percentage: currentMonthGross > 0 ? Math.round(((currentMonthDeductions - currentMonthPenalties) / currentMonthGross) * 100) : 0 },
+      { name: "Lateness & Absence Penalties", amount: currentMonthPenalties, fill: "#DC2626", percentage: currentMonthGross > 0 ? Math.round((currentMonthPenalties / currentMonthGross) * 100) : 0 },
+    ];
+
+    const currentMonthAnalytics = {
+      monthInfo: {
+        monthName: currentMonthName,
+        monthShort: currentMonthShort,
+        year: currentYear,
+        daysInMonth: daysInCurrentMonth,
+        currentDay: currentDayNum,
+        monthKey: currentMonthPrefix,
+      },
+      attendance: {
+        trends: currentMonthAttendanceTrends,
+        totalPresentLogs: currentMonthTotalPresent,
+        totalLateLogs: currentMonthTotalLate,
+        totalAbsentLogs: currentMonthTotalAbsent,
+        totalOnLeaveLogs: currentMonthTotalOnLeave,
+        avgTurnoutRate: (currentMonthTotalPresent + currentMonthTotalLate + currentMonthTotalAbsent) > 0
+          ? Math.round(((currentMonthTotalPresent + currentMonthTotalLate) / (currentMonthTotalPresent + currentMonthTotalLate + currentMonthTotalAbsent)) * 100)
+          : 0,
+        avgPunctualityRate: (currentMonthTotalPresent + currentMonthTotalLate) > 0
+          ? Math.round((currentMonthTotalPresent / (currentMonthTotalPresent + currentMonthTotalLate)) * 100)
+          : 0,
+      },
+      payroll: {
+        grossExpenditure: parseFloat(currentMonthGross.toFixed(2)),
+        netExpenditure: parseFloat(currentMonthNet.toFixed(2)),
+        basicSalaries: parseFloat(currentMonthBasic.toFixed(2)),
+        allowances: parseFloat(currentMonthAllowances.toFixed(2)),
+        statutoryDeductions: parseFloat(Math.max(0, currentMonthDeductions - currentMonthPenalties).toFixed(2)),
+        penaltyDeductions: parseFloat(currentMonthPenalties.toFixed(2)),
+        totalDeductions: parseFloat(currentMonthDeductions.toFixed(2)),
+        disbursedExpenditure: parseFloat(currentMonthPaid.toFixed(2)),
+        pendingExpenditure: parseFloat(currentMonthPending.toFixed(2)),
+        paidEmployeesCount: currentMonthPaidCount,
+        pendingEmployeesCount: currentMonthPendingCount,
+        totalHeadcount: activeHeadcount,
+        averageCostPerEmployee: activeHeadcount > 0 ? parseFloat((currentMonthGross / activeHeadcount).toFixed(2)) : 0,
+        categories: currentMonthPayrollCategories,
+        departmentBreakdown: departmentExpenseDistribution,
+      },
+    };
+
     res.status(200).json({
       success: true,
       overview: {
+        currentMonthAnalytics,
         cards: {
           totalEmployees,
-          activeEmployees: dbActiveCount || totalActive || totalEmployees,
-          presentToday,
-          onLeave,
-          employeesOnLeave: onLeave,
+          activeEmployees: totalEmployees === 0 ? 0 : Math.min(totalEmployees, (dbActiveCount !== undefined ? dbActiveCount : totalActive || 0)),
+          presentToday: Math.min(totalEmployees, presentToday),
+          onLeave: Math.min(totalEmployees, onLeave),
+          employeesOnLeave: Math.min(totalEmployees, onLeave),
           pendingLeaves,
           pendingPayroll: payroll.pending || payroll.pendingDisbursements || 0,
           pendingPayrollCount: pendingCount,
         },
         payroll: {
-          totalEmployees: payroll.totalEmployees || dbActiveCount || totalActive || totalEmployees,
+          totalEmployees: totalEmployees === 0 ? 0 : Math.min(totalEmployees, (payroll.totalEmployees || dbActiveCount || totalActive || 0)),
           totalPayroll: payroll.totalPayroll || 0,
           totalPayrollDisbursed: payroll.totalPayrollDisbursed || 0,
           monthlyPayrollTotal: payroll.monthlyPayrollTotal || 0,
@@ -714,10 +987,10 @@ export const getDashboardOverview = async (req, res) => {
         },
         attendance: {
           totalEmployees,
-          present: presentToday,
-          onLeave,
-          late: lateToday,
-          absent: absentToday,
+          present: Math.min(totalEmployees, presentToday),
+          onLeave: Math.min(totalEmployees, onLeave),
+          late: Math.min(totalEmployees, lateToday),
+          absent: Math.min(totalEmployees, absentToday),
         },
         leave: {
           totalRequests,
@@ -771,25 +1044,33 @@ export const employeeDashboardOverview = async (req, res) => {
     const currentMonthIndex = now.getMonth();
     const currentMonthPrefix = `${currentYear}-${String(currentMonthIndex + 1).padStart(2, "0")}`;
 
+    const tenantId = getTenantId(req);
+    const tenantScope = buildTenantScope(req);
+    const userId = rawEmployeeId || req.user?._id || req.user?.id || "unknown";
+    const userOrgId = tenantId || req.user?.organizationId || req.user?.companyId || req.organizationId || "none";
+
     let employee = null;
     let validObjectId = null;
 
-    // 1. Fetch employee profile & base salary
+    // 1. Fetch employee profile & base salary scoped to tenant
     if (isValidObjectId(rawEmployeeId)) {
       validObjectId = rawEmployeeId;
-      employee = await Employee.findById(rawEmployeeId).lean();
+      employee = await Employee.findOne(combineTenantScope(tenantScope, { _id: rawEmployeeId })).lean();
     } else if (rawEmployeeId) {
-      employee = await Employee.findOne({
-        $or: [{ employeeId: rawEmployeeId }, { email: rawEmployeeId }],
-      }).lean();
+      employee = await Employee.findOne(
+        combineTenantScope(tenantScope, {
+          $or: [{ employeeId: rawEmployeeId }, { email: rawEmployeeId }],
+        })
+      ).lean();
       if (employee && employee._id) {
         validObjectId = employee._id.toString();
       }
     }
 
     if (!employee && isValidObjectId(rawEmployeeId)) {
-      const userDoc = await User.findById(rawEmployeeId).lean();
+      const userDoc = await User.findOne(combineTenantScope(tenantScope, { _id: rawEmployeeId })).lean();
       if (userDoc) {
+        validateOrganizationAccess(userDoc, req);
         const userAvatar =
           userDoc.avatar ||
           userDoc.avatarUrl ||
@@ -819,8 +1100,12 @@ export const employeeDashboardOverview = async (req, res) => {
       }
     }
 
+    if (employee) {
+      validateOrganizationAccess(employee, req);
+    }
+
     if (!employee) {
-      const anyEmployee = await Employee.findOne({ isActive: true }).lean();
+      const anyEmployee = await Employee.findOne(combineTenantScope(tenantScope, { isActive: true })).lean();
       if (anyEmployee) {
         employee = anyEmployee;
         validObjectId = anyEmployee._id.toString();
@@ -828,7 +1113,7 @@ export const employeeDashboardOverview = async (req, res) => {
     }
 
     if (!employee) {
-      const anyUser = await User.findOne({ role: "employee" }).lean();
+      const anyUser = await User.findOne(combineTenantScope(tenantScope, { role: "employee" })).lean();
       if (anyUser) {
         const anyAvatar =
           anyUser.avatar ||
@@ -918,9 +1203,11 @@ export const employeeDashboardOverview = async (req, res) => {
         { userId: { $in: idList } },
       ];
 
-      const dbAtt = await Attendance.find({
-        $or: filterConditions,
-      })
+      const dbAtt = await Attendance.find(
+        combineTenantScope(tenantScope, {
+          $or: filterConditions,
+        })
+      )
         .sort({ date: -1, createdAt: -1 })
         .lean();
 
@@ -1091,7 +1378,9 @@ export const employeeDashboardOverview = async (req, res) => {
     let dbLeaves = [];
     if (validObjectId) {
       try {
-        dbLeaves = await Leave.find({ employee: validObjectId })
+        dbLeaves = await Leave.find(
+          combineTenantScope(tenantScope, { employee: validObjectId })
+        )
           .sort({ createdAt: -1 })
           .lean();
       } catch (lErr) {
@@ -1102,10 +1391,17 @@ export const employeeDashboardOverview = async (req, res) => {
     let recentLeaves = [...dbLeaves];
     if (liveLeaveStore && liveLeaveStore.length > 0) {
       const matchingLive = liveLeaveStore.filter(
-        (l) =>
-          String(l.employee?._id) === String(rawEmployeeId) ||
-          String(l.employee?._id) === String(validObjectId) ||
-          l.employee?.employeeId === employee.employeeId
+        (l) => {
+          if (tenantId) {
+            const itemOrg = String(l.organizationId || l.companyId || l.employee?.organizationId || l.employee?.companyId || "");
+            if (itemOrg && itemOrg !== String(tenantId)) return false;
+          }
+          return (
+            String(l.employee?._id) === String(rawEmployeeId) ||
+            String(l.employee?._id) === String(validObjectId) ||
+            l.employee?.employeeId === employee?.employeeId
+          );
+        }
       );
       matchingLive.forEach((item) => {
         if (!recentLeaves.some((r) => String(r._id) === String(item._id))) {
@@ -1168,10 +1464,12 @@ export const employeeDashboardOverview = async (req, res) => {
     let latestPayslip = null;
     if (validObjectId) {
       try {
-        const dbPayslip = await Payroll.findOne({
-          employee: validObjectId,
-          status: { $in: ["Published", "published", "Paid", "paid"] },
-        })
+        const dbPayslip = await Payroll.findOne(
+          combineTenantScope(tenantScope, {
+            employee: validObjectId,
+            status: { $in: ["Published", "published", "Paid", "paid"] },
+          })
+        )
           .sort({ paymentDate: -1, createdAt: -1 })
           .lean();
         if (dbPayslip) {
@@ -1201,6 +1499,10 @@ export const employeeDashboardOverview = async (req, res) => {
 
     if (!latestPayslip && (validObjectId || employee?.employeeId)) {
       const match = livePayrollStore.find((p) => {
+        if (tenantId) {
+          const itemOrg = String(p.organizationId || p.companyId || p.employee?.organizationId || p.employee?.companyId || "");
+          if (itemOrg && itemOrg !== String(tenantId)) return false;
+        }
         const pEmpId = String(p.employee?._id || p.employee || p.employeeId || "");
         const status = String(p.status || "").toLowerCase();
         const isPublished = status === "published" || status === "paid";
@@ -1340,13 +1642,17 @@ export const getDashboardNotifications = async (req, res) => {
  */
 export const getRecentActivityFeed = async (req, res) => {
   try {
+    const tenantScope = buildTenantScope(req);
+    const userId = req.user?._id || req.user?.id || req.admin?._id || req.admin?.id || "unknown";
+    const userOrgId = req.user?.organizationId || req.user?.companyId || req.organizationId || req.companyId || req.tenantId || "none";
+
     const [recentAttendance, recentPayroll] = await Promise.all([
-      Attendance.find({})
+      Attendance.find(tenantScope)
         .sort({ updatedAt: -1, createdAt: -1, date: -1 })
         .limit(10)
         .populate("employee", "fullName name full_name employeeId department position profilePicture avatar email")
         .lean(),
-      Payroll.find({})
+      Payroll.find(tenantScope)
         .sort({ updatedAt: -1, createdAt: -1, paymentDate: -1 })
         .limit(10)
         .populate("employee", "fullName name full_name employeeId department position profilePicture avatar email")
@@ -1380,15 +1686,19 @@ export const getRecentActivityFeed = async (req, res) => {
     });
 
     const [allEmployees, allUsers] = await Promise.all([
-      Employee.find({
-        $or: [
-          { _id: { $in: Array.from(candidateIds).filter(isValidObjectId) } },
-          { employeeId: { $in: Array.from(candidateCodes) } },
-        ],
-      }).lean().catch(() => []),
-      User.find({
-        _id: { $in: Array.from(candidateIds).filter(isValidObjectId) },
-      }).lean().catch(() => []),
+      Employee.find(
+        combineTenantScope(tenantScope, {
+          $or: [
+            { _id: { $in: Array.from(candidateIds).filter(isValidObjectId) } },
+            { employeeId: { $in: Array.from(candidateCodes) } },
+          ],
+        })
+      ).lean().catch(() => []),
+      User.find(
+        combineTenantScope(tenantScope, {
+          _id: { $in: Array.from(candidateIds).filter(isValidObjectId) },
+        })
+      ).lean().catch(() => []),
     ]);
 
     const employeeMap = new Map();

@@ -16,6 +16,7 @@ import {
 import { User } from "../models/userModel.js";
 import { Employee } from "../models/employeeModel.js";
 import { Payroll } from "../models/payrollModel.js";
+import { buildTenantScope, combineTenantScope } from "../utils/tenantScope.js";
 
 /**
  * Controller endpoint to calculate single employee payroll details with accurate lateness and absence deductions.
@@ -65,6 +66,7 @@ export const calculateEmployeePayroll = async (req, res) => {
       baseSalaryInput,
       allowances,
       customDeductions,
+      req,
     });
 
     return res.status(200).json({
@@ -130,7 +132,7 @@ export const generatePayroll = async (req, res) => {
           }
         }
 
-        const penalties = await calculateMonthlyPenalties(employee, year, monthIndex);
+        const penalties = await calculateMonthlyPenalties(employee, year, monthIndex, { req });
         if (penalties) {
           if (req.body.absentDaysDeduction === undefined) {
             req.body.absentDaysDeduction = penalties.absenceDeductions;
@@ -169,27 +171,37 @@ export const getAdminPayrollSummary = async (req, res) => {
     const { month, payMonth, billingCycle } = req.query;
     const filterMonth = month || payMonth || billingCycle;
 
+    const tenantScope = buildTenantScope(req);
+    const userId = req.user?._id || req.user?.id || req.admin?._id || req.admin?.id || "unknown";
+    const userOrgId = req.user?.organizationId || req.user?.companyId || req.organizationId || req.companyId || req.tenantId || "none";
+
     // 1. Query active employee count from User collection where role: 'employee' and status: 'active'
     let totalEmployees = 0;
     try {
-      const userCount = await User.countDocuments({ role: "employee", status: "active" });
-      const employeeCount = await Employee.countDocuments({
-        $or: [{ status: "active" }, { status: { $exists: false }, isActive: { $ne: false } }],
-      });
+      const userCount = await User.countDocuments(
+        combineTenantScope(tenantScope, { role: "employee", status: "active" })
+      );
+      const employeeCount = await Employee.countDocuments(
+        combineTenantScope(tenantScope, {
+          $or: [{ status: "active" }, { status: { $exists: false }, isActive: { $ne: false } }],
+        })
+      );
       totalEmployees = Math.max(userCount, employeeCount);
       if (totalEmployees === 0) {
-        const fallbackCount = await User.countDocuments({ role: "employee" });
-        const fallbackEmpCount = await Employee.countDocuments({});
+        const fallbackCount = await User.countDocuments(
+          combineTenantScope(tenantScope, { role: "employee" })
+        );
+        const fallbackEmpCount = await Employee.countDocuments(tenantScope);
         totalEmployees = Math.max(fallbackCount, fallbackEmpCount);
       }
     } catch (countErr) {
       console.warn("Error counting active employees in getAdminPayrollSummary:", countErr.message);
     }
 
-    // 2. Query Payslip / Payroll records in MongoDB
+    // 2. Query Payslip / Payroll records in MongoDB strictly scoped to tenant
     let payslips = [];
     try {
-      payslips = await Payroll.find({})
+      payslips = await Payroll.find(tenantScope)
         .populate("employee", "fullName employeeId department position email")
         .sort({ createdAt: -1 })
         .lean();

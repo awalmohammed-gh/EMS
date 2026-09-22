@@ -4,7 +4,7 @@ import { motion, AnimatePresence } from "framer-motion";
 import { useTheme } from "../context/ThemeContext";
 import { useManagement } from "../context/ManagementContextProvider";
 
-export const ThemeToggle = ({ className = "" }) => {
+export const ThemeToggle = ({ className = "", id = "navbar-theme-toggle-btn" }) => {
   const { theme, resolvedTheme, setTheme } = useTheme();
   const { showToast } = useManagement();
   const [isOpen, setIsOpen] = useState(false);
@@ -58,83 +58,93 @@ export const ThemeToggle = ({ className = "" }) => {
     },
   ];
 
+  // Direct toggle between light and dark
+  const handleDirectToggle = (e) => {
+    e.preventDefault();
+    const nextTheme = resolvedTheme === "dark" ? "light" : "dark";
+    setTheme(nextTheme);
+
+    if (typeof showToast === "function") {
+      showToast(`Switched to ${nextTheme === "dark" ? "Dark" : "Light"} mode`, "info");
+    }
+  };
+
   const handleSelectTheme = (modeId, modeLabel) => {
     setTheme(modeId);
     setIsOpen(false);
 
     if (typeof showToast === "function") {
-      showToast(`Theme switched to ${modeLabel}`, "info");
+      showToast(`Theme set to ${modeLabel}`, "info");
     }
   };
 
   // Get current active theme config
   const activeOption =
     themeOptions.find((opt) => opt.id === theme) || themeOptions[2];
-  const ActiveIcon = activeOption.icon;
 
   return (
     <div
-      className={`relative inline-block text-left ${className}`}
+      className={`relative inline-flex items-center text-left ${className}`}
       ref={dropdownRef}
       id="theme-dropdown-container"
     >
-      {/* Trigger Button */}
-      <button
-        id="theme-dropdown-trigger"
-        type="button"
-        onClick={() => setIsOpen((prev) => !prev)}
-        aria-expanded={isOpen}
-        aria-haspopup="true"
-        aria-label={`Current theme: ${activeOption.label}. Click to open theme menu.`}
-        title={`Current theme: ${activeOption.label} (Click to change)`}
-        className={`px-2.5 py-1.5 sm:px-3 sm:py-2 rounded-xl border transition-all duration-200 cursor-pointer flex items-center gap-2 shadow-2xs group focus:outline-none focus:ring-2 focus:ring-[#002185]/30 dark:focus:ring-blue-500/40 ${
-          isOpen
-            ? "border-[#002185] dark:border-blue-500 bg-slate-50 dark:bg-slate-800 text-[#002185] dark:text-blue-400 shadow-sm"
-            : "border-slate-200 dark:border-slate-700 bg-white/95 dark:bg-slate-800/95 text-slate-700 dark:text-slate-200 hover:bg-slate-50 dark:hover:bg-slate-700/80 hover:border-slate-300 dark:hover:border-slate-600"
-        }`}
-      >
-        <div className="relative w-4 h-4 flex items-center justify-center">
-          <AnimatePresence mode="wait" initial={false}>
-            <motion.div
-              key={theme}
-              initial={{ opacity: 0, scale: 0.8, rotate: -15 }}
-              animate={{ opacity: 1, scale: 1, rotate: 0 }}
-              exit={{ opacity: 0, scale: 0.8, rotate: 15 }}
-              transition={{ duration: 0.22, ease: "easeOut" }}
-              className="flex items-center justify-center"
-            >
-              <ActiveIcon
-                className={`w-4 h-4 shrink-0 transition-transform duration-200 group-hover:scale-110 ${
-                  theme === "light"
-                    ? "text-amber-500"
-                    : theme === "dark"
-                    ? "text-blue-600 dark:text-blue-400"
-                    : "text-slate-600 dark:text-slate-300"
-                }`}
-              />
-            </motion.div>
-          </AnimatePresence>
-        </div>
+      {/* Combined Trigger / Toggle Group */}
+      <div className="inline-flex items-center rounded-xl border border-slate-200 dark:border-slate-700 bg-white/95 dark:bg-slate-800/95 shadow-2xs hover:border-slate-300 dark:hover:border-slate-600 transition-all duration-200 overflow-hidden">
+        {/* Main 1-Click Toggle Button */}
+        <button
+          id={id}
+          data-testid="theme-toggle-btn"
+          type="button"
+          onClick={handleDirectToggle}
+          aria-label={`Toggle theme. Current: ${activeOption.label}. Click to switch to ${resolvedTheme === "dark" ? "light" : "dark"} mode.`}
+          title={`Switch to ${resolvedTheme === "dark" ? "Light" : "Dark"} mode`}
+          className="px-2.5 py-1.5 sm:px-3 sm:py-2 text-slate-700 dark:text-slate-200 hover:bg-slate-50 dark:hover:bg-slate-700/80 transition-all duration-150 cursor-pointer flex items-center gap-2 focus:outline-none focus:ring-1 focus:ring-[#002185]/30 dark:focus:ring-blue-500/40"
+        >
+          <div className="relative w-4 h-4 flex items-center justify-center">
+            <AnimatePresence mode="wait" initial={false}>
+              <motion.div
+                key={resolvedTheme}
+                initial={{ opacity: 0, scale: 0.8, rotate: -15 }}
+                animate={{ opacity: 1, scale: 1, rotate: 0 }}
+                exit={{ opacity: 0, scale: 0.8, rotate: 15 }}
+                transition={{ duration: 0.22, ease: "easeOut" }}
+                className="flex items-center justify-center"
+              >
+                {resolvedTheme === "dark" ? (
+                  <Moon className="w-4 h-4 text-blue-400 shrink-0" />
+                ) : (
+                  <Sun className="w-4 h-4 text-amber-500 shrink-0" />
+                )}
+              </motion.div>
+            </AnimatePresence>
+          </div>
 
-        <AnimatePresence mode="wait" initial={false}>
-          <motion.span
-            key={activeOption.label}
-            initial={{ opacity: 0, y: -2 }}
-            animate={{ opacity: 1, y: 0 }}
-            exit={{ opacity: 0, y: 2 }}
-            transition={{ duration: 0.18, ease: "easeOut" }}
-            className="hidden sm:inline text-xs font-semibold capitalize text-slate-700 dark:text-slate-300"
-          >
+          <span className="hidden sm:inline text-xs font-semibold capitalize text-slate-700 dark:text-slate-300">
             {activeOption.label}
-          </motion.span>
-        </AnimatePresence>
+          </span>
+        </button>
 
-        <ChevronDown
-          className={`w-3.5 h-3.5 text-slate-400 dark:text-slate-500 transition-transform duration-200 ${
-            isOpen ? "rotate-180 text-[#002185] dark:text-blue-400" : ""
-          }`}
-        />
-      </button>
+        {/* Dropdown Opener Chevron Button */}
+        <button
+          id="theme-dropdown-trigger"
+          type="button"
+          onClick={(e) => {
+            e.stopPropagation();
+            setIsOpen((prev) => !prev);
+          }}
+          aria-expanded={isOpen}
+          aria-haspopup="true"
+          aria-label="Select theme options menu"
+          title="More theme options (System, Light, Dark)"
+          className="px-1.5 py-2 border-l border-slate-200 dark:border-slate-700 text-slate-400 dark:text-slate-500 hover:text-slate-700 dark:hover:text-slate-200 hover:bg-slate-50 dark:hover:bg-slate-700/80 transition-all duration-150 cursor-pointer"
+        >
+          <ChevronDown
+            className={`w-3.5 h-3.5 transition-transform duration-200 ${
+              isOpen ? "rotate-180 text-[#002185] dark:text-blue-400" : ""
+            }`}
+          />
+        </button>
+      </div>
 
       {/* Dropdown Menu */}
       {isOpen && (

@@ -26,8 +26,10 @@ import {
   togglePinAnnouncement,
   deleteAnnouncement,
 } from "../../apis/fontApis";
+import { useBranding } from "../../context/BrandingContext";
 
 const AdminAnnouncements = () => {
+  const { companyName } = useBranding() || {};
   const [announcements, setAnnouncements] = useState([]);
   const [isLoading, setIsLoading] = useState(true);
   const [selectedCategory, setSelectedCategory] = useState("All");
@@ -469,7 +471,9 @@ const AdminAnnouncements = () => {
           {isLoading ? (
             <div className="py-16 text-center text-slate-400 space-y-2">
               <Clock className="w-7 h-7 animate-spin mx-auto text-[#002185] dark:text-blue-400" />
-              <p className="text-xs">Loading announcement records...</p>
+              <p className="text-xs">
+                Loading {companyName ? `${companyName} ` : ""}announcement records...
+              </p>
             </div>
           ) : displayedAnnouncements.length === 0 ? (
             <div className="py-16 text-center bg-[#F8FAFC] dark:bg-slate-800/40 rounded-xl border border-dashed border-[#E2E8F0] dark:border-slate-800 p-6">

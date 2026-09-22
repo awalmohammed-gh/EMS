@@ -71,20 +71,6 @@ export const authService = {
   },
 
   /**
-   * Registers a new organization with initial admin profile and branding assets
-   */
-  registerOrganization: async (data) => {
-    const isFormData = typeof FormData !== "undefined" && data instanceof FormData;
-    const headers = isFormData ? { "Content-Type": "multipart/form-data" } : {};
-    const response = await apiService.post("/company/register-organization", data, { headers });
-    if (response.data?.token) {
-      apiService.setToken(response.data.token);
-      authService.saveAuthSession(response.data.token, response.data.admin || response.data.user, "admin");
-    }
-    return response.data;
-  },
-
-  /**
    * Dedicated Admin login method
    */
   adminLogin: async (credentials) => {
@@ -127,7 +113,8 @@ export const authService = {
   },
 
   /**
-   * Logs out user from backend session and clears local session
+   * Logs out user from backend session, explicitly clears local persistent keys and tokens,
+   * and navigates to the public Welcome page
    */
   logout: async (role = "admin") => {
     try {
@@ -139,6 +126,9 @@ export const authService = {
       await apiService.post("/auth/logout").catch(() => {});
     } finally {
       authService.clearAuthSession();
+      if (typeof window !== "undefined") {
+        window.location.hash = "#/welcome";
+      }
     }
   },
 
@@ -164,21 +154,38 @@ export const authService = {
   },
 
   /**
-   * Clears all authentication session keys
+   * Clears all authentication session keys, tokens, and storage
    */
   clearAuthSession: () => {
     if (typeof window === "undefined") return;
     try {
       apiService.clearToken();
+      // Tokens
       localStorage.removeItem("token");
       localStorage.removeItem("auth_token");
       localStorage.removeItem("adminToken");
       localStorage.removeItem("employeeToken");
+      // User data and session keys
       localStorage.removeItem("adminData");
       localStorage.removeItem("employeeData");
       localStorage.removeItem("userRole");
       localStorage.removeItem("isLoggedIn");
       localStorage.removeItem("app_user");
+      localStorage.removeItem("user");
+      localStorage.removeItem("admin");
+      localStorage.removeItem("employee");
+      // Session storage
+      sessionStorage.removeItem("token");
+      sessionStorage.removeItem("auth_token");
+      sessionStorage.removeItem("adminToken");
+      sessionStorage.removeItem("employeeToken");
+      sessionStorage.removeItem("adminData");
+      sessionStorage.removeItem("employeeData");
+      sessionStorage.removeItem("userRole");
+      sessionStorage.removeItem("isLoggedIn");
+      sessionStorage.removeItem("app_user");
+      sessionStorage.removeItem("user");
+      sessionStorage.clear();
     } catch {
       // ignore
     }

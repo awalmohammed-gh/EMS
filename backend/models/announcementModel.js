@@ -53,14 +53,37 @@ const announcementSchema = new mongoose.Schema(
       type: Date,
       default: null,
     },
+    organizationId: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: "Organization",
+      index: true,
+      default: null,
+    },
+    companyId: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: "Organization",
+      required: true,
+      index: true,
+    },
   },
   {
     timestamps: true,
   }
 );
 
-// Index for fast sorting with pinned announcements first
+announcementSchema.pre("validate", function () {
+  if (!this.organizationId && this.companyId) this.organizationId = this.companyId;
+  if (!this.companyId && this.organizationId) this.companyId = this.organizationId;
+});
+
+// Compound indexes for multi-tenant query performance and fast sorting
+announcementSchema.index({ companyId: 1, _id: 1 });
+announcementSchema.index({ organizationId: 1, _id: 1 });
 announcementSchema.index({ isPinned: -1, createdAt: -1 });
+announcementSchema.index({ organizationId: 1, isPinned: -1, createdAt: -1 });
+announcementSchema.index({ companyId: 1, isPinned: -1, createdAt: -1 });
+announcementSchema.index({ companyId: 1, category: 1 });
+announcementSchema.index({ companyId: 1, targetAudience: 1 });
 
 export const Announcement =
   mongoose.models.Announcement ||

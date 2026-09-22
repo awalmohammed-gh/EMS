@@ -24,7 +24,11 @@ import { employeeDashboardOverview } from "../controllers/dashboardController.js
 import { updateEmployeeStatus, deleteEmployee } from "../controllers/adminController.js";
 import { getEmployeeLeave, getLeaveEmployeeStats, applyLeave } from "../controllers/leaveController.js";
 import { getCurrentMonthLatenessAnalytics } from "../controllers/analyticsController.js";
+import { getEmployeeAttendance } from "../controllers/employeeAttendance.js";
 import { employeeAuth } from "../middleware/employeeAuth.js";
+import { validateOrganizationAccess } from "../middleware/validateOrganizationAccess.js";
+import { Employee } from "../models/Employee.js";
+import { Payroll } from "../models/Payroll.js";
 
 const employeeRouter = express.Router();
 
@@ -79,7 +83,8 @@ employeeRouter.get("/my-payslips", employeeAuth, employeePayslips);
 employeeRouter.get("/payslips/latest", employeeAuth, getEmployeeLatestPayslipBreakdown);
 employeeRouter.get("/payslip/latest", employeeAuth, getEmployeeLatestPayslipBreakdown);
 employeeRouter.get("/payslips", employeeAuth, employeePayslips);
-employeeRouter.get("/payslip/:id", employeeAuth, getEmployeePayslipBreakdownById);
+employeeRouter.get("/payslip/:id", employeeAuth, validateOrganizationAccess(Payroll), getEmployeePayslipBreakdownById);
+employeeRouter.get("/attendance", employeeAuth, getEmployeeAttendance);
 
 // Employee details & directory list (supports both custom and REST standard endpoints)
 employeeRouter.get("/me", employeeAuth, getCurrentLoggedInEmployee);
@@ -89,6 +94,7 @@ employeeRouter.put("/change-password", employeeAuth, changeEmployeePassword);
 employeeRouter.put("/password", employeeAuth, changeEmployeePassword);
 employeeRouter.post("/change-password", employeeAuth, changeEmployeePassword);
 employeeRouter.get("/all-employees", verifyAdmin, employeeDetails);
+employeeRouter.get("/details", verifyAdmin, employeeDetails);
 employeeRouter.get("/all", verifyAdmin, employeeDetails);
 employeeRouter.get("/directory", verifyAdmin, employeeDetails);
 employeeRouter.get("/list", verifyAdmin, employeeDetails);
@@ -96,16 +102,16 @@ employeeRouter.get("/", verifyAdmin, employeeDetails);
 
 employeeRouter.get("/list-employee-name", employeeAuth, employeeNameList);
 employeeRouter.get("/names", employeeAuth, employeeNameList);
-employeeRouter.get("/profile/:id", employeeAuth, getEmployeeById);
-employeeRouter.get("/:id", employeeAuth, getEmployeeById);
+employeeRouter.get("/profile/:id", employeeAuth, validateOrganizationAccess(Employee), getEmployeeById);
+employeeRouter.get("/:id", employeeAuth, validateOrganizationAccess(Employee), getEmployeeById);
 
 // Admin-only status modification
-employeeRouter.put("/:id/status", verifyAdmin, updateEmployeeStatus);
-employeeRouter.put("/status/:id", verifyAdmin, updateEmployeeStatus);
-employeeRouter.patch("/:id/status", verifyAdmin, updateEmployeeStatus);
+employeeRouter.put("/:id/status", verifyAdmin, validateOrganizationAccess(Employee), updateEmployeeStatus);
+employeeRouter.put("/status/:id", verifyAdmin, validateOrganizationAccess(Employee), updateEmployeeStatus);
+employeeRouter.patch("/:id/status", verifyAdmin, validateOrganizationAccess(Employee), updateEmployeeStatus);
 
 // Admin-only deletion
-employeeRouter.delete("/:id", verifyAdmin, deleteEmployee);
+employeeRouter.delete("/:id", verifyAdmin, validateOrganizationAccess(Employee), deleteEmployee);
 
 export default employeeRouter;
 

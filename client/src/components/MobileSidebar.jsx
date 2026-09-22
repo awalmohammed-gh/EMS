@@ -12,8 +12,8 @@ import {
   User,
   Megaphone,
 } from "lucide-react";
-import eyenitLogo from "../assets/eyenit_logo.png";
 import { useManagement } from "../context/ManagementContextProvider";
+import { useBranding } from "../context/BrandingContext";
 
 /**
  * MobileSidebar Component
@@ -30,6 +30,7 @@ export const MobileSidebar = ({
   const { pathname } = useLocation();
   const navigate = useNavigate();
   const { user, role: contextRole, logout } = useManagement();
+  const { companyName, logoUrl } = useBranding();
 
   // Animation lifecycle state to ensure smooth open and close transitions
   const [isRendered, setIsRendered] = useState(isOpen);
@@ -62,9 +63,7 @@ export const MobileSidebar = ({
     (contextRole === "admin" && !pathname.startsWith("/employee"));
 
   const userRoleTitle = isAdmin
-    ? user?.role === "super_admin"
-      ? "Super Admin"
-      : "Administrator"
+    ? "Administrator"
     : user?.position || "Staff Member";
 
   // Prevent background scroll when mobile drawer is open
@@ -107,7 +106,7 @@ export const MobileSidebar = ({
     if (logout) {
       await logout(isAdmin ? "admin" : "employee");
     }
-    navigate("/welcome");
+    navigate("/admin/login");
   };
 
   const adminNavItems = [
@@ -160,20 +159,35 @@ export const MobileSidebar = ({
         {/* Drawer Header */}
         <div>
           <div className="flex justify-between items-center pb-3 border-b border-gray-200/80 dark:border-slate-800">
-            <div className="flex items-center gap-2.5">
-              <div className="w-8 h-8 rounded-lg bg-white dark:bg-slate-800 flex items-center justify-center p-1 border border-gray-200 dark:border-slate-700 shadow-2xs">
-                <img
-                  className="w-full h-full object-contain"
-                  src={eyenitLogo}
-                  alt="Eyenit"
-                />
-              </div>
-              <div className="leading-tight">
-                <span className="font-bold text-sm text-[#002185] dark:text-blue-400 tracking-tight block">
-                  Eyenit
+            <div className="flex items-center gap-2.5 min-w-0">
+              {logoUrl ? (
+                <div className="w-8 h-8 rounded-lg bg-white dark:bg-slate-800 flex items-center justify-center p-1 border border-gray-200 dark:border-slate-700 shadow-2xs overflow-hidden shrink-0">
+                  <img
+                    className="w-full h-full object-contain"
+                    src={logoUrl}
+                    alt={companyName || "Company Logo"}
+                    onError={(e) => {
+                      e.target.style.display = "none";
+                      if (e.target.nextSibling) {
+                        e.target.nextSibling.style.display = "flex";
+                      }
+                    }}
+                  />
+                  <div className="hidden w-full h-full items-center justify-center bg-[#0B1E48] text-white font-bold text-xs rounded-md">
+                    {companyName ? companyName.charAt(0).toUpperCase() : "W"}
+                  </div>
+                </div>
+              ) : (
+                <div className="w-8 h-8 rounded-lg bg-[#0B1E48] text-white flex items-center justify-center font-bold text-xs shadow-2xs shrink-0">
+                  {companyName ? companyName.charAt(0).toUpperCase() : "W"}
+                </div>
+              )}
+              <div className="leading-tight min-w-0">
+                <span className="font-bold text-sm text-slate-900 dark:text-slate-100 tracking-tight block truncate">
+                  {companyName || "WorkPulse"}
                 </span>
                 <span className="text-[10px] text-gray-500 dark:text-slate-400 font-medium block">
-                  Management
+                  Workforce Suite
                 </span>
               </div>
             </div>

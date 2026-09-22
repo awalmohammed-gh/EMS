@@ -6,6 +6,8 @@ import { CompanySettings } from "../models/CompanySettings.js";
 import { createNotificationRecord } from "./notificationController.js";
 import { evaluateLatenessPenalty, calculateLatenessPenalty } from "../utils/latenessPenaltyCalculator.js";
 import { calculateWorkHours, parseTimeToMinutes, safeDateTime } from "../utils/calculateWorkHours.js";
+import { validateOrganizationAccess } from "../utils/validateOrganizationAccess.js";
+import { buildTenantScope } from "../utils/tenantScope.js";
 
 const isValidObjectId = (id) =>
   id &&
@@ -59,21 +61,23 @@ export const resolveEmployeeObjectId = async (idOrKey) => {
  */
 export const resolveEmployeeInfo = async (req, rawId = null) => {
   const targetId = rawId || req.user?._id || req.user?.id || req.employee?.id || req.employee?._id;
+  const tenantId = req.organizationId || req.companyId || req.user?.companyId || req.user?.organizationId || req.employee?.companyId;
+  const tenantScope = tenantId ? { $or: [{ companyId: tenantId }, { organizationId: tenantId }] } : {};
   let employeeDoc = null;
   let userDoc = null;
 
-  // 1. Direct Employee findById if targetId is an ObjectId
+  // 1. Direct Employee findOne if targetId is an ObjectId
   if (targetId && isValidObjectId(targetId)) {
     try {
-      employeeDoc = await Employee.findById(targetId)
-        .select("fullName employeeId department position email avatar profile_picture baseSalary salary")
+      employeeDoc = await Employee.findOne({ _id: targetId, ...tenantScope })
+        .select("fullName employeeId department position email avatar profile_picture baseSalary salary companyId organizationId")
         .lean();
     } catch {
       // ignore
     }
     if (!employeeDoc) {
       try {
-        userDoc = await User.findById(targetId).select("-password").lean();
+        userDoc = await User.findOne({ _id: targetId, ...tenantScope }).select("-password").lean();
       } catch {
         // ignore
       }
@@ -92,8 +96,8 @@ export const resolveEmployeeInfo = async (req, rawId = null) => {
 
   if (!employeeDoc && emailCandidate) {
     try {
-      employeeDoc = await Employee.findOne({ email: emailCandidate })
-        .select("fullName employeeId department position email avatar profile_picture baseSalary salary")
+      employeeDoc = await Employee.findOne({ email: emailCandidate, ...tenantScope })
+        .select("fullName employeeId department position email avatar profile_picture baseSalary salary companyId organizationId")
         .lean();
     } catch {
       // ignore
@@ -111,9 +115,10 @@ export const resolveEmployeeInfo = async (req, rawId = null) => {
   if (!employeeDoc && codeCandidate) {
     try {
       employeeDoc = await Employee.findOne({
+        ...tenantScope,
         $or: [{ employeeId: codeCandidate }, { employeeId: codeCandidate.toUpperCase() }],
       })
-        .select("fullName employeeId department position email avatar profile_picture baseSalary salary")
+        .select("fullName employeeId department position email avatar profile_picture baseSalary salary companyId organizationId")
         .lean();
     } catch {
       // ignore
@@ -599,8 +604,9 @@ export const clockIn = async (req, res) => {
 
     // Fetch active CompanySettings for work start time and lateness penalty matrix
     let settingsDoc = null;
+    const resolvedOrgId = req.organizationId || employeeDoc?.organizationId || req.user?.organizationId || req.employee?.organizationId || null;
     try {
-      settingsDoc = await CompanySettings.getSingletonSettings();
+      settingsDoc = await CompanySettings.getSingletonSettings(resolvedOrgId);
     } catch (err) {
       settingsDoc = {};
     }
@@ -672,11 +678,21 @@ export const clockIn = async (req, res) => {
     let savedRecord = null;
     if (isValidObjectId(employeeId)) {
       try {
+        const startOfToday = new Date(now);
+        startOfToday.setHours(0, 0, 0, 0);
+
         savedRecord = await Attendance.findOneAndUpdate(
-          { employee: employeeId, date: today },
+          {
+            employee: employeeId,
+            $or: [
+              { date: { $gte: startOfToday, $lte: endOfToday } },
+              { date: today },
+              { clockIn: { $gte: startOfToday, $lte: endOfToday } },
+            ],
+          },
           {
             $set: {
-              employeeId: employeeCode,
+              employeeId: req.user?._id || employeeCode || employeeId,
               clockIn: validNow,
               clockInTime: validNow,
               status: status,
@@ -687,13 +703,15 @@ export const clockIn = async (req, res) => {
               penaltyTier: penaltyTier,
               lateReason: lateReason,
               ...(lateReason ? { notes: lateReason } : {}),
+              ...(resolvedOrgId ? { organizationId: resolvedOrgId, companyId: resolvedOrgId } : {}),
             },
             $setOnInsert: {
               employee: employeeId,
-              date: today,
+              date: startOfToday,
               clockOut: null,
               clockOutTime: null,
               notes: lateReason || "",
+              ...(resolvedOrgId ? { organizationId: resolvedOrgId, companyId: resolvedOrgId } : {}),
             },
           },
           { upsert: true, returnDocument: "after", setDefaultsOnInsert: true }
@@ -877,12 +895,15 @@ export const clockOut = async (req, res) => {
     const clientDate = req.body?.date || "";
     const dateList = Array.from(new Set([today, localToday, clientDate].filter(Boolean)));
 
-    // 1. Direct record ID match if provided by client in req.body
+    // 1. Direct record ID match if provided by client in req.body scoped to tenant
     let record = null;
     const explicitId = req.body?.attendanceId || req.body?.recordId || req.body?.id || req.body?._id;
+    const tenantId = req.organizationId || req.companyId || req.user?.companyId || req.employee?.companyId;
+    const tenantScope = tenantId ? { $or: [{ companyId: tenantId }, { organizationId: tenantId }] } : {};
+
     if (explicitId && isValidObjectId(explicitId)) {
       try {
-        record = await Attendance.findById(explicitId).populate("employee", "fullName employeeId department position email avatar");
+        record = await Attendance.findOne({ _id: explicitId, ...tenantScope }).populate("employee", "fullName employeeId department position email avatar");
       } catch (err) {
         console.warn("[clockOut] Direct findById failed:", err.message);
       }
@@ -1115,17 +1136,20 @@ export const clockOut = async (req, res) => {
 export const getCurrentEmployee = async (req, res) => {
   try {
     let employee = null;
-    const targetId = req.employee?.id || req.employee?._id;
+    const targetId = req.employee?.id || req.employee?._id || req.user?.id || req.user?._id;
+    const tenantId = req.organizationId || req.companyId || req.user?.companyId || req.employee?.companyId;
+    const tenantScope = tenantId ? { $or: [{ companyId: tenantId }, { organizationId: tenantId }] } : {};
 
     if (isValidObjectId(targetId)) {
       try {
-        employee = await Employee.findById(targetId).select("-password").lean();
+        employee = await Employee.findOne({ _id: targetId, ...tenantScope }).select("-password").lean();
       } catch (dbErr) {
         console.warn("DB find in getCurrentEmployee:", dbErr.message);
       }
     } else if (targetId) {
       try {
         employee = await Employee.findOne({
+          ...tenantScope,
           $or: [{ employeeId: targetId }, { email: targetId }],
         }).select("-password").lean();
       } catch (dbErr) {
@@ -1188,13 +1212,13 @@ export const getEmployeeAttendance = async (req, res) => {
       empDoc = await Employee.findOne({ employeeId: code }).lean();
     }
 
+    const tenantId = req.companyId || req.organizationId || empDoc?.companyId || empDoc?.organizationId || req.user?.companyId || req.employee?.companyId;
     const idList = [userDoc?._id, empDoc?._id, rawId].filter(Boolean);
     const codeList = [
       empDoc?.employeeId,
       userDoc?.employeeId,
       req.user?.employeeId,
       req.employee?.employeeId,
-      "EMP00845",
     ].filter(Boolean);
 
     const empObj = {
@@ -1209,13 +1233,19 @@ export const getEmployeeAttendance = async (req, res) => {
     };
 
     try {
-      const filter = {
-        $or: [
-          { employee: { $in: idList } },
-          { employeeId: { $in: [...codeList, ...idList.map(String)] } },
-          { userId: { $in: idList } },
-        ],
-      };
+      const baseOr = [
+        { employee: { $in: idList } },
+        { employeeId: { $in: [...codeList, ...idList.map(String)] } },
+        { userId: { $in: idList } },
+      ];
+      const filter = tenantId
+        ? {
+            $and: [
+              { $or: baseOr },
+              { $or: [{ organizationId: tenantId }, { companyId: tenantId }] },
+            ],
+          }
+        : { $or: baseOr };
 
       const dbAtt = await Attendance.find(filter)
         .populate("employee", "fullName department position employeeId email avatar profilePicture")
@@ -1362,9 +1392,19 @@ export const getAllAttendance = async (req, res) => {
     await autoCloseEveningPastGracePeriod();
 
     let attendance = [];
+    const tenantId = req.organizationId || req.companyId || req.user?.companyId || req.user?.organizationId;
+    if (!tenantId && req.user?.role !== "super_admin") {
+      return res.status(403).json({
+        success: false,
+        message: "Access restricted: No company workspace identified for this request.",
+      });
+    }
+    const query = tenantId
+      ? { $or: [{ organizationId: tenantId }, { companyId: tenantId }] }
+      : {};
 
     try {
-      const dbAtt = await Attendance.find({})
+      const dbAtt = await Attendance.find(query)
         .populate("employee", "fullName department position employeeId email avatar")
         .sort({ date: -1, createdAt: -1 })
         .lean();
@@ -1388,11 +1428,63 @@ export const getAllAttendance = async (req, res) => {
   }
 };
 
+// Get single attendance record by ID strictly scoped to company
+export const getAttendanceById = async (req, res) => {
+  try {
+    const { id } = req.params;
+    const tenantId = req.user?.organizationId || req.user?.companyId || req.organizationId || req.companyId;
+
+    if (!tenantId && req.user?.role !== "super_admin") {
+      return res.status(403).json({
+        success: false,
+        message: "Access restricted: No company workspace identified for this request.",
+      });
+    }
+
+    if (!mongoose.Types.ObjectId.isValid(id)) {
+      return res.status(404).json({
+        success: false,
+        message: "Attendance record not found.",
+      });
+    }
+
+    const tenantScope = tenantId ? { $or: [{ organizationId: tenantId }, { companyId: tenantId }] } : {};
+    const record = await Attendance.findOne({ _id: id, ...tenantScope })
+      .populate("employee", "fullName employeeId department position email avatar")
+      .lean();
+
+    if (!record) {
+      return res.status(404).json({
+        success: false,
+        message: "Attendance record not found in this company workspace.",
+      });
+    }
+
+    // Validate organization access to prevent cross-tenant data access
+    validateOrganizationAccess(record, req);
+
+    return res.status(200).json({
+      success: true,
+      attendance: record,
+      record,
+    });
+  } catch (error) {
+    const statusCode = error.message === "Unauthorized" || error.statusCode === 403 ? 403 : (error.statusCode || 500);
+    return res.status(statusCode).json({
+      success: false,
+      message: error.message,
+    });
+  }
+};
+
 // Get today's attendance for active employee
 export const getTodayAttendance = async (req, res) => {
   try {
     const rawAuthId = req.user?._id || req.user?.id || req.employee?.id || req.employee?._id;
     let employeeId = rawAuthId;
+    const tenantId = req.organizationId || req.companyId || req.user?.companyId || req.employee?.companyId;
+    const tenantScope = tenantId ? { $or: [{ companyId: tenantId }, { organizationId: tenantId }] } : {};
+
     const startOfToday = new Date();
     startOfToday.setHours(0, 0, 0, 0);
     const endOfToday = new Date();
@@ -1404,6 +1496,7 @@ export const getTodayAttendance = async (req, res) => {
 
     if (employeeId && !isValidObjectId(employeeId)) {
       const empDoc = await Employee.findOne({
+        ...tenantScope,
         $or: [{ employeeId: employeeId }, { email: employeeId }],
       }).lean();
       if (empDoc) {
@@ -1416,7 +1509,7 @@ export const getTodayAttendance = async (req, res) => {
     if (isValidObjectId(employeeId)) {
       try {
         if (!employee) {
-          employee = await Employee.findById(employeeId)
+          employee = await Employee.findOne({ _id: employeeId, ...tenantScope })
             .select("fullName position department employeeId email avatar profile_picture")
             .lean();
         }
@@ -1430,9 +1523,10 @@ export const getTodayAttendance = async (req, res) => {
 
     if (!employee && isValidObjectId(rawAuthId)) {
       try {
-        const userDoc = await User.findById(rawAuthId).lean();
+        const userDoc = await User.findOne({ _id: rawAuthId, ...tenantScope }).lean();
         if (userDoc) {
           const matchedEmp = await Employee.findOne({
+            ...tenantScope,
             $or: [
               ...(userDoc.email ? [{ email: userDoc.email }] : []),
               ...(userDoc.employeeId ? [{ employeeId: userDoc.employeeId }] : []),
@@ -1468,31 +1562,59 @@ export const getTodayAttendance = async (req, res) => {
 
     let attendance = null;
     const employeeCode = employee?.employeeId || req.employee?.employeeId || req.user?.employeeId || "";
-    const idCandidates = [validObjectId, employeeId, rawAuthId, employee?._id].filter(Boolean);
+    const activeUserId = req.user?._id || req.user?.id || rawAuthId;
+    const activeOrgId = req.user?.organizationId || req.organizationId || employee?.organizationId;
+    const idCandidates = [activeUserId, validObjectId, employeeId, rawAuthId, employee?._id].filter(Boolean);
 
     try {
-      const filterConditions = [
-        { employee: { $in: idCandidates } },
-        ...(employeeCode ? [{ employeeId: employeeCode }] : []),
-      ];
+      // 1. First attempt exact query as required: employeeId: req.user._id, organizationId: req.user.organizationId, date: { $gte: startOfToday, $lte: endOfToday }
+      if (activeUserId) {
+        const exactConditions = {
+          $or: [
+            { employeeId: activeUserId },
+            ...(isValidObjectId(activeUserId) ? [{ employeeId: new mongoose.Types.ObjectId(activeUserId) }] : []),
+            ...(isValidObjectId(activeUserId) ? [{ employee: new mongoose.Types.ObjectId(activeUserId) }] : []),
+          ],
+          date: { $gte: startOfToday, $lte: endOfToday },
+        };
+        if (activeOrgId) {
+          exactConditions.organizationId = isValidObjectId(activeOrgId) ? new mongoose.Types.ObjectId(activeOrgId) : activeOrgId;
+        }
 
-      const dbAtt = await Attendance.findOne({
-        $and: [
-          { $or: filterConditions },
-          {
-            $or: [
-              { clockIn: { $gte: startOfToday, $lte: endOfToday } },
-              { date: today },
-            ],
-          },
-        ],
-      })
-        .populate("employee", "fullName department position employeeId email avatar")
-        .sort({ updatedAt: -1, createdAt: -1 })
-        .lean();
+        attendance = await Attendance.findOne(exactConditions)
+          .populate("employee", "fullName department position employeeId email avatar")
+          .sort({ updatedAt: -1, createdAt: -1 })
+          .lean();
+      }
 
-      if (dbAtt) {
-        attendance = dbAtt;
+      // 2. Comprehensive fallback across all candidate IDs and date representations
+      if (!attendance) {
+        const filterConditions = [
+          { employee: { $in: idCandidates } },
+          { employeeId: { $in: idCandidates } },
+          ...(employeeCode ? [{ employeeId: employeeCode }] : []),
+        ];
+
+        const dbAtt = await Attendance.findOne({
+          $and: [
+            { $or: filterConditions },
+            ...(activeOrgId ? [{ $or: [{ organizationId: activeOrgId }, { organizationId: null }, { organizationId: { $exists: false } }] }] : []),
+            {
+              $or: [
+                { date: { $gte: startOfToday, $lte: endOfToday } },
+                { clockIn: { $gte: startOfToday, $lte: endOfToday } },
+                { date: today },
+              ],
+            },
+          ],
+        })
+          .populate("employee", "fullName department position employeeId email avatar")
+          .sort({ updatedAt: -1, createdAt: -1 })
+          .lean();
+
+        if (dbAtt) {
+          attendance = dbAtt;
+        }
       }
     } catch (dbErr) {
       console.warn("DB query in getTodayAttendance:", dbErr.message);
@@ -1655,16 +1777,24 @@ export const updateAttendanceRecord = async (req, res) => {
       updateFields.workHours = calculateWorkHours(clockIn, clockOut);
     }
 
-    const updated = await Attendance.findByIdAndUpdate(id, { $set: updateFields }, { returnDocument: "after" })
+    const orgId = req.user?.organizationId || req.user?.companyId || req.organizationId || req.companyId;
+    const orgQuery = orgId
+      ? { $or: [{ organizationId: orgId }, { companyId: orgId }] }
+      : {};
+
+    const updated = await Attendance.findOneAndUpdate({ _id: id, ...orgQuery }, { $set: updateFields }, { returnDocument: "after" })
       .populate("employee", "fullName department position employeeId email avatar")
       .lean();
 
     if (!updated) {
       return res.status(404).json({
         success: false,
-        message: "Attendance record not found.",
+        message: "Attendance record not found in your company workspace.",
       });
     }
+
+    // Validate organization access to prevent cross-tenant data access
+    validateOrganizationAccess(updated, req);
 
     // If status updated to Absent or Late, notify employee
     if (status === "Absent" || status === "Late") {
@@ -1740,7 +1870,8 @@ export const updateAttendanceRecord = async (req, res) => {
       attendance: updated,
     });
   } catch (error) {
-    return res.status(500).json({
+    const statusCode = error.message === "Unauthorized" || error.statusCode === 403 ? 403 : (error.statusCode || 500);
+    return res.status(statusCode).json({
       success: false,
       message: error.message,
     });
@@ -1760,13 +1891,20 @@ export const excuseAttendanceRecord = async (req, res) => {
       });
     }
 
-    const existing = await Attendance.findById(id);
+    const orgId = req.user?.organizationId || req.user?.companyId || req.organizationId || req.companyId;
+    const orgQuery = orgId
+      ? { $or: [{ organizationId: orgId }, { companyId: orgId }] }
+      : {};
+
+    const existing = await Attendance.findOne({ _id: id, ...orgQuery });
     if (!existing) {
       return res.status(404).json({
         success: false,
-        message: "Attendance record not found.",
+        message: "Attendance record not found in your company workspace.",
       });
     }
+
+    validateOrganizationAccess(existing, req);
 
     const adminName = req.admin?.fullName || req.user?.fullName || "Manager";
     const excuseNote = `[Excused by ${adminName}: ${reason || "Lateness penalty waived"}]`;
@@ -1783,7 +1921,7 @@ export const excuseAttendanceRecord = async (req, res) => {
       notes: updatedNote,
     };
 
-    const updated = await Attendance.findByIdAndUpdate(id, { $set: updateFields }, { returnDocument: "after" })
+    const updated = await Attendance.findOneAndUpdate({ _id: id, ...orgQuery }, { $set: updateFields }, { returnDocument: "after" })
       .populate("employee", "fullName department position employeeId email avatar")
       .lean();
 
@@ -1815,7 +1953,8 @@ export const excuseAttendanceRecord = async (req, res) => {
       attendance: updated,
     });
   } catch (error) {
-    return res.status(500).json({
+    const statusCode = error.message === "Unauthorized" || error.statusCode === 403 ? 403 : (error.statusCode || 500);
+    return res.status(statusCode).json({
       success: false,
       message: error.message,
     });
@@ -1835,13 +1974,20 @@ export const flagAttendanceRecord = async (req, res) => {
       });
     }
 
-    const existing = await Attendance.findById(id);
+    const orgId = req.user?.organizationId || req.user?.companyId || req.organizationId || req.companyId;
+    const orgQuery = orgId
+      ? { $or: [{ organizationId: orgId }, { companyId: orgId }] }
+      : {};
+
+    const existing = await Attendance.findOne({ _id: id, ...orgQuery });
     if (!existing) {
       return res.status(404).json({
         success: false,
-        message: "Attendance record not found.",
+        message: "Attendance record not found in your company workspace.",
       });
     }
+
+    validateOrganizationAccess(existing, req);
 
     const adminName = req.admin?.fullName || req.user?.fullName || "Manager";
     const flagNote = `[Flagged by ${adminName}: ${reason || "Flagged for HR/Manager review"}]`;
@@ -1855,7 +2001,7 @@ export const flagAttendanceRecord = async (req, res) => {
       notes: updatedNote,
     };
 
-    const updated = await Attendance.findByIdAndUpdate(id, { $set: updateFields }, { returnDocument: "after" })
+    const updated = await Attendance.findOneAndUpdate({ _id: id, ...orgQuery }, { $set: updateFields }, { returnDocument: "after" })
       .populate("employee", "fullName department position employeeId email avatar")
       .lean();
 
@@ -1887,7 +2033,8 @@ export const flagAttendanceRecord = async (req, res) => {
       attendance: updated,
     });
   } catch (error) {
-    return res.status(500).json({
+    const statusCode = error.message === "Unauthorized" || error.statusCode === 403 ? 403 : (error.statusCode || 500);
+    return res.status(statusCode).json({
       success: false,
       message: error.message,
     });
@@ -1906,20 +2053,28 @@ export const unflagAttendanceRecord = async (req, res) => {
       });
     }
 
-    const updated = await Attendance.findByIdAndUpdate(
-      id,
+    const orgId = req.user?.organizationId || req.user?.companyId || req.organizationId || req.companyId;
+    const orgQuery = orgId
+      ? { $or: [{ organizationId: orgId }, { companyId: orgId }] }
+      : {};
+
+    const existing = await Attendance.findOne({ _id: id, ...orgQuery });
+    if (!existing) {
+      return res.status(404).json({
+        success: false,
+        message: "Attendance record not found in your company workspace.",
+      });
+    }
+
+    validateOrganizationAccess(existing, req);
+
+    const updated = await Attendance.findOneAndUpdate(
+      { _id: id, ...orgQuery },
       { $set: { flaggedForReview: false, flagReason: "", flaggedBy: "", flaggedAt: null } },
       { returnDocument: "after" }
     )
       .populate("employee", "fullName department position employeeId email avatar")
       .lean();
-
-    if (!updated) {
-      return res.status(404).json({
-        success: false,
-        message: "Attendance record not found.",
-      });
-    }
 
     return res.status(200).json({
       success: true,
@@ -1927,7 +2082,8 @@ export const unflagAttendanceRecord = async (req, res) => {
       attendance: updated,
     });
   } catch (error) {
-    return res.status(500).json({
+    const statusCode = error.message === "Unauthorized" || error.statusCode === 403 ? 403 : (error.statusCode || 500);
+    return res.status(statusCode).json({
       success: false,
       message: error.message,
     });
@@ -1946,13 +2102,20 @@ export const recalculateAttendanceRecord = async (req, res) => {
       });
     }
 
-    const record = await Attendance.findById(id);
+    const orgId = req.user?.organizationId || req.user?.companyId || req.organizationId || req.companyId;
+    const orgQuery = orgId
+      ? { $or: [{ organizationId: orgId }, { companyId: orgId }] }
+      : {};
+
+    const record = await Attendance.findOne({ _id: id, ...orgQuery });
     if (!record) {
       return res.status(404).json({
         success: false,
-        message: "Attendance record not found.",
+        message: "Attendance record not found in your company workspace.",
       });
     }
+
+    validateOrganizationAccess(record, req);
 
     const settingsDoc = await CompanySettings.getSingletonSettings().catch(() => ({}));
     const updateFields = {
@@ -1975,7 +2138,7 @@ export const recalculateAttendanceRecord = async (req, res) => {
       updateFields.status = penaltyEval.minutesLate > 0 ? "Late" : "On Time";
     }
 
-    const updated = await Attendance.findByIdAndUpdate(id, { $set: updateFields }, { returnDocument: "after" })
+    const updated = await Attendance.findOneAndUpdate({ _id: id, ...orgQuery }, { $set: updateFields }, { returnDocument: "after" })
       .populate("employee", "fullName department position employeeId email avatar")
       .lean();
 
@@ -1985,7 +2148,8 @@ export const recalculateAttendanceRecord = async (req, res) => {
       attendance: updated,
     });
   } catch (error) {
-    return res.status(500).json({
+    const statusCode = error.message === "Unauthorized" || error.statusCode === 403 ? 403 : (error.statusCode || 500);
+    return res.status(statusCode).json({
       success: false,
       message: error.message,
     });
@@ -2010,6 +2174,22 @@ export const createManualAttendance = async (req, res) => {
         success: false,
         message: "Employee not found.",
       });
+    }
+
+    const orgId = req.user?.organizationId || req.user?.companyId || req.organizationId || req.companyId;
+
+    if (orgId) {
+      const empBelongs = await Employee.findOne({
+        _id: resolvedEmpId,
+        $or: [{ organizationId: orgId }, { companyId: orgId }],
+      });
+      if (!empBelongs) {
+        return res.status(403).json({
+          success: false,
+          message: "Unauthorized: Target employee does not belong to your company workspace.",
+        });
+      }
+      validateOrganizationAccess(empBelongs, req);
     }
 
     let calculatedHours = 0;
@@ -2046,8 +2226,10 @@ export const createManualAttendance = async (req, res) => {
       }
     }
 
+    const orgQuery = orgId ? { $or: [{ organizationId: orgId }, { companyId: orgId }] } : {};
+
     const record = await Attendance.findOneAndUpdate(
-      { employee: resolvedEmpId, date },
+      { employee: resolvedEmpId, date, ...orgQuery },
       {
         $set: {
           clockIn: safeClockInDate && !isNaN(safeClockInDate.getTime()) ? safeClockInDate : null,
@@ -2059,12 +2241,18 @@ export const createManualAttendance = async (req, res) => {
           lateMinutes: delayMinutes,
           latePenalty,
           penaltyTier,
+          ...(orgId ? { organizationId: orgId, companyId: orgId } : {}),
           auditLog: {
             adminId: String(req.admin?._id || req.admin?.id || "admin"),
             adminName: req.admin?.fullName || "HR Administrator",
             reason: notes || "Manual attendance entry created by admin",
             timestamp: new Date(),
           },
+        },
+        $setOnInsert: {
+          employee: resolvedEmpId,
+          date,
+          ...(orgId ? { organizationId: orgId, companyId: orgId } : {}),
         },
       },
       { upsert: true, returnDocument: "after", setDefaultsOnInsert: true }
@@ -2166,22 +2354,31 @@ export const bulkUploadBiometricAttendance = async (req, res) => {
       });
     }
 
+    const tenantId = req.organizationId || req.companyId || req.user?.companyId || req.user?.organizationId;
+    const tenantScope = tenantId ? { $or: [{ organizationId: tenantId }, { companyId: tenantId }] } : {};
+
     // 1. Fetch company settings for shift start time & lateness threshold
     let settings = {
       workStartTime: "08:00",
       absenceDeductionRate: 10,
     };
     try {
-      const dbSettings = await CompanySettings.findOne().lean();
+      let dbSettings = null;
+      if (tenantId) {
+        dbSettings = await CompanySettings.findById(tenantId).lean();
+        if (!dbSettings) {
+          dbSettings = await CompanySettings.findOne(tenantScope).lean();
+        }
+      }
       if (dbSettings) settings = { ...settings, ...dbSettings };
     } catch (err) {
       console.warn("Could not fetch company settings for bulk attendance:", err.message);
     }
 
-    // 2. Fetch all employees for fast in-memory code/id/email lookup
+    // 2. Fetch all employees for fast in-memory code/id/email lookup strictly scoped to tenant
     let allEmployeesList = [];
     try {
-      allEmployeesList = await Employee.find({}).select("_id employeeId email fullName").lean();
+      allEmployeesList = await Employee.find(tenantScope).select("_id employeeId email fullName").lean();
     } catch (err) {
       console.warn("Could not query employees list:", err.message);
     }
@@ -2319,6 +2516,7 @@ export const bulkUploadBiometricAttendance = async (req, res) => {
         const existing = await Attendance.findOne({
           employee: matchedEmp._id,
           date: normalizedDate,
+          ...(tenantId ? { $or: [{ organizationId: tenantId }, { companyId: tenantId }] } : {}),
         });
 
         if (existing) {
@@ -2327,6 +2525,10 @@ export const bulkUploadBiometricAttendance = async (req, res) => {
           existing.workHours = calculatedHours || existing.workHours;
           existing.status = determinedStatus || existing.status;
           existing.notes = noteText;
+          if (tenantId && !existing.companyId) {
+            existing.companyId = tenantId;
+            existing.organizationId = tenantId;
+          }
           await existing.save();
           updatedCount++;
           processedRecords.push(existing);
@@ -2339,6 +2541,7 @@ export const bulkUploadBiometricAttendance = async (req, res) => {
             workHours: calculatedHours,
             status: determinedStatus,
             notes: noteText,
+            ...(tenantId ? { companyId: tenantId, organizationId: tenantId } : {}),
           });
           createdCount++;
           processedRecords.push(newRec);
@@ -2399,22 +2602,28 @@ export const syncAttendancePenalties = async (req, res) => {
     const currentMonth = Number(req.query?.month || req.body?.month || (now.getMonth() + 1));
     const monthPrefix = `${currentYear}-${String(currentMonth).padStart(2, "0")}`;
 
+    const tenantId = req.user?.organizationId || req.user?.companyId || req.organizationId || req.companyId;
+    const tenantScope = tenantId ? { $or: [{ organizationId: tenantId }, { companyId: tenantId }] } : {};
+
+    const dateFilter = {
+      $or: [
+        { date: { $regex: `^${monthPrefix}` } },
+        { clockIn: { $gte: new Date(currentYear, currentMonth - 1, 1), $lte: new Date(currentYear, currentMonth, 0, 23, 59, 59) } },
+      ],
+    };
+
     // Build filter for records in the current pay period
     let filter = {};
     if (!isAdmin && resolvedId) {
       filter = {
         employee: resolvedId,
-        $or: [
-          { date: { $regex: `^${monthPrefix}` } },
-          { clockIn: { $gte: new Date(currentYear, currentMonth - 1, 1), $lte: new Date(currentYear, currentMonth, 0, 23, 59, 59) } },
-        ],
+        ...dateFilter,
+        ...tenantScope,
       };
     } else {
       filter = {
-        $or: [
-          { date: { $regex: `^${monthPrefix}` } },
-          { clockIn: { $gte: new Date(currentYear, currentMonth - 1, 1), $lte: new Date(currentYear, currentMonth, 0, 23, 59, 59) } },
-        ],
+        ...dateFilter,
+        ...tenantScope,
       };
     }
 
@@ -2519,14 +2728,25 @@ export const deleteAttendanceRecord = async (req, res) => {
       }
     }
 
-    // Remove from MongoDB Database
+    // Remove from MongoDB Database with strict tenant scoping
+    const orgId = req.user?.organizationId || req.user?.companyId || req.organizationId || req.companyId;
+    const orgQuery = orgId
+      ? { $or: [{ organizationId: orgId }, { companyId: orgId }] }
+      : {};
+
+    const existingRecord = await Attendance.findOne({ _id: id, ...orgQuery });
+    if (!existingRecord) {
+      return res.status(404).json({
+        success: false,
+        message: "Attendance record not found in your company workspace.",
+      });
+    }
+
+    validateOrganizationAccess(existingRecord, req);
+
     let deletedDoc = null;
     try {
-      if (isValidObjectId(id)) {
-        deletedDoc = await Attendance.findByIdAndDelete(id);
-      } else {
-        deletedDoc = await Attendance.findOneAndDelete({ _id: id });
-      }
+      deletedDoc = await Attendance.findOneAndDelete({ _id: id, ...orgQuery });
     } catch (dbErr) {
       console.warn("DB delete attendance error:", dbErr.message);
     }
@@ -2538,7 +2758,8 @@ export const deleteAttendanceRecord = async (req, res) => {
     });
   } catch (error) {
     console.error("Error deleting attendance record:", error);
-    return res.status(500).json({
+    const statusCode = error.message === "Unauthorized" || error.statusCode === 403 ? 403 : (error.statusCode || 500);
+    return res.status(statusCode).json({
       success: false,
       message: error.message || "Failed to delete attendance record.",
     });
@@ -2555,6 +2776,9 @@ export const getPerformanceMetrics = async (req, res) => {
 
     const { month, week, startDate, endDate } = req.query;
     const query = {};
+    if (req.organizationId) {
+      query.$or = [{ organizationId: req.organizationId }, { companyId: req.organizationId }];
+    }
     if (employeeId && isValidObjectId(employeeId)) {
       query.employee = employeeId;
     }

@@ -5,6 +5,8 @@ import { Employee } from "../models/employeeModel.js";
 import { CompanySettings } from "../models/CompanySettings.js";
 import { evaluateLatenessPenalty } from "./payrollController.js";
 import { logErrorToFile } from "../utils/logger.js";
+import { buildTenantScope, combineTenantScope } from "../utils/tenantScope.js";
+import { validateOrganizationAccess } from "../utils/validateOrganizationAccess.js";
 
 /**
  * Controller for Attendance Penalties & Payroll Cost Impact Analytics
@@ -44,6 +46,9 @@ export const getPenaltyImpactAnalytics = async (req, res) => {
     }
 
     // 2. Fetch company penalty settings from DB
+    const tenantScope = buildTenantScope(req);
+    const tenantId = req.organizationId || req.companyId || req.user?.companyId || req.user?.organizationId;
+
     let companySettings = {
       workStartTime: "08:00",
       absenceDeductionRate: 10,
@@ -55,7 +60,7 @@ export const getPenaltyImpactAnalytics = async (req, res) => {
       lateTier6_amount: 0,
     };
     try {
-      const settingsDoc = await CompanySettings.findOne().lean();
+      const settingsDoc = tenantId ? (await CompanySettings.findById(tenantId).lean() || await CompanySettings.findOne(tenantScope).lean()) : await CompanySettings.findOne(tenantScope).lean();
       if (settingsDoc) {
         companySettings = { ...companySettings, ...settingsDoc };
       }
@@ -65,13 +70,15 @@ export const getPenaltyImpactAnalytics = async (req, res) => {
 
     const dailyAbsenceRate = Number(companySettings.absenceDeductionRate || 10);
 
-    // 3. Fetch active employees headcount & baseline salary
+    // 3. Fetch active employees headcount & baseline salary scoped to tenant
     let activeEmployees = [];
     let totalActiveBaseSalary = 0;
     try {
-      activeEmployees = await Employee.find({
-        $or: [{ status: "active" }, { status: { $exists: false }, isActive: { $ne: false } }],
-      }).lean() || [];
+      activeEmployees = await Employee.find(
+        combineTenantScope(tenantScope, {
+          $or: [{ status: "active" }, { status: { $exists: false }, isActive: { $ne: false } }],
+        })
+      ).lean() || [];
 
       totalActiveBaseSalary = activeEmployees.reduce((sum, e) => {
         const sal = Number(e?.salary !== undefined ? e.salary : (e?.basicSalary !== undefined ? e.basicSalary : (e?.baseSalary || 0)));
@@ -87,7 +94,28 @@ export const getPenaltyImpactAnalytics = async (req, res) => {
 
     let payrollAggregations = [];
     try {
+      const userOrgId = req.user?.organizationId || req.admin?.organizationId || req.organizationId;
+      const isSuperAdmin =
+        req.user?.role === "super_admin" ||
+        req.user?.role === "superadmin" ||
+        req.admin?.role === "super_admin" ||
+        req.admin?.role === "superadmin";
+
+      const orgMatch = {
+        $match: !isSuperAdmin && userOrgId
+          ? {
+              $or: [
+                { organizationId: String(userOrgId) },
+                ...(mongoose.isValidObjectId(userOrgId) ? [{ organizationId: new mongoose.Types.ObjectId(userOrgId) }] : []),
+                { companyId: String(userOrgId) },
+                ...(mongoose.isValidObjectId(userOrgId) ? [{ companyId: new mongoose.Types.ObjectId(userOrgId) }] : []),
+              ],
+            }
+          : tenantScope,
+      };
+      const startMatch = !isSuperAdmin || Object.keys(tenantScope).length > 0 ? [orgMatch] : [];
       payrollAggregations = await Payroll.aggregate([
+        ...startMatch,
         {
           $project: {
             payMonth: { $ifNull: ["$payMonth", ""] },
@@ -136,12 +164,14 @@ export const getPenaltyImpactAnalytics = async (req, res) => {
       payrollAggregations = [];
     }
 
-    // 5. Query attendance logs for 6-month window
+    // 5. Query attendance logs for 6-month window scoped to tenant
     let attendanceRecords = [];
     try {
-      attendanceRecords = await Attendance.find({
-        date: { $gte: `${startPeriodKey}-01`, $lte: `${endPeriodKey}-31` },
-      })
+      attendanceRecords = await Attendance.find(
+        combineTenantScope(tenantScope, {
+          date: { $gte: `${startPeriodKey}-01`, $lte: `${endPeriodKey}-31` },
+        })
+      )
       .select("employee date status isExcused latePenalty clockIn")
       .lean() || [];
     } catch (err) {
@@ -350,6 +380,9 @@ export const getCurrentMonthLatenessAnalytics = async (req, res) => {
     const startDateStr = `${monthKey}-01`;
     const endDateStr = `${monthKey}-${String(totalDays).padStart(2, "0")}`;
 
+    const tenantScope = buildTenantScope(req);
+    const tenantId = req.organizationId || req.companyId || req.user?.companyId || req.user?.organizationId;
+
     // Fetch company settings for accurate fallback calculation
     let companySettings = {
       workStartTime: "08:00",
@@ -357,7 +390,7 @@ export const getCurrentMonthLatenessAnalytics = async (req, res) => {
       latenessTiers: [],
     };
     try {
-      const settingsDoc = await CompanySettings.findOne().lean();
+      const settingsDoc = tenantId ? await CompanySettings.findById(tenantId).lean() : await CompanySettings.findOne(tenantScope).lean();
       if (settingsDoc) {
         companySettings = { ...companySettings, ...settingsDoc };
       }
@@ -365,13 +398,13 @@ export const getCurrentMonthLatenessAnalytics = async (req, res) => {
       console.warn("Could not fetch company settings for lateness analytics:", err?.message || err);
     }
 
-    // Build query filter: include all records for this month, including today's live records
+    // Build query filter: include all records for this month, including today's live records scoped to tenant
     const dateConditions = [
       { date: { $gte: startDateStr, $lte: endDateStr } },
       { date: { $regex: `^${monthKey}` } },
     ];
 
-    const query = {
+    let baseFilter = {
       $or: dateConditions,
     };
 
@@ -382,7 +415,9 @@ export const getCurrentMonthLatenessAnalytics = async (req, res) => {
         orConditions.push({ employee: new mongoose.Types.ObjectId(empId) });
         orConditions.push({ employee: empId });
       }
-      query.$and = [{ $or: orConditions }];
+      baseFilter = {
+        $and: [{ $or: dateConditions }, { $or: orConditions }],
+      };
     } else if (req.user && req.user.role === "employee") {
       const uId = req.user._id || req.user.id;
       const orConditions = [];
@@ -396,9 +431,13 @@ export const getCurrentMonthLatenessAnalytics = async (req, res) => {
         orConditions.push({ employeeId: req.user.employeeId });
       }
       if (orConditions.length > 0) {
-        query.$and = [{ $or: orConditions }];
+        baseFilter = {
+          $and: [{ $or: dateConditions }, { $or: orConditions }],
+        };
       }
     }
+
+    const query = combineTenantScope(tenantScope, baseFilter);
 
     let attendanceList = [];
     try {
@@ -416,18 +455,24 @@ export const getCurrentMonthLatenessAnalytics = async (req, res) => {
       const empIdParam = req.query.employeeId;
       if (empIdParam) {
         if (mongoose.Types.ObjectId.isValid(empIdParam)) {
-          targetEmployee = await Employee.findById(empIdParam).lean();
+          targetEmployee = await Employee.findOne(combineTenantScope(tenantScope, { _id: empIdParam })).lean();
         }
         if (!targetEmployee) {
-          targetEmployee = await Employee.findOne({ employeeId: empIdParam }).lean();
+          targetEmployee = await Employee.findOne(combineTenantScope(tenantScope, { employeeId: empIdParam })).lean();
+        }
+        if (targetEmployee) {
+          validateOrganizationAccess(targetEmployee, req);
         }
       } else if (req.user && req.user.role === "employee") {
         const uId = req.user._id || req.user.id;
         if (uId && mongoose.Types.ObjectId.isValid(uId)) {
-          targetEmployee = await Employee.findById(uId).lean();
+          targetEmployee = await Employee.findOne(combineTenantScope(tenantScope, { _id: uId })).lean();
         }
         if (!targetEmployee && req.user.employeeId) {
-          targetEmployee = await Employee.findOne({ employeeId: req.user.employeeId }).lean();
+          targetEmployee = await Employee.findOne(combineTenantScope(tenantScope, { employeeId: req.user.employeeId })).lean();
+        }
+        if (targetEmployee) {
+          validateOrganizationAccess(targetEmployee, req);
         }
       }
     } catch (empErr) {

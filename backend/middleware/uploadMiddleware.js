@@ -41,11 +41,12 @@ const fileFilter = (req, file, cb) => {
   }
 };
 
-// Multer upload middleware instance (5MB maximum file size)
+// Multer upload middleware instance (5MB maximum file size, 10MB text field size)
 export const uploadAvatar = multer({
   storage,
   limits: {
     fileSize: 5 * 1024 * 1024, // 5MB limit
+    fieldSize: 10 * 1024 * 1024, // 10MB field value limit
     files: 1,
   },
   fileFilter,
@@ -53,6 +54,12 @@ export const uploadAvatar = multer({
 
 export const handleMulterError = (err, req, res, next) => {
   if (err instanceof multer.MulterError) {
+    if (err.code === "LIMIT_FIELD_VALUE") {
+      return res.status(400).json({
+        success: false,
+        message: "Text field value is too long.",
+      });
+    }
     if (err.code === "LIMIT_FILE_SIZE") {
       return res.status(400).json({
         success: false,

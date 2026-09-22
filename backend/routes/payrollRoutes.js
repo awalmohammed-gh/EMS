@@ -22,6 +22,9 @@ import {
 import { getAdminPayrollSummary } from "../controllers/payrollAdminController.js";
 import { employeeAuth } from "../middleware/employeeAuth.js";
 import { protect } from "../middleware/authMiddleware.js";
+import { validateOrganizationAccess } from "../middleware/validateOrganizationAccess.js";
+import { Payroll } from "../models/Payroll.js";
+import { Employee } from "../models/Employee.js";
 
 import {
   getPayrollForecasting,
@@ -35,7 +38,7 @@ const payrollRouter = express.Router();
 payrollRouter.get("/forecasting", protect, getPayrollForecasting);
 payrollRouter.get("/forecasting/export", protect, exportForecastingCSV);
 payrollRouter.get("/forecasting/me", protect, getEmployeeForecasting);
-payrollRouter.get("/forecasting/employee/:id", protect, getEmployeeForecasting);
+payrollRouter.get("/forecasting/employee/:id", protect, validateOrganizationAccess(Employee), getEmployeeForecasting);
 
 // Dynamic KPI Summary Metrics Aggregation (Admin)
 payrollRouter.get("/summary", verifyAdmin, getAdminPayrollSummary);
@@ -108,14 +111,14 @@ payrollRouter.get("/payslips/latest", employeeAuth, getEmployeeLatestPayslipBrea
 payrollRouter.get("/payslip/latest", employeeAuth, getEmployeeLatestPayslipBreakdown);
 
 // Single payroll record details (by ID or payslipNumber - authenticated with ownership check)
-payrollRouter.get("/employee/payslip/:id", employeeAuth, getEmployeePayslipBreakdownById);
-payrollRouter.get("/payslip/:id", employeeAuth, getEmployeePayslipBreakdownById);
-payrollRouter.get("/details/:id", employeeAuth, getEmployeePayslipBreakdownById);
-payrollRouter.get("/:id", employeeAuth, getEmployeePayslipBreakdownById);
+payrollRouter.get("/employee/payslip/:id", employeeAuth, validateOrganizationAccess(Payroll), getEmployeePayslipBreakdownById);
+payrollRouter.get("/payslip/:id", employeeAuth, validateOrganizationAccess(Payroll), getEmployeePayslipBreakdownById);
+payrollRouter.get("/details/:id", employeeAuth, validateOrganizationAccess(Payroll), getEmployeePayslipBreakdownById);
+payrollRouter.get("/:id", employeeAuth, validateOrganizationAccess(Payroll), getEmployeePayslipBreakdownById);
 
 // Update status and deletion
-payrollRouter.put("/status/:id", verifyAdmin, updatePayrollStatus);
-payrollRouter.delete("/:id", verifyAdmin, deletePayroll);
+payrollRouter.put("/status/:id", verifyAdmin, validateOrganizationAccess(Payroll), updatePayrollStatus);
+payrollRouter.delete("/:id", verifyAdmin, validateOrganizationAccess(Payroll), deletePayroll);
 
 export default payrollRouter;
 

@@ -506,10 +506,13 @@ export const updateSecuritySettings = (data) => {
   return api.put("/settings/security", data);
 };
 
-// Admin Settings Audit Logs
+// Admin Settings Audit Logs & Activity Trail
 export const getAuditLogs = (params) => {
-  return api.get("/admin/audit-logs", { params });
+  return api.get("/admin/audit-logs", { params }).catch(() => {
+    return api.get("/admin/activity", { params });
+  });
 };
+export const getActivityLogs = getAuditLogs;
 
 // Profile Picture & Avatar Management
 export const uploadProfilePicture = (payload) => {

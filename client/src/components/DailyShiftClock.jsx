@@ -13,6 +13,7 @@ import {
   Sparkles,
 } from "lucide-react";
 import { useAttendanceContext } from "../context/AttendanceContext";
+import { getTodayAttendance } from "../apis/fontApis";
 
 /**
  * Custom Hook: useMidnightRefresh
@@ -92,8 +93,32 @@ const DailyShiftClock = ({
     refreshAttendance: ctxRefreshAttendance,
   } = contextValues || {};
 
-  // Resolve attendance data & flags: priority to props, fallback to context
-  const activeRecord = propAttendanceData ?? todayRecord;
+  const [mountAttendance, setMountAttendance] = useState(null);
+
+  // Fetch /api/attendance/today on mount to ensure zero loss of state upon refresh
+  useEffect(() => {
+    let isMounted = true;
+    const fetchTodayOnMount = async () => {
+      try {
+        const res = await getTodayAttendance();
+        if (res?.data?.success && isMounted) {
+          const shiftData = res.data.data !== undefined ? res.data.data : (res.data.todayRecord || res.data.attendance);
+          if (shiftData) {
+            setMountAttendance(shiftData);
+          }
+        }
+      } catch (err) {
+        console.warn("[DailyShiftClock] Error hydrating /api/attendance/today on mount:", err.message);
+      }
+    };
+    fetchTodayOnMount();
+    return () => {
+      isMounted = false;
+    };
+  }, []);
+
+  // Resolve attendance data & flags: priority to mount-fetched/props, fallback to context
+  const activeRecord = propAttendanceData ?? mountAttendance ?? todayRecord;
   const todayStr = useMemo(() => new Date().toISOString().split("T")[0], []);
   const recordDate = activeRecord?.date || (activeRecord?.clockIn ? new Date(activeRecord.clockIn).toISOString().split("T")[0] : "");
   const isRecordForToday = Boolean(recordDate && recordDate === todayStr);

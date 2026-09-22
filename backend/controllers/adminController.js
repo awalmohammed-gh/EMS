@@ -9,10 +9,13 @@ import { Leave } from "../models/leaveModel.js";
 import { Settings } from "../models/adminSettingsModel.js";
 import { Notification } from "../models/notificationModel.js";
 import { AuditLog } from "../models/AuditLog.js";
+import { logAuditAction } from "../utils/auditLogger.js";
 import { User } from "../models/userModel.js";
 import { livePayrollStore } from "./payrollController.js";
 import { liveLeaveStore } from "./leaveController.js";
 import { CompanySettings } from "../models/CompanySettings.js";
+import { buildTenantScope, combineTenantScope } from "../utils/tenantScope.js";
+import { validateOrganizationAccess } from "../utils/validateOrganizationAccess.js";
 
 // Function for creating admin account (Admin-only restricted)
 export const createAdminAccount = async (req, res) => {
@@ -23,7 +26,21 @@ export const createAdminAccount = async (req, res) => {
     const name = (full_name || fullName || "").trim();
     const cleanEmail = (email || "").toLowerCase().trim();
     const plainPassword = password;
-    const adminRole = role === "super_admin" ? "super_admin" : "admin";
+    // Security guard: Super Admin accounts CANNOT be created through standard admin endpoints
+    if (
+      role === "super_admin" ||
+      role === "superadmin" ||
+      role === "superAdmin" ||
+      req.body.isSuperAdmin === true ||
+      req.body.isSuperAdmin === "true"
+    ) {
+      return res.status(403).json({
+        success: false,
+        code: "FORBIDDEN_SUPERADMIN_PROVISIONING",
+        message: "Platform Super Administrator accounts cannot be provisioned through standard admin registration.",
+      });
+    }
+    const adminRole = "admin";
     const profileImage = profile_image_url || profileImageUrl || "";
 
     // 1. Validate required fields
@@ -91,7 +108,7 @@ export const createAdminAccount = async (req, res) => {
 
 export const adminLogin = async (req, res) => {
   try {
-    const { identifier, email, password, rememberMe, rememberDevice } = req.body;
+    const { identifier, email, password, rememberMe, rememberDevice, companySlug, workspaceSlug, companyId } = req.body;
     const inputIdentifier = (identifier || email || "").trim();
 
     if (!inputIdentifier || !password) {
@@ -112,33 +129,26 @@ export const adminLogin = async (req, res) => {
       dbAdmin = await Admin.findOne({ email: cleanIdentifier });
     }
 
-    // 2. Fallback: If no match is found, look up the organization by the identifier and find the associated primary manager/admin
+    // 2. Fallback: If no match is found, check if identifier matches registered organization company email
     if (!user && !dbAdmin) {
       const matchingCompany = await CompanySettings.findOne({
         $or: [
           { companyEmail: cleanIdentifier },
           { contactEmail: cleanIdentifier },
           { email: cleanIdentifier },
-          { slug: cleanIdentifier },
-          { companyName: new RegExp(`^${cleanIdentifier.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}$`, "i") },
         ],
       });
 
-      if (matchingCompany) {
-        if (matchingCompany._id) {
-          user = await User.findOne({
-            organizationId: matchingCompany._id,
-            role: { $in: ["admin", "manager", "super_admin"] },
-          });
-        }
-        if (!user) {
-          user = await User.findOne({
-            role: { $in: ["admin", "manager", "super_admin"] },
-          });
-        }
+      if (matchingCompany && matchingCompany._id) {
+        // Find the primary admin/manager strictly belonging to THIS company
+        user = await User.findOne({
+          organizationId: matchingCompany._id,
+          role: { $in: ["admin", "manager"] },
+        });
         if (!user) {
           dbAdmin = await Admin.findOne({
-            role: { $in: ["admin", "super_admin"] },
+            organizationId: matchingCompany._id,
+            role: { $in: ["admin"] },
           });
         }
       }
@@ -179,6 +189,7 @@ export const adminLogin = async (req, res) => {
       avatar: dbAdmin.avatar || dbAdmin.profile_image_url || "",
       profile_image_url: dbAdmin.avatar || dbAdmin.profile_image_url || "",
       organizationId: dbAdmin.organizationId,
+      companyId: dbAdmin.companyId || dbAdmin.organizationId,
     };
 
     // Strict role verification: only admin or manager allowed
@@ -199,6 +210,8 @@ export const adminLogin = async (req, res) => {
       });
     }
 
+    const targetOrgId = targetAccount.companyId || targetAccount.organizationId || null;
+
     const token = jwt.sign(
       {
         id: (targetAccount._id || targetAccount.id).toString(),
@@ -206,7 +219,8 @@ export const adminLogin = async (req, res) => {
         email: targetAccount.email,
         role: targetAccount.role,
         fullName: targetAccount.fullName || targetAccount.full_name,
-        organizationId: targetAccount.organizationId,
+        companyId: targetOrgId ? targetOrgId.toString() : null,
+        organizationId: targetOrgId ? targetOrgId.toString() : null,
       },
       jwtSecret,
       { expiresIn: "7d" }
@@ -237,7 +251,8 @@ export const adminLogin = async (req, res) => {
       position: targetAccount.position || (targetAccount.role === "manager" ? "Manager" : targetAccount.role === "super_admin" ? "Super Admin" : "Administrator"),
       avatar: targetAccount.avatar || targetAccount.profile_image_url || "",
       profile_image_url: targetAccount.avatar || targetAccount.profile_image_url || "",
-      organizationId: targetAccount.organizationId,
+      organizationId: targetOrgId ? targetOrgId.toString() : null,
+      companyId: targetOrgId ? targetOrgId.toString() : null,
     };
 
     return res.status(200).json({
@@ -541,26 +556,63 @@ export const updateEmployeeStatus = async (req, res) => {
     const cleanStatus = status.toLowerCase().trim();
     const isActive = cleanStatus === "active" || cleanStatus === "on leave" || cleanStatus === "on-leave";
 
-    let employee = null;
+    // 1. Locate target employee across database to verify cross-company ownership
+    let targetEmployee = null;
     if (mongoose.Types.ObjectId.isValid(id)) {
-      employee = await Employee.findByIdAndUpdate(
-        id,
-        { $set: { status: cleanStatus, isActive } },
-        { returnDocument: "after" }
-      ).select("-password");
-    } else {
-      employee = await Employee.findOneAndUpdate(
-        { $or: [{ employeeId: id }, { email: id }] },
-        { $set: { status: cleanStatus, isActive } },
-        { returnDocument: "after" }
-      ).select("-password");
+      targetEmployee = await Employee.findById(id, null, { skipTenant: true }).lean();
+    }
+    if (!targetEmployee) {
+      targetEmployee = await Employee.findOne({
+        $or: [{ employeeId: id }, { email: id }],
+      }, null, { skipTenant: true }).lean();
     }
 
-    if (!employee) {
+    if (!targetEmployee) {
       return res.status(404).json({
         success: false,
         message: "Employee record not found in database.",
       });
+    }
+
+    // 2. Strict Company Isolation Verification
+    validateOrganizationAccess(targetEmployee, req);
+
+    const targetOrgId = req.companyId || req.organizationId || req.user?.organizationId || req.user?.companyId;
+    const orgScope = targetOrgId ? { $or: [{ organizationId: targetOrgId }, { companyId: targetOrgId }] } : {};
+
+    const employee = await Employee.findOneAndUpdate(
+      { _id: targetEmployee._id, ...orgScope },
+      { $set: { status: cleanStatus, isActive } },
+      { returnDocument: "after" }
+    ).select("-password");
+
+    // Compliance Audit Logging
+    try {
+      await logAuditAction({
+        req,
+        action: "UPDATE_EMPLOYEE",
+        category: "Employees",
+        organizationId: targetOrgId || empOrg || null,
+        companyId: targetOrgId || empOrg || null,
+        target: `Employee: ${targetEmployee.fullName || targetEmployee.name} (${targetEmployee.employeeId || targetEmployee._id})`,
+        targetModel: "Employee",
+        summary: `Updated employee '${targetEmployee.fullName || targetEmployee.name}' status to '${cleanStatus}'.`,
+        changes: [
+          {
+            field: "status",
+            oldValue: targetEmployee.status || "active",
+            newValue: cleanStatus,
+          },
+        ],
+        performedBy: {
+          id: req.user?._id?.toString() || req.user?.id || "admin",
+          name: req.user?.name || req.user?.fullName || "Administrator",
+          email: req.user?.email || "admin@workspace.local",
+          role: req.user?.role || "admin",
+        },
+      });
+    } catch (auditErr) {
+      console.warn("Employee status audit log notice:", auditErr.message);
     }
 
     return res.status(200).json({
@@ -570,7 +622,8 @@ export const updateEmployeeStatus = async (req, res) => {
     });
   } catch (error) {
     console.error("Error updating employee status:", error);
-    return res.status(500).json({
+    const statusCode = error.message === "Unauthorized" || error.statusCode === 403 ? 403 : (error.statusCode || 500);
+    return res.status(statusCode).json({
       success: false,
       message: error.message || "Internal server error while updating employee status.",
     });
@@ -589,15 +642,25 @@ export const deleteEmployee = async (req, res) => {
       });
     }
 
-    // 1. Locate target employee first to get full identifiers
+    // 1. Locate target employee first to get full identifiers and check tenant boundary
     let targetEmployee = null;
     if (mongoose.Types.ObjectId.isValid(id)) {
-      targetEmployee = await Employee.findById(id).lean();
+      targetEmployee = await Employee.findById(id, null, { skipTenant: true }).lean();
     }
     if (!targetEmployee) {
       targetEmployee = await Employee.findOne({
         $or: [{ employeeId: id }, { email: id }],
-      }).lean();
+      }, null, { skipTenant: true }).lean();
+    }
+
+    // Strict Cross-Company Isolation Verification: prevent deleting another company's staff
+    const targetOrgId = req.companyId || req.organizationId || req.user?.organizationId || req.user?.companyId;
+    const orgScope = targetOrgId
+      ? { $or: [{ organizationId: targetOrgId }, { companyId: targetOrgId }] }
+      : {};
+
+    if (targetEmployee) {
+      validateOrganizationAccess(targetEmployee, req);
     }
 
     let empObjectId = targetEmployee?._id || (mongoose.Types.ObjectId.isValid(id) ? new mongoose.Types.ObjectId(id) : null);
@@ -605,11 +668,20 @@ export const deleteEmployee = async (req, res) => {
     const empEmail = targetEmployee?.email || (typeof id === "string" && id.includes("@") ? id : "");
     const empName = targetEmployee?.fullName || empCode || "Employee";
 
+    // If target doesn't exist anywhere, return 404
+    if (!targetEmployee && !empObjectId) {
+      return res.status(404).json({
+        success: false,
+        message: "Employee record not found.",
+      });
+    }
+
     // If empObjectId wasn't found from Employee, try to resolve it from Attendance or in-memory stores
     if (!empObjectId && empCode) {
       try {
-        const attDoc = await Attendance.findOne({ employeeId: empCode }).select("employee").lean();
+        const attDoc = await Attendance.findOne({ employeeId: empCode, ...orgScope }).select("employee organizationId companyId").lean();
         if (attDoc?.employee && mongoose.Types.ObjectId.isValid(attDoc.employee)) {
+          validateOrganizationAccess(attDoc, req);
           empObjectId = new mongoose.Types.ObjectId(attDoc.employee);
         }
       } catch {
@@ -651,8 +723,12 @@ export const deleteEmployee = async (req, res) => {
       ? { $or: attendanceOrClauses }
       : (attendanceOrClauses[0] || null);
 
-    const attendanceDeleteResult = attendanceFilter
-      ? await Attendance.deleteMany(attendanceFilter).catch((err) => {
+    const scopedAttendanceFilter = attendanceFilter
+      ? (targetOrgId ? { $and: [attendanceFilter, orgScope] } : attendanceFilter)
+      : null;
+
+    const attendanceDeleteResult = scopedAttendanceFilter
+      ? await Attendance.deleteMany(scopedAttendanceFilter).catch((err) => {
           console.warn("[Cascading Delete] Attendance purge warning:", err.message);
           return { deletedCount: 0 };
         })
@@ -671,8 +747,12 @@ export const deleteEmployee = async (req, res) => {
       ? { $or: payrollOrClauses }
       : (payrollOrClauses[0] || null);
 
-    const payrollDeleteResult = payrollFilter
-      ? await Payroll.deleteMany(payrollFilter).catch((err) => {
+    const scopedPayrollFilter = payrollFilter
+      ? (targetOrgId ? { $and: [payrollFilter, orgScope] } : payrollFilter)
+      : null;
+
+    const payrollDeleteResult = scopedPayrollFilter
+      ? await Payroll.deleteMany(scopedPayrollFilter).catch((err) => {
           console.warn("[Cascading Delete] Payroll purge warning:", err.message);
           return { deletedCount: 0 };
         })
@@ -683,6 +763,10 @@ export const deleteEmployee = async (req, res) => {
       if (Array.isArray(livePayrollStore)) {
         for (let i = livePayrollStore.length - 1; i >= 0; i--) {
           const p = livePayrollStore[i];
+          if (targetOrgId) {
+            const pOrg = p.organizationId ? String(p.organizationId) : (p.companyId ? String(p.companyId) : null);
+            if (pOrg && pOrg !== String(targetOrgId)) continue;
+          }
           const matchObjectId = empObjectId && (String(p?.employee?._id || p?.employee) === String(empObjectId));
           const matchCode = empCode && (p?.employeeId === empCode || p?.employee?.employeeId === empCode || String(p?.employee) === empCode);
           const matchId = id && (p?.employeeId === String(id) || String(p?.employee) === String(id));
@@ -708,8 +792,12 @@ export const deleteEmployee = async (req, res) => {
       ? { $or: leaveOrClauses }
       : (leaveOrClauses[0] || null);
 
-    const leaveDeleteResult = leaveFilter
-      ? await Leave.deleteMany(leaveFilter).catch((err) => {
+    const scopedLeaveFilter = leaveFilter
+      ? (targetOrgId ? { $and: [leaveFilter, orgScope] } : leaveFilter)
+      : null;
+
+    const leaveDeleteResult = scopedLeaveFilter
+      ? await Leave.deleteMany(scopedLeaveFilter).catch((err) => {
           console.warn("[Cascading Delete] Leave purge warning:", err.message);
           return { deletedCount: 0 };
         })
@@ -755,17 +843,23 @@ export const deleteEmployee = async (req, res) => {
         })
       : { deletedCount: 0 };
 
-    // Primary Employee Document deletion
+    // Primary Employee Document deletion (strictly scoped to targetOrgId)
     let employeeDeletedCount = 0;
+
     if (empObjectId) {
-      const delDoc = await Employee.findByIdAndDelete(empObjectId).catch(() => null);
-      if (delDoc) employeeDeletedCount++;
+      const delDoc = await Employee.deleteOne({ _id: empObjectId, ...orgScope }).catch(() => null);
+      if (delDoc?.deletedCount) employeeDeletedCount += delDoc.deletedCount;
     }
     const empExtraDel = await Employee.deleteMany({
-      $or: [
-        ...(empObjectId ? [{ _id: empObjectId }] : []),
-        ...(empCode ? [{ employeeId: empCode }] : []),
-        { employeeId: String(id) },
+      $and: [
+        orgScope,
+        {
+          $or: [
+            ...(empObjectId ? [{ _id: empObjectId }] : []),
+            ...(empCode ? [{ employeeId: empCode }] : []),
+            { employeeId: String(id) },
+          ],
+        },
       ],
     }).catch(() => ({ deletedCount: 0 }));
     employeeDeletedCount += (empExtraDel?.deletedCount || 0);
@@ -773,28 +867,29 @@ export const deleteEmployee = async (req, res) => {
     // User Model deletion (auth credentials if linked)
     if (User) {
       await User.deleteMany({
-        $or: [
-          ...(empObjectId ? [{ _id: empObjectId }] : []),
-          ...(empEmail ? [{ email: empEmail }] : []),
-          { email: String(id) },
+        $and: [
+          orgScope,
+          {
+            $or: [
+              ...(empObjectId ? [{ _id: empObjectId }] : []),
+              ...(empEmail ? [{ email: empEmail }] : []),
+              { email: String(id) },
+            ],
+          },
         ],
       }).catch(() => {});
     }
 
     // 3. Record Audit Log entry
     try {
-      const adminPerformer = req.admin || req.user || {};
-      await AuditLog.create({
+      await logAuditAction({
+        req,
         action: "DELETE_EMPLOYEE",
         category: "Employees",
-        performedBy: {
-          id: String(adminPerformer.id || adminPerformer._id || "admin"),
-          name: adminPerformer.fullName || adminPerformer.full_name || "Administrator",
-          email: adminPerformer.email || "admin@system.local",
-          role: adminPerformer.role || "admin",
-        },
         target: `${empName} (${empCode || empObjectId || id})`,
+        targetModel: "Employee",
         summary: `Permanently deleted employee ${empName}. Purged ${attendanceDeleteResult?.deletedCount || 0} attendance records, ${payrollDeleteResult?.deletedCount || 0} payslips, ${leaveDeleteResult?.deletedCount || 0} leave requests, and ${notificationDeleteResult?.deletedCount || 0} notifications.`,
+        details: `Employee ID: ${empCode || id}, purged records: attendance (${attendanceDeleteResult?.deletedCount || 0}), payroll (${payrollDeleteResult?.deletedCount || 0}), leave (${leaveDeleteResult?.deletedCount || 0}).`,
         metadata: {
           employeeId: empCode || id,
           employeeObjectId: empObjectId ? String(empObjectId) : String(id),
@@ -827,7 +922,8 @@ export const deleteEmployee = async (req, res) => {
     });
   } catch (error) {
     console.error("Error in cascading deleteEmployee:", error);
-    return res.status(500).json({
+    const statusCode = error.message === "Unauthorized" || error.statusCode === 403 ? 403 : (error.statusCode || 500);
+    return res.status(statusCode).json({
       success: false,
       message: error.message || "Internal server error while deleting employee.",
     });
@@ -854,6 +950,11 @@ export const bulkUpdateEmployees = async (req, res) => {
       });
     }
 
+    const targetOrgId = req.companyId || req.organizationId || req.user?.organizationId || req.user?.companyId;
+    const orgScope = targetOrgId
+      ? { $or: [{ organizationId: targetOrgId }, { companyId: targetOrgId }] }
+      : {};
+
     const setFields = {};
     if (updates.department) {
       setFields.department = String(updates.department).trim();
@@ -872,8 +973,12 @@ export const bulkUpdateEmployees = async (req, res) => {
       return { employeeId: id };
     });
 
+    const filter = targetOrgId
+      ? { $and: [orgScope, { $or: idFilters }] }
+      : { $or: idFilters };
+
     const result = await Employee.updateMany(
-      { $or: idFilters },
+      filter,
       { $set: setFields }
     );
 
@@ -906,6 +1011,10 @@ export const bulkDeleteEmployees = async (req, res) => {
 
     let deletedCount = 0;
     const errors = [];
+    const targetOrgId = req.companyId || req.organizationId || req.user?.organizationId || req.user?.companyId;
+    const orgScope = targetOrgId
+      ? { $or: [{ organizationId: targetOrgId }, { companyId: targetOrgId }] }
+      : {};
 
     for (const id of employeeIds) {
       try {
@@ -918,6 +1027,12 @@ export const bulkDeleteEmployees = async (req, res) => {
             $or: [{ employeeId: id }, { email: id }],
           }).lean();
         }
+
+        if (!targetEmployee) {
+          continue;
+        }
+
+        validateOrganizationAccess(targetEmployee, req);
 
         const empObjectId = targetEmployee?._id || (mongoose.Types.ObjectId.isValid(id) ? new mongoose.Types.ObjectId(id) : null);
         const empCode = targetEmployee?.employeeId || (typeof id === "string" ? id : "");
@@ -939,7 +1054,8 @@ export const bulkDeleteEmployees = async (req, res) => {
           }
         }
         if (attClauses.length > 0) {
-          await Attendance.deleteMany({ $or: attClauses }).catch(() => {});
+          const attFilter = targetOrgId ? { $and: [orgScope, { $or: attClauses }] } : { $or: attClauses };
+          await Attendance.deleteMany(attFilter).catch(() => {});
         }
 
         // Purge Payroll
@@ -951,7 +1067,8 @@ export const bulkDeleteEmployees = async (req, res) => {
           payClauses.push({ employee: new mongoose.Types.ObjectId(id) });
         }
         if (payClauses.length > 0) {
-          await Payroll.deleteMany({ $or: payClauses }).catch(() => {});
+          const payFilter = targetOrgId ? { $and: [orgScope, { $or: payClauses }] } : { $or: payClauses };
+          await Payroll.deleteMany(payFilter).catch(() => {});
         }
 
         // Purge Leave
@@ -963,13 +1080,18 @@ export const bulkDeleteEmployees = async (req, res) => {
           leaveClauses.push({ employee: new mongoose.Types.ObjectId(id) });
         }
         if (leaveClauses.length > 0) {
-          await Leave.deleteMany({ $or: leaveClauses }).catch(() => {});
+          const leaveFilter = targetOrgId ? { $and: [orgScope, { $or: leaveClauses }] } : { $or: leaveClauses };
+          await Leave.deleteMany(leaveFilter).catch(() => {});
         }
 
         // Purge memory stores
         if (Array.isArray(livePayrollStore)) {
           for (let i = livePayrollStore.length - 1; i >= 0; i--) {
             const p = livePayrollStore[i];
+            if (targetOrgId) {
+              const pOrg = p.organizationId ? String(p.organizationId) : (p.companyId ? String(p.companyId) : null);
+              if (pOrg && pOrg !== String(targetOrgId)) continue;
+            }
             if (p?.employeeId === empCode || String(p?.employee?._id || p?.employee) === String(empObjectId)) {
               livePayrollStore.splice(i, 1);
             }
@@ -985,16 +1107,27 @@ export const bulkDeleteEmployees = async (req, res) => {
         }
 
         // Purge Employee
-        if (empObjectId) {
-          await Employee.findByIdAndDelete(empObjectId).catch(() => {});
-        }
-        await Employee.deleteMany({
-          $or: [
-            ...(empObjectId ? [{ _id: empObjectId }] : []),
-            ...(empCode ? [{ employeeId: empCode }] : []),
-            { employeeId: String(id) },
-          ],
-        }).catch(() => {});
+        const empFilter = targetOrgId
+          ? {
+              $and: [
+                orgScope,
+                {
+                  $or: [
+                    ...(empObjectId ? [{ _id: empObjectId }] : []),
+                    ...(empCode ? [{ employeeId: empCode }] : []),
+                    { employeeId: String(id) },
+                  ],
+                },
+              ],
+            }
+          : {
+              $or: [
+                ...(empObjectId ? [{ _id: empObjectId }] : []),
+                ...(empCode ? [{ employeeId: empCode }] : []),
+                { employeeId: String(id) },
+              ],
+            };
+        await Employee.deleteMany(empFilter).catch(() => {});
 
         // Purge User auth credentials if linked
         if (User) {
@@ -1037,16 +1170,27 @@ export const getDashboardStats = async (req, res) => {
     let employeesPaidCount = 0;
     let totalEmployees = 0;
 
+    const tenantScope = buildTenantScope(req);
+    const userId = req.user?._id || req.user?.id || req.admin?._id || req.admin?.id || "unknown";
+    const userOrgId = req.user?.organizationId || req.user?.companyId || req.organizationId || req.companyId || req.tenantId || "none";
+
     try {
-      totalEmployees = await Employee.countDocuments({
-        $or: [{ status: "active" }, { status: { $exists: false }, isActive: { $ne: false } }],
-      });
+      const allCount = await Employee.countDocuments(tenantScope);
+      if (allCount === 0) {
+        totalEmployees = 0;
+      } else {
+        totalEmployees = await Employee.countDocuments(
+          combineTenantScope(tenantScope, {
+            $or: [{ status: "active" }, { status: { $exists: false }, isActive: { $ne: false } }],
+          })
+        );
+      }
     } catch (err) {
       console.warn("DB employee count error in getDashboardStats:", err.message);
     }
 
     try {
-      const payrollRecords = await Payroll.find({}).lean();
+      const payrollRecords = await Payroll.find(tenantScope).lean();
       if (payrollRecords && payrollRecords.length > 0) {
         payrollRecords.forEach((p) => {
           const net = Number(p.netPay !== undefined ? p.netPay : (p.netSalary !== undefined ? p.netSalary : (p.basicSalary || 0)));

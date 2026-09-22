@@ -224,21 +224,10 @@ export const calculateEmployeeMonthPayroll = async ({
   }
 
   if (!employee) {
-    employee = {
-      _id: employeeIdStr || "emp_default_01",
-      employeeId: "EMP-001",
-      fullName: "Mohammed Awal",
-      email: "awalm8043@gmail.com",
-      department: "Engineering",
-      position: "Frontend Developer",
-      baseSalary: 2500,
-      role: "employee",
-      status: "active",
-      isActive: true,
-    };
+    throw new Error(`Employee not found for payroll calculation: ${employeeIdStr || "unknown"}`);
   }
 
-  const baseSalary = Number(employee.baseSalary ?? employee.salary ?? 2500);
+  const baseSalary = Number(employee.baseSalary ?? employee.salary ?? 0);
 
   // 2. Fetch Employee Attendance Records for the month
   let attendanceRecords = [];
@@ -553,14 +542,18 @@ export const calculateEmployeeMonthPayroll = async ({
 /**
  * Runs batch monthly payroll calculation across all active employees in MongoDB.
  */
-export const calculateAllEmployeesMonthlyRun = async ({ month = null, year = null }) => {
+export const calculateAllEmployeesMonthlyRun = async ({ month = null, year = null, organizationId = null }) => {
   const settings = await getActiveCompanySettings();
   const { year: parsedYear, monthIndex, monthStr, monthName } = parseMonthYear(month, year);
+
+  const tenantFilter = organizationId
+    ? { $or: [{ organizationId }, { companyId: organizationId }] }
+    : {};
 
   // Fetch all active employees from MongoDB Employee and User collections
   let activeEmployees = [];
   try {
-    const dbEmps = await Employee.find({ isActive: { $ne: false }, status: { $ne: "Terminated" } }).lean();
+    const dbEmps = await Employee.find({ ...tenantFilter, isActive: { $ne: false }, status: { $ne: "Terminated" } }).lean();
     if (dbEmps && dbEmps.length > 0) {
       activeEmployees = dbEmps;
     }
@@ -570,7 +563,7 @@ export const calculateAllEmployeesMonthlyRun = async ({ month = null, year = nul
 
   // Also merge any users with employee role not yet in employees list
   try {
-    const dbUsers = await User.find({ role: "employee", status: "active" }).lean();
+    const dbUsers = await User.find({ ...tenantFilter, role: "employee", status: "active" }).lean();
     dbUsers.forEach((u) => {
       if (!activeEmployees.some((e) => String(e._id) === String(u._id) || e.email === u.email)) {
         activeEmployees.push({
@@ -591,19 +584,21 @@ export const calculateAllEmployeesMonthlyRun = async ({ month = null, year = nul
   }
 
   if (activeEmployees.length === 0) {
-    activeEmployees = [
-      {
-        _id: "6650a123456789abcdef0001",
-        employeeId: "EMP-001",
-        fullName: "Mohammed Awal",
-        email: "awalm8043@gmail.com",
-        department: "Engineering",
-        position: "Frontend Developer",
-        baseSalary: 2500,
-        status: "active",
-        isActive: true,
+    return {
+      month: monthStr,
+      monthName,
+      totalEmployees: 0,
+      totalPayrollCost: 0,
+      totalBaseSalary: 0,
+      totalAllowances: 0,
+      totalAbsenceDeductions: 0,
+      totalLatenessDeductions: 0,
+      companySettings: {
+        workStartTime: settings.workStartTime,
+        absenceDeductionRate: settings.absenceDeductionRate,
       },
-    ];
+      employees: [],
+    };
   }
 
   const employeeResults = [];

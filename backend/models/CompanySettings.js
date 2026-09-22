@@ -2,30 +2,11 @@ import mongoose from "mongoose";
 
 const latenessTierSchema = new mongoose.Schema(
   {
-    tier: {
-      type: Number,
-      required: true,
-    },
-    name: {
-      type: String,
-      default: "",
-    },
-    minMinutes: {
-      type: Number,
-      required: true,
-      default: 0,
-    },
-    maxMinutes: {
-      type: Number,
-      required: true,
-      default: 9999,
-    },
-    fine: {
-      type: Number,
-      required: true,
-      default: 0,
-      min: 0,
-    },
+    tier: { type: Number, required: true },
+    name: { type: String, default: "" },
+    minMinutes: { type: Number, required: true, default: 0 },
+    maxMinutes: { type: Number, required: true, default: 9999 },
+    fine: { type: Number, required: true, default: 0, min: 0 },
   },
   { _id: false }
 );
@@ -34,190 +15,195 @@ const companySettingsSchema = new mongoose.Schema(
   {
     companyName: {
       type: String,
-      required: true,
+      default: "WorkPulse",
       trim: true,
-      default: "Enterprise Organization",
+    },
+    name: {
+      type: String,
+      default: "WorkPulse",
+      trim: true,
+    },
+    slug: {
+      type: String,
+      default: "workpulse",
+      trim: true,
+      lowercase: true,
+    },
+    logo: {
+      type: String,
+      default: "",
+      trim: true,
     },
     logoUrl: {
       type: String,
-      default: "/default-logo.png",
+      default: "",
+      trim: true,
+    },
+    companyLogo: {
+      type: String,
+      default: "",
+      trim: true,
+    },
+    companyLogoPublicId: {
+      type: String,
+      default: "",
     },
     welcomeBackgroundUrl: {
       type: String,
       default: "",
+      trim: true,
     },
     primaryColor: {
       type: String,
       default: "#0B1E48",
+      trim: true,
+    },
+    email: {
+      type: String,
+      default: "",
+      trim: true,
+      lowercase: true,
     },
     contactEmail: {
       type: String,
-      trim: true,
-      default: "admin@company.com",
-    },
-    companyEmail: {
-      type: String,
-      trim: true,
       default: "",
+      trim: true,
+      lowercase: true,
+    },
+    phone: {
+      type: String,
+      default: "",
+      trim: true,
     },
     contactPhone: {
       type: String,
-      trim: true,
       default: "",
-    },
-    companyPhone: {
-      type: String,
       trim: true,
-      default: "",
-    },
-    companyAddress: {
-      type: String,
-      trim: true,
-      default: "",
     },
     address: {
       type: String,
-      trim: true,
       default: "",
-    },
-    industry: {
-      type: String,
       trim: true,
-      default: "Technology",
     },
-    numberOfEmployees: {
+    website: {
       type: String,
+      default: "",
       trim: true,
-      default: "11-50",
     },
+
+    // Work / Attendance policies
+    workingHours: {
+      workStartTime: { type: String, default: "08:00" },
+      workEndTime: { type: String, default: "19:00" },
+      workingDays: {
+        type: [String],
+        default: ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday"],
+      },
+    },
+
+    attendanceSettings: {
+      workingDays: {
+        type: [String],
+        default: ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday"],
+      },
+      workStartTime: { type: String, default: "08:00" },
+      workEndTime: { type: String, default: "19:00" },
+      lateAfterMinutes: { type: Number, default: 15 },
+      gracePeriodMinutes: { type: Number, default: 15 },
+      autoCheckoutTime: { type: String, default: "19:30" },
+      autoCheckoutGraceTime: { type: String, default: "19:30" },
+      absenceDeductionRate: { type: Number, default: 15 },
+      overtimeEnabled: { type: Boolean, default: true },
+      latenessTiers: {
+        type: [latenessTierSchema],
+        default: [
+          { tier: 1, name: "Grace Period", minMinutes: 0, maxMinutes: 15, fine: 0 },
+          { tier: 2, name: "Minor Lateness", minMinutes: 16, maxMinutes: 30, fine: 5 },
+          { tier: 3, name: "Moderate Lateness", minMinutes: 31, maxMinutes: 60, fine: 10 },
+          { tier: 4, name: "Severe Lateness", minMinutes: 61, maxMinutes: 9999, fine: 20 },
+        ],
+      },
+    },
+
+    leaveSettings: {
+      annualLeaveDays: { type: Number, default: 15 },
+      sickLeaveDays: { type: Number, default: 10 },
+      casualLeaveDays: { type: Number, default: 5 },
+      maternityLeaveDays: { type: Number, default: 90 },
+      paternityLeaveDays: { type: Number, default: 14 },
+      requireApproval: { type: Boolean, default: true },
+    },
+
+    payrollSettings: {
+      currency: { type: String, default: "GHS" },
+      currencySymbol: { type: String, default: "₵" },
+      payrollFrequency: {
+        type: String,
+        enum: ["Weekly", "Biweekly", "Monthly"],
+        default: "Monthly",
+      },
+      paymentDate: { type: Number, default: 25 },
+      paymentMethods: {
+        type: [String],
+        default: ["Bank Transfer", "Mobile Money", "Cash"],
+      },
+    },
+
+    securitySettings: {
+      twoFactorAuthentication: { type: Boolean, default: false },
+      sessionTimeout: { type: Number, default: 30 },
+      maxLoginAttempts: { type: Number, default: 5 },
+      passwordExpiryDays: { type: Number, default: 90 },
+    },
+
     isConfigured: {
       type: Boolean,
-      default: false,
-    },
-    workStartTime: {
-      type: String,
-      default: "08:00",
-      trim: true,
-    },
-    workEndTime: {
-      type: String,
-      default: "19:00",
-      trim: true,
-    },
-    gracePeriodMinutes: {
-      type: Number,
-      default: 0,
-      min: 0,
-    },
-    absenceDeductionRate: {
-      type: Number,
-      default: 15,
-      min: 0,
-    },
-    lateTier1_amount: {
-      type: Number,
-      default: 10,
-      min: 0,
-    },
-    lateTier2_amount: {
-      type: Number,
-      default: 30,
-      min: 0,
-    },
-    lateTier3_amount: {
-      type: Number,
-      default: 50,
-      min: 0,
-    },
-    lateTier4_amount: {
-      type: Number,
-      default: 75,
-      min: 0,
-    },
-    lateTier5_amount: {
-      type: Number,
-      default: 100,
-      min: 0,
-    },
-    lateTier6_amount: {
-      type: Number,
-      default: 150,
-      min: 0,
-    },
-    maxLatenessPenaltyDeductionPercent: {
-      type: Number,
-      default: 15,
-      min: 1,
-      max: 100,
-    },
-    latenessWarningThresholdPercent: {
-      type: Number,
-      default: 80,
-      min: 1,
-      max: 100,
-    },
-    defaultMonthlyPenaltyCap: {
-      type: Number,
-      default: 200,
-      min: 0,
-    },
-    latenessTiers: {
-      type: [latenessTierSchema],
-      default: () => [
-        { tier: 1, name: "Tier 1 (1–30 mins)", minMinutes: 1, maxMinutes: 30, fine: 10 },
-        { tier: 2, name: "Tier 2 (31–60 mins)", minMinutes: 31, maxMinutes: 60, fine: 30 },
-        { tier: 3, name: "Tier 3 (61–120 mins / 1–2 hrs)", minMinutes: 61, maxMinutes: 120, fine: 50 },
-        { tier: 4, name: "Tier 4 (121–180 mins / 2–3 hrs)", minMinutes: 121, maxMinutes: 180, fine: 75 },
-        { tier: 5, name: "Tier 5 (181–240 mins / 3–4 hrs)", minMinutes: 181, maxMinutes: 240, fine: 100 },
-        { tier: 6, name: "Tier 6 (241+ mins / 4+ hrs)", minMinutes: 241, maxMinutes: 9999, fine: 150 },
-      ],
-    },
-    updatedAt: {
-      type: Date,
-      default: Date.now,
+      default: true,
     },
   },
   {
     timestamps: true,
+    toJSON: { virtuals: true },
+    toObject: { virtuals: true },
   }
 );
 
-// Helper method to retrieve or initialize singleton settings document
-companySettingsSchema.statics.getSingletonSettings = async function () {
-  let doc = await this.findOne().exec();
-  if (!doc) {
-    doc = await this.create({
-      workStartTime: "08:00",
-      workEndTime: "19:00",
-      gracePeriodMinutes: 0,
-      absenceDeductionRate: 15,
-      lateTier1_amount: 10,
-      lateTier2_amount: 30,
-      lateTier3_amount: 50,
-      lateTier4_amount: 75,
-      lateTier5_amount: 100,
-      lateTier6_amount: 150,
-      maxLatenessPenaltyDeductionPercent: 15,
-      latenessWarningThresholdPercent: 80,
-      defaultMonthlyPenaltyCap: 200,
-      latenessTiers: [
-        { tier: 1, name: "Tier 1 (1–30 mins)", minMinutes: 1, maxMinutes: 30, fine: 10 },
-        { tier: 2, name: "Tier 2 (31–60 mins)", minMinutes: 31, maxMinutes: 60, fine: 30 },
-        { tier: 3, name: "Tier 3 (61–120 mins / 1–2 hrs)", minMinutes: 61, maxMinutes: 120, fine: 50 },
-        { tier: 4, name: "Tier 4 (121–180 mins / 2–3 hrs)", minMinutes: 121, maxMinutes: 180, fine: 75 },
-        { tier: 5, name: "Tier 5 (181–240 mins / 3–4 hrs)", minMinutes: 181, maxMinutes: 240, fine: 100 },
-        { tier: 6, name: "Tier 6 (241+ mins / 4+ hrs)", minMinutes: 241, maxMinutes: 9999, fine: 150 },
-      ],
+// Synchronize duplicated aliases so callers referencing .logo or .logoUrl or .name get expected values
+companySettingsSchema.pre("save", function () {
+  if (this.companyName && !this.name) this.name = this.companyName;
+  if (this.name && !this.companyName) this.companyName = this.name;
+  if (this.logo && !this.logoUrl) this.logoUrl = this.logo;
+  if (this.logoUrl && !this.logo) this.logo = this.logoUrl;
+  if (this.logo && !this.companyLogo) this.companyLogo = this.logo;
+  if (this.email && !this.contactEmail) this.contactEmail = this.email;
+  if (this.contactEmail && !this.email) this.email = this.contactEmail;
+  if (this.phone && !this.contactPhone) this.contactPhone = this.phone;
+  if (this.contactPhone && !this.phone) this.phone = this.contactPhone;
+});
+
+/**
+ * Singleton getter: ensures exactly one CompanySettings document exists in this deployment.
+ */
+companySettingsSchema.statics.getSettings = async function () {
+  let settings = await this.findOne();
+  if (!settings) {
+    settings = await this.create({
+      companyName: "WorkPulse",
+      name: "WorkPulse",
+      slug: "workpulse",
+      primaryColor: "#0B1E48",
+      isConfigured: true,
     });
   }
-  return doc;
+  return settings;
 };
 
 export const CompanySettings =
-  mongoose.models.CompanySettings ||
-  mongoose.model("CompanySettings", companySettingsSchema);
+  mongoose.models.CompanySettings || mongoose.model("CompanySettings", companySettingsSchema);
 
+// Backward-compatibility exports for controllers and models during single-tenant refactor
 export const Organization = CompanySettings;
+export const Workspace = CompanySettings;
+export const Settings = CompanySettings;
 
 export default CompanySettings;
-

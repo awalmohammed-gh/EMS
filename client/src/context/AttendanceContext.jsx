@@ -136,22 +136,26 @@ export const AttendanceProvider = ({ children }) => {
 
   // Fetch today's attendance status from server
   const refreshAttendance = useCallback(async (silent = false) => {
+    // Avoid querying employee attendance if in super admin mode
+    if (typeof document !== "undefined" && document.cookie.includes("superAdminToken")) {
+      return;
+    }
+
     const todayStr = getTodayString();
     if (!silent) setIsSyncing(true);
     setError(null);
 
     try {
-      // Query /attendance/now (backed by getTodayAttendance with live memory store fallback)
+      // Query /attendance/today as primary source of truth (with /now fallback)
       let res;
       try {
-        res = await getNowAttendance();
-      } catch {
-        // Fallback to /attendance/today if /now fails
         res = await getTodayAttendance();
+      } catch {
+        res = await getNowAttendance();
       }
 
       if (res?.data?.success) {
-        const rawAtt = res.data.todayRecord || res.data.attendance;
+        const rawAtt = res.data.data !== undefined ? res.data.data : (res.data.todayRecord || res.data.attendance);
         const recordDate = rawAtt?.date || (rawAtt?.clockIn ? new Date(rawAtt.clockIn).toISOString().split("T")[0] : "");
         if (rawAtt && (!recordDate || recordDate === todayStr)) {
           const normalized = normalizeAttendanceRecord(rawAtt, todayStr);
@@ -177,7 +181,9 @@ export const AttendanceProvider = ({ children }) => {
       }
       setLastSyncTime(Date.now());
     } catch (err) {
-      console.warn("Could not refresh today's attendance:", err.message);
+      if (err?.response?.status !== 403 && err?.response?.status !== 401) {
+        console.warn("Could not refresh today's attendance:", err.message);
+      }
       setError(err.message);
     } finally {
       if (!silent) setIsSyncing(false);
@@ -186,6 +192,10 @@ export const AttendanceProvider = ({ children }) => {
 
   // Fetch full attendance history
   const fetchAttendanceHistory = useCallback(async () => {
+    if (typeof document !== "undefined" && document.cookie.includes("superAdminToken")) {
+      return;
+    }
+
     try {
       const res = await getEmployeeAttendance();
       if (res?.data?.success && Array.isArray(res.data.attendance)) {
@@ -203,7 +213,9 @@ export const AttendanceProvider = ({ children }) => {
         }
       }
     } catch (err) {
-      console.warn("Could not fetch attendance history:", err.message);
+      if (err?.response?.status !== 403 && err?.response?.status !== 401) {
+        console.warn("Could not fetch attendance history:", err.message);
+      }
     }
   }, [saveToStorage]);
 

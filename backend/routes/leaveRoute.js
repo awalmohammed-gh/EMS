@@ -9,6 +9,8 @@ import {
   deleteLeave,
 } from "../controllers/leaveController.js";
 import { verifyAdmin } from "../middleware/authAdmin.js";
+import { Leave } from "../models/leaveModel.js";
+import { validateOrganizationAccess } from "../middleware/validateOrganizationAccess.js";
 
 const leaveRouter = express.Router();
 
@@ -28,9 +30,9 @@ leaveRouter.get("/history", employeeAuth, getEmployeeLeave);
 leaveRouter.get("/employee-stats", employeeAuth, getLeaveEmployeeStats);
 leaveRouter.get("/stats", employeeAuth, getLeaveEmployeeStats);
 
-// Delete leave (Employee can delete own pending request, or Admin)
-leaveRouter.delete("/:id", employeeAuth, deleteLeave);
-leaveRouter.delete("/request/:id", employeeAuth, deleteLeave);
+// Delete leave (Employee can delete own pending request, or Admin) - verified with validateOrganizationAccess
+leaveRouter.delete("/:id", employeeAuth, validateOrganizationAccess(Leave), deleteLeave);
+leaveRouter.delete("/request/:id", employeeAuth, validateOrganizationAccess(Leave), deleteLeave);
 
 // ================= Admin =================
 
@@ -38,16 +40,15 @@ leaveRouter.delete("/request/:id", employeeAuth, deleteLeave);
 leaveRouter.get("/all", verifyAdmin, getAllLeaves);
 leaveRouter.get("/", verifyAdmin, getAllLeaves);
 
-// Approve or Reject leave
-leaveRouter.patch("/status/:id", verifyAdmin, updateLeaveStatus);
-leaveRouter.put("/status/:id", verifyAdmin, updateLeaveStatus);
-leaveRouter.patch("/:id/status", verifyAdmin, updateLeaveStatus);
-leaveRouter.put("/:id/status", verifyAdmin, updateLeaveStatus);
-leaveRouter.patch("/:id", verifyAdmin, updateLeaveStatus);
-leaveRouter.put("/:id", verifyAdmin, updateLeaveStatus);
+// Approve or Reject leave - verified with validateOrganizationAccess
+leaveRouter.patch("/status/:id", verifyAdmin, validateOrganizationAccess(Leave), updateLeaveStatus);
+leaveRouter.put("/status/:id", verifyAdmin, validateOrganizationAccess(Leave), updateLeaveStatus);
+leaveRouter.patch("/:id/status", verifyAdmin, validateOrganizationAccess(Leave), updateLeaveStatus);
+leaveRouter.put("/:id/status", verifyAdmin, validateOrganizationAccess(Leave), updateLeaveStatus);
+leaveRouter.patch("/:id", verifyAdmin, validateOrganizationAccess(Leave), updateLeaveStatus);
+leaveRouter.put("/:id", verifyAdmin, validateOrganizationAccess(Leave), updateLeaveStatus);
 
-// Admin-only delete route
-leaveRouter.delete("/admin/:id", verifyAdmin, deleteLeave);
-
+// Admin-only delete route - verified with validateOrganizationAccess
+leaveRouter.delete("/admin/:id", verifyAdmin, validateOrganizationAccess(Leave), deleteLeave);
 
 export default leaveRouter;

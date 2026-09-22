@@ -210,7 +210,7 @@ export const normalizeAttendanceAuditRecords = (records = []) => {
 export const exportAttendanceLogsToCSV = ({
   attendanceList = [],
   periodLabel = "Current Period",
-  companyName = "Enterprise Organization",
+  companyName = "",
   filename,
 }) => {
   const { records, summary } = normalizeAttendanceAuditRecords(attendanceList);
@@ -327,7 +327,7 @@ export const exportAttendanceLogsToCSV = ({
 export const exportAttendanceLogsToPDF = async ({
   attendanceList = [],
   periodLabel = "Current Audit Period",
-  companyName = "Enterprise Organization",
+  companyName = "",
   logoUrl,
   departmentFilter = "All Departments",
   filename,

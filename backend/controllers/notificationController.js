@@ -2,6 +2,7 @@ import mongoose from "mongoose";
 import { Notification } from "../models/notificationModel.js";
 import { Payroll } from "../models/payrollModel.js";
 import { Employee } from "../models/employeeModel.js";
+import { validateOrganizationAccess } from "../utils/validateOrganizationAccess.js";
 
 /**
  * Helper to persist a new notification document into MongoDB
@@ -20,6 +21,8 @@ export const createNotificationRecord = async ({
   action_url = "",
   action_label = "View Details",
   metadata = {},
+  organizationId = null,
+  companyId = null,
 }) => {
   try {
     const doc = await Notification.create({
@@ -38,6 +41,8 @@ export const createNotificationRecord = async ({
       action_url,
       action_label,
       metadata,
+      organizationId: organizationId || companyId || null,
+      companyId: companyId || organizationId || null,
       is_read: false,
       created_at: new Date(),
     });
@@ -111,6 +116,32 @@ export const getNotifications = async (req, res) => {
       };
     }
 
+    const tenantId = req.organizationId || req.companyId || req.user?.organizationId || req.user?.companyId;
+    if (req.user?.role !== "super_admin") {
+      if (!tenantId) {
+        return res.status(200).json({
+          success: true,
+          role: isAdmin ? "admin" : "employee",
+          recipient_id: isAdmin ? "admin" : userId || "employee",
+          notifications: [],
+          unreadCount: 0,
+          counts: { total: 0, unread: 0, leave: 0, payroll: 0, system: 0, announcement: 0 },
+        });
+      }
+      const tenantMatch = {
+        $or: [
+          { organizationId: tenantId },
+          { companyId: tenantId },
+        ],
+      };
+      if (query.$or) {
+        query.$and = [{ $or: query.$or }, tenantMatch];
+        delete query.$or;
+      } else {
+        query.$or = tenantMatch.$or;
+      }
+    }
+
     // Execute mongoose query sorted by created_at descending
     const documents = await Notification.find(query)
       .sort({ created_at: -1 })
@@ -126,9 +157,11 @@ export const getNotifications = async (req, res) => {
         if (req.employee?._id && mongoose.Types.ObjectId.isValid(req.employee._id)) {
           empObjectIds.push(new mongoose.Types.ObjectId(req.employee._id));
         }
+        const tenantScope = tenantId ? { $or: [{ companyId: tenantId }, { organizationId: tenantId }] } : {};
         if (empObjectIds.length === 0 && userId) {
           const empDoc = await Employee.findOne({
             $or: [{ employeeId: userId }, { email: userId }],
+            ...tenantScope,
           }).lean();
           if (empDoc?._id) {
             empObjectIds.push(empDoc._id);
@@ -142,6 +175,7 @@ export const getNotifications = async (req, res) => {
 
         const publishedPayslips = await Payroll.find({
           ...empQuery,
+          ...tenantScope,
           status: { $in: ["Published", "published", "Paid", "paid"] },
         }).lean();
 
@@ -172,6 +206,8 @@ export const getNotifications = async (req, res) => {
               priority: "high",
               action_url: "/employee/dashboard/payslips",
               action_label: "View Payslip",
+              organizationId: tenantId,
+              companyId: tenantId,
               metadata: {
                 payMonth: ps.payMonth,
                 payslipNumber: psNumber,
@@ -267,14 +303,24 @@ export const markNotificationAsRead = async (req, res) => {
       });
     }
 
+    const tenantId = req.organizationId || req.companyId || req.user?.organizationId || req.user?.companyId || req.employee?.organizationId || req.employee?.companyId;
+    const tenantScope = tenantId ? { $or: [{ companyId: tenantId }, { organizationId: tenantId }] } : {};
+
     const isRead = req.body?.is_read !== undefined ? Boolean(req.body.is_read) : true;
     let updatedDoc = null;
     if (mongoose.Types.ObjectId.isValid(id)) {
-      updatedDoc = await Notification.findByIdAndUpdate(
-        id,
-        { $set: { is_read: isRead } },
-        { returnDocument: "after" }
-      );
+      const existing = await Notification.findOne({ _id: id, ...tenantScope });
+      if (existing) {
+        validateOrganizationAccess(existing, req);
+        existing.is_read = isRead;
+        await existing.save();
+        updatedDoc = existing;
+      } else {
+        return res.status(404).json({
+          success: false,
+          message: "Notification not found or access denied.",
+        });
+      }
     }
 
     return res.status(200).json({
@@ -285,7 +331,8 @@ export const markNotificationAsRead = async (req, res) => {
     });
   } catch (error) {
     console.error("Error in markNotificationAsRead:", error);
-    return res.status(500).json({
+    const statusCode = error.message === "Unauthorized" || error.statusCode === 403 ? 403 : 500;
+    return res.status(statusCode).json({
       success: false,
       message: error.message || "Failed to update notification read status.",
     });
@@ -302,13 +349,23 @@ export const markNotificationAsUnread = async (req, res) => {
       });
     }
 
+    const tenantId = req.organizationId || req.companyId || req.user?.organizationId || req.user?.companyId || req.employee?.organizationId || req.employee?.companyId;
+    const tenantScope = tenantId ? { $or: [{ companyId: tenantId }, { organizationId: tenantId }] } : {};
+
     let updatedDoc = null;
     if (mongoose.Types.ObjectId.isValid(id)) {
-      updatedDoc = await Notification.findByIdAndUpdate(
-        id,
-        { $set: { is_read: false } },
-        { returnDocument: "after" }
-      );
+      const existing = await Notification.findOne({ _id: id, ...tenantScope });
+      if (existing) {
+        validateOrganizationAccess(existing, req);
+        existing.is_read = false;
+        await existing.save();
+        updatedDoc = existing;
+      } else {
+        return res.status(404).json({
+          success: false,
+          message: "Notification not found or access denied.",
+        });
+      }
     }
 
     return res.status(200).json({
@@ -319,7 +376,8 @@ export const markNotificationAsUnread = async (req, res) => {
     });
   } catch (error) {
     console.error("Error in markNotificationAsUnread:", error);
-    return res.status(500).json({
+    const statusCode = error.message === "Unauthorized" || error.statusCode === 403 ? 403 : 500;
+    return res.status(statusCode).json({
       success: false,
       message: error.message || "Failed to mark notification as unread.",
     });
@@ -337,12 +395,21 @@ export const toggleNotificationRead = async (req, res) => {
     }
 
     let updatedDoc = null;
+    const tenantId = req.organizationId || req.companyId || req.user?.organizationId || req.user?.companyId || req.employee?.organizationId || req.employee?.companyId;
+    const tenantScope = tenantId ? { $or: [{ companyId: tenantId }, { organizationId: tenantId }] } : {};
+
     if (mongoose.Types.ObjectId.isValid(id)) {
-      const existing = await Notification.findById(id);
+      const existing = await Notification.findOne({ _id: id, ...tenantScope });
       if (existing) {
+        validateOrganizationAccess(existing, req);
         existing.is_read = !existing.is_read;
         await existing.save();
         updatedDoc = existing;
+      } else {
+        return res.status(404).json({
+          success: false,
+          message: "Notification not found or access denied.",
+        });
       }
     }
 
@@ -354,7 +421,8 @@ export const toggleNotificationRead = async (req, res) => {
     });
   } catch (error) {
     console.error("Error in toggleNotificationRead:", error);
-    return res.status(500).json({
+    const statusCode = error.message === "Unauthorized" || error.statusCode === 403 ? 403 : 500;
+    return res.status(statusCode).json({
       success: false,
       message: error.message || "Failed to toggle notification status.",
     });
@@ -380,13 +448,19 @@ export const markAllNotificationsAsRead = async (req, res) => {
       ""
     );
 
-    const filter = isAdmin
-      ? { recipient_role: "admin", is_read: false }
-      : {
-          recipient_role: "employee",
-          is_read: false,
-          ...(userId ? { $or: [{ recipient_id: userId }, { recipient_id: "all_employees" }] } : {}),
-        };
+    const tenantId = req.organizationId || req.companyId || req.user?.organizationId || req.user?.companyId || req.employee?.organizationId || req.employee?.companyId;
+    const tenantScope = tenantId ? { $or: [{ companyId: tenantId }, { organizationId: tenantId }] } : {};
+
+    const filter = {
+      ...tenantScope,
+      ...(isAdmin
+        ? { recipient_role: "admin", is_read: false }
+        : {
+            recipient_role: "employee",
+            is_read: false,
+            ...(userId ? { $or: [{ recipient_id: userId }, { recipient_id: "all_employees" }] } : {}),
+          }),
+    };
 
     // Atomic updateMany query
     const result = await Notification.updateMany(filter, { $set: { is_read: true } });
@@ -425,12 +499,18 @@ export const deleteAllNotifications = async (req, res) => {
       ""
     );
 
-    const filter = isAdmin
-      ? { recipient_role: "admin" }
-      : {
-          recipient_role: "employee",
-          ...(userId ? { $or: [{ recipient_id: userId }, { recipient_id: "all_employees" }] } : {}),
-        };
+    const tenantId = req.organizationId || req.companyId || req.user?.organizationId || req.user?.companyId || req.employee?.organizationId || req.employee?.companyId;
+    const tenantScope = tenantId ? { $or: [{ companyId: tenantId }, { organizationId: tenantId }] } : {};
+
+    const filter = {
+      ...tenantScope,
+      ...(isAdmin
+        ? { recipient_role: "admin" }
+        : {
+            recipient_role: "employee",
+            ...(userId ? { $or: [{ recipient_id: userId }, { recipient_id: "all_employees" }] } : {}),
+          }),
+    };
 
     const result = await Notification.deleteMany(filter);
 
@@ -462,8 +542,20 @@ export const deleteNotification = async (req, res) => {
       });
     }
 
+    const tenantId = req.organizationId || req.companyId || req.user?.organizationId || req.user?.companyId || req.employee?.organizationId || req.employee?.companyId;
+    const tenantScope = tenantId ? { $or: [{ companyId: tenantId }, { organizationId: tenantId }] } : {};
+
     if (mongoose.Types.ObjectId.isValid(id)) {
-      await Notification.findByIdAndDelete(id);
+      const existing = await Notification.findOne({ _id: id, ...tenantScope });
+      if (existing) {
+        validateOrganizationAccess(existing, req);
+        await Notification.deleteOne({ _id: id, ...tenantScope });
+      } else {
+        return res.status(404).json({
+          success: false,
+          message: "Notification not found or access denied.",
+        });
+      }
     }
 
     return res.status(200).json({
@@ -473,7 +565,8 @@ export const deleteNotification = async (req, res) => {
     });
   } catch (error) {
     console.error("Error in deleteNotification:", error);
-    return res.status(500).json({
+    const statusCode = error.message === "Unauthorized" || error.statusCode === 403 ? 403 : 500;
+    return res.status(statusCode).json({
       success: false,
       message: error.message || "Failed to delete notification.",
     });

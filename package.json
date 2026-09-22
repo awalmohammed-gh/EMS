@@ -18,6 +18,12 @@
     "start": "node server.js",
     "seed": "node backend/scripts/seedRealData.js",
     "seed:admin": "node backend/scripts/seedAdmin.js",
+    "test": "node --test tests/tenantIsolation.test.js",
+    "test:isolation": "node --test tests/tenantIsolation.test.js",
+    "audit:aggregations": "node scripts/auditAggregationPipelines.js",
+    "audit:tenant-models": "node backend/scripts/listTenantModels.js",
+    "test:jest": "node --experimental-vm-modules node_modules/jest/bin/jest.js tests/crossCompanyIsolation.jest.test.js --runInBand",
+    "db:purge-test-seeds": "node scripts/purgeMockCompanies.js",
     "lint": "npm run lint --workspace=client"
   },
   "dependencies": {
@@ -40,6 +46,8 @@
     "vite": "^8.2.2"
   },
   "devDependencies": {
-    "concurrently": "^10.0.5"
+    "concurrently": "^10.0.5",
+    "jest": "^30.5.1",
+    "supertest": "^7.2.2"
   }
 }

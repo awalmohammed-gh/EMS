@@ -14,6 +14,7 @@ import {
 import { useManagement } from "../../context/ManagementContextProvider";
 import { getAdminProfile, getSettings } from "../../apis/fontApis";
 import ErrorBoundary from "../../components/ErrorBoundary";
+import { useBranding } from "../../context/BrandingContext";
 
 // Tab Sub-Components
 import ProfileSettings from "./Settings/ProfileSettings";
@@ -96,7 +97,10 @@ const SettingsContent = () => {
     fetchAllSettings(true);
   };
 
+  const { companyName } = useBranding() || {};
+
   if (isLoading) {
+    const orgTitle = companyName ? `${companyName} System Settings` : "System Settings";
     return (
       <div className="flex flex-col items-center justify-center min-h-[400px] w-full p-8 text-center bg-white dark:bg-slate-900 rounded-3xl border border-slate-200/80 dark:border-slate-800 shadow-sm">
         <div className="relative mb-4">
@@ -105,7 +109,7 @@ const SettingsContent = () => {
           </div>
         </div>
         <h3 className="text-base font-bold text-slate-800 dark:text-slate-200">
-          Loading System Settings
+          Loading {orgTitle}...
         </h3>
         <p className="text-xs text-slate-500 dark:text-slate-400 mt-1 max-w-sm">
           Fetching live administration configuration and account parameters from database...

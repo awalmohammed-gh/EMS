@@ -13,55 +13,21 @@ const getJwtSecret = () => process.env.JWT_SECRET || "default_jwt_secret_key_123
 export const protect = async (req, res, next) => {
   try {
     const authHeader = req.headers.authorization;
-    const bearerToken = authHeader && authHeader.startsWith("Bearer ") ? authHeader.slice(7).trim() : null;
+    const bearerToken =
+      authHeader && authHeader.startsWith("Bearer ") ? authHeader.slice(7).trim() : null;
+
     const token =
+      bearerToken ||
       req.cookies?.auth_token ||
       req.cookies?.token ||
-      req.cookies?.employeeToken ||
       req.cookies?.adminToken ||
-      bearerToken ||
+      req.cookies?.employeeToken ||
       req.headers["x-admin-token"] ||
-      req.headers["x-employee-token"];
+      req.headers["x-employee-token"] ||
+      req.headers["x-auth-token"] ||
+      req.headers["x-access-token"];
 
     if (!token) {
-      // In development or preview environments, provide a graceful fallback to active employee
-      if (process.env.NODE_ENV !== "production") {
-        try {
-          const activeEmp =
-            (await Employee.findOne({ status: "active" }).lean()) ||
-            (await Employee.findOne().lean());
-          if (activeEmp) {
-            const empRole = activeEmp.role || "employee";
-            const empId = activeEmp._id.toString();
-            req.user = {
-              _id: empId,
-              id: empId,
-              email: activeEmp.email,
-              fullName: activeEmp.fullName,
-              role: empRole,
-              employeeId: activeEmp.employeeId,
-              department: activeEmp.department,
-              position: activeEmp.position,
-              status: activeEmp.status || "active",
-              isActive: true,
-              userDoc: activeEmp,
-            };
-            req.employee = {
-              _id: empId,
-              id: empId,
-              employeeId: activeEmp.employeeId,
-              role: empRole,
-              email: activeEmp.email,
-              fullName: activeEmp.fullName,
-              department: activeEmp.department,
-            };
-            return next();
-          }
-        } catch (fbErr) {
-          console.warn("[AuthMiddleware] Fallback lookup error:", fbErr.message);
-        }
-      }
-
       return res.status(401).json({
         success: false,
         message: "Authentication required. No authorization token provided.",
@@ -72,44 +38,6 @@ export const protect = async (req, res, next) => {
     try {
       decoded = jwt.verify(token, getJwtSecret());
     } catch (tokenErr) {
-      // If token is expired or invalid in dev/preview, still attempt active employee fallback
-      if (process.env.NODE_ENV !== "production") {
-        try {
-          const activeEmp =
-            (await Employee.findOne({ status: "active" }).lean()) ||
-            (await Employee.findOne().lean());
-          if (activeEmp) {
-            const empRole = activeEmp.role || "employee";
-            const empId = activeEmp._id.toString();
-            req.user = {
-              _id: empId,
-              id: empId,
-              email: activeEmp.email,
-              fullName: activeEmp.fullName,
-              role: empRole,
-              employeeId: activeEmp.employeeId,
-              department: activeEmp.department,
-              position: activeEmp.position,
-              status: activeEmp.status || "active",
-              isActive: true,
-              userDoc: activeEmp,
-            };
-            req.employee = {
-              _id: empId,
-              id: empId,
-              employeeId: activeEmp.employeeId,
-              role: empRole,
-              email: activeEmp.email,
-              fullName: activeEmp.fullName,
-              department: activeEmp.department,
-            };
-            return next();
-          }
-        } catch (fbErr) {
-          // ignore
-        }
-      }
-
       return res.status(401).json({
         success: false,
         message: "Invalid or expired token. Please log in again.",
@@ -127,51 +55,39 @@ export const protect = async (req, res, next) => {
     const userId = decoded.id || decoded._id;
     let activeUser = null;
 
-    // 1. Check MongoDB for active user document
     if (mongoose.connection.readyState === 1) {
       try {
         if (userId && mongoose.Types.ObjectId.isValid(userId)) {
-          activeUser = await User.findById(userId).select("-password").lean();
-        }
-
-        if (!activeUser && decoded.email) {
-          activeUser = await User.findOne({ email: decoded.email.toLowerCase() }).select("-password").lean();
-        }
-
-        // Fallback checks against Employee and Admin collections if User model wasn't populated
-        if (!activeUser && userId && mongoose.Types.ObjectId.isValid(userId)) {
-          activeUser = await Employee.findById(userId).select("-password").lean();
-          if (activeUser) {
-            activeUser.role = activeUser.role || "employee";
+          activeUser = await Admin.findById(userId).select("-password_hash").lean();
+          if (!activeUser) {
+            activeUser = await Employee.findById(userId).select("-password").lean();
+          }
+          if (!activeUser) {
+            activeUser = await User.findById(userId).select("-password").lean();
           }
         }
 
         if (!activeUser && decoded.email) {
-          activeUser = await Employee.findOne({ email: decoded.email.toLowerCase() }).select("-password").lean();
-          if (activeUser) {
-            activeUser.role = activeUser.role || "employee";
+          const email = decoded.email.toLowerCase().trim();
+          activeUser = await Admin.findOne({ email }).select("-password_hash").lean();
+          if (!activeUser) {
+            activeUser = await Employee.findOne({ email }).select("-password").lean();
+          }
+          if (!activeUser) {
+            activeUser = await User.findOne({ email }).select("-password").lean();
           }
         }
 
         if (!activeUser && decoded.employeeId) {
-          activeUser = await Employee.findOne({ employeeId: decoded.employeeId }).select("-password").lean();
-          if (activeUser) {
-            activeUser.role = activeUser.role || "employee";
-          }
-        }
-
-        if (!activeUser && userId && mongoose.Types.ObjectId.isValid(userId)) {
-          activeUser = await Admin.findById(userId).select("-password_hash").lean();
-          if (activeUser) {
-            activeUser.role = activeUser.role || "admin";
-          }
+          activeUser = await Employee.findOne({ employeeId: decoded.employeeId })
+            .select("-password")
+            .lean();
         }
       } catch (dbErr) {
         console.warn("[AuthMiddleware] DB lookup warning:", dbErr.message);
       }
     }
 
-    // 2. Reject suspended or inactive accounts immediately
     if (activeUser) {
       const isStatusInactive =
         (activeUser.status && activeUser.status.toLowerCase() !== "active") ||
@@ -180,22 +96,34 @@ export const protect = async (req, res, next) => {
       if (isStatusInactive) {
         return res.status(401).json({
           success: false,
-          message: "Forbidden: Account is inactive, suspended, or deactivated. Please contact your administrator.",
+          message: "Forbidden: Account is inactive or suspended. Please contact your administrator.",
         });
       }
     }
 
-    // 3. Assemble normalized req.user object
-    const role = activeUser?.role || decoded.role || "employee";
+    const role = (activeUser?.role || decoded.role || "employee").toLowerCase();
     const normalizedId = String(activeUser?._id || userId || decoded.employeeId || "anonymous");
-    const normalizedEmpCode = activeUser?.employeeId || decoded.employeeId || (role === "admin" ? "ADMIN" : "");
+    const normalizedEmpCode =
+      activeUser?.employeeId || decoded.employeeId || (role === "admin" ? "ADMIN" : "");
+
+    req.organizationId = null;
+    req.companyId = null;
+    req.tenantId = null;
+    req.tenantQuery = (baseQuery = {}) => baseQuery;
+    req.ensureTenant = () => true;
 
     req.user = {
       _id: normalizedId,
       id: normalizedId,
       email: activeUser?.email || decoded.email || "",
-      fullName: activeUser?.fullName || activeUser?.full_name || decoded.fullName || decoded.name || "",
-      role: role,
+      fullName:
+        activeUser?.fullName ||
+        activeUser?.full_name ||
+        activeUser?.name ||
+        decoded.fullName ||
+        decoded.name ||
+        "",
+      role,
       employeeId: normalizedEmpCode,
       department: activeUser?.department || decoded.department || "",
       position: activeUser?.position || decoded.position || "",
@@ -204,28 +132,25 @@ export const protect = async (req, res, next) => {
       userDoc: activeUser || null,
     };
 
-    // Role-specific aliases for backward compatibility with existing controllers
-    if (role === "admin" || role === "super_admin") {
-      req.admin = {
-        _id: req.user._id,
-        id: req.user.id,
-        email: req.user.email,
-        role: req.user.role,
-        full_name: req.user.fullName,
-      };
-    } else {
-      req.employee = {
-        _id: req.user._id,
-        id: req.user.id,
-        employeeId: req.user.employeeId,
-        role: req.user.role,
-        email: req.user.email,
-        fullName: req.user.fullName,
-        department: req.user.department,
-      };
-    }
+    req.admin = {
+      _id: req.user._id,
+      id: req.user.id,
+      email: req.user.email,
+      role: req.user.role,
+      full_name: req.user.fullName,
+    };
 
-    return next();
+    req.employee = {
+      _id: req.user._id,
+      id: req.user.id,
+      employeeId: req.user.employeeId,
+      role: req.user.role,
+      email: req.user.email,
+      fullName: req.user.fullName,
+      department: req.user.department,
+    };
+
+    next();
   } catch (error) {
     console.error("[AuthMiddleware] protect error:", error);
     return res.status(401).json({
@@ -236,8 +161,7 @@ export const protect = async (req, res, next) => {
 };
 
 /**
- * Strict Role Verification Middleware (authorize / requireRole)
- * Variadic role guard checking req.user.role against permitted roles.
+ * Role Verification Middleware (authorize / requireRole)
  */
 export const authorize = (...roles) => {
   return (req, res, next) => {
@@ -248,13 +172,8 @@ export const authorize = (...roles) => {
       });
     }
 
-    const userRole = req.user.role || "employee";
-    const allowedRoles = [...roles];
-
-    // Admin role implicitly allows super_admin
-    if (allowedRoles.includes("admin") && !allowedRoles.includes("super_admin")) {
-      allowedRoles.push("super_admin");
-    }
+    const userRole = (req.user.role || "employee").toLowerCase();
+    const allowedRoles = roles.map((r) => r.toLowerCase());
 
     if (!allowedRoles.includes(userRole)) {
       return res.status(403).json({
@@ -267,10 +186,28 @@ export const authorize = (...roles) => {
   };
 };
 
-// Aliases and Convenience Guards
 export const requireRole = authorize;
 export const requireAuth = protect;
-export const requireAdmin = [protect, authorize("admin")];
+export const requireAdmin = [protect, authorize("admin", "manager")];
 export const requireManagerOrAdmin = [protect, authorize("admin", "manager")];
-export const requireEmployee = [protect, authorize("employee", "manager", "hr", "admin")];
+export const requireEmployee = [protect, authorize("employee", "manager", "admin")];
 
+export const requireSuperAdmin = (req, res, next) => {
+  return res.status(404).json({
+    success: false,
+    message: "Super Admin routes are not available in single-company mode.",
+  });
+};
+
+export const superAdminAuth = requireSuperAdmin;
+
+export default {
+  protect,
+  authorize,
+  requireAuth,
+  requireAdmin,
+  requireManagerOrAdmin,
+  requireEmployee,
+  requireSuperAdmin,
+  superAdminAuth,
+};

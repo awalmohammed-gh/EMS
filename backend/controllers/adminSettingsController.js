@@ -2,6 +2,7 @@ import { Settings } from "../models/adminSettingsModel.js";
 import { CompanySettings } from "../models/CompanySettings.js";
 import { AuditLog } from "../models/AuditLog.js";
 import { getStandardizedLatenessTiers } from "../utils/latenessPenaltyCalculator.js";
+import { inMemoryAuditLogs, logAuditAction } from "../utils/auditLogger.js";
 
 // In-memory fallback for penalty settings
 let inMemoryPenaltySettings = {
@@ -25,17 +26,29 @@ let inMemoryPenaltySettings = {
   updatedAt: new Date(),
 };
 
-// In-memory audit fallback
-const inMemoryAuditLogs = [];
-
 // Retrieve company penalty settings (absence rates & lateness tiers)
 export const getPenaltySettings = async (req, res) => {
   try {
     let settingsDoc = null;
+    const tenantId = req.organizationId || req.companyId;
+
     try {
-      settingsDoc = await CompanySettings.findOne().lean();
+      if (tenantId) {
+        settingsDoc = await CompanySettings.findById(tenantId).lean();
+        if (!settingsDoc) {
+          settingsDoc = await CompanySettings.findOne({
+            $or: [{ organizationId: tenantId }, { companyId: tenantId }],
+          }).lean();
+        }
+      }
       if (!settingsDoc) {
-        const created = await CompanySettings.create(inMemoryPenaltySettings);
+        settingsDoc = await CompanySettings.findOne().lean();
+      }
+
+      if (!settingsDoc) {
+        const created = await CompanySettings.create({
+          ...inMemoryPenaltySettings,
+        });
         settingsDoc = created.toObject ? created.toObject() : created;
       }
     } catch (dbErr) {
@@ -65,6 +78,8 @@ export const getPenaltySettings = async (req, res) => {
 // Update company penalty settings (Protected Admin route) with Audit Log recording
 export const updatePenaltySettings = async (req, res) => {
   try {
+    const tenantId = req.organizationId || req.companyId;
+
     const {
       workStartTime,
       absenceDeductionRate,
@@ -79,7 +94,18 @@ export const updatePenaltySettings = async (req, res) => {
     // Fetch existing settings before applying update
     let currentSettings = inMemoryPenaltySettings;
     try {
-      const dbDoc = await CompanySettings.findOne().lean();
+      let dbDoc = null;
+      if (tenantId) {
+        dbDoc = await CompanySettings.findById(tenantId).lean();
+        if (!dbDoc) {
+          dbDoc = await CompanySettings.findOne({
+            $or: [{ organizationId: tenantId }, { companyId: tenantId }],
+          }).lean();
+        }
+      }
+      if (!dbDoc) {
+        dbDoc = await CompanySettings.findOne().lean();
+      }
       if (dbDoc) {
         currentSettings = dbDoc;
       }
@@ -156,8 +182,9 @@ export const updatePenaltySettings = async (req, res) => {
 
     let updatedDoc = null;
     try {
+      const filter = tenantId ? { $or: [{ _id: tenantId }, { organizationId: tenantId }, { companyId: tenantId }] } : {};
       updatedDoc = await CompanySettings.findOneAndUpdate(
-        {},
+        filter,
         { $set: payload },
         { returnDocument: "after", upsert: true, setDefaultsOnInsert: true }
       ).lean();
@@ -189,6 +216,8 @@ export const updatePenaltySettings = async (req, res) => {
       const logEntry = await AuditLog.create({
         action: "UPDATE_ATTENDANCE_PENALTIES",
         category: "Penalties & Deductions",
+        organizationId: tenantId || null,
+        companyId: tenantId || null,
         performedBy,
         target: "Global Attendance Penalties",
         summary: summaryText,
@@ -196,6 +225,7 @@ export const updatePenaltySettings = async (req, res) => {
         metadata: {
           workStartTime: payload.workStartTime,
           absenceDeductionRate: payload.absenceDeductionRate,
+          organizationId: tenantId || null,
         },
         ipAddress: req.ip || req.headers["x-forwarded-for"] || "127.0.0.1",
         userAgent: req.headers["user-agent"] || "Browser",
@@ -236,6 +266,7 @@ export const getAuditLogs = async (req, res) => {
   try {
     const { category, search, limit = 50, page = 1 } = req.query;
     const query = {};
+    const tenantId = req.organizationId || req.companyId;
 
     if (category && category !== "All") {
       query.category = category;
@@ -265,35 +296,6 @@ export const getAuditLogs = async (req, res) => {
     } catch (dbErr) {
       console.warn("DB query for audit logs fallback:", dbErr.message);
       logs = inMemoryAuditLogs;
-      total = inMemoryAuditLogs.length;
-    }
-
-    // If DB is empty, ensure we provide seed/recent log entries for initial view
-    if (!logs || logs.length === 0) {
-      if (inMemoryAuditLogs.length > 0) {
-        logs = inMemoryAuditLogs;
-      } else {
-        logs = [
-          {
-            _id: "seed_audit_01",
-            action: "UPDATE_ATTENDANCE_PENALTIES",
-            category: "Penalties & Deductions",
-            performedBy: {
-              id: "admin_01",
-              name: "System Super Admin",
-              email: "admin@eyenit.com",
-              role: "super_admin",
-            },
-            target: "Global Attendance Penalties",
-            summary: "Initialized company attendance penalty policy: GH₵10.00 absence deduction rate, 08:00 AM start time.",
-            changes: [
-              { field: "workStartTime", label: "Work Shift Start Time", oldValue: "--", newValue: "08:00" },
-              { field: "absenceDeductionRate", label: "Unexcused Absence Rate (GH₵/day)", oldValue: 0, newValue: 10 },
-            ],
-            createdAt: new Date(Date.now() - 3600000 * 24),
-          },
-        ];
-      }
       total = logs.length;
     }
 
@@ -326,7 +328,7 @@ export const getSettings = async (req, res) => {
     // Ensure companySettings singleton values are harmonized
     let compSettings = null;
     try {
-      compSettings = await CompanySettings.getSingletonSettings();
+      compSettings = await CompanySettings.getSettings();
     } catch {
       compSettings = null;
     }
@@ -343,6 +345,11 @@ export const getSettings = async (req, res) => {
     settingsObj.attendance.workEndTime = resolvedEndTime;
     settingsObj.company.workStartTime = resolvedStartTime;
     settingsObj.company.workEndTime = resolvedEndTime;
+    settingsObj.company.companyName = compSettings?.companyName || settingsObj.company.companyName || "WorkPulse";
+    settingsObj.company.logo = compSettings?.logoUrl || compSettings?.logo || settingsObj.company.logo || "";
+    settingsObj.company.email = compSettings?.contactEmail || compSettings?.email || settingsObj.company.email || "";
+    settingsObj.company.phone = compSettings?.contactPhone || compSettings?.phone || settingsObj.company.phone || "";
+    settingsObj.company.address = compSettings?.address || settingsObj.company.address || "";
     settingsObj.workStartTime = resolvedStartTime;
     settingsObj.workEndTime = resolvedEndTime;
 
@@ -367,20 +374,32 @@ export const updateCompanySettings = async (req, res) => {
       { returnDocument: "after", upsert: true },
     );
 
-    // Harmonize work hours across attendance settings and CompanySettings singleton
+    // Synchronize to CompanySettings singleton
+    const compUpdate = {};
+    if (req.body?.companyName || req.body?.name) {
+      compUpdate.companyName = req.body.companyName || req.body.name;
+      compUpdate.name = compUpdate.companyName;
+    }
+    if (req.body?.address !== undefined) compUpdate.address = req.body.address;
+    if (req.body?.phone || req.body?.contactPhone) compUpdate.contactPhone = req.body.phone || req.body.contactPhone;
+    if (req.body?.email || req.body?.contactEmail) compUpdate.contactEmail = req.body.email || req.body.contactEmail;
+    if (req.body?.logo || req.body?.logoUrl) {
+      compUpdate.logoUrl = req.body.logoUrl || req.body.logo;
+      compUpdate.logo = compUpdate.logoUrl;
+    }
+    if (req.body?.workStartTime) compUpdate.workStartTime = req.body.workStartTime;
+    if (req.body?.workEndTime) compUpdate.workEndTime = req.body.workEndTime;
+
+    if (Object.keys(compUpdate).length > 0) {
+      await CompanySettings.findOneAndUpdate({}, { $set: compUpdate }, { upsert: true });
+    }
+
+    // Harmonize work hours across attendance settings
     if (req.body?.workStartTime || req.body?.workEndTime) {
       const attUpdate = {};
-      const compUpdate = {};
-      if (req.body.workStartTime) {
-        attUpdate["attendance.workStartTime"] = req.body.workStartTime;
-        compUpdate.workStartTime = req.body.workStartTime;
-      }
-      if (req.body.workEndTime) {
-        attUpdate["attendance.workEndTime"] = req.body.workEndTime;
-        compUpdate.workEndTime = req.body.workEndTime;
-      }
+      if (req.body.workStartTime) attUpdate["attendance.workStartTime"] = req.body.workStartTime;
+      if (req.body.workEndTime) attUpdate["attendance.workEndTime"] = req.body.workEndTime;
       await Settings.updateOne({}, { $set: attUpdate });
-      await CompanySettings.updateOne({}, { $set: compUpdate });
     }
 
     const adminUser = req.admin || {};
@@ -388,6 +407,8 @@ export const updateCompanySettings = async (req, res) => {
       await AuditLog.create({
         action: "UPDATE_COMPANY_SETTINGS",
         category: "Admin Settings",
+        organizationId: tenantId || null,
+        companyId: tenantId || null,
         performedBy: {
           id: String(adminUser.id || adminUser._id || "admin_01"),
           name: adminUser.fullName || adminUser.full_name || "Administrator",

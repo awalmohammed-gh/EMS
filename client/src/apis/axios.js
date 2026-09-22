@@ -2,11 +2,15 @@ import axios from "axios";
 
 /**
  * Centralized Base URL resolution
- * Defaults to relative /api or custom Vite environment variable
+ * Defaults to relative /api or custom Vite environment variable (ensuring /api suffix)
  */
 const getBaseURL = () => {
   if (typeof window !== "undefined" && import.meta?.env?.VITE_API_URL) {
-    return import.meta.env.VITE_API_URL;
+    let url = String(import.meta.env.VITE_API_URL).trim();
+    if (url && !url.endsWith("/api")) {
+      url = url.replace(/\/+$/, "") + "/api";
+    }
+    return url;
   }
   return "/api";
 };
@@ -47,6 +51,16 @@ api.interceptors.request.use(
   (config) => {
     // Flag for AJAX requests
     config.headers["X-Requested-With"] = "XMLHttpRequest";
+
+    // Normalize duplicate /api prefix when baseURL already includes /api
+    if (config.url && config.url.startsWith("/api/")) {
+      config.url = config.url.replace(/^\/api(?=\/)/, "");
+    }
+
+    // When sending FormData, remove Content-Type so Axios & browser inject multipart/form-data with boundary
+    if (typeof FormData !== "undefined" && config.data instanceof FormData) {
+      delete config.headers["Content-Type"];
+    }
 
     const token =
       inMemoryToken ||
@@ -142,12 +156,11 @@ export const apiService = {
    * Multipart Form-Data upload helper
    */
   upload: (url, formData, onUploadProgress = null, config = {}) => {
+    const uploadHeaders = { ...(config.headers || {}) };
+    delete uploadHeaders["Content-Type"];
     return api.post(url, formData, {
       ...config,
-      headers: {
-        ...(config.headers || {}),
-        "Content-Type": "multipart/form-data",
-      },
+      headers: uploadHeaders,
       onUploadProgress,
     });
   },

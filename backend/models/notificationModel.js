@@ -68,6 +68,18 @@ const notificationSchema = new mongoose.Schema(
       default: false,
       index: true,
     },
+    organizationId: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: "Organization",
+      index: true,
+      default: null,
+    },
+    companyId: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: "Organization",
+      required: true,
+      index: true,
+    },
     created_at: {
       type: Date,
       default: Date.now,
@@ -79,8 +91,18 @@ const notificationSchema = new mongoose.Schema(
   }
 );
 
+notificationSchema.pre("validate", function () {
+  if (!this.organizationId && this.companyId) this.organizationId = this.companyId;
+  if (!this.companyId && this.organizationId) this.companyId = this.organizationId;
+});
+
 // Helpful index for querying notifications by role and recipient
+notificationSchema.index({ companyId: 1, _id: 1 });
+notificationSchema.index({ organizationId: 1, _id: 1 });
 notificationSchema.index({ recipient_role: 1, recipient_id: 1, created_at: -1 });
+notificationSchema.index({ organizationId: 1, recipient_role: 1, recipient_id: 1 });
+notificationSchema.index({ companyId: 1, recipient_role: 1, recipient_id: 1 });
+notificationSchema.index({ companyId: 1, is_read: 1, created_at: -1 });
 
 export const Notification =
   mongoose.models.Notification ||

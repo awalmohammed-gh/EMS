@@ -2,18 +2,18 @@ import multer from "multer";
 import path from "path";
 import fs from "fs";
 import { fileURLToPath } from "url";
-import sharp from "sharp";
+import {
+  brandingUploadDir,
+  storeBrandingAsset,
+  storeBase64Image,
+} from "../services/storageService.js";
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
-// Designated storage path for company branding assets
-export const brandingUploadDir = path.resolve(__dirname, "../uploads/branding");
-if (!fs.existsSync(brandingUploadDir)) {
-  fs.mkdirSync(brandingUploadDir, { recursive: true });
-}
+export { brandingUploadDir };
 
-// In-memory buffer storage so sharp can optimize images before disk writing
+// In-memory buffer storage so Sharp / Cloudinary can optimize images before persistence
 const memoryStorage = multer.memoryStorage();
 
 // File filter strictly allowing standard image formats
@@ -39,92 +39,194 @@ const fileFilter = (req, file, cb) => {
   }
 };
 
-// Multer upload middleware instance (10MB limit per file)
+// Multer upload middleware instance (15MB limit per file, 25MB limit per field to prevent busboy LIMIT_FIELD_VALUE)
 export const uploadBranding = multer({
   storage: memoryStorage,
   limits: {
-    fileSize: 10 * 1024 * 1024, // 10MB limit
+    fileSize: 15 * 1024 * 1024, // 15MB file limit
+    fieldSize: 25 * 1024 * 1024, // 25MB field value limit to prevent premature LIMIT_FIELD_VALUE aborts
+    files: 5,
   },
   fileFilter,
 }).fields([
   { name: "logo", maxCount: 1 },
+  { name: "companyLogo", maxCount: 1 },
+  { name: "logoFile", maxCount: 1 },
   { name: "welcomeBackground", maxCount: 1 },
+  { name: "background", maxCount: 1 },
+  { name: "backgroundImage", maxCount: 1 },
+  { name: "welcomeBg", maxCount: 1 },
+  { name: "bgFile", maxCount: 1 },
 ]);
 
 /**
- * Middleware: Process, optimize, and store uploaded images using Sharp
- * - Logos: Resized to max 800x800, converted to optimized WebP (or preserves SVG), stored to /backend/uploads/branding/
- * - Welcome background: Resized to max 1920x1080, converted to high-efficiency WebP, stored to /backend/uploads/branding/
+ * Middleware: Process, optimize, and store uploaded images using Cloudinary or Sharp
+ * - Logos: Resized to max 800x800, converted to optimized WebP (or preserves SVG)
+ * - Welcome background: Resized to max 1920x1080, converted to high-efficiency WebP
+ * - Base64 fallback: If logo is sent as a Data URL in req.body, safely decodes and stores it
  */
 export const processAndOptimizeBranding = async (req, res, next) => {
-  try {
-    if (!req.files) {
-      return next();
-    }
+  const createdAssets = [];
+  req.createdBrandingAssets = createdAssets;
 
-    const uniqueSuffix = `${Date.now()}-${Math.round(Math.random() * 1e9)}`;
-
-    // 1. Process and optimize company logo
-    if (req.files.logo && req.files.logo[0]) {
-      const logoFile = req.files.logo[0];
-      const isSvg =
-        logoFile.mimetype === "image/svg+xml" ||
-        path.extname(logoFile.originalname).toLowerCase() === ".svg";
-
-      let logoFilename = "";
-      let logoFilePath = "";
-
-      if (isSvg) {
-        // Preserve vectors without rasterization
-        logoFilename = `logo-${uniqueSuffix}.svg`;
-        logoFilePath = path.join(brandingUploadDir, logoFilename);
-        await fs.promises.writeFile(logoFilePath, logoFile.buffer);
-      } else {
-        // Optimize raster logos using Sharp
-        logoFilename = `logo-${uniqueSuffix}.webp`;
-        logoFilePath = path.join(brandingUploadDir, logoFilename);
-        await sharp(logoFile.buffer)
-          .resize({
-            width: 800,
-            height: 800,
-            fit: "inside",
-            withoutEnlargement: true,
-          })
-          .webp({ quality: 90, effort: 4 })
-          .toFile(logoFilePath);
+  const cleanupProcessedAssets = async () => {
+    for (const asset of createdAssets) {
+      try {
+        await deleteStoredAsset(asset);
+      } catch (e) {
+        // continue
       }
+    }
+  };
 
-      // Populate file properties for controller access
-      logoFile.filename = logoFilename;
-      logoFile.path = logoFilePath;
-      logoFile.publicUrl = `/uploads/branding/${logoFilename}`;
+  try {
+    // Normalize field aliases so controller and processing logic consistently receive req.files.logo and req.files.welcomeBackground
+    if (req.files) {
+      if (!req.files.logo) {
+        const aliasLogo = req.files.companyLogo || req.files.logoFile;
+        if (aliasLogo) req.files.logo = aliasLogo;
+      }
+      if (!req.files.welcomeBackground) {
+        const aliasBg =
+          req.files.background ||
+          req.files.backgroundImage ||
+          req.files.welcomeBg ||
+          req.files.bgFile;
+        if (aliasBg) req.files.welcomeBackground = aliasBg;
+      }
     }
 
-    // 2. Process and optimize welcome background image
-    if (req.files.welcomeBackground && req.files.welcomeBackground[0]) {
+    // 1. Process uploaded company logo file
+    if (req.files?.logo && req.files.logo[0]) {
+      const logoFile = req.files.logo[0];
+      const result = await storeBrandingAsset({
+        buffer: logoFile.buffer,
+        originalFilename: logoFile.originalname,
+        mimetype: logoFile.mimetype,
+        folder: "workpulse/companies",
+        prefix: "logo",
+        maxWidth: 800,
+        maxHeight: 800,
+        quality: 90,
+      });
+
+      logoFile.filename = path.basename(result.url);
+      logoFile.path = result.filePath || "";
+      logoFile.publicUrl = result.url;
+      logoFile.publicId = result.publicId;
+      logoFile.storage = result.storage;
+
+      createdAssets.push({
+        publicId: result.publicId,
+        url: result.url,
+        storage: result.storage,
+        filePath: result.filePath,
+      });
+    }
+
+    // 2. Process uploaded welcome background image file
+    if (req.files?.welcomeBackground && req.files.welcomeBackground[0]) {
       const bgFile = req.files.welcomeBackground[0];
-      const bgFilename = `bg-${uniqueSuffix}.webp`;
-      const bgFilePath = path.join(brandingUploadDir, bgFilename);
+      const result = await storeBrandingAsset({
+        buffer: bgFile.buffer,
+        originalFilename: bgFile.originalname,
+        mimetype: bgFile.mimetype,
+        folder: "workpulse/companies/backgrounds",
+        prefix: "bg",
+        maxWidth: 1920,
+        maxHeight: 1080,
+        quality: 85,
+      });
 
-      await sharp(bgFile.buffer)
-        .resize({
-          width: 1920,
-          height: 1080,
-          fit: "inside",
-          withoutEnlargement: true,
-        })
-        .webp({ quality: 85, effort: 4 })
-        .toFile(bgFilePath);
+      bgFile.filename = path.basename(result.url);
+      bgFile.path = result.filePath || "";
+      bgFile.publicUrl = result.url;
+      bgFile.publicId = result.publicId;
+      bgFile.storage = result.storage;
 
-      // Populate file properties for controller access
-      bgFile.filename = bgFilename;
-      bgFile.path = bgFilePath;
-      bgFile.publicUrl = `/uploads/branding/${bgFilename}`;
+      createdAssets.push({
+        publicId: result.publicId,
+        url: result.url,
+        storage: result.storage,
+        filePath: result.filePath,
+      });
+    }
+
+    // 3. Fallback: If no logo file was uploaded, but a Base64 Data URL was supplied in req.body
+    const rawLogoBody = req.body?.logo || req.body?.companyLogo || req.body?.logoPreview;
+    if (!req.files?.logo?.[0] && typeof rawLogoBody === "string" && rawLogoBody.startsWith("data:")) {
+      try {
+        const result = await storeBase64Image(rawLogoBody, {
+          folder: "workpulse/companies",
+          prefix: "logo",
+          maxWidth: 800,
+          maxHeight: 800,
+          quality: 90,
+        });
+
+        // Set clean URL in req.body and remove raw base64 string
+        req.body.logo = result.url;
+        req.body.companyLogo = result.url;
+        req.body.companyLogoPublicId = result.publicId;
+        req.body.logoStorage = result.storage;
+        delete req.body.logoPreview;
+
+        createdAssets.push({
+          publicId: result.publicId,
+          url: result.url,
+          storage: result.storage,
+          filePath: result.filePath,
+        });
+      } catch (b64Err) {
+        await cleanupProcessedAssets();
+        return res.status(b64Err.statusCode || 400).json({
+          success: false,
+          message: b64Err.message || "Failed to process Base64 company logo.",
+        });
+      }
+    } else if (req.body?.logoPreview) {
+      // Discard logoPreview if a file is already present to prevent base64 leaks
+      delete req.body.logoPreview;
+    }
+
+    // 4. Fallback: If no background file was uploaded, but a Base64 Data URL was supplied in req.body
+    const rawBgBody = req.body?.welcomeBackground || req.body?.backgroundPreview;
+    if (!req.files?.welcomeBackground?.[0] && typeof rawBgBody === "string" && rawBgBody.startsWith("data:")) {
+      try {
+        const result = await storeBase64Image(rawBgBody, {
+          folder: "workpulse/companies/backgrounds",
+          prefix: "bg",
+          maxWidth: 1920,
+          maxHeight: 1080,
+          quality: 85,
+        });
+
+        req.body.welcomeBackground = result.url;
+        req.body.welcomeBackgroundUrl = result.url;
+        req.body.backgroundPublicId = result.publicId;
+        delete req.body.backgroundPreview;
+
+        createdAssets.push({
+          publicId: result.publicId,
+          url: result.url,
+          storage: result.storage,
+          filePath: result.filePath,
+        });
+      } catch (b64Err) {
+        await cleanupProcessedAssets();
+        return res.status(b64Err.statusCode || 400).json({
+          success: false,
+          message: b64Err.message || "Failed to process Base64 welcome background.",
+        });
+      }
+    } else if (req.body?.backgroundPreview) {
+      delete req.body.backgroundPreview;
     }
 
     next();
   } catch (err) {
-    console.error("[BrandingUpload] Sharp image optimization error:", err);
+    await cleanupProcessedAssets();
+    console.error("[BrandingUpload] Sharp/Cloudinary image optimization error:", err);
     return res.status(500).json({
       success: false,
       message: "Image optimization failed. Please verify the uploaded image file.",
@@ -139,7 +241,13 @@ export const handleBrandingUploadError = (err, req, res, next) => {
     if (err.code === "LIMIT_FILE_SIZE") {
       return res.status(400).json({
         success: false,
-        message: "Brand asset file size exceeds the 10MB maximum limit.",
+        message: "Company logo must be smaller than 10MB.",
+      });
+    }
+    if (err.code === "LIMIT_FIELD_VALUE") {
+      return res.status(400).json({
+        success: false,
+        message: `Field value too long for '${err.field || "form field"}'. Please upload images as image files rather than large text strings.`,
       });
     }
     return res.status(400).json({

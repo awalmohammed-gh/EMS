@@ -8,6 +8,8 @@ import {
   evaluateLatenessPenalty,
   getStandardizedLatenessTiers,
 } from "../utils/latenessPenaltyCalculator.js";
+import { buildTenantScope, combineTenantScope } from "../utils/tenantScope.js";
+import { validateOrganizationAccess } from "../utils/validateOrganizationAccess.js";
 
 const MONTH_NAMES = [
   "January", "February", "March", "April", "May", "June",
@@ -123,10 +125,13 @@ export const getPayrollForecasting = async (req, res) => {
     const { year: parsedYear, monthIndex, monthStr, monthName } = parseMonthYear(month, year);
     const workingDaysInfo = getWorkingDaysTelemetry(parsedYear, monthIndex);
 
+    const tenantScope = buildTenantScope(req);
+    const tenantId = req.companyId || req.organizationId || req.user?.companyId || req.user?.organizationId;
+
     // Fetch company settings for lateness tier rules
     let settings = {};
     try {
-      const dbSettings = await CompanySettings.findOne().lean();
+      const dbSettings = tenantId ? (await CompanySettings.findById(tenantId).lean() || await CompanySettings.findOne(tenantScope).lean()) : await CompanySettings.findOne(tenantScope).lean();
       if (dbSettings) settings = dbSettings;
     } catch {
       // Fallback
@@ -134,12 +139,14 @@ export const getPayrollForecasting = async (req, res) => {
 
     const tiersConfig = getStandardizedLatenessTiers(settings);
 
-    // Fetch all active employees
+    // Fetch all active employees scoped to tenant
     let employees = [];
     try {
-      const empDocs = await Employee.find({
-        $or: [{ status: { $regex: /active/i } }, { isActive: true }, { status: { $exists: false } }],
-      })
+      const empDocs = await Employee.find(
+        combineTenantScope(tenantScope, {
+          $or: [{ status: { $regex: /active/i } }, { isActive: true }, { status: { $exists: false } }],
+        })
+      )
         .select("_id employeeId fullName firstName lastName email department position baseSalary salary avatar profilePicture profile_image_url status")
         .lean();
 
@@ -153,9 +160,11 @@ export const getPayrollForecasting = async (req, res) => {
     // Fallback to User collection if Employee collection is sparse
     if (employees.length === 0) {
       try {
-        const userDocs = await User.find({
-          role: { $in: ["employee", "staff"] },
-        })
+        const userDocs = await User.find(
+          combineTenantScope(tenantScope, {
+            role: { $in: ["employee", "staff"] },
+          })
+        )
           .select("_id employeeId fullName email department position baseSalary salary avatar profilePicture profile_image_url")
           .lean();
         if (userDocs && userDocs.length > 0) {
@@ -166,71 +175,22 @@ export const getPayrollForecasting = async (req, res) => {
       }
     }
 
-    // Default seed fallback if database is completely empty
-    if (employees.length === 0) {
-      employees = [
-        {
-          _id: "emp_default_01",
-          employeeId: "EMP-1001",
-          fullName: "Mohammed Awal",
-          email: "awalm8043@gmail.com",
-          department: "Engineering",
-          position: "Frontend Developer",
-          baseSalary: 12500,
-        },
-        {
-          _id: "emp_default_02",
-          employeeId: "EMP-1002",
-          fullName: "Kwame Mensah",
-          email: "kwame.mensah@techcorp.com",
-          department: "Engineering",
-          position: "Senior Backend Engineer",
-          baseSalary: 14000,
-        },
-        {
-          _id: "emp_default_03",
-          employeeId: "EMP-1003",
-          fullName: "Ama Boateng",
-          email: "ama.boateng@techcorp.com",
-          department: "Operations",
-          position: "Operations Lead",
-          baseSalary: 9500,
-        },
-        {
-          _id: "emp_default_04",
-          employeeId: "EMP-1004",
-          fullName: "Kofi Appiah",
-          email: "kofi.appiah@techcorp.com",
-          department: "Sales",
-          position: "Account Executive",
-          baseSalary: 8200,
-        },
-        {
-          _id: "emp_default_05",
-          employeeId: "EMP-1005",
-          fullName: "Efua Darko",
-          email: "efua.darko@techcorp.com",
-          department: "Human Resources",
-          position: "HR Specialist",
-          baseSalary: 7800,
-        },
-      ];
-    }
-
-    // Fetch all attendance records for the month
+    // Fetch all attendance records for the month scoped to tenant
     let allMonthAttendance = [];
     try {
-      const dbAttendance = await Attendance.find({
-        $or: [
-          { date: { $regex: `^${monthStr}` } },
-          {
-            clockIn: {
-              $gte: new Date(parsedYear, monthIndex, 1),
-              $lte: new Date(parsedYear, monthIndex + 1, 0, 23, 59, 59),
+      const dbAttendance = await Attendance.find(
+        combineTenantScope(tenantScope, {
+          $or: [
+            { date: { $regex: `^${monthStr}` } },
+            {
+              clockIn: {
+                $gte: new Date(parsedYear, monthIndex, 1),
+                $lte: new Date(parsedYear, monthIndex + 1, 0, 23, 59, 59),
+              },
             },
-          },
-        ],
-      }).lean();
+          ],
+        })
+      ).lean();
 
       if (dbAttendance && dbAttendance.length > 0) {
         allMonthAttendance = dbAttendance;
@@ -242,6 +202,10 @@ export const getPayrollForecasting = async (req, res) => {
     // Merge live in-memory attendance store
     if (Array.isArray(liveAttendanceStore)) {
       liveAttendanceStore.forEach((liveAtt) => {
+        if (tenantId) {
+          const recordOrg = liveAtt.organizationId || liveAtt.companyId;
+          if (recordOrg && String(recordOrg) !== String(tenantId)) return;
+        }
         if (liveAtt.date && liveAtt.date.startsWith(monthStr)) {
           const idx = allMonthAttendance.findIndex(
             (a) =>
@@ -645,61 +609,65 @@ export const getEmployeeForecasting = async (req, res) => {
     const { year: parsedYear, monthIndex, monthStr, monthName } = parseMonthYear(month, year);
     const workingDaysInfo = getWorkingDaysTelemetry(parsedYear, monthIndex);
 
+    const tenantScope = buildTenantScope(req);
+    const tenantId = req.companyId || req.organizationId || req.user?.companyId || req.user?.organizationId;
+
     // Settings
     let settings = {};
     try {
-      const dbSettings = await CompanySettings.findOne().lean();
+      const dbSettings = tenantId ? (await CompanySettings.findById(tenantId).lean() || await CompanySettings.findOne(tenantScope).lean()) : await CompanySettings.findOne(tenantScope).lean();
       if (dbSettings) settings = dbSettings;
     } catch {
       // Fallback
     }
 
-    // Lookup employee
+    // Lookup employee strictly scoped to tenant
     let employee = null;
     try {
       if (mongoose.Types.ObjectId.isValid(id)) {
-        employee = await Employee.findById(id).lean();
+        employee = await Employee.findOne(combineTenantScope(tenantScope, { _id: id })).lean();
       }
       if (!employee) {
-        employee = await Employee.findOne({
-          $or: [{ employeeId: id }, { email: id }],
-        }).lean();
+        employee = await Employee.findOne(
+          combineTenantScope(tenantScope, {
+            $or: [{ employeeId: id }, { email: id }],
+          })
+        ).lean();
       }
       if (!employee && mongoose.Types.ObjectId.isValid(id)) {
-        employee = await User.findById(id).lean();
+        employee = await User.findOne(combineTenantScope(tenantScope, { _id: id })).lean();
       }
     } catch (err) {
       console.warn("Error finding employee in getEmployeeForecasting:", err.message);
     }
 
     if (!employee) {
-      employee = {
-        _id: id || "emp_fallback",
-        employeeId: "EMP-1001",
-        fullName: "Mohammed Awal",
-        email: "awalm8043@gmail.com",
-        department: "Engineering",
-        position: "Frontend Developer",
-        baseSalary: 12500,
-      };
+      return res.status(404).json({
+        success: false,
+        message: "Employee record not found in your company workspace.",
+      });
     }
+
+    validateOrganizationAccess(employee, req);
 
     const baseSalary = Number(employee.baseSalary || employee.salary || 12500);
 
-    // Attendance query
+    // Attendance query scoped to tenant
     let attendanceRecords = [];
     try {
-      attendanceRecords = await Attendance.find({
-        $and: [
-          {
-            $or: [
-              { employee: employee._id },
-              { employeeId: employee.employeeId },
-            ],
-          },
-          { date: { $regex: `^${monthStr}` } },
-        ],
-      }).lean();
+      attendanceRecords = await Attendance.find(
+        combineTenantScope(tenantScope, {
+          $and: [
+            {
+              $or: [
+                { employee: employee._id },
+                { employeeId: employee.employeeId },
+              ],
+            },
+            { date: { $regex: `^${monthStr}` } },
+          ],
+        })
+      ).lean();
     } catch {
       // Ignore
     }
@@ -789,7 +757,8 @@ export const getEmployeeForecasting = async (req, res) => {
     });
   } catch (error) {
     console.error("Error in getEmployeeForecasting:", error);
-    return res.status(500).json({
+    const statusCode = error.message === "Unauthorized" || error.statusCode === 403 ? 403 : (error.statusCode || 500);
+    return res.status(statusCode).json({
       success: false,
       message: error.message || "Failed to calculate employee forecast.",
     });

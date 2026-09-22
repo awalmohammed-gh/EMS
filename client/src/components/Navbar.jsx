@@ -8,10 +8,12 @@ import {
   Calendar,
   ExternalLink,
   CheckCircle2,
+  History,
 } from "lucide-react";
 import { useManagement } from "../context/ManagementContextProvider";
 import NotificationBell from "./NotificationBell";
 import Avatar from "./Avatar";
+import ThemeToggle from "./ThemeToggle";
 
 // Helper to extract dynamic initials from full name
 const getInitials = (name, fallback = "EM") => {
@@ -36,7 +38,7 @@ export const Navbar = ({ role: propsRole }) => {
   const isAdmin =
     propsRole === "admin" ||
     (!propsRole && isAdminRoute) ||
-    ((user?.role === "admin" || user?.role === "super_admin" || user?.is_admin === true || contextRole === "admin") &&
+    ((user?.role === "admin" || user?.is_admin === true || contextRole === "admin") &&
       !isEmployeeRoute &&
       propsRole !== "employee");
 
@@ -71,14 +73,23 @@ export const Navbar = ({ role: propsRole }) => {
     user?.fullName ||
     user?.full_name ||
     user?.name ||
-    "Mohammed Awal"
+    "Staff Member"
   ).trim();
-  const employeeEmail = user?.email || "awalm8043@gmail.com";
-  const employeePosition = user?.position || user?.job_title || "Frontend Developer";
-  const employeeInitials = getInitials(employeeFullName, "MA");
+  const employeeEmail = user?.email || "";
+  const employeePosition = user?.position || user?.job_title || "Staff Member";
+  const employeeInitials = getInitials(employeeFullName, "EM");
 
-  const adminTitle = "Super Admin";
-  const adminInitials = "SA";
+  const adminFullName = (
+    admin?.fullName ||
+    admin?.full_name ||
+    admin?.name ||
+    user?.fullName ||
+    user?.full_name ||
+    user?.name ||
+    "Administrator"
+  ).trim();
+  const adminTitle = user?.role === "manager" ? "Manager" : "Administrator";
+  const adminInitials = getInitials(adminFullName, "AD");
 
   return (
     <header
@@ -87,8 +98,13 @@ export const Navbar = ({ role: propsRole }) => {
     >
       <div className="w-full max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
         <div className="flex items-center justify-end h-16 w-full">
-          {/* Right Section: Notification Bell + User Profile Menu */}
+          {/* Right Section: Notification Bell + Theme Toggle + User Profile Menu */}
           <div className="flex items-center justify-end ml-auto gap-2 sm:gap-3.5">
+            {/* Persistent UI Theme Toggle Button */}
+            <div className="relative shrink-0">
+              <ThemeToggle id="navbar-theme-toggle-btn" />
+            </div>
+
             {/* Notification Bell */}
             <div className="relative shrink-0">
               <NotificationBell
@@ -197,7 +213,7 @@ export const Navbar = ({ role: propsRole }) => {
                                 : "bg-[#ff5500] text-white shadow-sm"
                             }`}
                           >
-                            {isAdmin ? "Super Admin" : employeePosition}
+                            {isAdmin ? adminTitle : employeePosition}
                           </span>
                           <span className="text-[10px] text-[#64748B] dark:text-slate-400 font-medium flex items-center gap-1">
                             <CheckCircle2 className="w-3 h-3 text-[#16A34A]" />
@@ -252,6 +268,18 @@ export const Navbar = ({ role: propsRole }) => {
                       <Calendar className="w-4 h-4 text-[#64748B] dark:text-slate-400" />
                       <span>Leave & Time Off</span>
                     </Link>
+
+                    {isAdmin && (
+                      <Link
+                        to="/admin/dashboard/activity"
+                        onClick={() => setIsProfileMenuOpen(false)}
+                        className="flex items-center gap-3 px-3 py-2 text-xs font-semibold text-[#0F172A] dark:text-slate-200 hover:bg-[#F8FAFC] dark:hover:bg-slate-800 hover:text-[#002185] dark:hover:text-blue-400 rounded-xl transition-colors duration-150"
+                        role="menuitem"
+                      >
+                        <History className="w-4 h-4 text-[#64748B] dark:text-slate-400" />
+                        <span>Activity Audit Trail</span>
+                      </Link>
+                    )}
 
                     {isAdmin && (
                       <Link

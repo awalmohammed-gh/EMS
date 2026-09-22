@@ -5,14 +5,19 @@ const userSchema = new mongoose.Schema(
   {
     fullName: {
       type: String,
-      required: true,
       trim: true,
+      default: "",
+    },
+
+    name: {
+      type: String,
+      trim: true,
+      default: "",
     },
 
     email: {
       type: String,
       required: true,
-      unique: true,
       lowercase: true,
       trim: true,
     },
@@ -24,13 +29,22 @@ const userSchema = new mongoose.Schema(
 
     role: {
       type: String,
-      enum: ["admin", "employee", "manager", "hr", "staff"],
+      enum: ["admin", "manager", "employee", "company_admin", "hr", "staff"],
       default: "employee",
+      required: true,
+    },
+
+    companyId: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: "CompanySettings",
+      default: null,
+      index: true,
     },
 
     organizationId: {
       type: mongoose.Schema.Types.ObjectId,
       ref: "CompanySettings",
+      index: true,
       default: null,
     },
 
@@ -75,6 +89,11 @@ const userSchema = new mongoose.Schema(
   },
 );
 
+userSchema.pre("validate", function () {
+  if (!this.fullName && this.name) this.fullName = this.name;
+  if (!this.name && this.fullName) this.name = this.fullName;
+});
+
 // Pre-save hook for password hashing (prevents double-hashing)
 userSchema.pre("save", async function () {
   if (!this.isModified("password")) return;
@@ -93,6 +112,8 @@ userSchema.methods.comparePassword = async function (candidatePassword) {
   return bcrypt.compare(candidatePassword, this.password);
 };
 
+userSchema.index({ email: 1 }, { unique: true });
+userSchema.index({ role: 1 });
 userSchema.index({ role: 1, status: 1 });
 
 export const User = mongoose.models.User || mongoose.model("User", userSchema);

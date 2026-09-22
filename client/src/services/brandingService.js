@@ -9,15 +9,15 @@ export const brandingService = {
       const res = await api.get("/company/public-branding");
       return res.data;
     } catch (err) {
-      console.warn("[BrandingService] Using fallback branding due to error:", err.message);
+      console.warn("[BrandingService] Public branding error:", err.message);
       return {
-        success: true,
+        success: false,
         company: {
-          companyName: "Enterprise Organization",
-          logoUrl: "/eyenit_logo.png",
+          companyName: "",
+          logoUrl: "",
           welcomeBackgroundUrl: "",
           primaryColor: "#0B1E48",
-          contactEmail: "admin@company.com",
+          contactEmail: "",
           isConfigured: false,
         },
         isConfigured: false,
@@ -26,7 +26,7 @@ export const brandingService = {
   },
 
   /**
-   * Check organization setup and configuration status
+   * Check company setup and configuration status
    */
   getCompanyStatus: async () => {
     try {
@@ -63,22 +63,10 @@ export const brandingService = {
   },
 
   /**
-   * Register new organization (multipart form data with logo and welcomeBackground)
-   */
-  registerOrganization: async (formData) => {
-    const isFormData = typeof FormData !== "undefined" && formData instanceof FormData;
-    const headers = isFormData ? { "Content-Type": "multipart/form-data" } : {};
-    const res = await api.post("/company/register-organization", formData, { headers });
-    return res.data;
-  },
-
-  /**
    * Upload and optimize brand assets via standalone endpoint
    */
   uploadBrandAssets: async (formData) => {
-    const isFormData = typeof FormData !== "undefined" && formData instanceof FormData;
-    const headers = isFormData ? { "Content-Type": "multipart/form-data" } : {};
-    const res = await api.post("/company/upload-assets", formData, { headers });
+    const res = await api.post("/company/upload-assets", formData);
     return res.data;
   },
 
@@ -86,9 +74,7 @@ export const brandingService = {
    * Submit initial setup wizard registration
    */
   setupInitialCompany: async (formData) => {
-    const isFormData = typeof FormData !== "undefined" && formData instanceof FormData;
-    const headers = isFormData ? { "Content-Type": "multipart/form-data" } : {};
-    const res = await api.post("/company/setup", formData, { headers });
+    const res = await api.post("/company/setup", formData);
     return res.data;
   },
 
@@ -104,9 +90,7 @@ export const brandingService = {
    * Update company branding assets and organization info (authenticated)
    */
   updateAdminBranding: async (formData) => {
-    const isFormData = typeof FormData !== "undefined" && formData instanceof FormData;
-    const headers = isFormData ? { "Content-Type": "multipart/form-data" } : {};
-    const res = await api.put("/company/branding", formData, { headers });
+    const res = await api.put("/company/branding", formData);
     return res.data;
   },
 };

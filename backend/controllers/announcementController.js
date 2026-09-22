@@ -20,6 +20,8 @@ export const getAnnouncements = async (req, res) => {
     let dbAnnouncements = [];
     try {
       const query = {};
+      const tenantId = req.organizationId || req.companyId;
+
       if (category && category !== "All") {
         query.category = category;
       }
@@ -36,6 +38,29 @@ export const getAnnouncements = async (req, res) => {
         ];
       }
 
+      if (req.user?.role !== "super_admin") {
+        if (!tenantId) {
+          return res.status(200).json({
+            success: true,
+            total: 0,
+            pinnedCount: 0,
+            announcements: [],
+          });
+        }
+        const tenantFilter = {
+          $or: [
+            { organizationId: tenantId },
+            { companyId: tenantId },
+          ],
+        };
+        if (query.$or) {
+          query.$and = [{ $or: query.$or }, tenantFilter];
+          delete query.$or;
+        } else {
+          query.$or = tenantFilter.$or;
+        }
+      }
+
       dbAnnouncements = await Announcement.find(query)
         .populate("createdBy", "fullName email role name")
         .sort({ isPinned: -1, createdAt: -1 })
@@ -50,6 +75,12 @@ export const getAnnouncements = async (req, res) => {
 
     liveAnnouncementStore.forEach((liveItem) => {
       if (!existingIds.has(String(liveItem._id || liveItem.id))) {
+        const itemTenant = liveItem.organizationId || liveItem.companyId;
+        if (req.user?.role !== "super_admin") {
+          if (!tenantId || (itemTenant !== tenantId && String(itemTenant) !== String(tenantId))) {
+            return;
+          }
+        }
         let match = true;
         if (category && category !== "All" && liveItem.category !== category) match = false;
         if (priority && priority !== "All" && liveItem.priority !== priority.toLowerCase()) match = false;
@@ -100,9 +131,12 @@ export const getAnnouncementById = async (req, res) => {
     const { id } = req.params;
     let announcement = null;
 
+    const tenantId = req.organizationId || req.companyId || req.user?.companyId || req.employee?.companyId;
+    const tenantScope = tenantId ? { $or: [{ companyId: tenantId }, { organizationId: tenantId }] } : {};
+
     if (mongoose.Types.ObjectId.isValid(id)) {
       try {
-        announcement = await Announcement.findById(id)
+        announcement = await Announcement.findOne({ _id: id, ...tenantScope })
           .populate("createdBy", "fullName email role name")
           .lean();
       } catch (dbErr) {
@@ -112,7 +146,11 @@ export const getAnnouncementById = async (req, res) => {
 
     // Check reactive in-memory cache if not found in DB
     if (!announcement) {
-      const liveItem = liveAnnouncementStore.find((a) => String(a._id) === String(id));
+      const liveItem = liveAnnouncementStore.find(
+        (a) =>
+          String(a._id) === String(id) &&
+          (!tenantId || !a.companyId || String(a.companyId) === String(tenantId) || String(a.organizationId) === String(tenantId))
+      );
       if (liveItem) {
         announcement = { ...liveItem };
       }
@@ -121,7 +159,7 @@ export const getAnnouncementById = async (req, res) => {
     if (!announcement) {
       return res.status(404).json({
         success: false,
-        message: "Announcement not found.",
+        message: "Announcement not found or access denied.",
       });
     }
 
@@ -266,6 +304,7 @@ export const createAnnouncement = async (req, res) => {
     const creatorId = req.admin?.id || req.admin?._id;
 
     let savedDoc = null;
+    const tenantId = req.organizationId || req.companyId || req.admin?.organizationId || req.admin?.companyId || null;
 
     try {
       const newDocData = {
@@ -279,6 +318,8 @@ export const createAnnouncement = async (req, res) => {
         targetAudience: targetAudience || "all",
         department: department || "All",
         tags: Array.isArray(tags) ? tags : [],
+        organizationId: tenantId,
+        companyId: tenantId,
         createdAt: new Date(),
       };
 
@@ -317,15 +358,18 @@ export const createAnnouncement = async (req, res) => {
     // for every active employee (User.find({ role: 'employee', status: 'active' }))
     // =========================================================================
     try {
-      // Find active employees across both User model and Employee model
+      // Find active employees across both User model and Employee model scoped to tenant
       let activeEmployees = [];
       try {
+        const tenantScope = tenantId ? { $or: [{ companyId: tenantId }, { organizationId: tenantId }] } : {};
         const users = await User.find({
+          ...tenantScope,
           role: "employee",
           isActive: { $ne: false },
         }).select("_id fullName email");
 
         const emps = await Employee.find({
+          ...tenantScope,
           status: { $in: ["active", "Active"] },
         }).select("_id fullName email employeeId");
 
@@ -365,6 +409,8 @@ export const createAnnouncement = async (req, res) => {
             isRead: false,
             is_read: false,
             announcementId: savedDoc?._id || null,
+            organizationId: tenantId,
+            companyId: tenantId,
             action_url: "/employee/dashboard",
             action_label: "View Announcement",
             createdAt: new Date(),
@@ -385,6 +431,8 @@ export const createAnnouncement = async (req, res) => {
           isRead: false,
           is_read: false,
           announcementId: savedDoc?._id || null,
+          organizationId: tenantId,
+          companyId: tenantId,
           action_url: "/employee/dashboard",
           action_label: "View Announcement",
           createdAt: new Date(),
@@ -529,7 +577,14 @@ export const togglePinAnnouncement = async (req, res) => {
     const { id } = req.params;
     let newPinnedStatus = true;
 
-    const liveItem = liveAnnouncementStore.find((a) => String(a._id) === String(id));
+    const tenantId = req.organizationId || req.companyId || req.user?.companyId || req.admin?.organizationId || req.admin?.companyId;
+    const tenantScope = tenantId ? { $or: [{ companyId: tenantId }, { organizationId: tenantId }] } : {};
+
+    const liveItem = liveAnnouncementStore.find(
+      (a) =>
+        String(a._id) === String(id) &&
+        (!tenantId || !a.companyId || String(a.companyId) === String(tenantId) || String(a.organizationId) === String(tenantId))
+    );
     if (liveItem) {
       liveItem.isPinned = !liveItem.isPinned;
       newPinnedStatus = liveItem.isPinned;
@@ -538,11 +593,16 @@ export const togglePinAnnouncement = async (req, res) => {
 
     try {
       if (mongoose.Types.ObjectId.isValid(id)) {
-        const doc = await Announcement.findById(id);
+        const doc = await Announcement.findOne({ _id: id, ...tenantScope });
         if (doc) {
           doc.isPinned = !doc.isPinned;
           newPinnedStatus = doc.isPinned;
           await doc.save();
+        } else if (!liveItem) {
+          return res.status(404).json({
+            success: false,
+            message: "Announcement not found or access denied.",
+          });
         }
       }
     } catch (dbErr) {

@@ -5,6 +5,7 @@ import { Employee } from "../models/employeeModel.js";
 import { User } from "../models/userModel.js";
 import { Admin } from "../models/Admin.js";
 import { verifyActiveIncompleteShift } from "./authController.js";
+import { logAuditAction } from "../utils/auditLogger.js";
 
 const isValidObjectId = (id) =>
   id && mongoose.Types.ObjectId.isValid(id) && String(new mongoose.Types.ObjectId(id)) === String(id);
@@ -58,20 +59,41 @@ export const createEmployeeAccount = async (req, res) => {
       });
     }
 
-    // Check if email or employee ID already exists in Employee DB
-    const existingEmail = await Employee.findOne({ email: cleanEmail });
-    if (existingEmail) {
-      return res.status(409).json({
+    // Resolve Tenant Workspace: STRICTLY from authenticated session, NEVER frontend payload
+    const targetOrgId =
+      req.companyId ||
+      req.organizationId ||
+      req.user?.companyId ||
+      req.user?.organizationId ||
+      req.admin?.companyId ||
+      req.admin?.organizationId ||
+      null;
+
+    if (!targetOrgId && req.user?.role !== "super_admin") {
+      return res.status(403).json({
         success: false,
-        message: "An employee with this email address already exists in the system.",
+        message: "Security violation: An employee account can only be provisioned within an authenticated company workspace.",
       });
     }
 
-    const existingEmployeeId = await Employee.findOne({ employeeId: id });
+    const orgQuery = targetOrgId
+      ? { $or: [{ organizationId: targetOrgId }, { companyId: targetOrgId }] }
+      : {};
+
+    // Check if email or employee ID already exists in Employee DB (scoped to this specific company workspace)
+    const existingEmail = await Employee.findOne({ email: cleanEmail, ...orgQuery });
+    if (existingEmail) {
+      return res.status(409).json({
+        success: false,
+        message: "An employee with this email address already exists in this company workspace.",
+      });
+    }
+
+    const existingEmployeeId = await Employee.findOne({ employeeId: id, ...orgQuery });
     if (existingEmployeeId) {
       return res.status(409).json({
         success: false,
-        message: `Employee ID "${id}" is already assigned to another staff member.`,
+        message: `Employee ID "${id}" is already assigned to another staff member in this company workspace.`,
       });
     }
 
@@ -89,19 +111,24 @@ export const createEmployeeAccount = async (req, res) => {
       role: assignedRole,
       status: "active",
       isActive: true,
+      companyId: targetOrgId,
+      organizationId: targetOrgId,
     });
 
     // Also sync to User collection
     try {
       await User.findOneAndUpdate(
-        { email: cleanEmail },
+        { email: cleanEmail, companyId: targetOrgId },
         {
           fullName: name,
+          name: name,
           email: cleanEmail,
           password: plainPassword,
           role: assignedRole,
           status: "active",
           isActive: true,
+          companyId: targetOrgId,
+          organizationId: targetOrgId,
         },
         { upsert: true, returnDocument: "after", setDefaultsOnInsert: true }
       );
@@ -119,12 +146,37 @@ export const createEmployeeAccount = async (req, res) => {
           email: cleanEmail,
           password_hash: adminHash,
           role: "admin",
+          organizationId: targetOrgId,
         });
       }
     }
 
     const safeEmployee = employee.toObject ? employee.toObject() : employee;
     delete safeEmployee.password;
+
+    // Log critical user action: Employee Creation
+    try {
+      await logAuditAction({
+        req,
+        action: "CREATE_EMPLOYEE",
+        category: "Employees",
+        target: `${name} (${id})`,
+        targetModel: "Employee",
+        summary: `Created employee profile for ${name} (${id}) in ${department.trim()} as ${position.trim()}.`,
+        details: `Assigned role: ${assignedRole.toUpperCase()}, Base Salary: GHS ${parsedBaseSalary.toFixed(2)}, Contact: ${cleanEmail}.`,
+        metadata: {
+          employeeId: id,
+          fullName: name,
+          department: department.trim(),
+          position: position.trim(),
+          role: assignedRole,
+          baseSalary: parsedBaseSalary,
+          organizationId: targetOrgId,
+        },
+      });
+    } catch (auditErr) {
+      console.warn("Audit log notice in createEmployeeAccount:", auditErr.message);
+    }
 
     res.status(201).json({
       success: true,
@@ -150,7 +202,7 @@ export const createEmployeeAccount = async (req, res) => {
 // Employee Login directly against MongoDB
 export const employeeLogin = async (req, res) => {
   try {
-    const { email, password } = req.body;
+    const { email, password, companySlug, workspaceSlug, companyId } = req.body;
 
     if (!email || !password) {
       return res.status(400).json({
@@ -164,7 +216,7 @@ export const employeeLogin = async (req, res) => {
     const cleanPassword = password.trim();
     const jwtSecret = process.env.JWT_SECRET || "default_jwt_secret_key_12345";
 
-    // Query real employee document from MongoDB (explicitly selecting password)
+    // Query real employee document from MongoDB
     let employee = await Employee.findOne({
       $or: [{ email: cleanEmail }, { employeeId: cleanInput }],
     }).select("+password");
@@ -173,16 +225,28 @@ export const employeeLogin = async (req, res) => {
     if (!employee) {
       const user = await User.findOne({ email: cleanEmail }).select("+password");
       if (user) {
-        employee = await Employee.findOne({ email: cleanEmail }).select("+password");
+        employee = user;
       }
     }
 
     if (!employee || !employee.password) {
       return res.status(401).json({
         success: false,
-        message: "Invalid credentials",
+        message: "Invalid credentials.",
       });
     }
+
+    if (employee.role === "admin" || employee.role === "manager") {
+      return res.status(403).json({
+        success: false,
+        message: "Access restricted. Only Employees may log in through the Employee portal. Administrators and Managers must use the Admin portal.",
+        code: "EMPLOYEE_PORTAL_ONLY",
+      });
+    }
+
+    const employeeOrgId = employee.companyId
+      ? String(employee.companyId)
+      : (employee.organizationId ? String(employee.organizationId) : null);
 
     if (employee.status === "suspended") {
       return res.status(403).json({
@@ -207,7 +271,8 @@ export const employeeLogin = async (req, res) => {
       });
     }
 
-    // Generate JWT
+    // Generate JWT strictly bound to the verified employee's company
+    const orgId = employeeOrgId;
     const token = jwt.sign(
       {
         id: employee._id.toString(),
@@ -215,6 +280,8 @@ export const employeeLogin = async (req, res) => {
         email: employee.email,
         role: employee.role || "employee",
         fullName: employee.fullName,
+        companyId: orgId,
+        organizationId: orgId,
       },
       jwtSecret,
       {
@@ -241,6 +308,8 @@ export const employeeLogin = async (req, res) => {
     safeEmployee.id = safeEmployee._id ? safeEmployee._id.toString() : safeEmployee.id;
     safeEmployee.name = safeEmployee.fullName || safeEmployee.name || "";
     safeEmployee.avatar = safeEmployee.avatar || safeEmployee.profilePicture || safeEmployee.profile_image_url || "";
+    safeEmployee.companyId = orgId;
+    safeEmployee.organizationId = orgId;
 
     // Verify if user has an active, incomplete shift in the database immediately upon login
     const shiftVerification = await verifyActiveIncompleteShift(safeEmployee);

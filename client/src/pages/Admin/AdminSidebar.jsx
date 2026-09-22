@@ -6,6 +6,7 @@ import {
   Banknote,
   CalendarDays,
   Megaphone,
+  Activity,
   Settings,
 } from "lucide-react";
 import Sidebar from "../../components/Sidebar";
@@ -20,6 +21,7 @@ const AdminSidebar = () => {
     { name: "Payroll", path: "/admin/dashboard/payroll", icon: Banknote },
     { name: "Leave Requests", path: "/admin/dashboard/leave", icon: CalendarDays },
     { name: "Announcements", path: "/admin/dashboard/announcements", icon: Megaphone },
+    { name: "Activity", path: "/admin/dashboard/activity", icon: Activity },
     { name: "Settings", path: "/admin/dashboard/settings", icon: Settings },
   ];
 

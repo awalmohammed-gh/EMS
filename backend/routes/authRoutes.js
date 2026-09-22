@@ -6,11 +6,23 @@ import {
   employeeLogin,
   authLogout,
   getAuthMe,
+  unifiedLogin,
 } from "../controllers/authController.js";
 
 const authRouter = express.Router();
 
-// Admin Authentication Routes
+// Support CORS preflight requests
+authRouter.use((req, res, next) => {
+  if (req.method === "OPTIONS") {
+    return res.sendStatus(204);
+  }
+  next();
+});
+
+// Unified Authentication Route
+authRouter.post("/login", unifiedLogin);
+
+// Admin Authentication Routes (Consolidated for /admin/auth)
 authRouter.get("/admin/exists", checkAdminExists);
 authRouter.post("/admin/register", adminRegister);
 authRouter.post("/admin/login", adminLogin);

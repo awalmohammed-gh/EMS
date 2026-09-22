@@ -5,6 +5,7 @@ import mongoose from "mongoose";
 import { Admin } from "../models/Admin.js";
 import { Employee } from "../models/employeeModel.js";
 import { User } from "../models/userModel.js";
+import { validateOrganizationAccess } from "../utils/validateOrganizationAccess.js";
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -108,6 +109,9 @@ export const uploadProfilePicture = async (req, res) => {
     const userRole = req.user?.role || (req.admin ? "admin" : "employee");
     const userEmail = req.user?.email || req.body?.email;
 
+    const tenantId = req.organizationId || req.companyId || req.user?.companyId || req.employee?.companyId || req.admin?.organizationId || req.admin?.companyId;
+    const tenantScope = tenantId ? { $or: [{ companyId: tenantId }, { organizationId: tenantId }] } : {};
+
     let updatedUser = null;
     let oldAvatarUrl = null;
     let targetModel = "";
@@ -116,13 +120,10 @@ export const uploadProfilePicture = async (req, res) => {
     if (userRole === "admin" || userRole === "super_admin" || req.admin) {
       let dbAdmin = null;
       if (userId && mongoose.Types.ObjectId.isValid(userId)) {
-        dbAdmin = await Admin.findById(userId);
+        dbAdmin = await Admin.findOne({ _id: userId, ...(userRole === "super_admin" ? {} : tenantScope) });
       }
       if (!dbAdmin && userEmail) {
-        dbAdmin = await Admin.findOne({ email: userEmail.toLowerCase().trim() });
-      }
-      if (!dbAdmin) {
-        dbAdmin = await Admin.findOne();
+        dbAdmin = await Admin.findOne({ email: userEmail.toLowerCase().trim(), ...(userRole === "super_admin" ? {} : tenantScope) });
       }
 
       if (dbAdmin) {
@@ -158,22 +159,20 @@ export const uploadProfilePicture = async (req, res) => {
     if (!updatedUser) {
       let dbEmp = null;
       if (userId && mongoose.Types.ObjectId.isValid(userId)) {
-        dbEmp = await Employee.findById(userId);
+        dbEmp = await Employee.findOne({ _id: userId, ...tenantScope });
       }
       if (!dbEmp && req.user?.employeeId) {
-        dbEmp = await Employee.findOne({ employeeId: req.user.employeeId });
+        dbEmp = await Employee.findOne({ employeeId: req.user.employeeId, ...tenantScope });
       }
       if (!dbEmp && userId) {
-        dbEmp = await Employee.findOne({ employeeId: String(userId) });
+        dbEmp = await Employee.findOne({ employeeId: String(userId), ...tenantScope });
       }
       if (!dbEmp && userEmail) {
-        dbEmp = await Employee.findOne({ email: userEmail.toLowerCase().trim() });
-      }
-      if (!dbEmp && (!userRole || userRole === "employee")) {
-        dbEmp = await Employee.findOne();
+        dbEmp = await Employee.findOne({ email: userEmail.toLowerCase().trim(), ...tenantScope });
       }
 
       if (dbEmp) {
+        validateOrganizationAccess(dbEmp, req);
         targetModel = "Employee";
         oldAvatarUrl = dbEmp.profilePicture || dbEmp.profile_picture || dbEmp.avatar || dbEmp.avatarUrl;
         dbEmp.profilePicture = newAvatarUrl;
@@ -209,8 +208,9 @@ export const uploadProfilePicture = async (req, res) => {
     // 4. Also synchronize standard User model if exists
     if (userId && mongoose.Types.ObjectId.isValid(userId)) {
       try {
-        const dbUser = await User.findById(userId);
+        const dbUser = await User.findOne({ _id: userId, ...tenantScope });
         if (dbUser) {
+          validateOrganizationAccess(dbUser, req);
           dbUser.profile_image_url = newAvatarUrl;
           dbUser.avatar = newAvatarUrl;
           dbUser.avatarUrl = newAvatarUrl;
@@ -253,7 +253,8 @@ export const uploadProfilePicture = async (req, res) => {
     const duration = Date.now() - startTime;
     console.error(`[Avatar Update] ❌ Error in ${duration}ms:`, error);
     console.log("=================================================");
-    return res.status(500).json({
+    const statusCode = error.message === "Unauthorized" || error.statusCode === 403 ? 403 : 500;
+    return res.status(statusCode).json({
       success: false,
       message: error.message || "Failed to update profile picture in database.",
     });
@@ -274,6 +275,10 @@ export const removeProfilePicture = async (req, res) => {
     const userId = req.user?.id || req.user?._id || req.admin?.id || req.employee?.id;
     const userRole = req.user?.role || (req.admin ? "admin" : "employee");
     const userEmail = req.user?.email || req.body?.email;
+
+    const tenantId = req.organizationId || req.companyId || req.user?.companyId || req.employee?.companyId || req.admin?.organizationId || req.admin?.companyId;
+    const tenantScope = tenantId ? { $or: [{ companyId: tenantId }, { organizationId: tenantId }] } : {};
+
     let oldAvatarUrl = null;
     let updatedUser = null;
     let targetModel = "";
@@ -282,13 +287,10 @@ export const removeProfilePicture = async (req, res) => {
     if (userRole === "admin" || userRole === "super_admin" || req.admin) {
       let dbAdmin = null;
       if (userId && mongoose.Types.ObjectId.isValid(userId)) {
-        dbAdmin = await Admin.findById(userId);
+        dbAdmin = await Admin.findOne({ _id: userId, ...(userRole === "super_admin" ? {} : tenantScope) });
       }
       if (!dbAdmin && userEmail) {
-        dbAdmin = await Admin.findOne({ email: userEmail.toLowerCase().trim() });
-      }
-      if (!dbAdmin) {
-        dbAdmin = await Admin.findOne();
+        dbAdmin = await Admin.findOne({ email: userEmail.toLowerCase().trim(), ...(userRole === "super_admin" ? {} : tenantScope) });
       }
 
       if (dbAdmin) {
@@ -319,22 +321,20 @@ export const removeProfilePicture = async (req, res) => {
     if (!updatedUser) {
       let dbEmp = null;
       if (userId && mongoose.Types.ObjectId.isValid(userId)) {
-        dbEmp = await Employee.findById(userId);
+        dbEmp = await Employee.findOne({ _id: userId, ...tenantScope });
       }
       if (!dbEmp && req.user?.employeeId) {
-        dbEmp = await Employee.findOne({ employeeId: req.user.employeeId });
+        dbEmp = await Employee.findOne({ employeeId: req.user.employeeId, ...tenantScope });
       }
       if (!dbEmp && userId) {
-        dbEmp = await Employee.findOne({ employeeId: String(userId) });
+        dbEmp = await Employee.findOne({ employeeId: String(userId), ...tenantScope });
       }
       if (!dbEmp && userEmail) {
-        dbEmp = await Employee.findOne({ email: userEmail.toLowerCase().trim() });
-      }
-      if (!dbEmp) {
-        dbEmp = await Employee.findOne();
+        dbEmp = await Employee.findOne({ email: userEmail.toLowerCase().trim(), ...tenantScope });
       }
 
       if (dbEmp) {
+        validateOrganizationAccess(dbEmp, req);
         targetModel = "Employee";
         oldAvatarUrl = dbEmp.profilePicture || dbEmp.profile_picture || dbEmp.avatar;
         dbEmp.profilePicture = "";
@@ -390,7 +390,8 @@ export const removeProfilePicture = async (req, res) => {
     const duration = Date.now() - startTime;
     console.error(`[Avatar Remove] ❌ Error in ${duration}ms:`, error);
     console.log("=================================================");
-    return res.status(500).json({
+    const statusCode = error.message === "Unauthorized" || error.statusCode === 403 ? 403 : 500;
+    return res.status(statusCode).json({
       success: false,
       message: error.message || "Failed to remove profile picture.",
     });

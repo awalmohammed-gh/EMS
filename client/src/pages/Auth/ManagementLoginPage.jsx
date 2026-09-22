@@ -1,36 +1,68 @@
 import { useState, useEffect } from "react";
-import { Link, useNavigate } from "react-router-dom";
+import { Link, useNavigate, useSearchParams, useLocation } from "react-router-dom";
 import {
   ShieldCheck,
-  Mail,
   Lock,
   Eye,
   EyeOff,
   ArrowLeft,
   AlertCircle,
-  Sparkles,
   ArrowRight,
+  Mail,
+  User,
+  Phone,
 } from "lucide-react";
 import { authService } from "../../services/authService";
+import { brandingService } from "../../services/brandingService";
 import { useManagement } from "../../context/ManagementContextProvider";
 import { useAuth } from "../../context/AuthContext";
 import { MotionSpinner } from "../../components/ui/MotionSpinner";
 
-/**
- * ManagementLoginPage
- * Dedicated commercial manager and administrator authentication page.
- * Strictly verifies admin/manager credentials, issues secure HTTP-only cookie,
- * and routes directly to the Admin Dashboard.
- */
 export const ManagementLoginPage = () => {
   const navigate = useNavigate();
+  const location = useLocation();
+  const [searchParams, setSearchParams] = useSearchParams();
 
-  const [formData, setFormData] = useState({
+  // Mode: "login" or "signup"
+  const initialMode =
+    searchParams.get("mode") === "signup" || location.pathname.includes("register")
+      ? "signup"
+      : "login";
+  const [mode, setMode] = useState(initialMode);
+
+  // Sync mode with URL if updated via search params
+  useEffect(() => {
+    const qMode = searchParams.get("mode");
+    if (qMode === "signup" && mode !== "signup") {
+      setMode("signup");
+    } else if (qMode === "login" && mode !== "login") {
+      setMode("login");
+    }
+  }, [searchParams]);
+
+  const [branding, setBranding] = useState({
+    companyName: "WorkPulse",
+    logoUrl: "",
+  });
+
+  // Login Form State
+  const [loginData, setLoginData] = useState({
     email: "",
     password: "",
     rememberMe: true,
   });
+
+  // Sign Up Form State
+  const [signUpData, setSignUpData] = useState({
+    fullName: "",
+    email: "",
+    phone: "",
+    password: "",
+    confirmPassword: "",
+  });
+
   const [showPassword, setShowPassword] = useState(false);
+  const [showConfirmPassword, setShowConfirmPassword] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState(null);
 
@@ -38,39 +70,59 @@ export const ManagementLoginPage = () => {
     useManagement();
   const { login: contextLogin } = useAuth();
 
+  // Load single company branding
   useEffect(() => {
-    if (typeof document !== "undefined") {
-      document.title = "Management Login | WorkPulse Enterprise";
-    }
+    let isMounted = true;
+    brandingService
+      .getPublicBranding()
+      .then((res) => {
+        if (!isMounted) return;
+        const brand = res?.branding || res?.company || res || {};
+        const companyName = brand.companyName || brand.name || "WorkPulse";
+        const logoUrl = brand.logoUrl || brand.logo || "";
+        setBranding({ companyName, logoUrl });
+        if (typeof document !== "undefined") {
+          document.title = `${companyName} | Admin Authentication`;
+        }
+      })
+      .catch(() => {});
+    return () => {
+      isMounted = false;
+    };
   }, []);
 
-  const handleInputChange = (e) => {
+  const switchMode = (newMode) => {
+    setMode(newMode);
+    setError(null);
+    setSearchParams({ mode: newMode });
+  };
+
+  const handleLoginChange = (e) => {
     const { name, value, type, checked } = e.target;
-    setFormData((prev) => ({
+    setLoginData((prev) => ({
       ...prev,
       [name]: type === "checkbox" ? checked : value,
     }));
   };
 
-  // Quick fill helper for testing/QA
-  const handleQuickFill = () => {
-    setError(null);
-    setFormData({
-      email: "admin@eyenitgh.com",
-      password: "password123",
-      rememberMe: true,
-    });
+  const handleSignUpChange = (e) => {
+    const { name, value } = e.target;
+    setSignUpData((prev) => ({
+      ...prev,
+      [name]: value,
+    }));
   };
 
-  const handleSubmit = async (e) => {
+  // Handle Admin Login
+  const handleLoginSubmit = async (e) => {
     e.preventDefault();
     setError(null);
 
-    const email = formData.email.trim();
-    const password = formData.password;
+    const email = loginData.email.trim();
+    const password = loginData.password;
 
     if (!email || !password) {
-      setError("Please enter your manager email address and password.");
+      setError("Please enter your admin email address and password.");
       return;
     }
 
@@ -82,15 +134,15 @@ export const ManagementLoginPage = () => {
         email,
         password,
         role: "admin",
-        rememberMe: formData.rememberMe,
+        rememberMe: loginData.rememberMe,
       });
 
       if (result?.success) {
         const userObj = result.admin || result.user;
         const userRole = (userObj?.role || "admin").toLowerCase();
 
-        // Strict role verification: only admin or manager roles allowed
-        if (userRole !== "admin" && userRole !== "manager" && userRole !== "super_admin") {
+        // Only manager or admin roles allowed in admin portal
+        if (userRole !== "admin" && userRole !== "manager") {
           setError(
             "Access restricted. This portal is reserved for Managers and System Administrators only. Employees must use the Employee Login portal."
           );
@@ -101,7 +153,7 @@ export const ManagementLoginPage = () => {
         const userToken = result.token;
 
         if (typeof contextLogin === "function") {
-          contextLogin(userObj, userRole, userToken);
+          contextLogin(userObj, userRole, userToken, result);
         }
         if (typeof setManagementUser === "function") {
           setManagementUser(userObj);
@@ -113,12 +165,11 @@ export const ManagementLoginPage = () => {
         if (typeof setShowToast === "function") {
           setShowToast({
             show: true,
-            message: `Welcome back, ${userObj.fullName || userObj.full_name || "Manager"}! Signed in to Management Console.`,
+            message: `Welcome back, ${userObj.fullName || userObj.full_name || "Administrator"}! Signed in to Admin Dashboard.`,
             type: "success",
           });
         }
 
-        // Direct redirection to Admin Dashboard
         navigate("/admin/dashboard", {
           replace: true,
           state: { role: userRole },
@@ -126,7 +177,7 @@ export const ManagementLoginPage = () => {
       } else {
         setError(
           result?.message ||
-            "Invalid manager credentials. Please verify your email and password."
+            "Invalid admin credentials. Please verify your email and password."
         );
       }
     } catch (err) {
@@ -141,232 +192,537 @@ export const ManagementLoginPage = () => {
     }
   };
 
+  // Handle Admin Sign Up
+  const handleSignUpSubmit = async (e) => {
+    e.preventDefault();
+    setError(null);
+
+    const fullName = signUpData.fullName.trim();
+    const email = signUpData.email.trim();
+    const phone = signUpData.phone.trim();
+    const password = signUpData.password;
+    const confirmPassword = signUpData.confirmPassword;
+
+    if (!fullName || !email || !password) {
+      setError("Full Name, Email Address, and Password are required.");
+      return;
+    }
+
+    if (password.length < 6) {
+      setError("Password must be at least 6 characters long.");
+      return;
+    }
+
+    if (password !== confirmPassword) {
+      setError("Passwords do not match. Please verify both password entries.");
+      return;
+    }
+
+    try {
+      setIsLoading(true);
+
+      const result = await authService.registerAdmin({
+        fullName,
+        email,
+        phone,
+        password,
+        confirmPassword,
+      });
+
+      if (result?.success) {
+        const userObj = result.admin || result.user;
+        const userRole = (userObj?.role || "admin").toLowerCase();
+        const userToken = result.token;
+
+        if (typeof contextLogin === "function") {
+          contextLogin(userObj, userRole, userToken, result);
+        }
+        if (typeof setManagementUser === "function") {
+          setManagementUser(userObj);
+        }
+        if (typeof setManagementRole === "function") {
+          setManagementRole(userRole);
+        }
+
+        if (typeof setShowToast === "function") {
+          setShowToast({
+            show: true,
+            message: `Admin account created successfully! Welcome, ${userObj.fullName || userObj.full_name || "Administrator"}!`,
+            type: "success",
+          });
+        }
+
+        navigate("/admin/dashboard", {
+          replace: true,
+          state: { role: userRole },
+        });
+      } else {
+        setError(
+          result?.message ||
+            "Failed to create admin account. Please verify your details."
+        );
+      }
+    } catch (err) {
+      const msg =
+        err.response?.data?.message ||
+        err.normalizedMessage ||
+        err.message ||
+        "Registration failed. Please check your information and try again.";
+      setError(msg);
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
   return (
     <div
-      id="management-login-page"
-      className="min-h-screen bg-[#F4F7FB] flex flex-col justify-between items-center px-4 py-8 relative selection:bg-[#0B1E48]/10 selection:text-[#0B1E48] font-sans"
+      id="admin-auth-page"
+      className="min-h-screen w-full bg-[#F4F7FB] dark:bg-slate-950 flex flex-col justify-between items-center px-4 py-6 font-sans selection:bg-[#0B1E48]/10 selection:text-[#0B1E48]"
     >
-      {/* Subtle background ambient gradient */}
-      <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_top,_var(--tw-gradient-stops))] from-blue-100/40 via-transparent to-transparent pointer-events-none" />
-
-      {/* Top Navigation / Brand Header */}
-      <header className="relative z-10 w-full max-w-4xl flex items-center justify-between py-2">
+      {/* Top Header Navigation */}
+      <header className="w-full max-w-md flex items-center justify-between py-2">
         <Link
-          to="/"
-          id="btn-back-to-workpulse"
-          className="inline-flex items-center gap-2 text-xs font-semibold text-slate-600 hover:text-[#0B1E48] transition-colors group"
+          to="/welcome"
+          id="link-admin-back-welcome"
+          className="inline-flex items-center gap-2 text-xs font-semibold text-slate-600 dark:text-slate-400 hover:text-[#0B1E48] dark:hover:text-white transition-colors"
         >
-          <div className="w-7 h-7 rounded-lg bg-white border border-slate-200/80 shadow-2xs flex items-center justify-center group-hover:border-slate-300">
+          <div className="w-7 h-7 rounded-lg bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 shadow-2xs flex items-center justify-center">
             <ArrowLeft className="w-3.5 h-3.5" />
           </div>
-          <span>Back to WorkPulse</span>
+          <span>Back to Welcome</span>
         </Link>
 
-        <div className="flex items-center gap-2">
-          <Link
-            to="/login"
-            id="link-nav-employee-portal"
-            className="text-xs font-semibold text-slate-600 hover:text-[#0B1E48] px-3 py-1.5 rounded-lg border border-transparent hover:border-slate-200/80 bg-transparent hover:bg-white transition-all"
-          >
-            Staff Self-Service
-          </Link>
-        </div>
+        <Link
+          to="/"
+          id="link-admin-overview"
+          className="text-xs font-semibold text-slate-500 dark:text-slate-400 hover:text-[#0B1E48] dark:hover:text-white"
+        >
+          Overview
+        </Link>
       </header>
 
-      {/* Central Login Card Container */}
-      <main className="relative z-10 w-full max-w-md my-auto py-6">
-        <div className="bg-white rounded-2xl border border-slate-200/80 shadow-xl shadow-slate-200/50 p-6 sm:p-8">
-          {/* Header & Icon */}
+      {/* Main Authentication Card */}
+      <main className="w-full max-w-md my-auto py-4">
+        <div className="bg-white dark:bg-slate-900 rounded-2xl border border-slate-200/90 dark:border-slate-800 shadow-xl p-6 sm:p-8">
+          {/* Company Brand & Portal Icon */}
           <div className="text-center mb-6">
-            <div className="w-14 h-14 rounded-2xl bg-[#0B1E48] text-white mx-auto flex items-center justify-center mb-4 shadow-md shadow-[#0B1E48]/20">
-              <ShieldCheck className="w-7 h-7 text-blue-300" />
+            <div className="mx-auto mb-3 flex items-center justify-center">
+              {branding.logoUrl ? (
+                <div className="w-14 h-14 rounded-2xl bg-white dark:bg-slate-800 p-1.5 shadow-md border border-slate-200/80 dark:border-slate-700 flex items-center justify-center overflow-hidden">
+                  <img
+                    src={branding.logoUrl}
+                    alt={branding.companyName}
+                    className="w-full h-full object-contain"
+                    onError={(e) => {
+                      e.target.style.display = "none";
+                      if (e.target.nextSibling) {
+                        e.target.nextSibling.style.display = "flex";
+                      }
+                    }}
+                  />
+                  <div className="hidden w-full h-full items-center justify-center bg-[#0B1E48] text-white font-bold text-base rounded-xl">
+                    {branding.companyName.charAt(0).toUpperCase()}
+                  </div>
+                </div>
+              ) : (
+                <div className="w-14 h-14 rounded-2xl bg-[#0B1E48] text-white p-3 shadow-md flex items-center justify-center border border-[#0B1E48]">
+                  <ShieldCheck className="w-8 h-8 text-blue-400" />
+                </div>
+              )}
             </div>
 
-            <h1
-              id="management-login-title"
-              className="text-2xl font-black tracking-tight text-[#0B1E48] mb-1.5"
-            >
-              Management Login
+            <h1 className="text-xl sm:text-2xl font-black tracking-tight text-[#0B1E48] dark:text-white">
+              {branding.companyName}
             </h1>
-            <p
-              id="management-login-subtitle"
-              className="text-xs text-slate-500 max-w-xs mx-auto leading-relaxed"
-            >
-              Secure administrative authentication for Managers and System Administrators
+            <p className="text-xs font-bold uppercase tracking-wider text-slate-400 dark:text-slate-500 mt-0.5">
+              Admin Authentication
             </p>
+          </div>
+
+          {/* Segmented Control / Tabs: [ Login ] [ Sign Up ] */}
+          <div className="mb-6 p-1 bg-slate-100 dark:bg-slate-800 rounded-xl flex items-center gap-1">
+            <button
+              type="button"
+              id="tab-admin-login"
+              onClick={() => switchMode("login")}
+              className={`flex-1 py-2 rounded-lg text-xs sm:text-sm font-bold transition-all duration-150 cursor-pointer ${
+                mode === "login"
+                  ? "bg-white dark:bg-slate-900 text-[#0B1E48] dark:text-white shadow-xs"
+                  : "text-slate-500 hover:text-slate-800 dark:hover:text-slate-200"
+              }`}
+            >
+              Login
+            </button>
+            <button
+              type="button"
+              id="tab-admin-signup"
+              onClick={() => switchMode("signup")}
+              className={`flex-1 py-2 rounded-lg text-xs sm:text-sm font-bold transition-all duration-150 cursor-pointer ${
+                mode === "signup"
+                  ? "bg-white dark:bg-slate-900 text-[#0B1E48] dark:text-white shadow-xs"
+                  : "text-slate-500 hover:text-slate-800 dark:hover:text-slate-200"
+              }`}
+            >
+              Sign Up
+            </button>
           </div>
 
           {/* Error Banner */}
           {error && (
             <div
-              id="login-error-alert"
-              role="alert"
-              className="mb-5 p-3.5 rounded-xl bg-rose-50 border border-rose-200/80 text-rose-800 text-xs flex items-start gap-2.5 animate-fadeIn"
+              id="auth-error-banner"
+              className="mb-5 p-3.5 bg-rose-50 dark:bg-rose-950/40 border border-rose-200 dark:border-rose-900/60 rounded-xl flex items-start gap-2.5 text-xs text-rose-700 dark:text-rose-300"
             >
-              <AlertCircle className="w-4 h-4 text-rose-600 shrink-0 mt-0.5" />
-              <div className="flex-1 font-medium leading-relaxed">{error}</div>
+              <AlertCircle className="w-4 h-4 shrink-0 mt-0.5 text-rose-500" />
+              <div className="flex-1 leading-relaxed font-medium">{error}</div>
             </div>
           )}
 
-          {/* Form */}
-          <form onSubmit={handleSubmit} className="space-y-4" noValidate>
-            {/* EMAIL / IDENTIFIER */}
-            <div>
-              <div className="flex items-center justify-between mb-1.5">
+          {/* FORM 1: ADMIN LOGIN */}
+          {mode === "login" && (
+            <form onSubmit={handleLoginSubmit} className="space-y-4">
+              {/* EMAIL */}
+              <div>
                 <label
-                  htmlFor="input-manager-email"
-                  className="block text-[11px] font-bold tracking-wider text-slate-600 uppercase"
+                  htmlFor="admin-login-email"
+                  className="block text-[11px] font-bold tracking-wider text-slate-600 dark:text-slate-300 uppercase mb-1.5"
                 >
-                  Email or Identifier <span className="text-rose-500">*</span>
+                  Admin Email <span className="text-rose-500">*</span>
                 </label>
-                <span className="text-[10px] text-slate-400">Personal or Organization</span>
-              </div>
-              <div className="relative">
-                <div className="absolute inset-y-0 left-0 pl-3.5 flex items-center pointer-events-none text-slate-400">
-                  <Mail className="w-4 h-4" />
+                <div className="relative">
+                  <div className="absolute inset-y-0 left-0 pl-3.5 flex items-center pointer-events-none text-slate-400">
+                    <Mail className="w-4 h-4" />
+                  </div>
+                  <input
+                    id="admin-login-email"
+                    name="email"
+                    type="email"
+                    autoComplete="email"
+                    value={loginData.email}
+                    onChange={handleLoginChange}
+                    placeholder="admin@company.com"
+                    required
+                    disabled={isLoading}
+                    className="w-full pl-10 pr-3.5 py-2.5 bg-slate-50/60 dark:bg-slate-800/60 focus:bg-white dark:focus:bg-slate-800 text-slate-900 dark:text-white placeholder:text-slate-400 text-sm rounded-xl border border-slate-200/90 dark:border-slate-700 focus:border-[#0B1E48] focus:ring-2 focus:ring-[#0B1E48]/10 transition-all outline-none disabled:opacity-60"
+                  />
                 </div>
-                <input
-                  type="text"
-                  id="input-manager-email"
-                  name="email"
-                  required
-                  autoComplete="username email"
-                  value={formData.email}
-                  onChange={handleInputChange}
-                  placeholder="admin@company.com or company email"
-                  className="w-full pl-10 pr-3.5 py-2.5 bg-slate-50/60 focus:bg-white text-slate-900 placeholder:text-slate-400 text-sm rounded-xl border border-slate-200/90 focus:border-[#0B1E48] focus:ring-2 focus:ring-[#0B1E48]/10 transition-all outline-none"
-                />
               </div>
-              <p className="mt-1 text-[11px] text-slate-400">
-                Log in using either your personal admin email or registered organization email.
-              </p>
-            </div>
 
-            {/* PASSWORD */}
-            <div>
-              <div className="flex items-center justify-between mb-1.5">
-                <label
-                  htmlFor="input-manager-password"
-                  className="block text-[11px] font-bold tracking-wider text-slate-600 uppercase"
-                >
-                  Password <span className="text-rose-500">*</span>
-                </label>
-                <span className="text-[11px] text-slate-400">
-                  Min 6 characters
-                </span>
-              </div>
-              <div className="relative">
-                <div className="absolute inset-y-0 left-0 pl-3.5 flex items-center pointer-events-none text-slate-400">
-                  <Lock className="w-4 h-4" />
+              {/* PASSWORD */}
+              <div>
+                <div className="flex items-center justify-between mb-1.5">
+                  <label
+                    htmlFor="admin-login-password"
+                    className="block text-[11px] font-bold tracking-wider text-slate-600 dark:text-slate-300 uppercase"
+                  >
+                    Password <span className="text-rose-500">*</span>
+                  </label>
                 </div>
-                <input
-                  type={showPassword ? "text" : "password"}
-                  id="input-manager-password"
-                  name="password"
-                  required
-                  autoComplete="current-password"
-                  value={formData.password}
-                  onChange={handleInputChange}
-                  placeholder="&bull;&bull;&bull;&bull;&bull;&bull;&bull;&bull;"
-                  className="w-full pl-10 pr-10 py-2.5 bg-slate-50/60 focus:bg-white text-slate-900 placeholder:text-slate-400 text-sm rounded-xl border border-slate-200/90 focus:border-[#0B1E48] focus:ring-2 focus:ring-[#0B1E48]/10 transition-all outline-none"
-                />
+                <div className="relative">
+                  <div className="absolute inset-y-0 left-0 pl-3.5 flex items-center pointer-events-none text-slate-400">
+                    <Lock className="w-4 h-4" />
+                  </div>
+                  <input
+                    id="admin-login-password"
+                    name="password"
+                    type={showPassword ? "text" : "password"}
+                    autoComplete="current-password"
+                    value={loginData.password}
+                    onChange={handleLoginChange}
+                    placeholder="••••••••"
+                    required
+                    disabled={isLoading}
+                    className="w-full pl-10 pr-10 py-2.5 bg-slate-50/60 dark:bg-slate-800/60 focus:bg-white dark:focus:bg-slate-800 text-slate-900 dark:text-white placeholder:text-slate-400 text-sm rounded-xl border border-slate-200/90 dark:border-slate-700 focus:border-[#0B1E48] focus:ring-2 focus:ring-[#0B1E48]/10 transition-all outline-none disabled:opacity-60"
+                  />
+                  <button
+                    type="button"
+                    id="btn-toggle-admin-password"
+                    onClick={() => setShowPassword((prev) => !prev)}
+                    className="absolute inset-y-0 right-0 pr-3.5 flex items-center text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 cursor-pointer"
+                    tabIndex={-1}
+                    aria-label={showPassword ? "Hide password" : "Show password"}
+                  >
+                    {showPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                  </button>
+                </div>
+              </div>
+
+              {/* Remember Me Checkbox */}
+              <div className="flex items-center justify-between pt-1">
+                <label className="flex items-center gap-2 cursor-pointer select-none">
+                  <input
+                    type="checkbox"
+                    id="admin-remember-me"
+                    name="rememberMe"
+                    checked={loginData.rememberMe}
+                    onChange={handleLoginChange}
+                    className="w-4 h-4 rounded border-slate-300 text-[#0B1E48] focus:ring-[#0B1E48] cursor-pointer"
+                  />
+                  <span className="text-xs text-slate-600 dark:text-slate-400 font-medium">
+                    Remember this device
+                  </span>
+                </label>
+              </div>
+
+              {/* Submit Button */}
+              <div className="pt-2">
                 <button
-                  type="button"
-                  id="btn-toggle-password-visibility"
-                  onClick={() => setShowPassword((prev) => !prev)}
-                  className="absolute inset-y-0 right-0 pr-3.5 flex items-center text-slate-400 hover:text-slate-600 cursor-pointer"
-                  tabIndex={-1}
-                  aria-label={showPassword ? "Hide password" : "Show password"}
+                  id="admin-login-submit-btn"
+                  type="submit"
+                  disabled={isLoading}
+                  className="w-full py-3 px-4 rounded-xl text-sm font-bold text-white bg-[#0B1E48] hover:bg-[#071534] dark:bg-blue-600 dark:hover:bg-blue-700 disabled:opacity-60 shadow-md shadow-[#0B1E48]/20 transition-all flex items-center justify-center gap-2 cursor-pointer"
                 >
-                  {showPassword ? (
-                    <EyeOff className="w-4 h-4" />
+                  {isLoading ? (
+                    <>
+                      <MotionSpinner size="sm" className="text-white" />
+                      <span>Authenticating...</span>
+                    </>
                   ) : (
-                    <Eye className="w-4 h-4" />
+                    <>
+                      <span>Login to Admin Dashboard</span>
+                      <ArrowRight className="w-4 h-4" />
+                    </>
                   )}
                 </button>
               </div>
-            </div>
 
-            {/* Remember this device checkbox */}
-            <div className="flex items-center justify-between pt-1">
-              <label className="flex items-center gap-2 cursor-pointer select-none">
-                <input
-                  type="checkbox"
-                  id="checkbox-remember-device"
-                  name="rememberMe"
-                  checked={formData.rememberMe}
-                  onChange={handleInputChange}
-                  className="w-4 h-4 rounded border-slate-300 text-[#0B1E48] focus:ring-[#0B1E48] cursor-pointer"
-                />
-                <span className="text-xs text-slate-600 font-medium">
-                  Remember this device
-                </span>
-              </label>
+              {/* Switch to Sign Up */}
+              <div className="pt-4 text-center">
+                <button
+                  type="button"
+                  id="btn-switch-to-signup"
+                  onClick={() => switchMode("signup")}
+                  className="text-xs font-semibold text-slate-600 dark:text-slate-400 hover:text-[#0B1E48] dark:hover:text-blue-400 transition-colors cursor-pointer"
+                >
+                  Don't have an admin account?{" "}
+                  <span className="text-blue-600 dark:text-blue-400 font-bold hover:underline">
+                    Sign Up
+                  </span>
+                </button>
+              </div>
+            </form>
+          )}
 
-              <button
-                type="button"
-                id="btn-demo-quick-fill"
-                onClick={handleQuickFill}
-                className="text-[11px] font-semibold text-blue-700 hover:underline hover:text-blue-900"
-              >
-                Fill demo credentials
-              </button>
-            </div>
+          {/* FORM 2: ADMIN SIGN UP */}
+          {mode === "signup" && (
+            <form onSubmit={handleSignUpSubmit} className="space-y-3.5">
+              {/* FULL NAME */}
+              <div>
+                <label
+                  htmlFor="admin-signup-name"
+                  className="block text-[11px] font-bold tracking-wider text-slate-600 dark:text-slate-300 uppercase mb-1.5"
+                >
+                  Full Name <span className="text-rose-500">*</span>
+                </label>
+                <div className="relative">
+                  <div className="absolute inset-y-0 left-0 pl-3.5 flex items-center pointer-events-none text-slate-400">
+                    <User className="w-4 h-4" />
+                  </div>
+                  <input
+                    id="admin-signup-name"
+                    name="fullName"
+                    type="text"
+                    autoComplete="name"
+                    value={signUpData.fullName}
+                    onChange={handleSignUpChange}
+                    placeholder="e.g. Jane Doe"
+                    required
+                    disabled={isLoading}
+                    className="w-full pl-10 pr-3.5 py-2 bg-slate-50/60 dark:bg-slate-800/60 focus:bg-white dark:focus:bg-slate-800 text-slate-900 dark:text-white placeholder:text-slate-400 text-sm rounded-xl border border-slate-200/90 dark:border-slate-700 focus:border-[#0B1E48] focus:ring-2 focus:ring-[#0B1E48]/10 transition-all outline-none disabled:opacity-60"
+                  />
+                </div>
+              </div>
 
-            {/* Action Button */}
-            <div className="pt-2">
-              <button
-                type="submit"
-                id="btn-sign-in-management"
-                disabled={isLoading}
-                className="w-full py-3 px-4 rounded-xl text-sm font-bold text-white bg-[#0B1E48] hover:bg-[#081738] disabled:opacity-60 shadow-md shadow-[#0B1E48]/20 hover:shadow-lg transition-all flex items-center justify-center gap-2 cursor-pointer"
-              >
-                {isLoading ? (
-                  <>
-                    <MotionSpinner size="sm" className="text-white" />
-                    <span>Verifying Credentials...</span>
-                  </>
-                ) : (
-                  <>
-                    <span>Sign In to Management Console</span>
-                    <ArrowRight className="w-4 h-4" />
-                  </>
-                )}
-              </button>
-            </div>
-          </form>
+              {/* EMAIL */}
+              <div>
+                <label
+                  htmlFor="admin-signup-email"
+                  className="block text-[11px] font-bold tracking-wider text-slate-600 dark:text-slate-300 uppercase mb-1.5"
+                >
+                  Email Address <span className="text-rose-500">*</span>
+                </label>
+                <div className="relative">
+                  <div className="absolute inset-y-0 left-0 pl-3.5 flex items-center pointer-events-none text-slate-400">
+                    <Mail className="w-4 h-4" />
+                  </div>
+                  <input
+                    id="admin-signup-email"
+                    name="email"
+                    type="email"
+                    autoComplete="email"
+                    value={signUpData.email}
+                    onChange={handleSignUpChange}
+                    placeholder="admin@company.com"
+                    required
+                    disabled={isLoading}
+                    className="w-full pl-10 pr-3.5 py-2 bg-slate-50/60 dark:bg-slate-800/60 focus:bg-white dark:focus:bg-slate-800 text-slate-900 dark:text-white placeholder:text-slate-400 text-sm rounded-xl border border-slate-200/90 dark:border-slate-700 focus:border-[#0B1E48] focus:ring-2 focus:ring-[#0B1E48]/10 transition-all outline-none disabled:opacity-60"
+                  />
+                </div>
+              </div>
 
-          {/* Alternate Portals & Links */}
-          <div className="mt-6 pt-5 border-t border-slate-100 flex flex-col items-center gap-2.5 text-center">
-            <Link
-              to="/login"
+              {/* PHONE */}
+              <div>
+                <label
+                  htmlFor="admin-signup-phone"
+                  className="block text-[11px] font-bold tracking-wider text-slate-600 dark:text-slate-300 uppercase mb-1.5"
+                >
+                  Phone Number
+                </label>
+                <div className="relative">
+                  <div className="absolute inset-y-0 left-0 pl-3.5 flex items-center pointer-events-none text-slate-400">
+                    <Phone className="w-4 h-4" />
+                  </div>
+                  <input
+                    id="admin-signup-phone"
+                    name="phone"
+                    type="tel"
+                    autoComplete="tel"
+                    value={signUpData.phone}
+                    onChange={handleSignUpChange}
+                    placeholder="+1 (555) 000-0000"
+                    disabled={isLoading}
+                    className="w-full pl-10 pr-3.5 py-2 bg-slate-50/60 dark:bg-slate-800/60 focus:bg-white dark:focus:bg-slate-800 text-slate-900 dark:text-white placeholder:text-slate-400 text-sm rounded-xl border border-slate-200/90 dark:border-slate-700 focus:border-[#0B1E48] focus:ring-2 focus:ring-[#0B1E48]/10 transition-all outline-none disabled:opacity-60"
+                  />
+                </div>
+              </div>
+
+              {/* PASSWORD */}
+              <div>
+                <label
+                  htmlFor="admin-signup-password"
+                  className="block text-[11px] font-bold tracking-wider text-slate-600 dark:text-slate-300 uppercase mb-1.5"
+                >
+                  Password <span className="text-rose-500">*</span>
+                </label>
+                <div className="relative">
+                  <div className="absolute inset-y-0 left-0 pl-3.5 flex items-center pointer-events-none text-slate-400">
+                    <Lock className="w-4 h-4" />
+                  </div>
+                  <input
+                    id="admin-signup-password"
+                    name="password"
+                    type={showPassword ? "text" : "password"}
+                    autoComplete="new-password"
+                    value={signUpData.password}
+                    onChange={handleSignUpChange}
+                    placeholder="At least 6 characters"
+                    required
+                    disabled={isLoading}
+                    className="w-full pl-10 pr-10 py-2 bg-slate-50/60 dark:bg-slate-800/60 focus:bg-white dark:focus:bg-slate-800 text-slate-900 dark:text-white placeholder:text-slate-400 text-sm rounded-xl border border-slate-200/90 dark:border-slate-700 focus:border-[#0B1E48] focus:ring-2 focus:ring-[#0B1E48]/10 transition-all outline-none disabled:opacity-60"
+                  />
+                  <button
+                    type="button"
+                    id="btn-toggle-signup-password"
+                    onClick={() => setShowPassword((prev) => !prev)}
+                    className="absolute inset-y-0 right-0 pr-3.5 flex items-center text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 cursor-pointer"
+                    tabIndex={-1}
+                    aria-label={showPassword ? "Hide password" : "Show password"}
+                  >
+                    {showPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                  </button>
+                </div>
+              </div>
+
+              {/* CONFIRM PASSWORD */}
+              <div>
+                <label
+                  htmlFor="admin-signup-confirm-password"
+                  className="block text-[11px] font-bold tracking-wider text-slate-600 dark:text-slate-300 uppercase mb-1.5"
+                >
+                  Confirm Password <span className="text-rose-500">*</span>
+                </label>
+                <div className="relative">
+                  <div className="absolute inset-y-0 left-0 pl-3.5 flex items-center pointer-events-none text-slate-400">
+                    <Lock className="w-4 h-4" />
+                  </div>
+                  <input
+                    id="admin-signup-confirm-password"
+                    name="confirmPassword"
+                    type={showConfirmPassword ? "text" : "password"}
+                    autoComplete="new-password"
+                    value={signUpData.confirmPassword}
+                    onChange={handleSignUpChange}
+                    placeholder="Repeat your password"
+                    required
+                    disabled={isLoading}
+                    className="w-full pl-10 pr-10 py-2 bg-slate-50/60 dark:bg-slate-800/60 focus:bg-white dark:focus:bg-slate-800 text-slate-900 dark:text-white placeholder:text-slate-400 text-sm rounded-xl border border-slate-200/90 dark:border-slate-700 focus:border-[#0B1E48] focus:ring-2 focus:ring-[#0B1E48]/10 transition-all outline-none disabled:opacity-60"
+                  />
+                  <button
+                    type="button"
+                    id="btn-toggle-signup-confirm-password"
+                    onClick={() => setShowConfirmPassword((prev) => !prev)}
+                    className="absolute inset-y-0 right-0 pr-3.5 flex items-center text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 cursor-pointer"
+                    tabIndex={-1}
+                    aria-label={showConfirmPassword ? "Hide password" : "Show password"}
+                  >
+                    {showConfirmPassword ? (
+                      <EyeOff className="w-4 h-4" />
+                    ) : (
+                      <Eye className="w-4 h-4" />
+                    )}
+                  </button>
+                </div>
+              </div>
+
+              {/* Submit Button */}
+              <div className="pt-2">
+                <button
+                  id="admin-signup-submit-btn"
+                  type="submit"
+                  disabled={isLoading}
+                  className="w-full py-3 px-4 rounded-xl text-sm font-bold text-white bg-[#0B1E48] hover:bg-[#071534] dark:bg-blue-600 dark:hover:bg-blue-700 disabled:opacity-60 shadow-md shadow-[#0B1E48]/20 transition-all flex items-center justify-center gap-2 cursor-pointer"
+                >
+                  {isLoading ? (
+                    <>
+                      <MotionSpinner size="sm" className="text-white" />
+                      <span>Creating Account...</span>
+                    </>
+                  ) : (
+                    <>
+                      <span>Create Admin Account</span>
+                      <ArrowRight className="w-4 h-4" />
+                    </>
+                  )}
+                </button>
+              </div>
+
+              {/* Switch to Login */}
+              <div className="pt-3 text-center">
+                <button
+                  type="button"
+                  id="btn-switch-to-login"
+                  onClick={() => switchMode("login")}
+                  className="text-xs font-semibold text-slate-600 dark:text-slate-400 hover:text-[#0B1E48] dark:hover:text-blue-400 transition-colors cursor-pointer"
+                >
+                  Already have an account?{" "}
+                  <span className="text-blue-600 dark:text-blue-400 font-bold hover:underline">
+                    Login
+                  </span>
+                </button>
+              </div>
+            </form>
+          )}
+
+          {/* Portal Switcher Footer */}
+          <div className="mt-6 pt-5 border-t border-slate-100 dark:border-slate-800 flex flex-col items-center gap-2 text-center">
+            <button
+              type="button"
               id="link-switch-to-employee"
-              className="text-xs font-semibold text-slate-600 hover:text-[#0B1E48] inline-flex items-center gap-1.5"
+              onClick={() => navigate("/employee/login")}
+              className="text-xs font-semibold text-slate-500 dark:text-slate-400 hover:text-[#0B1E48] dark:hover:text-white inline-flex items-center gap-1.5 cursor-pointer"
             >
-              <span>Need the Employee Portal?</span>
-              <span className="text-blue-600 font-bold hover:underline">
-                Sign in with Staff ID &rarr;
+              <span>Employee looking to clock in?</span>
+              <span className="text-emerald-600 dark:text-emerald-400 font-bold hover:underline">
+                Employee Login &rarr;
               </span>
-            </Link>
-
-            <Link
-              to="/register-organization"
-              id="link-register-new-org"
-              className="text-xs font-semibold text-slate-600 hover:text-[#0B1E48] inline-flex items-center gap-1.5"
-            >
-              <Sparkles className="w-3.5 h-3.5 text-blue-600" />
-              <span>New to WorkPulse?</span>
-              <span className="text-[#0B1E48] font-bold hover:underline">
-                Register your organization
-              </span>
-            </Link>
+            </button>
           </div>
         </div>
       </main>
 
       {/* Footer */}
-      <footer className="relative z-10 w-full max-w-4xl text-center py-2 text-xs text-slate-400">
-        &copy; {new Date().getFullYear()} WorkPulse Enterprise Suite. All rights reserved.
+      <footer className="w-full max-w-md text-center py-2 text-xs text-slate-400 dark:text-slate-500">
+        &copy; {new Date().getFullYear()} {branding.companyName}. Internal Workforce Operating System.
       </footer>
     </div>
   );

@@ -21,11 +21,18 @@ const adminSchema = new mongoose.Schema(
     role: {
       type: String,
       default: "admin",
-      enum: ["admin", "super_admin", "manager"],
+      enum: ["admin", "manager"],
     },
     organizationId: {
       type: mongoose.Schema.Types.ObjectId,
       ref: "CompanySettings",
+      index: true,
+      default: null,
+    },
+    companyId: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: "CompanySettings",
+      index: true,
       default: null,
     },
     profile_image_url: {
@@ -86,6 +93,8 @@ if (!adminSchema.paths.fullName) {
     return this.full_name;
   });
 }
+
+adminSchema.index({ role: 1 });
 
 export const Admin = mongoose.models.Admin || mongoose.model("Admin", adminSchema);
 export default Admin;

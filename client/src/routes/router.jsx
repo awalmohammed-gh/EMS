@@ -12,11 +12,10 @@ import PrintPayslips from "../pages/Admin/PrintPayslips";
 import Settings from "../pages/Admin/Settings";
 import AdminLayout from "../layout/AdminLayout";
 import ProtectedRoute from "./ProtectedRoute";
-import WelcomePortalsPage from "../pages/WelcomePortalsPage";
 import LandingPage from "../pages/LandingPage";
+import WelcomePage from "../pages/WelcomePage";
 import EmployeeLoginPage from "../pages/Auth/EmployeeLoginPage";
 import ManagementLoginPage from "../pages/Auth/ManagementLoginPage";
-import RegisterOrganizationPage from "../pages/Auth/RegisterOrganizationPage";
 import OnboardingGate from "./OnboardingGate";
 import EmployeesLayout from "../layout/EmployeesLayout";
 import EmployeesAttendance from "../pages/Employees/EmployeesAttendance";
@@ -27,45 +26,12 @@ import EmployeeDashboard from "../pages/Employees/EmployeeDashboard";
 import AdminDashboard from "../pages/Admin/AdminDashboard";
 import Leave from "../pages/Admin/Leave";
 import AdminAnnouncements from "../pages/Admin/Announcements";
+import Activity from "../pages/Admin/Activity";
 
 export const router = createHashRouter(
   createRoutesFromElements(
     <>
-      {/* Organization Registration Routes */}
-      <Route
-        path="/register-organization"
-        element={
-          <OnboardingGate>
-            <RegisterOrganizationPage />
-          </OnboardingGate>
-        }
-      />
-      <Route
-        path="/setup"
-        element={
-          <OnboardingGate>
-            <RegisterOrganizationPage />
-          </OnboardingGate>
-        }
-      />
-      <Route
-        path="/setup-company"
-        element={
-          <OnboardingGate>
-            <RegisterOrganizationPage />
-          </OnboardingGate>
-        }
-      />
-      <Route
-        path="/setup-admin"
-        element={
-          <OnboardingGate>
-            <RegisterOrganizationPage />
-          </OnboardingGate>
-        }
-      />
-
-      {/* Public Routes */}
+      {/* Public Landing Page */}
       <Route
         path="/"
         element={
@@ -74,32 +40,37 @@ export const router = createHashRouter(
           </OnboardingGate>
         }
       />
-      <Route
-        path="/landing"
-        element={
-          <OnboardingGate>
-            <LandingPage />
-          </OnboardingGate>
-        }
-      />
+      <Route path="/landing" element={<Navigate to="/" replace />} />
+
+      {/* Internal Welcome Portal (Role Selection Gateway) */}
       <Route
         path="/welcome"
         element={
           <OnboardingGate>
-            <WelcomePortalsPage />
-          </OnboardingGate>
-        }
-      />
-      <Route
-        path="/:orgSlug/welcome"
-        element={
-          <OnboardingGate>
-            <WelcomePortalsPage />
+            <WelcomePage />
           </OnboardingGate>
         }
       />
 
-      {/* Dedicated Authentication Routes */}
+      {/* Consolidated Admin Authentication (Unified Login & Sign Up) */}
+      <Route
+        path="/admin/auth"
+        element={
+          <OnboardingGate>
+            <ManagementLoginPage />
+          </OnboardingGate>
+        }
+      />
+      <Route path="/admin/login" element={<Navigate to="/admin/auth" replace />} />
+      <Route
+        path="/management/login"
+        element={<Navigate to="/admin/auth" replace />}
+      />
+      <Route path="/login/admin" element={<Navigate to="/admin/auth" replace />} />
+      <Route path="/admin/register" element={<Navigate to="/admin/auth?mode=signup" replace />} />
+      <Route path="/register/admin" element={<Navigate to="/admin/auth?mode=signup" replace />} />
+
+      {/* Employee Authentication (Internal access) */}
       <Route
         path="/login"
         element={
@@ -116,33 +87,19 @@ export const router = createHashRouter(
           </OnboardingGate>
         }
       />
-      <Route path="/login/employee" element={<Navigate to="/login" replace />} />
-      <Route
-        path="/admin/login"
-        element={
-          <OnboardingGate>
-            <ManagementLoginPage />
-          </OnboardingGate>
-        }
-      />
-      <Route
-        path="/management/login"
-        element={
-          <OnboardingGate>
-            <ManagementLoginPage />
-          </OnboardingGate>
-        }
-      />
-      <Route path="/login/admin" element={<Navigate to="/admin/login" replace />} />
-      <Route
-        path="/admin/register"
-        element={
-          <OnboardingGate>
-            <RegisterOrganizationPage />
-          </OnboardingGate>
-        }
-      />
-      <Route path="/register/admin" element={<Navigate to="/register-organization" replace />} />
+      <Route path="/login/employee" element={<Navigate to="/employee/login" replace />} />
+
+      {/* Obsolete Multi-Tenant & Setup Route Redirects */}
+      <Route path="/workspace" element={<Navigate to="/" replace />} />
+      <Route path="/workspace/*" element={<Navigate to="/" replace />} />
+      <Route path="/register-organization" element={<Navigate to="/" replace />} />
+      <Route path="/setup" element={<Navigate to="/" replace />} />
+      <Route path="/setup-company" element={<Navigate to="/" replace />} />
+      <Route path="/setup-admin" element={<Navigate to="/" replace />} />
+      <Route path="/super-admin/*" element={<Navigate to="/admin/auth" replace />} />
+      <Route path="/superadmin/*" element={<Navigate to="/admin/auth" replace />} />
+      <Route path="/super-admin" element={<Navigate to="/admin/auth" replace />} />
+      <Route path="/superadmin" element={<Navigate to="/admin/auth" replace />} />
 
       {/* Admin Protected Routes */}
       <Route element={<ProtectedRoute allowRole="admin" />}>
@@ -156,9 +113,11 @@ export const router = createHashRouter(
           <Route path="leave" element={<Leave />} />
           <Route path="leaves" element={<Leave />} />
           <Route path="announcements" element={<AdminAnnouncements />} />
+          <Route path="activity" element={<Activity />} />
+          <Route path="activity-logs" element={<Activity />} />
           <Route path="settings" element={<Settings />} />
         </Route>
-        {/* Top-level aliases for direct admin routes */}
+        {/* Direct aliases */}
         <Route path="/admin/employees" element={<Navigate to="/admin/dashboard/employees" replace />} />
         <Route path="/admin/attendance" element={<Navigate to="/admin/dashboard/attendance" replace />} />
         <Route path="/admin/payroll" element={<Navigate to="/admin/dashboard/payroll" replace />} />
@@ -166,6 +125,8 @@ export const router = createHashRouter(
         <Route path="/admin/leave" element={<Navigate to="/admin/dashboard/leave" replace />} />
         <Route path="/admin/leaves" element={<Navigate to="/admin/dashboard/leave" replace />} />
         <Route path="/admin/announcements" element={<Navigate to="/admin/dashboard/announcements" replace />} />
+        <Route path="/admin/activity" element={<Navigate to="/admin/dashboard/activity" replace />} />
+        <Route path="/admin/activity-logs" element={<Navigate to="/admin/dashboard/activity" replace />} />
         <Route path="/admin/settings" element={<Navigate to="/admin/dashboard/settings" replace />} />
         <Route path="/print-payslips/:id" element={<PrintPayslips />} />
       </Route>
@@ -182,7 +143,7 @@ export const router = createHashRouter(
           <Route path="payroll" element={<EmployeePayslips />} />
           <Route path="settings" element={<EmployeeSettings />} />
         </Route>
-        {/* Top-level aliases for direct employee routes */}
+        {/* Direct aliases */}
         <Route path="/employee/attendance" element={<Navigate to="/employee/dashboard/attendance" replace />} />
         <Route path="/employee/leave" element={<Navigate to="/employee/dashboard/leave" replace />} />
         <Route path="/employee/leaves" element={<Navigate to="/employee/dashboard/leave" replace />} />
@@ -191,8 +152,10 @@ export const router = createHashRouter(
         <Route path="/employee/settings" element={<Navigate to="/employee/dashboard/settings" replace />} />
       </Route>
 
-      {/* Catch all - Redirect to welcome */}
-      <Route path="*" element={<Navigate to="/welcome" replace />} />
+      {/* Catch all - Redirect to Home */}
+      <Route path="*" element={<Navigate to="/" replace />} />
     </>,
   ),
 );
+
+export default router;
