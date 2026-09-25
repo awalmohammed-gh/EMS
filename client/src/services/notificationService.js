@@ -58,16 +58,22 @@ const computeMetrics = (items) => {
   const unread = items.filter((n) => !n.is_read && n.unread !== false).length;
   const leave = items.filter((n) => n.category === "leave").length;
   const payroll = items.filter(
-    (n) => n.category === "payroll" || n.type === "payroll_alert" || n.category === "payslip"
+    (n) =>
+      n.category === "payroll" ||
+      n.type === "payroll_alert" ||
+      n.type === "payroll_status_update" ||
+      n.category === "payslip"
   ).length;
   const system = items.filter(
     (n) =>
       (n.category === "system" ||
+      n.category === "employee" ||
       n.category === "announcement" ||
       n.category === "attendance" ||
       !n.category) &&
       n.category !== "payroll" &&
       n.type !== "payroll_alert" &&
+      n.type !== "payroll_status_update" &&
       n.category !== "payslip"
   ).length;
 

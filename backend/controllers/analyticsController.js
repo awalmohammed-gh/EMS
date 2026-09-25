@@ -2,6 +2,8 @@ import mongoose from "mongoose";
 import { Payroll } from "../models/payrollModel.js";
 import { Attendance } from "../models/attendanceModel.js";
 import { Employee } from "../models/employeeModel.js";
+import { User } from "../models/userModel.js";
+import { Leave, LeaveRequest } from "../models/leaveModel.js";
 import { CompanySettings } from "../models/CompanySettings.js";
 import { evaluateLatenessPenalty } from "./payrollController.js";
 import { logErrorToFile } from "../utils/logger.js";
@@ -695,7 +697,326 @@ export const getCurrentMonthLatenessAnalytics = async (req, res) => {
   }
 };
 
+/**
+ * Live Dashboard Analytics & KPI Statistics Endpoint: GET /api/admin/dashboard-stats
+ * Real-time counts and MongoDB aggregations with safe defaults to 0 and GH₵0.00 for empty states.
+ * Strictly returns 0 for all counts and financial totals if database is empty.
+ */
+export const getDashboardStats = async (req, res) => {
+  try {
+    const today = new Date().toISOString().split("T")[0];
+    const now = new Date();
+    const startOfToday = new Date(now.getFullYear(), now.getMonth(), now.getDate(), 0, 0, 0, 0);
+    const endOfToday = new Date(now.getFullYear(), now.getMonth(), now.getDate(), 23, 59, 59, 999);
+
+    // 1. Accurate Mongoose queries to count actual employee records in database
+    const employeeCountFromUsers = await User.countDocuments({ role: "employee" });
+    const staffCountFromUsers = await User.countDocuments({ role: "staff" });
+    const userEmployeeCount = employeeCountFromUsers + staffCountFromUsers;
+    const employeeDocsCount = await Employee.countDocuments();
+    const totalEmployeesCount = Math.max(userEmployeeCount, employeeDocsCount);
+
+    const activeUserEmployees = await User.countDocuments({
+      role: { $in: ["employee", "staff"] },
+      status: "active",
+    });
+    const activeEmployeeDocs = await Employee.countDocuments({
+      $or: [
+        { status: "active" },
+        { status: { $exists: false }, isActive: { $ne: false } },
+      ],
+    });
+    const activeEmployeesCount = Math.max(activeUserEmployees, activeEmployeeDocs);
+
+    const inactiveEmployeesCount = await Employee.countDocuments({ status: "inactive" });
+    const suspendedEmployeesCount = await Employee.countDocuments({ status: "suspended" });
+
+    // 2. Live Leave counts & active today logic
+    let leaveCount = 0;
+    if (totalEmployeesCount > 0) {
+      leaveCount = await (LeaveRequest || Leave).countDocuments({
+        status: { $regex: /^approved$/i },
+        startDate: { $lte: endOfToday },
+        endDate: { $gte: startOfToday },
+      });
+    }
+
+    const pendingLeaveCount = await (LeaveRequest || Leave).countDocuments({
+      status: { $regex: /^pending$/i },
+    });
+    const approvedLeaves = await (LeaveRequest || Leave).countDocuments({
+      status: { $regex: /^approved$/i },
+    });
+    const rejectedLeaves = await (LeaveRequest || Leave).countDocuments({
+      status: { $regex: /^rejected$/i },
+    });
+    const totalLeaveRequests = pendingLeaveCount + approvedLeaves + rejectedLeaves;
+
+    // 3. Live Pending Payroll aggregation
+    const payrollAgg = await Payroll.aggregate([
+      {
+        $match: {
+          status: { $in: ["pending", "Pending", "draft", "Draft", "unpaid", "Unpaid"] },
+        },
+      },
+      {
+        $group: {
+          _id: null,
+          total: {
+            $sum: {
+              $ifNull: [
+                "$amount",
+                { $ifNull: ["$netPay", { $ifNull: ["$netSalary", "$basicSalary"] }] },
+              ],
+            },
+          },
+          count: { $sum: 1 },
+        },
+      },
+    ]);
+    const pendingPayrollAmount =
+      payrollAgg.length > 0 && payrollAgg[0].total != null
+        ? parseFloat(Number(payrollAgg[0].total).toFixed(2))
+        : 0;
+    const pendingPayrollCount =
+      payrollAgg.length > 0 && payrollAgg[0].count != null ? payrollAgg[0].count : 0;
+
+    // Total & Disbursed Payroll Aggregations
+    const totalPayrollAgg = await Payroll.aggregate([
+      {
+        $group: {
+          _id: null,
+          total: {
+            $sum: {
+              $ifNull: [
+                "$amount",
+                { $ifNull: ["$netPay", { $ifNull: ["$netSalary", "$basicSalary"] }] },
+              ],
+            },
+          },
+          paid: {
+            $sum: {
+              $cond: [
+                { $in: ["$status", ["paid", "Paid", "completed", "Completed"]] },
+                {
+                  $ifNull: [
+                    "$amount",
+                    { $ifNull: ["$netPay", { $ifNull: ["$netSalary", "$basicSalary"] }] },
+                  ],
+                },
+                0,
+              ],
+            },
+          },
+          paidCount: {
+            $sum: {
+              $cond: [
+                { $in: ["$status", ["paid", "Paid", "completed", "Completed"]] },
+                1,
+                0,
+              ],
+            },
+          },
+        },
+      },
+    ]);
+    const totalPayrollAmount =
+      totalPayrollAgg.length > 0 && totalPayrollAgg[0].total != null
+        ? parseFloat(Number(totalPayrollAgg[0].total).toFixed(2))
+        : 0;
+    const totalPayrollDisbursed =
+      totalPayrollAgg.length > 0 && totalPayrollAgg[0].paid != null
+        ? parseFloat(Number(totalPayrollAgg[0].paid).toFixed(2))
+        : 0;
+    const employeesPaidCount =
+      totalPayrollAgg.length > 0 && totalPayrollAgg[0].paidCount != null
+        ? totalPayrollAgg[0].paidCount
+        : 0;
+
+    // 4. Live Attendance
+    const presentToday =
+      totalEmployeesCount === 0
+        ? 0
+        : await Attendance.countDocuments({
+            date: today,
+            clockIn: { $ne: null },
+          });
+
+    const lateToday =
+      totalEmployeesCount === 0
+        ? 0
+        : await Attendance.countDocuments({
+            date: today,
+            $or: [
+              { status: { $regex: /late/i } },
+              { lateMinutes: { $gt: 0 } },
+              { delayMinutes: { $gt: 0 } },
+            ],
+          });
+
+    const onTimeToday = Math.max(0, presentToday - lateToday);
+    const absentToday = Math.max(0, totalEmployeesCount - (presentToday + leaveCount));
+    const turnoutRate =
+      totalEmployeesCount > 0 ? Math.round((presentToday / totalEmployeesCount) * 100) : 0;
+
+    // 5. Department Breakdown from live Employee records
+    const deptAgg =
+      totalEmployeesCount === 0
+        ? []
+        : await Employee.aggregate([
+            {
+              $group: {
+                _id: { $ifNull: ["$department", "General"] },
+                count: { $sum: 1 },
+                active: {
+                  $sum: {
+                    $cond: [{ $eq: ["$status", "active"] }, 1, 0],
+                  },
+                },
+              },
+            },
+            { $sort: { count: -1 } },
+          ]);
+    const departmentDistribution = (deptAgg || []).map((d) => ({
+      _id: d._id,
+      name: d._id,
+      department: d._id,
+      total: d.count,
+      count: d.count,
+      active: d.active,
+    }));
+
+    // 6. Recent records with zero fallbacks
+    const recentEmployees =
+      totalEmployeesCount === 0
+        ? []
+        : await Employee.find()
+            .select("-password")
+            .sort({ createdAt: -1 })
+            .limit(10)
+            .lean();
+
+    const rawRecentAttendance =
+      totalEmployeesCount === 0
+        ? []
+        : await Attendance.find()
+            .sort({ date: -1, createdAt: -1 })
+            .limit(10)
+            .populate("userId", "fullName department position employeeId email avatar profilePicture")
+            .populate("employee", "fullName department position employeeId email avatar profilePicture")
+            .lean();
+
+    const recentAttendance = (rawRecentAttendance || []).map((rec) => {
+      const staff = rec.employee || rec.userId || {};
+      return {
+        ...rec,
+        userId: staff,
+        employee: staff,
+      };
+    });
+
+    const pendingApprovalsList =
+      pendingLeaveCount === 0
+        ? []
+        : await (LeaveRequest || Leave).find({ status: { $regex: /^pending$/i } })
+            .sort({ createdAt: -1 })
+            .limit(10)
+            .populate("employee", "fullName department position employeeId avatar profilePicture")
+            .lean();
+
+    return res.status(200).json({
+      success: true,
+      activeEmployees: activeEmployeesCount,
+      activeEmployeesCount,
+      employeesOnLeave: leaveCount,
+      leaveCount,
+      pendingLeaveRequests: pendingLeaveCount,
+      pendingLeaveCount,
+      pendingPayroll: pendingPayrollAmount,
+      pendingPayrollAmount,
+      totalEmployees: totalEmployeesCount,
+      inactiveEmployees: inactiveEmployeesCount,
+      suspendedEmployees: suspendedEmployeesCount,
+      presentToday,
+      onTimeToday,
+      lateToday,
+      absentToday,
+      turnoutRate,
+      pendingLeaves: pendingLeaveCount,
+      approvedLeaves,
+      rejectedLeaves,
+      totalLeaveRequests,
+      totalPayroll: totalPayrollAmount,
+      totalPayrollDisbursed,
+      monthlyPayrollTotal: totalPayrollDisbursed,
+      pendingDisbursements: pendingPayrollAmount,
+      employeesPaidCount,
+      totalEmployeesPaid: employeesPaidCount,
+      recentAttendance,
+      recentEmployees,
+      pendingApprovalsList,
+      departments: departmentDistribution,
+      departmentDistribution,
+      cards: {
+        activeEmployees: activeEmployeesCount,
+        totalEmployees: totalEmployeesCount,
+        presentToday,
+        lateToday,
+        onLeave: leaveCount,
+        employeesOnLeave: leaveCount,
+        pendingLeaves: pendingLeaveCount,
+        pendingLeaveRequests: pendingLeaveCount,
+        pendingPayroll: pendingPayrollAmount,
+        pendingPayrollCount,
+        totalPayroll: totalPayrollAmount,
+      },
+      attendance: {
+        totalEmployees: totalEmployeesCount,
+        present: presentToday,
+        onTime: onTimeToday,
+        late: lateToday,
+        onLeave: leaveCount,
+        absent: absentToday,
+        turnoutRate,
+      },
+      payroll: {
+        totalPayroll: totalPayrollAmount,
+        paid: totalPayrollDisbursed,
+        totalPayrollDisbursed,
+        pending: pendingPayrollAmount,
+        pendingDisbursements: pendingPayrollAmount,
+        pendingCount: pendingPayrollCount,
+        employeesPaidCount,
+        totalEmployeesPaid: employeesPaidCount,
+      },
+      leave: {
+        totalRequests: totalLeaveRequests,
+        approved: approvedLeaves,
+        pending: pendingLeaveCount,
+        rejected: rejectedLeaves,
+      },
+      leaveStatusData: [
+        { name: "Approved", value: approvedLeaves, fill: "#16A34A" },
+        { name: "Pending", value: pendingLeaveCount, fill: "#ff5500" },
+        { name: "Rejected", value: rejectedLeaves, fill: "#DC2626" },
+      ],
+      employeeStatusDistribution: [
+        { name: "Active", value: activeEmployeesCount, fill: "#16A34A" },
+        { name: "Inactive", value: inactiveEmployeesCount, fill: "#F59E0B" },
+        { name: "Suspended", value: suspendedEmployeesCount, fill: "#DC2626" },
+      ],
+    });
+  } catch (error) {
+    console.error("Error in getDashboardStats:", error);
+    return res.status(500).json({
+      success: false,
+      message: error.message || "Failed to fetch dashboard stats.",
+    });
+  }
+};
+
 export default {
   getPenaltyImpactAnalytics,
   getCurrentMonthLatenessAnalytics,
+  getDashboardStats,
 };

@@ -2,10 +2,15 @@ import { useEffect, useState, useMemo } from "react";
 import { useNavigate } from "react-router-dom";
 import {
   adminDashboardOverview,
+  getDashboardStats,
+  getAdminEmployees,
+  getAdminAttendance,
   updateStatus,
+  exportEmployeesCSV,
 } from "../../apis/fontApis";
 import {
   Users,
+  UserPlus,
   UserCheck,
   CalendarCheck,
   Building2,
@@ -17,6 +22,10 @@ import {
   XCircle,
   ArrowRight,
   UserX,
+  Download,
+  Award,
+  Eye,
+  Search,
 } from "lucide-react";
 import {
   ResponsiveContainer,
@@ -42,14 +51,20 @@ import LatenessDeductionsLineChart from "../../components/LatenessDeductionsLine
 import MonthlyAttendanceCalendarCard from "../../components/MonthlyAttendanceCalendarCard";
 import PenaltyPayrollImpactChart from "../../components/PenaltyPayrollImpactChart";
 import RecentActivityFeed from "../../components/RecentActivityFeed";
+import AttentionRequiredLateAttendance from "../../components/AttentionRequiredLateAttendance";
+import DashboardAuditTrail from "../../components/DashboardAuditTrail";
 import DashboardSummaryMetrics from "../../components/DashboardSummaryMetrics";
+import WorkforceSummaryDashboard from "../../components/WorkforceSummaryDashboard";
 import DashboardQuickActions from "../../components/DashboardQuickActions";
 import AddEmployee from "../../components/modal/AddEmployee";
 import RecordAttendanceModal from "../../components/modal/RecordAttendanceModal";
 import PayslipsModal from "../../components/modal/PayslipsModal";
 import DashboardDataSummarySection from "../../components/DashboardDataSummarySection";
 import Avatar from "../../components/Avatar";
+import EmployeeDetailModal from "../../components/EmployeeDetailModal";
+import { exportHREmployeeReportToCSV } from "../../utils/exportCsv";
 import { useManagement } from "../../context/ManagementContextProvider";
+import DefaultPlatformLogo from "../../components/DefaultPlatformLogo";
 
 const AdminDashboard = () => {
   const navigate = useNavigate();
@@ -58,31 +73,165 @@ const AdminDashboard = () => {
     setShowEmployeeModal,
     showPayslipsModal,
     setShowPayslipsModal,
+    company,
+    companyLogoUrl,
   } = useManagement();
   const [showRecordAttendanceModal, setShowRecordAttendanceModal] = useState(false);
   const [dashboardData, setDashboardData] = useState(null);
-  const [isLoading, setIsLoading] = useState(false);
+  const [employeeList, setEmployeeList] = useState([]);
+  const [attendanceList, setAttendanceList] = useState([]);
+  const [selectedEmployeeForModal, setSelectedEmployeeForModal] = useState(null);
+  const [isLoading, setIsLoading] = useState(true);
   const [isError, setIsError] = useState(null);
   const [actionProcessingId, setActionProcessingId] = useState(null);
   const [exportNotice, setExportNotice] = useState(null);
+  const [isExportingCsv, setIsExportingCsv] = useState(false);
+  const [employeeSearchTerm, setEmployeeSearchTerm] = useState("");
+
+  const filteredEmployeeList = useMemo(() => {
+    if (!employeeSearchTerm) return employeeList;
+    const term = employeeSearchTerm.toLowerCase().trim();
+    return employeeList.filter(
+      (emp) =>
+        emp.fullName?.toLowerCase().includes(term) ||
+        emp.department?.toLowerCase().includes(term) ||
+        emp.position?.toLowerCase().includes(term) ||
+        emp.email?.toLowerCase().includes(term) ||
+        emp.employeeId?.toLowerCase().includes(term)
+    );
+  }, [employeeList, employeeSearchTerm]);
 
   const fetchDashboardData = async () => {
     try {
       setIsLoading(true);
       setIsError(null);
-      const { data } = await adminDashboardOverview();
-      if (data.success) {
-        setDashboardData(data.overview);
+
+      // Query live single-tenant endpoints directly from database
+      const [statsRes, overviewRes, employeesRes, attendanceRes] = await Promise.allSettled([
+        getDashboardStats(),
+        adminDashboardOverview(),
+        getAdminEmployees(),
+        getAdminAttendance(),
+      ]);
+
+      let mergedData = {};
+
+      if (overviewRes.status === "fulfilled" && overviewRes.value.data?.success) {
+        mergedData = { ...overviewRes.value.data.overview };
+      }
+
+      if (statsRes.status === "fulfilled" && statsRes.value.data?.success) {
+        const liveStats = statsRes.value.data;
+        mergedData = {
+          ...mergedData,
+          ...liveStats,
+          cards: {
+            ...mergedData.cards,
+            ...liveStats.cards,
+          },
+          attendance: {
+            ...mergedData.attendance,
+            ...liveStats.attendance,
+          },
+          payroll: {
+            ...mergedData.payroll,
+            ...liveStats.payroll,
+          },
+          leave: {
+            ...mergedData.leave,
+            ...liveStats.leave,
+          },
+          departments:
+            liveStats.departments ||
+            liveStats.departmentDistribution ||
+            mergedData.departments,
+          recentAttendance:
+            liveStats.recentAttendance || mergedData.recentAttendance || [],
+          pendingApprovalsList:
+            liveStats.pendingApprovalsList || mergedData.pendingApprovalsList || [],
+        };
+      }
+
+      if (Object.keys(mergedData).length > 0) {
+        setDashboardData(mergedData);
       } else {
-        setIsError(data.message || "Failed to fetch dashboard data.");
+        setIsError("Failed to fetch dashboard data from server.");
+      }
+
+      // Live Employees list directly from database (Global Single-Tenant)
+      if (employeesRes.status === "fulfilled" && employeesRes.value?.data) {
+        const empData = employeesRes.value.data;
+        const list = Array.isArray(empData.employees)
+          ? empData.employees
+          : Array.isArray(empData)
+          ? empData
+          : empData.list || [];
+        setEmployeeList(list);
+      } else if (Array.isArray(mergedData?.recentEmployees) && mergedData.recentEmployees.length > 0) {
+        setEmployeeList(mergedData.recentEmployees);
+      } else {
+        setEmployeeList([]);
+      }
+
+      // Live Attendance list directly from database (Global Single-Tenant)
+      if (attendanceRes.status === "fulfilled" && attendanceRes.value?.data) {
+        const attData = attendanceRes.value.data;
+        const list = Array.isArray(attData.attendance)
+          ? attData.attendance
+          : Array.isArray(attData)
+          ? attData
+          : [];
+        setAttendanceList(list);
+      } else if (Array.isArray(mergedData?.recentAttendance) && mergedData.recentAttendance.length > 0) {
+        setAttendanceList(mergedData.recentAttendance);
+      } else {
+        setAttendanceList([]);
       }
     } catch (error) {
       console.error("Error fetching dashboard:", error);
+      setEmployeeList([]);
+      setAttendanceList([]);
       const errorMessage =
         error.response?.data?.message || "Failed to fetch dashboard data.";
       setIsError(errorMessage);
     } finally {
       setIsLoading(false);
+    }
+  };
+
+  const handleExportEmployeesCSV = async () => {
+    try {
+      setIsExportingCsv(true);
+      const res = await exportEmployeesCSV();
+      if (res.data) {
+        const blob = new Blob([res.data], { type: "text/csv;charset=utf-8;" });
+        const url = window.URL.createObjectURL(blob);
+        const link = document.createElement("a");
+        link.href = url;
+        link.setAttribute(
+          "download",
+          `workforce-employee-database-${new Date().toISOString().split("T")[0]}.csv`
+        );
+        document.body.appendChild(link);
+        link.click();
+        link.remove();
+        window.URL.revokeObjectURL(url);
+        setExportNotice({
+          type: "success",
+          message: "HR Employee database exported successfully to CSV.",
+        });
+        setTimeout(() => setExportNotice(null), 5000);
+      }
+    } catch (err) {
+      console.warn("Server CSV export fallback to client utility:", err.message);
+      exportHREmployeeReportToCSV(employeeList);
+      setExportNotice({
+        type: "success",
+        message: "HR Employee database exported successfully via report generator.",
+      });
+      setTimeout(() => setExportNotice(null), 5000);
+    } finally {
+      setIsExportingCsv(false);
     }
   };
 
@@ -152,25 +301,27 @@ const AdminDashboard = () => {
     if (!dashboardData) return [];
     const totalPayroll = dashboardData.payroll?.totalPayroll ?? 0;
     const pendingPayroll = dashboardData.payroll?.pending ?? dashboardData.payroll?.pendingDisbursements ?? 0;
+    const activeEmpCount = Number(dashboardData.cards?.activeEmployees ?? dashboardData.activeEmployees ?? dashboardData.cards?.totalEmployees ?? 0);
+    const totalEmpCount = Number(dashboardData.cards?.totalEmployees ?? dashboardData.totalEmployees ?? activeEmpCount);
 
     return [
       {
-        title: "Total Employees",
-        value: dashboardData.cards?.totalEmployees || 0,
+        title: "Active Employees",
+        value: activeEmpCount,
         icon: Users,
         color: "bg-[#002185]",
         textColor: "text-[#002185] dark:text-blue-400",
         link: "/admin/employees",
-        subtitle: "Active workforce headcount",
+        subtitle: totalEmpCount > 0 ? `${activeEmpCount} active of ${totalEmpCount} staff` : "0 active employees registered",
       },
       {
         title: "Pending Leave Requests",
-        value: dashboardData.cards?.pendingLeaves || dashboardData.leave?.pending || 0,
+        value: Number(dashboardData.cards?.pendingLeaves ?? dashboardData.leave?.pending ?? 0),
         icon: Clock,
         color: "bg-[#ff5500]",
         textColor: "text-[#ff5500] dark:text-orange-400",
         link: "/admin/leave",
-        subtitle: "Awaiting administrative review",
+        subtitle: (dashboardData.cards?.pendingLeaves || dashboardData.leave?.pending || 0) > 0 ? "Awaiting administrative review" : "No pending review requests",
       },
       {
         title: "Payroll Status",
@@ -183,7 +334,7 @@ const AdminDashboard = () => {
       },
       {
         title: "Present Today",
-        value: dashboardData.cards?.presentToday || 0,
+        value: Number(dashboardData.cards?.presentToday ?? dashboardData.attendance?.present ?? 0),
         icon: UserCheck,
         color: "bg-[#002185]",
         textColor: "text-[#002185] dark:text-blue-400",
@@ -192,7 +343,7 @@ const AdminDashboard = () => {
       },
       {
         title: "On Leave",
-        value: dashboardData.cards?.onLeave || 0,
+        value: Number(dashboardData.cards?.onLeave ?? dashboardData.attendance?.onLeave ?? 0),
         icon: CalendarCheck,
         color: "bg-[#F59E0B]",
         textColor: "text-[#F59E0B] dark:text-amber-400",
@@ -283,13 +434,35 @@ const AdminDashboard = () => {
       {/* Header Banner */}
       <div className="bg-white dark:bg-slate-900 border border-slate-200/80 dark:border-slate-800/80 rounded-2xl sm:rounded-3xl p-5 sm:p-6 shadow-sm dark:shadow-black/20">
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-          <div>
-            <h1 className="text-2xl sm:text-3xl font-extrabold tracking-tight text-[#0B1E48] dark:text-blue-100">
-              Admin Analytics Dashboard
-            </h1>
-            <p className="text-sm font-medium text-slate-500 dark:text-slate-400 mt-1">
-              Real-time workforce intelligence, attendance turnout, and pending approval workflows.
-            </p>
+          <div className="flex items-center gap-3.5">
+            {company?.logoUrl || companyLogoUrl ? (
+              <div className="w-12 h-12 rounded-xl bg-white dark:bg-slate-800 border border-slate-200/80 dark:border-slate-700 shadow-xs flex items-center justify-center p-1 overflow-hidden shrink-0">
+                <img
+                  src={company?.logoUrl || companyLogoUrl}
+                  alt={company?.name || company?.companyName || "Company Logo"}
+                  className="w-full h-full object-contain"
+                  onError={(e) => {
+                    e.target.style.display = "none";
+                    if (e.target.nextSibling) {
+                      e.target.nextSibling.style.display = "flex";
+                    }
+                  }}
+                />
+                <div className="hidden w-full h-full items-center justify-center bg-[#0B1E48] text-white font-bold text-sm rounded-lg">
+                  {(company?.name || company?.companyName || "W").charAt(0).toUpperCase()}
+                </div>
+              </div>
+            ) : (
+              <DefaultPlatformLogo className="w-12 h-12" />
+            )}
+            <div>
+              <h1 className="text-2xl sm:text-3xl font-extrabold tracking-tight text-[#0B1E48] dark:text-blue-100">
+                Admin Analytics Dashboard
+              </h1>
+              <p className="text-sm font-medium text-slate-500 dark:text-slate-400 mt-1">
+                Real-time workforce intelligence, attendance turnout, and pending approval workflows.
+              </p>
+            </div>
           </div>
 
           <div className="flex flex-wrap items-center gap-2.5 self-start sm:self-auto">
@@ -379,6 +552,53 @@ const AdminDashboard = () => {
           );
         })}
       </div>
+
+      {/* ZERO STATE BANNER FOR BRAND NEW OR INITIALIZED SYSTEM WITH 0 EMPLOYEES */}
+      {Number(dashboardData.cards?.totalEmployees || dashboardData.totalEmployees || 0) === 0 && (
+        <div
+          id="dashboard-zero-state-banner"
+          className="bg-gradient-to-r from-blue-50 via-indigo-50 to-blue-50 dark:from-blue-950/40 dark:via-indigo-950/30 dark:to-blue-950/40 border border-blue-200 dark:border-blue-800/80 rounded-2xl sm:rounded-3xl p-6 sm:p-7 shadow-xs flex flex-col sm:flex-row sm:items-center justify-between gap-4"
+        >
+          <div className="flex items-start sm:items-center gap-4">
+            <div className="w-12 h-12 rounded-2xl bg-blue-600 text-white flex items-center justify-center shrink-0 shadow-sm">
+              <Users className="w-6 h-6" />
+            </div>
+            <div>
+              <h3 className="text-base sm:text-lg font-bold text-slate-900 dark:text-white">
+                Workspace Initialized · 0 Active Employees
+              </h3>
+              <p className="text-xs sm:text-sm text-slate-600 dark:text-slate-300 mt-0.5">
+                All metrics strictly reflect 0 records. Add your first employee to start recording attendance, scheduling shifts, and running payroll disbursements.
+              </p>
+            </div>
+          </div>
+          <button
+            type="button"
+            id="btn-zero-state-add-employee"
+            onClick={() => setShowEmployeeModal(true)}
+            className="px-4 py-2.5 rounded-xl bg-blue-600 hover:bg-blue-700 text-white text-xs font-bold transition-all shadow-sm flex items-center gap-2 self-start sm:self-auto shrink-0 cursor-pointer"
+          >
+            <UserPlus className="w-4 h-4" />
+            <span>Add First Employee</span>
+          </button>
+        </div>
+      )}
+
+      {/* HIGH-PRIORITY ATTENTION REQUIRED: Late Attendance & Missing Clock-Ins Monitoring */}
+      <AttentionRequiredLateAttendance onActionLogged={() => fetchDashboardData()} />
+
+      {/* RECHARTS KEY WORKFORCE OPERATIONS & ATTENDANCE SUMMARY COMPONENT */}
+      <WorkforceSummaryDashboard
+        dashboardData={dashboardData}
+        employeeList={employeeList}
+        onExportNotice={(msg) => {
+          setExportNotice({
+            type: "success",
+            message: msg,
+          });
+          setTimeout(() => setExportNotice(null), 6000);
+        }}
+      />
 
       {/* RECHARTS KEY METRICS & ACTIVE PAYROLL ALERTS SUMMARY COMPONENT */}
       <DashboardSummaryMetrics dashboardData={dashboardData} />
@@ -931,6 +1151,9 @@ const AdminDashboard = () => {
       {/* Real-time Recent Activity Feed (Attendance & Payroll Logs) */}
       <RecentActivityFeed />
 
+      {/* Real-time Administrative Audit Trail Component (Fetched from ActivityLog MongoDB Collection) */}
+      <DashboardAuditTrail />
+
       {/* Summary Cards: Payroll & Department Matrix */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
         {/* Payroll Summary Card */}
@@ -1017,6 +1240,342 @@ const AdminDashboard = () => {
         </div>
       </div>
 
+      {/* LIVE DATABASE INTEGRATION SECTION: Single-Tenant Live Attendance & Workforce Roster */}
+      <div className="space-y-6">
+        {/* SECTION 1: Live Attendance Stream */}
+        <div className="bg-white dark:bg-slate-900 border border-slate-200/80 dark:border-slate-800/80 rounded-2xl sm:rounded-3xl p-5 sm:p-6 shadow-sm dark:shadow-black/20">
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 mb-5 pb-4 border-b border-slate-100 dark:border-slate-800">
+            <div>
+              <div className="flex items-center gap-2">
+                <div className="p-1.5 rounded-lg bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border border-emerald-500/20">
+                  <Clock className="w-4 h-4" />
+                </div>
+                <h3 className="text-base font-bold text-slate-900 dark:text-white tracking-tight">
+                  Live Attendance Records
+                </h3>
+                <span className="px-2.5 py-0.5 rounded-full text-[10px] font-bold bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border border-emerald-500/20">
+                  Direct DB Query
+                </span>
+              </div>
+              <p className="text-xs text-slate-500 dark:text-slate-400 mt-1">
+                Real-time shift clock-ins, lateness calculations, and presence logs without tenant filtering.
+              </p>
+            </div>
+
+            <div className="flex items-center gap-2">
+              <button
+                type="button"
+                onClick={() => navigate("/admin/attendance")}
+                className="text-xs font-semibold text-blue-600 dark:text-blue-400 hover:underline cursor-pointer"
+              >
+                View Full Attendance History →
+              </button>
+            </div>
+          </div>
+
+          {attendanceList.length === 0 ? (
+            <div className="text-center py-10 bg-slate-50 dark:bg-slate-950/40 rounded-2xl border border-dashed border-slate-200 dark:border-slate-800">
+              <Clock className="w-8 h-8 text-slate-400 mx-auto mb-2" />
+              <p className="text-sm font-bold text-slate-700 dark:text-slate-300">
+                No attendance records for today yet
+              </p>
+              <p className="text-xs text-slate-400 mt-0.5">
+                Attendance logs will populate in real-time as employees clock in.
+              </p>
+            </div>
+          ) : (
+            <div className="overflow-x-auto">
+              <table className="w-full text-left border-collapse text-xs">
+                <thead>
+                  <tr className="border-b border-slate-100 dark:border-slate-800 text-slate-400 uppercase text-[10px] font-bold tracking-wider">
+                    <th className="py-3 px-3">Employee</th>
+                    <th className="py-3 px-3">Department</th>
+                    <th className="py-3 px-3">Date</th>
+                    <th className="py-3 px-3">Clock In</th>
+                    <th className="py-3 px-3">Clock Out</th>
+                    <th className="py-3 px-3">Status</th>
+                    <th className="py-3 px-3">Lateness</th>
+                    <th className="py-3 px-3 text-right">Actions</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-slate-100 dark:divide-slate-800/60 font-medium">
+                  {attendanceList.slice(0, 10).map((record, rIdx) => {
+                    const emp = record.employee || record.userId || {};
+                    const empName = emp.fullName || record.fullName || "Staff Member";
+                    const dept = emp.department || record.department || "General";
+                    const avatarUrl = emp.avatar || emp.profilePicture || emp.profile_image_url || "";
+                    const statusStr = (record.status || "present").toLowerCase();
+                    const isLate = statusStr.includes("late") || (record.lateMinutes && record.lateMinutes > 0);
+
+                    return (
+                      <tr
+                        key={record._id || rIdx}
+                        className="hover:bg-slate-50/70 dark:hover:bg-slate-800/40 transition-colors"
+                      >
+                        <td className="py-3 px-3">
+                          <div className="flex items-center gap-2.5">
+                            <Avatar
+                              src={avatarUrl}
+                              alt={empName}
+                              name={empName}
+                              className="w-8 h-8 rounded-full border border-slate-200 dark:border-slate-700 shrink-0"
+                            />
+                            <div className="min-w-0">
+                              <p className="font-bold text-slate-900 dark:text-white truncate">
+                                {empName}
+                              </p>
+                              <p className="text-[10px] text-slate-400 truncate">
+                                {emp.employeeId || record.employeeId || "EMP"}
+                              </p>
+                            </div>
+                          </div>
+                        </td>
+                        <td className="py-3 px-3 text-slate-600 dark:text-slate-300">
+                          {dept}
+                        </td>
+                        <td className="py-3 px-3 text-slate-500 dark:text-slate-400 whitespace-nowrap">
+                          {record.date || new Date().toISOString().split("T")[0]}
+                        </td>
+                        <td className="py-3 px-3 font-mono font-bold text-slate-800 dark:text-slate-200">
+                          {record.clockIn || "--:--"}
+                        </td>
+                        <td className="py-3 px-3 font-mono text-slate-500 dark:text-slate-400">
+                          {record.clockOut || "--:--"}
+                        </td>
+                        <td className="py-3 px-3">
+                          <span
+                            className={`inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-bold ${
+                              isLate
+                                ? "bg-amber-500/10 text-amber-600 dark:text-amber-400 border border-amber-500/20"
+                                : statusStr.includes("absent")
+                                ? "bg-rose-500/10 text-rose-600 dark:text-rose-400 border border-rose-500/20"
+                                : "bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border border-emerald-500/20"
+                            }`}
+                          >
+                            {isLate ? "Late Clock-in" : record.status || "Present"}
+                          </span>
+                        </td>
+                        <td className="py-3 px-3 text-slate-600 dark:text-slate-300">
+                          {record.lateMinutes > 0 ? (
+                            <span className="text-amber-600 dark:text-amber-400 font-bold">
+                              +{record.lateMinutes} mins
+                            </span>
+                          ) : (
+                            <span className="text-slate-400">On Time</span>
+                          )}
+                        </td>
+                        <td className="py-3 px-3 text-right">
+                          <button
+                            type="button"
+                            onClick={() => setSelectedEmployeeForModal(emp)}
+                            className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg bg-blue-50 dark:bg-blue-950/60 text-blue-600 dark:text-blue-400 hover:bg-blue-100 dark:hover:bg-blue-900/60 text-[11px] font-bold transition cursor-pointer"
+                          >
+                            <Eye className="w-3 h-3" />
+                            <span>Profile</span>
+                          </button>
+                        </td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
+          )}
+        </div>
+
+        {/* SECTION 2: Global Single-Tenant Employee Directory */}
+        <div className="bg-white dark:bg-slate-900 border border-slate-200/80 dark:border-slate-800/80 rounded-2xl sm:rounded-3xl p-5 sm:p-6 shadow-sm dark:shadow-black/20">
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 mb-5 pb-4 border-b border-slate-100 dark:border-slate-800">
+            <div>
+              <div className="flex items-center gap-2 flex-wrap">
+                <div className="p-1.5 rounded-lg bg-blue-500/10 text-blue-600 dark:text-blue-400 border border-blue-500/20">
+                  <Users className="w-4 h-4" />
+                </div>
+                <h3 className="text-base font-bold text-slate-900 dark:text-white tracking-tight">
+                  Workforce Employee Database
+                </h3>
+                <span className="px-2.5 py-0.5 rounded-full text-xs font-bold bg-blue-500/10 text-blue-600 dark:text-blue-400 border border-blue-500/20">
+                  {employeeList.length} Active Records
+                </span>
+              </div>
+              <p className="text-xs text-slate-500 dark:text-slate-400 mt-1">
+                Global workforce roster fetched directly from MongoDB without tenant restrictions.
+              </p>
+            </div>
+
+            <div className="flex flex-wrap items-center gap-2">
+              <div className="relative">
+                <Search className="w-3.5 h-3.5 absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
+                <input
+                  type="text"
+                  placeholder="Search employees..."
+                  value={employeeSearchTerm}
+                  onChange={(e) => setEmployeeSearchTerm(e.target.value)}
+                  className="pl-8 pr-3 py-1.5 rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 text-xs text-slate-800 dark:text-slate-200 focus:outline-none focus:ring-1 focus:ring-blue-500 w-44 sm:w-56"
+                />
+              </div>
+
+              <button
+                type="button"
+                disabled={isExportingCsv}
+                onClick={handleExportEmployeesCSV}
+                className="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-bold shadow-xs transition disabled:opacity-50 cursor-pointer"
+              >
+                <Download className="w-3.5 h-3.5" />
+                <span>{isExportingCsv ? "Exporting CSV..." : "Export CSV for HR Reporting"}</span>
+              </button>
+            </div>
+          </div>
+
+          {isLoading ? (
+            /* Loading State Protection: Skeleton Loader while initial data fetch has not completely resolved */
+            <div className="py-6 space-y-3">
+              <div className="flex items-center justify-between px-3">
+                <div className="h-4 bg-slate-200 dark:bg-slate-800 rounded w-1/4 animate-pulse"></div>
+                <div className="h-4 bg-slate-200 dark:bg-slate-800 rounded w-16 animate-pulse"></div>
+              </div>
+              <div className="divide-y divide-slate-100 dark:divide-slate-800/80">
+                {[1, 2, 3, 4, 5].map((i) => (
+                  <div key={i} className="py-3 px-3 flex items-center justify-between animate-pulse">
+                    <div className="flex items-center gap-3 w-1/3">
+                      <div className="w-8 h-8 rounded-full bg-slate-200 dark:bg-slate-800 shrink-0"></div>
+                      <div className="space-y-1.5 flex-1">
+                        <div className="h-3.5 bg-slate-200 dark:bg-slate-800 rounded w-32"></div>
+                        <div className="h-2.5 bg-slate-100 dark:bg-slate-850 rounded w-20"></div>
+                      </div>
+                    </div>
+                    <div className="h-3 bg-slate-200 dark:bg-slate-800 rounded w-20"></div>
+                    <div className="h-3 bg-slate-200 dark:bg-slate-800 rounded w-20"></div>
+                    <div className="h-5 bg-slate-200 dark:bg-slate-800 rounded-full w-14"></div>
+                    <div className="h-3 bg-slate-200 dark:bg-slate-800 rounded w-16"></div>
+                    <div className="h-6 bg-slate-200 dark:bg-slate-800 rounded-xl w-24"></div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          ) : !isLoading && employeeList.length === 0 ? (
+            /* PROFESSIONAL EMPTY STATE: Centered UI when database returns zero records */
+            <div className="py-14 px-6 text-center">
+              <div className="w-14 h-14 rounded-full bg-blue-50 dark:bg-blue-950/60 text-blue-600 dark:text-blue-400 border border-blue-100 dark:border-blue-900/40 flex items-center justify-center mx-auto mb-4 shadow-2xs">
+                <Users className="w-7 h-7" />
+              </div>
+              <h3 className="text-base sm:text-lg font-bold text-slate-900 dark:text-white tracking-tight">
+                No employees added yet.
+              </h3>
+              <p className="text-xs sm:text-sm text-slate-500 dark:text-slate-400 mt-1 max-w-md mx-auto leading-relaxed">
+                Get started by adding your first employee to the system to view attendance and payroll data.
+              </p>
+              <div className="mt-5 flex items-center justify-center">
+                <button
+                  type="button"
+                  onClick={() => setShowEmployeeModal(true)}
+                  className="inline-flex items-center gap-2 px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white text-xs font-semibold rounded-xl transition-all shadow-sm cursor-pointer hover:shadow-md active:scale-98"
+                >
+                  <UserPlus className="w-4 h-4" />
+                  <span>+ Add Employee</span>
+                </button>
+              </div>
+            </div>
+          ) : filteredEmployeeList.length === 0 ? (
+            <div className="text-center py-10 bg-slate-50 dark:bg-slate-950/40 rounded-2xl border border-dashed border-slate-200 dark:border-slate-800">
+              <Users className="w-8 h-8 text-slate-400 mx-auto mb-2" />
+              <p className="text-sm font-bold text-slate-700 dark:text-slate-300">
+                No employees match your search query
+              </p>
+              <p className="text-xs text-slate-400 mt-0.5 mb-3">
+                Try searching by another name, department, or email.
+              </p>
+              <button
+                type="button"
+                onClick={() => setEmployeeSearchTerm("")}
+                className="text-xs font-semibold text-blue-600 dark:text-blue-400 hover:underline cursor-pointer"
+              >
+                Clear search filter
+              </button>
+            </div>
+          ) : (
+            <div className="overflow-x-auto">
+              <table className="w-full text-left border-collapse text-xs">
+                <thead>
+                  <tr className="border-b border-slate-100 dark:border-slate-800 text-slate-400 uppercase text-[10px] font-bold tracking-wider">
+                    <th className="py-3 px-3">Employee</th>
+                    <th className="py-3 px-3">Position</th>
+                    <th className="py-3 px-3">Department</th>
+                    <th className="py-3 px-3">Status</th>
+                    <th className="py-3 px-3">Base Salary</th>
+                    <th className="py-3 px-3 text-right">Performance & Profile</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-slate-100 dark:divide-slate-800/60 font-medium">
+                  {filteredEmployeeList.slice(0, 10).map((emp, eIdx) => {
+                    const empName = emp.fullName || "Staff Member";
+                    const avatarUrl = emp.avatar || emp.profilePicture || emp.profile_image_url || "";
+                    const statusStr = (emp.status || (emp.isActive !== false ? "active" : "inactive")).toLowerCase();
+                    const isActive = statusStr === "active";
+
+                    return (
+                      <tr
+                        key={emp._id || eIdx}
+                        className="hover:bg-slate-50/70 dark:hover:bg-slate-800/40 transition-colors"
+                      >
+                        <td className="py-3 px-3">
+                          <div className="flex items-center gap-2.5">
+                            <Avatar
+                              src={avatarUrl}
+                              alt={empName}
+                              name={empName}
+                              className="w-8 h-8 rounded-full border border-slate-200 dark:border-slate-700 shrink-0"
+                            />
+                            <div className="min-w-0">
+                              <p className="font-bold text-slate-900 dark:text-white truncate">
+                                {empName}
+                              </p>
+                              <p className="text-[10px] text-slate-400 truncate">
+                                {emp.email || emp.employeeId || "EMP"}
+                              </p>
+                            </div>
+                          </div>
+                        </td>
+                        <td className="py-3 px-3 text-slate-600 dark:text-slate-300 font-medium">
+                          {emp.position || "Staff"}
+                        </td>
+                        <td className="py-3 px-3 text-slate-600 dark:text-slate-300">
+                          {emp.department || "General"}
+                        </td>
+                        <td className="py-3 px-3">
+                          <span
+                            className={`inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-bold ${
+                              isActive
+                                ? "bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border border-emerald-500/20"
+                                : "bg-slate-500/10 text-slate-600 dark:text-slate-400 border border-slate-500/20"
+                            }`}
+                          >
+                            {isActive ? "Active" : "Inactive"}
+                          </span>
+                        </td>
+                        <td className="py-3 px-3 font-mono font-bold text-slate-800 dark:text-slate-200">
+                          GHS {Number(emp.baseSalary || emp.salary || 0).toLocaleString()}
+                        </td>
+                        <td className="py-3 px-3 text-right">
+                          <button
+                            type="button"
+                            onClick={() => setSelectedEmployeeForModal(emp)}
+                            className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-[#002185] hover:bg-blue-700 text-white text-[11px] font-bold shadow-2xs transition cursor-pointer"
+                          >
+                            <Award className="w-3.5 h-3.5 text-amber-300" />
+                            <span>Performance & Reviews</span>
+                          </button>
+                        </td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
+          )}
+        </div>
+      </div>
+
       {/* Floating Quick Actions Menu */}
       <DashboardQuickActions
         onOpenAddEmployee={() => setShowEmployeeModal(true)}
@@ -1050,6 +1609,16 @@ const AdminDashboard = () => {
             setShowPayslipsModal(false);
             fetchDashboardData();
           }}
+        />
+      )}
+
+      {/* Employee Detail & Quarterly Performance Modal */}
+      {selectedEmployeeForModal && (
+        <EmployeeDetailModal
+          employee={selectedEmployeeForModal}
+          isOpen={!!selectedEmployeeForModal}
+          onClose={() => setSelectedEmployeeForModal(null)}
+          isAdmin={true}
         />
       )}
     </div>

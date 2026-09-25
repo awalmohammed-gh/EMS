@@ -10,6 +10,7 @@ import {
   AlertTriangle,
   RefreshCw,
   History,
+  Palette,
 } from "lucide-react";
 import { useManagement } from "../../context/ManagementContextProvider";
 import { getAdminProfile, getSettings } from "../../apis/fontApis";
@@ -26,9 +27,11 @@ import PenaltySettings from "./Settings/PenaltySettings";
 import LeaveSettings from "./Settings/LeaveSettings";
 import EmployeeSettings from "./Settings/EmployeeSettings";
 import AuditLogView from "../../components/AuditLogView";
+import ThemePreferenceCard from "../../components/ThemePreferenceCard";
 
 const TABS = [
   { id: "profile", label: "Profile Info", icon: User, desc: "Personal & admin account credentials" },
+  { id: "appearance", label: "Appearance & Theme", icon: Palette, desc: "Light, dark & system color mode selection" },
   { id: "security", label: "Security", icon: Shield, desc: "2FA, session policies & login defense" },
   { id: "company", label: "Company", icon: Building2, desc: "Organization profile, appearance, hours & currency" },
   { id: "payroll", label: "Payroll", icon: CreditCard, desc: "Payment cycles, taxes & disbursement" },
@@ -242,6 +245,11 @@ const SettingsContent = () => {
           {/* Tab Component Renderers */}
           {activeTab === "profile" && (
             <ProfileSettings onSaveSuccess={handleSaveNotification} />
+          )}
+          {activeTab === "appearance" && (
+            <div className="space-y-6">
+              <ThemePreferenceCard />
+            </div>
           )}
           {activeTab === "security" && (
             <SecuritySettings onSaveSuccess={handleSaveNotification} />

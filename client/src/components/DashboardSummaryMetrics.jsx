@@ -65,10 +65,10 @@ const DashboardSummaryMetrics = ({ dashboardData }) => {
     },
   ];
 
-  // Payroll Status Breakdown for Donut Chart
+  // Payroll Status Breakdown for Donut Chart - strict real values, zero mock multipliers
   const payrollStatusSegments = [
-    { name: "Disbursed", value: disbursedPayroll > 0 ? disbursedPayroll : (totalPayroll > 0 ? totalPayroll * 0.75 : 0), fill: "#16A34A" },
-    { name: "Pending", value: pendingPayroll > 0 ? pendingPayroll : (totalPayroll > 0 ? totalPayroll * 0.25 : 0), fill: "#F59E0B" },
+    { name: "Disbursed", value: disbursedPayroll, fill: "#16A34A" },
+    { name: "Pending", value: pendingPayroll, fill: "#F59E0B" },
     { name: "Penalties Deducted", value: penaltyDeductions, fill: "#DC2626" },
   ].filter((item) => item.value > 0);
 

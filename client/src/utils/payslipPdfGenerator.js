@@ -1,4 +1,5 @@
 import { jsPDF } from "jspdf";
+import html2canvas from "html2canvas";
 import logo from "../assets/eyenit_logo.png";
 
 /**
@@ -719,16 +720,171 @@ export const generatePayslipPDF = async (rawPayslip) => {
 };
 
 /**
- * Download handler that saves the PDF document directly to user's device
+ * Renders a payslip record into an HTML canvas using html2canvas.
+ * If targetElement is provided (e.g. an active card in the DOM), it captures that directly.
+ * Otherwise, it creates a temporary off-screen container from generatePayslipHTML, captures it, and cleans up.
  */
-export const downloadPayslipPDF = async (rawPayslip) => {
-  const data = normalizePayslipData(rawPayslip);
-  const doc = await generatePayslipPDF(rawPayslip);
-  const safeName = data.employeeName.replace(/\s+/g, "_");
-  const safePeriod = data.payPeriod.replace(/\s+/g, "_");
-  const fileName = `Payslip_${safeName}_${safePeriod}.pdf`;
-  doc.save(fileName);
+export const renderPayslipToCanvas = async (rawPayslip, targetElement = null) => {
+  let el = typeof targetElement === "string" ? document.getElementById(targetElement) : targetElement;
+  let tempContainer = null;
+
+  if (!el) {
+    tempContainer = document.createElement("div");
+    tempContainer.style.position = "fixed";
+    tempContainer.style.left = "-9999px";
+    tempContainer.style.top = "0";
+    tempContainer.style.width = "820px";
+    tempContainer.style.background = "#ffffff";
+    tempContainer.style.zIndex = "-9999";
+    tempContainer.style.boxSizing = "border-box";
+    tempContainer.innerHTML = generatePayslipHTML(rawPayslip);
+    document.body.appendChild(tempContainer);
+    el = tempContainer.querySelector("#corporate-payslip-document") || tempContainer;
+  }
+
+  try {
+    const canvas = await html2canvas(el, {
+      scale: 2, // 2x high resolution for sharp PDF printing
+      useCORS: true,
+      allowTaint: true,
+      logging: false,
+      backgroundColor: "#ffffff",
+      windowWidth: 1024,
+    });
+    return canvas;
+  } finally {
+    if (tempContainer && tempContainer.parentNode) {
+      tempContainer.parentNode.removeChild(tempContainer);
+    }
+  }
 };
+
+/**
+ * Adds an HTML canvas of a payslip to a jsPDF instance, fitting neatly inside A4 dimensions.
+ */
+export const addPayslipCanvasToDoc = (canvas, doc) => {
+  const pageWidth = doc.internal.pageSize.getWidth();
+  const pageHeight = doc.internal.pageSize.getHeight();
+  const margin = 10; // 10mm margin
+  const availableWidth = pageWidth - margin * 2;
+  const availableHeight = pageHeight - margin * 2;
+
+  const imgWidth = availableWidth;
+  const imgHeight = (canvas.height * imgWidth) / canvas.width;
+
+  let finalWidth = imgWidth;
+  let finalHeight = imgHeight;
+  let finalX = margin;
+  let finalY = margin;
+
+  if (imgHeight > availableHeight) {
+    const scaleFactor = availableHeight / imgHeight;
+    finalHeight = availableHeight;
+    finalWidth = imgWidth * scaleFactor;
+    finalX = margin + (availableWidth - finalWidth) / 2;
+  }
+
+  const imgData = canvas.toDataURL("image/png", 1.0);
+  doc.addImage(imgData, "PNG", finalX, finalY, finalWidth, finalHeight, undefined, "FAST");
+  return doc;
+};
+
+/**
+ * Download handler that saves an individual employee's official pay stub using html2canvas & jsPDF.
+ */
+export const downloadPayslipPDF = async (rawPayslip, targetElement = null) => {
+  const data = normalizePayslipData(rawPayslip);
+  try {
+    const canvas = await renderPayslipToCanvas(rawPayslip, targetElement);
+    const doc = new jsPDF({
+      orientation: "portrait",
+      unit: "mm",
+      format: "a4",
+      compress: true,
+    });
+    addPayslipCanvasToDoc(canvas, doc);
+
+    const safeName = data.employeeName.replace(/[^a-zA-Z0-9_-]/g, "_");
+    const safePeriod = data.payPeriod.replace(/[^a-zA-Z0-9_-]/g, "_");
+    const fileName = `Payslip_${safeName}_${safePeriod}.pdf`;
+    doc.save(fileName);
+    return { success: true, fileName };
+  } catch (canvasErr) {
+    console.warn("html2canvas PDF generation failed, falling back to direct vector PDF:", canvasErr);
+    // Programmatic vector fallback ensures download always succeeds
+    const doc = await generatePayslipPDF(rawPayslip);
+    const safeName = data.employeeName.replace(/[^a-zA-Z0-9_-]/g, "_");
+    const safePeriod = data.payPeriod.replace(/[^a-zA-Z0-9_-]/g, "_");
+    const fileName = `Payslip_${safeName}_${safePeriod}.pdf`;
+    doc.save(fileName);
+    return { success: true, fallback: true, fileName };
+  }
+};
+
+/**
+ * Downloads multiple employee payroll statements in a consolidated, multi-page PDF document
+ * using html2canvas and jsPDF.
+ *
+ * @param {Array} payslipList - Array of payroll/payslip records
+ * @param {Object} options - { onProgress: (progressObj) => void, fileName: string }
+ */
+export const downloadBulkPayslipsPDF = async (payslipList = [], options = {}) => {
+  if (!Array.isArray(payslipList) || payslipList.length === 0) {
+    throw new Error("No payroll records provided for bulk PDF download.");
+  }
+
+  const total = payslipList.length;
+  const doc = new jsPDF({
+    orientation: "portrait",
+    unit: "mm",
+    format: "a4",
+    compress: true,
+  });
+
+  for (let i = 0; i < total; i++) {
+    const payslip = payslipList[i];
+    const data = normalizePayslipData(payslip);
+
+    if (typeof options.onProgress === "function") {
+      options.onProgress({
+        current: i + 1,
+        total,
+        percentage: Math.round(((i + 1) / total) * 100),
+        employeeName: data.employeeName,
+        payPeriod: data.payPeriod,
+      });
+    }
+
+    // Add page for all records after the first
+    if (i > 0) {
+      doc.addPage();
+    }
+
+    try {
+      const canvas = await renderPayslipToCanvas(payslip);
+      addPayslipCanvasToDoc(canvas, doc);
+    } catch (err) {
+      console.warn(`Canvas render failed for ${data.employeeName}, generating direct vector fallback:`, err);
+      // Fallback note on canvas render issue
+      // If error occurs, create empty or minimal note
+      doc.setFont("helvetica", "bold");
+      doc.setFontSize(16);
+      doc.setTextColor(30, 58, 138);
+      doc.text(`Official Payslip - ${data.employeeName}`, 14, 20);
+      doc.setFontSize(10);
+      doc.text(`Period: ${data.payPeriod} • Net Salary: ${formatCurrency(data.netSalary)}`, 14, 28);
+    }
+  }
+
+  const samplePeriod =
+    normalizePayslipData(payslipList[0])?.payPeriod?.replace(/[^a-zA-Z0-9_-]/g, "_") || "Statements";
+  const defaultFileName = `Bulk_Payslips_${samplePeriod}_${total}_Employees.pdf`;
+  const fileName = options.fileName || defaultFileName;
+  doc.save(fileName);
+
+  return { success: true, count: total, fileName };
+};
+
 
 /**
  * Printable Window Handler for instant preview or physical print

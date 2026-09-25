@@ -24,6 +24,7 @@ import companyRouter from "./routes/companyRoutes.js";
 import { CompanySettings } from "./models/CompanySettings.js";
 import { logErrorToFile } from "./utils/logger.js";
 import { autoCloseAllStaleShifts } from "./controllers/employeeAttendance.js";
+import { syncActivityLogsCollection } from "./utils/auditLogger.js";
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -255,6 +256,13 @@ const startBackendServer = async () => {
         await autoCloseAllStaleShifts();
       } catch (sweepErr) {
         console.warn("[Backend] Stale shift auto-close sweep notice:", sweepErr.message);
+      }
+
+      // Synchronize and initialize ActivityLog MongoDB collection for real-time audit trail
+      try {
+        await syncActivityLogsCollection();
+      } catch (syncErr) {
+        console.warn("[Backend] ActivityLog sync notice:", syncErr.message);
       }
 
       // Schedule periodic background sweep to catch 7:30 PM auto-close and midnight rollovers

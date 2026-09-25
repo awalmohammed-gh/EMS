@@ -2,6 +2,7 @@ import mongoose from "mongoose";
 import { Notification } from "../models/notificationModel.js";
 import { Payroll } from "../models/payrollModel.js";
 import { Employee } from "../models/employeeModel.js";
+import { Leave } from "../models/leaveModel.js";
 import { validateOrganizationAccess } from "../utils/validateOrganizationAccess.js";
 
 /**
@@ -224,6 +225,175 @@ export const getNotifications = async (req, res) => {
         }
       } catch (syncErr) {
         console.warn("Could not auto-sync published payslip notifications:", syncErr.message);
+      }
+    }
+
+    // For administrators, ensure centralized alerts exist for system-wide events:
+    // (1) Pending Leave Approvals
+    // (2) New Employee Registrations
+    // (3) Payroll Status Updates
+    if (isAdmin) {
+      try {
+        const tenantScope = tenantId ? { $or: [{ companyId: tenantId }, { organizationId: tenantId }] } : {};
+
+        // 1. Pending Leave Approvals
+        const pendingLeaves = await Leave.find({
+          status: { $in: ["Pending", "pending"] },
+          ...tenantScope,
+        })
+          .populate("employee", "fullName employeeId department position")
+          .sort({ createdAt: -1 })
+          .limit(15)
+          .lean();
+
+        for (const pl of pendingLeaves) {
+          const leaveIdStr = String(pl._id);
+          const alreadyNotified = documents.some(
+            (d) =>
+              d.metadata?.leaveId === leaveIdStr ||
+              d.metadata?.leave_id === leaveIdStr
+          );
+
+          if (!alreadyNotified) {
+            const empName = pl.employee?.fullName || "Staff Member";
+            const dept = pl.employee?.department || "General";
+            const daysCount = pl.totalDays || 1;
+            const lType = pl.leaveType || "Leave";
+            const startStr = pl.startDate ? new Date(pl.startDate).toLocaleDateString("en-GH", { month: "short", day: "numeric", year: "numeric" }) : "";
+            const endStr = pl.endDate ? new Date(pl.endDate).toLocaleDateString("en-GH", { month: "short", day: "numeric", year: "numeric" }) : "";
+
+            const newNotif = await createNotificationRecord({
+              recipient_id: "admin",
+              recipient_role: "admin",
+              sender_id: String(pl.employee?._id || pl.employee?.employeeId || "employee"),
+              sender_role: "employee",
+              sender_name: empName,
+              title: `⏳ Pending Leave Approval: ${lType}`,
+              message: `${empName} (${dept}) submitted a ${daysCount}-day ${lType} request (${startStr} to ${endStr}) pending administrator approval.`,
+              type: "pending_leave_approval",
+              category: "leave",
+              priority: "high",
+              action_url: "/admin/leave",
+              action_label: "Review Leave",
+              organizationId: tenantId,
+              companyId: tenantId,
+              metadata: {
+                leaveId: leaveIdStr,
+                employeeName: empName,
+                department: dept,
+                leaveType: lType,
+                totalDays: daysCount,
+                startDate: pl.startDate,
+                endDate: pl.endDate,
+              },
+            });
+
+            if (newNotif) {
+              documents.unshift(newNotif);
+            }
+          }
+        }
+
+        // 2. New Employee Registrations
+        const recentEmployees = await Employee.find(tenantScope)
+          .sort({ createdAt: -1, employmentDate: -1 })
+          .limit(10)
+          .lean();
+
+        for (const emp of recentEmployees) {
+          const empIdStr = String(emp.employeeId || emp._id);
+          const alreadyNotified = documents.some(
+            (d) =>
+              d.metadata?.employeeId === empIdStr ||
+              d.metadata?.employeeId === String(emp.employeeId) ||
+              d.metadata?.employeeDbId === String(emp._id)
+          );
+
+          if (!alreadyNotified) {
+            const newNotif = await createNotificationRecord({
+              recipient_id: "admin",
+              recipient_role: "admin",
+              sender_id: String(emp._id),
+              sender_role: "system",
+              sender_name: "Staff Registration",
+              title: `👤 New Employee Registered: ${emp.fullName}`,
+              message: `${emp.fullName} (${emp.employeeId}) has registered as ${emp.position || "Staff"} in the ${emp.department || "Operations"} department.`,
+              type: "new_employee_registration",
+              category: "system",
+              priority: "medium",
+              action_url: "/admin/employees",
+              action_label: "View Employees",
+              organizationId: tenantId,
+              companyId: tenantId,
+              metadata: {
+                employeeId: emp.employeeId,
+                employeeDbId: String(emp._id),
+                fullName: emp.fullName,
+                department: emp.department,
+                position: emp.position,
+                email: emp.email,
+              },
+            });
+
+            if (newNotif) {
+              documents.unshift(newNotif);
+            }
+          }
+        }
+
+        // 3. Payroll Status Updates (Recent records)
+        const recentPayroll = await Payroll.find(tenantScope)
+          .sort({ updatedAt: -1, createdAt: -1 })
+          .limit(10)
+          .populate("employee", "fullName employeeId department")
+          .lean();
+
+        for (const pr of recentPayroll) {
+          const prIdStr = String(pr._id);
+          const alreadyNotified = documents.some(
+            (d) =>
+              d.metadata?.payrollId === prIdStr ||
+              (d.metadata?.payslipNumber && d.metadata?.payslipNumber === pr.payslipNumber)
+          );
+
+          if (!alreadyNotified) {
+            const empName = pr.employee?.fullName || pr.employeeName || "Employee";
+            const netSalary = Number(pr.netSalary || pr.netPay || 0);
+            const status = pr.status || "Pending";
+            const pMonth = pr.payMonth || pr.month || "Current Month";
+
+            const newNotif = await createNotificationRecord({
+              recipient_id: "admin",
+              recipient_role: "admin",
+              sender_id: "system",
+              sender_role: "system",
+              sender_name: "Payroll System",
+              title: `💳 Payroll Status: ${empName} (${status})`,
+              message: `Payroll for ${empName} (${pMonth}) status is currently "${status}". Net Salary: GH₵${netSalary.toFixed(2)}.`,
+              type: "payroll_status_update",
+              category: "payroll",
+              priority: status === "Paid" ? "high" : "medium",
+              action_url: "/admin/payroll",
+              action_label: "View Payroll",
+              organizationId: tenantId,
+              companyId: tenantId,
+              metadata: {
+                payrollId: prIdStr,
+                payslipNumber: pr.payslipNumber,
+                status,
+                payMonth: pMonth,
+                employeeName: empName,
+                netSalary,
+              },
+            });
+
+            if (newNotif) {
+              documents.unshift(newNotif);
+            }
+          }
+        }
+      } catch (adminSyncErr) {
+        console.warn("Could not auto-sync admin system notifications:", adminSyncErr.message);
       }
     }
 

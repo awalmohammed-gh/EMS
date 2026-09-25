@@ -1,6 +1,6 @@
 import { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
-import { motion, AnimatePresence } from "framer-motion";
+import { motion } from "framer-motion";
 import {
   Building2,
   Users,
@@ -15,21 +15,99 @@ import {
   CheckCircle2,
   Lock,
   TrendingUp,
-  Menu,
-  X,
   Award,
   Phone,
   Mail,
   MapPin,
   Check,
+  Search,
+  X,
+  Filter,
 } from "lucide-react";
 import { useBranding } from "../context/BrandingContext";
+import DefaultPlatformLogo from "../components/DefaultPlatformLogo";
 
 export const LandingPage = () => {
   const navigate = useNavigate();
-  const { companyName, logoUrl, contactEmail, contactPhone, address } = useBranding();
-  const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
+  const { contactEmail, contactPhone, address } = useBranding();
   const [activeTab, setActiveTab] = useState("attendance");
+  const [employeeSearchQuery, setEmployeeSearchQuery] = useState("");
+  const [employeeDeptFilter, setEmployeeDeptFilter] = useState("All");
+
+  const sampleEmployees = [
+    {
+      id: "EMP001",
+      name: "Jessica Taylor",
+      dept: "Engineering",
+      pos: "Senior Fullstack Engineer",
+      status: "Active",
+      email: "j.taylor@company.com",
+    },
+    {
+      id: "EMP002",
+      name: "Michael Vance",
+      dept: "Operations",
+      pos: "Logistics Operations Lead",
+      status: "Active",
+      email: "m.vance@company.com",
+    },
+    {
+      id: "EMP003",
+      name: "Elena Rostova",
+      dept: "Marketing",
+      pos: "Growth Marketing Lead",
+      status: "Active",
+      email: "e.rostova@company.com",
+    },
+    {
+      id: "EMP004",
+      name: "David Mensah",
+      dept: "Finance",
+      pos: "Payroll & Financial Analyst",
+      status: "Active",
+      email: "d.mensah@company.com",
+    },
+    {
+      id: "EMP005",
+      name: "Sarah Jenkins",
+      dept: "Human Resources",
+      pos: "People Operations Manager",
+      status: "Active",
+      email: "s.jenkins@company.com",
+    },
+    {
+      id: "EMP006",
+      name: "Alexander Reed",
+      dept: "Engineering",
+      pos: "DevOps & Cloud Architect",
+      status: "Active",
+      email: "a.reed@company.com",
+    },
+  ];
+
+  const showcaseDepartments = [
+    "All",
+    "Engineering",
+    "Operations",
+    "Marketing",
+    "Finance",
+    "Human Resources",
+  ];
+
+  const filteredShowcaseEmployees = sampleEmployees.filter((emp) => {
+    const q = employeeSearchQuery.toLowerCase().trim();
+    const nameMatches = emp.name.toLowerCase().includes(q);
+    const deptMatches = emp.dept.toLowerCase().includes(q);
+    const posMatches = emp.pos.toLowerCase().includes(q);
+    const idMatches = emp.id.toLowerCase().includes(q);
+    const searchMatches = !q || nameMatches || deptMatches || posMatches || idMatches;
+
+    const deptFilterMatches =
+      employeeDeptFilter === "All" ||
+      emp.dept.toLowerCase() === employeeDeptFilter.toLowerCase();
+
+    return searchMatches && deptFilterMatches;
+  });
 
   useEffect(() => {
     if (typeof document !== "undefined") {
@@ -38,7 +116,9 @@ export const LandingPage = () => {
   }, [companyName]);
 
   const scrollToSection = (id) => {
-    setMobileMenuOpen(false);
+    if (id === "employees" || id === "attendance" || id === "payroll") {
+      setActiveTab(id);
+    }
     const element = document.getElementById(id);
     if (element) {
       element.scrollIntoView({ behavior: "smooth" });
@@ -158,37 +238,16 @@ export const LandingPage = () => {
         className="sticky top-0 z-50 w-full bg-white/90 dark:bg-slate-900/90 backdrop-blur-md border-b border-slate-200/80 dark:border-slate-800 shadow-2xs transition-all"
       >
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 h-18 flex items-center justify-between gap-4">
-          {/* Brand Logo & Name */}
+          {/* Default SaaS Platform Brand Logo & Name */}
           <div
             id="brand-logo-container"
             className="flex items-center gap-3 cursor-pointer select-none shrink-0"
             onClick={() => window.scrollTo({ top: 0, behavior: "smooth" })}
           >
-            {logoUrl ? (
-              <div className="w-10 h-10 rounded-xl bg-white dark:bg-slate-800 p-1 shadow-2xs border border-slate-200/80 dark:border-slate-700 flex items-center justify-center overflow-hidden shrink-0">
-                <img
-                  src={logoUrl}
-                  alt={companyName || "WorkPulse"}
-                  className="w-full h-full object-contain"
-                  onError={(e) => {
-                    e.target.style.display = "none";
-                    if (e.target.nextSibling) {
-                      e.target.nextSibling.style.display = "flex";
-                    }
-                  }}
-                />
-                <div className="hidden w-full h-full items-center justify-center bg-[#0B1E48] text-white font-bold text-sm rounded-lg">
-                  {companyName ? companyName.charAt(0).toUpperCase() : "W"}
-                </div>
-              </div>
-            ) : (
-              <div className="w-10 h-10 rounded-xl bg-[#0B1E48] text-white p-2 shadow-2xs flex items-center justify-center border border-[#0B1E48] shrink-0">
-                <Building2 className="w-5 h-5 text-blue-400" />
-              </div>
-            )}
+            <DefaultPlatformLogo className="w-10 h-10" />
             <div className="flex flex-col">
               <span className="text-lg font-black tracking-tight text-[#0B1E48] dark:text-white leading-tight">
-                {companyName || "WorkPulse"}
+                WorkPulse
               </span>
               <span className="text-[10px] uppercase font-bold tracking-wider text-slate-400 dark:text-slate-500 -mt-0.5">
                 Workforce Management
@@ -196,127 +255,20 @@ export const LandingPage = () => {
             </div>
           </div>
 
-          {/* Desktop Navigation Links */}
-          <nav className="hidden md:flex items-center gap-8 text-sm font-semibold text-slate-600 dark:text-slate-300">
-            <button
-              type="button"
-              id="nav-link-features"
-              onClick={() => scrollToSection("features")}
-              className="hover:text-[#0B1E48] dark:hover:text-white transition-colors cursor-pointer"
-            >
-              Features
-            </button>
-            <button
-              type="button"
-              id="nav-link-attendance"
-              onClick={() => scrollToSection("attendance")}
-              className="hover:text-[#0B1E48] dark:hover:text-white transition-colors cursor-pointer"
-            >
-              Attendance
-            </button>
-            <button
-              type="button"
-              id="nav-link-payroll"
-              onClick={() => scrollToSection("payroll")}
-              className="hover:text-[#0B1E48] dark:hover:text-white transition-colors cursor-pointer"
-            >
-              Payroll
-            </button>
-            <button
-              type="button"
-              id="nav-link-employees"
-              onClick={() => scrollToSection("employees")}
-              className="hover:text-[#0B1E48] dark:hover:text-white transition-colors cursor-pointer"
-            >
-              Employee Management
-            </button>
-          </nav>
-
-          {/* Single Prominent Public CTA: Admin Login */}
-          <div className="hidden sm:flex items-center gap-3">
+          {/* Public CTA: Admin Login */}
+          <div className="flex items-center gap-3">
             <button
               type="button"
               id="nav-btn-admin-login"
               onClick={() => navigate("/admin/auth")}
-              className="px-5 py-2.5 rounded-xl text-sm font-bold text-white bg-[#0B1E48] hover:bg-[#071534] dark:bg-blue-600 dark:hover:bg-blue-700 shadow-sm hover:shadow-md transition-all cursor-pointer whitespace-nowrap flex items-center gap-2"
+              className="px-4 sm:px-5 py-2 sm:py-2.5 rounded-xl text-xs sm:text-sm font-bold text-white bg-[#0B1E48] hover:bg-[#071534] dark:bg-blue-600 dark:hover:bg-blue-700 shadow-sm hover:shadow-md transition-all cursor-pointer whitespace-nowrap flex items-center gap-2"
             >
               <Lock className="w-3.5 h-3.5 text-blue-300" />
               <span>Admin Login</span>
               <ArrowRight className="w-3.5 h-3.5 text-blue-300" />
             </button>
           </div>
-
-          {/* Mobile Menu Toggle */}
-          <div className="flex md:hidden items-center gap-2">
-            <button
-              type="button"
-              id="mobile-menu-toggle-btn"
-              onClick={() => setMobileMenuOpen(!mobileMenuOpen)}
-              className="p-2 rounded-xl text-slate-700 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800"
-              aria-label="Toggle navigation menu"
-            >
-              {mobileMenuOpen ? <X className="w-6 h-6" /> : <Menu className="w-6 h-6" />}
-            </button>
-          </div>
         </div>
-
-        {/* Mobile Navigation Drawer */}
-        <AnimatePresence>
-          {mobileMenuOpen && (
-            <motion.div
-              initial={{ opacity: 0, height: 0 }}
-              animate={{ opacity: 1, height: "auto" }}
-              exit={{ opacity: 0, height: 0 }}
-              className="md:hidden border-t border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 px-4 py-5 shadow-xl"
-            >
-              <nav className="flex flex-col gap-3 text-sm font-semibold text-slate-700 dark:text-slate-200">
-                <button
-                  type="button"
-                  onClick={() => scrollToSection("features")}
-                  className="text-left py-2 px-3 rounded-lg hover:bg-slate-50 dark:hover:bg-slate-800"
-                >
-                  Features
-                </button>
-                <button
-                  type="button"
-                  onClick={() => scrollToSection("attendance")}
-                  className="text-left py-2 px-3 rounded-lg hover:bg-slate-50 dark:hover:bg-slate-800"
-                >
-                  Attendance
-                </button>
-                <button
-                  type="button"
-                  onClick={() => scrollToSection("payroll")}
-                  className="text-left py-2 px-3 rounded-lg hover:bg-slate-50 dark:hover:bg-slate-800"
-                >
-                  Payroll
-                </button>
-                <button
-                  type="button"
-                  onClick={() => scrollToSection("employees")}
-                  className="text-left py-2 px-3 rounded-lg hover:bg-slate-50 dark:hover:bg-slate-800"
-                >
-                  Employee Management
-                </button>
-                <div className="pt-3 border-t border-slate-100 dark:border-slate-800">
-                  <button
-                    type="button"
-                    id="mobile-nav-btn-admin-login"
-                    onClick={() => {
-                      setMobileMenuOpen(false);
-                      navigate("/admin/auth");
-                    }}
-                    className="w-full py-3 px-4 rounded-xl text-sm font-bold text-white bg-[#0B1E48] dark:bg-blue-600 flex items-center justify-center gap-2"
-                  >
-                    <Lock className="w-4 h-4 text-blue-300" />
-                    <span>Admin Login</span>
-                    <ArrowRight className="w-4 h-4 text-blue-300" />
-                  </button>
-                </div>
-              </nav>
-            </motion.div>
-          )}
-        </AnimatePresence>
       </header>
 
       {/* ==================== MAIN CONTENT ==================== */}
@@ -643,7 +595,7 @@ export const LandingPage = () => {
                       : "text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white"
                   }`}
                 >
-                  Employee Directory
+                  Employee Management
                 </button>
               </div>
             </div>
@@ -759,21 +711,21 @@ export const LandingPage = () => {
             {activeTab === "employees" && (
               <div id="employees" className="bg-white dark:bg-slate-900 rounded-2xl border border-slate-200/90 dark:border-slate-800 p-6 sm:p-10 shadow-xl grid grid-cols-1 lg:grid-cols-2 gap-10 items-center">
                 <div className="space-y-5">
-                  <span className="text-xs font-bold text-blue-600 uppercase tracking-wider">Employee Directory</span>
+                  <span className="text-xs font-bold text-blue-600 uppercase tracking-wider">Employee Management</span>
                   <h3 className="text-2xl sm:text-3xl font-black text-[#0B1E48] dark:text-white leading-tight">
                     Structured Staff Directory &amp; Records
                   </h3>
                   <p className="text-sm text-slate-600 dark:text-slate-300 leading-relaxed">
-                    Organize your company's talent. Manage departments, job titles, active positions, and personal profiles with search and filtering.
+                    Organize your company's talent. Manage departments, job titles, active positions, and personal profiles with real-time search and filtering.
                   </p>
                   <ul className="space-y-3 text-xs sm:text-sm text-slate-700 dark:text-slate-300 font-medium">
                     <li className="flex items-center gap-3">
                       <CheckCircle2 className="w-4 h-4 text-blue-600 shrink-0" />
-                      <span>Instant search across employee names, IDs, and positions</span>
+                      <span>Instant real-time search bar to filter records by name or department</span>
                     </li>
                     <li className="flex items-center gap-3">
                       <CheckCircle2 className="w-4 h-4 text-blue-600 shrink-0" />
-                      <span>Departmental categorization and position hierarchies</span>
+                      <span>Departmental categorization and quick filter buttons</span>
                     </li>
                     <li className="flex items-center gap-3">
                       <CheckCircle2 className="w-4 h-4 text-blue-600 shrink-0" />
@@ -781,30 +733,166 @@ export const LandingPage = () => {
                     </li>
                   </ul>
                 </div>
-                <div className="p-4 rounded-xl bg-slate-50 dark:bg-slate-800/50 border border-slate-200/80 dark:border-slate-700 space-y-2.5">
-                  {[
-                    { name: "Jessica Taylor", dept: "Engineering", pos: "Senior Fullstack Engineer", status: "Active" },
-                    { name: "Michael Vance", dept: "Operations", pos: "Logistics Manager", status: "Active" },
-                    { name: "Elena Rostova", dept: "Marketing", pos: "Growth Lead", status: "Active" },
-                  ].map((emp, idx) => (
-                    <div
-                      key={idx}
-                      className="p-3 bg-white dark:bg-slate-900 rounded-xl border border-slate-200/80 dark:border-slate-800 flex items-center justify-between text-xs"
-                    >
-                      <div className="flex items-center gap-3">
-                        <div className="w-8 h-8 rounded-full bg-blue-100 dark:bg-blue-900 text-blue-800 dark:text-blue-200 flex items-center justify-center font-bold">
-                          {emp.name.charAt(0)}
-                        </div>
-                        <div>
-                          <p className="font-bold text-slate-900 dark:text-white">{emp.name}</p>
-                          <p className="text-[11px] text-slate-500">{emp.pos} • {emp.dept}</p>
-                        </div>
-                      </div>
-                      <span className="text-[10px] font-bold text-emerald-700 dark:text-emerald-400 bg-emerald-50 dark:bg-emerald-950/60 px-2 py-0.5 rounded-md">
-                        {emp.status}
+
+                {/* Real-time Searchable Employee Records Component */}
+                <div className="p-5 rounded-2xl bg-slate-50 dark:bg-slate-800/50 border border-slate-200/80 dark:border-slate-700 space-y-3.5 shadow-sm">
+                  {/* Header & Counter */}
+                  <div className="flex items-center justify-between gap-2 pb-1">
+                    <div className="flex items-center gap-2">
+                      <Users className="w-4 h-4 text-blue-600 dark:text-blue-400" />
+                      <span className="text-xs font-bold text-slate-800 dark:text-slate-200">
+                        Employee Records Directory
                       </span>
                     </div>
-                  ))}
+                    <span className="text-[11px] font-semibold px-2 py-0.5 rounded-full bg-blue-100 dark:bg-blue-950/70 text-blue-700 dark:text-blue-300 border border-blue-200 dark:border-blue-800/60">
+                      {filteredShowcaseEmployees.length} of {sampleEmployees.length} Staff
+                    </span>
+                  </div>
+
+                  {/* Real-time Search Input Bar & Department Dropdown Filter */}
+                  <div className="flex flex-col sm:flex-row gap-2.5">
+                    {/* Real-time Search Input Bar */}
+                    <div className="relative flex-1">
+                      <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none text-slate-400 dark:text-slate-500">
+                        <Search className="w-4 h-4" />
+                      </div>
+                      <input
+                        id="landing-employee-search-bar"
+                        type="text"
+                        value={employeeSearchQuery}
+                        onChange={(e) => setEmployeeSearchQuery(e.target.value)}
+                        placeholder="Search employee records by name or department..."
+                        aria-label="Real-time employee search by name or department"
+                        className="w-full pl-9 pr-9 py-2.5 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl text-xs text-slate-900 dark:text-white placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 transition-all shadow-2xs"
+                      />
+                      {employeeSearchQuery && (
+                        <button
+                          type="button"
+                          onClick={() => setEmployeeSearchQuery("")}
+                          title="Clear search query"
+                          className="absolute inset-y-0 right-0 pr-3 flex items-center text-slate-400 hover:text-slate-700 dark:hover:text-slate-200 cursor-pointer"
+                        >
+                          <X className="w-3.5 h-3.5" />
+                        </button>
+                      )}
+                    </div>
+
+                    {/* Department Dropdown Filter alongside Search Bar */}
+                    <div className="relative sm:w-48 shrink-0">
+                      <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none text-slate-400 dark:text-slate-500">
+                        <Building2 className="w-3.5 h-3.5" />
+                      </div>
+                      <select
+                        id="landing-employee-department-filter"
+                        aria-label="Filter by department"
+                        value={employeeDeptFilter}
+                        onChange={(e) => setEmployeeDeptFilter(e.target.value)}
+                        className="w-full pl-8.5 pr-8 py-2.5 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl text-xs text-slate-700 dark:text-slate-200 focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 cursor-pointer transition-all shadow-2xs font-medium"
+                      >
+                        {showcaseDepartments.map((dept) => (
+                          <option key={dept} value={dept}>
+                            {dept === "All" ? "All Departments" : dept}
+                          </option>
+                        ))}
+                      </select>
+                    </div>
+                  </div>
+
+                  {/* Department Quick Filter Pills */}
+                  <div className="flex items-center gap-1.5 overflow-x-auto pb-1 scrollbar-none text-[11px]">
+                    <span className="text-slate-400 dark:text-slate-500 shrink-0 font-medium flex items-center gap-1 mr-0.5">
+                      <Filter className="w-3 h-3" />
+                      <span>Dept:</span>
+                    </span>
+                    {showcaseDepartments.map((dept) => {
+                      const isActive = employeeDeptFilter === dept;
+                      return (
+                        <button
+                          key={dept}
+                          type="button"
+                          onClick={() => setEmployeeDeptFilter(dept)}
+                          className={`px-2.5 py-1 rounded-lg text-[11px] font-semibold whitespace-nowrap transition-all cursor-pointer ${
+                            isActive
+                              ? "bg-blue-600 text-white shadow-2xs"
+                              : "bg-white dark:bg-slate-900 text-slate-600 dark:text-slate-300 border border-slate-200/80 dark:border-slate-700/80 hover:bg-slate-100 dark:hover:bg-slate-800"
+                          }`}
+                        >
+                          {dept}
+                        </button>
+                      );
+                    })}
+                  </div>
+
+                  {/* Active Filter Indicator */}
+                  {(employeeSearchQuery || employeeDeptFilter !== "All") && (
+                    <div className="flex items-center justify-between text-[11px] text-slate-500 dark:text-slate-400 bg-blue-50/60 dark:bg-blue-950/40 px-2.5 py-1 rounded-lg border border-blue-100 dark:border-blue-900/40">
+                      <span className="truncate">
+                        Filtering by: {employeeSearchQuery && <strong className="text-blue-600 dark:text-blue-400">"{employeeSearchQuery}"</strong>}
+                        {employeeSearchQuery && employeeDeptFilter !== "All" && " in "}
+                        {employeeDeptFilter !== "All" && <strong className="text-blue-600 dark:text-blue-400">{employeeDeptFilter}</strong>}
+                        {" "}({filteredShowcaseEmployees.length} match{filteredShowcaseEmployees.length !== 1 ? "es" : ""})
+                      </span>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setEmployeeSearchQuery("");
+                          setEmployeeDeptFilter("All");
+                        }}
+                        className="text-blue-600 dark:text-blue-400 hover:underline font-semibold cursor-pointer shrink-0 ml-2"
+                      >
+                        Reset
+                      </button>
+                    </div>
+                  )}
+
+                  {/* Filtered Employee Records List */}
+                  <div className="space-y-2 max-h-[290px] overflow-y-auto pr-0.5">
+                    {filteredShowcaseEmployees.length > 0 ? (
+                      filteredShowcaseEmployees.map((emp) => (
+                        <div
+                          key={emp.id}
+                          className="p-3 bg-white dark:bg-slate-900 rounded-xl border border-slate-200/80 dark:border-slate-800 flex items-center justify-between text-xs hover:border-blue-300 dark:hover:border-blue-700 transition-colors shadow-2xs"
+                        >
+                          <div className="flex items-center gap-3 min-w-0">
+                            <div className="w-8 h-8 rounded-full bg-blue-100 dark:bg-blue-900/60 text-blue-700 dark:text-blue-300 flex items-center justify-center font-bold text-xs shrink-0">
+                              {emp.name.charAt(0)}
+                            </div>
+                            <div className="min-w-0">
+                              <p className="font-bold text-slate-900 dark:text-white truncate">
+                                {emp.name}
+                              </p>
+                              <p className="text-[11px] text-slate-500 dark:text-slate-400 truncate">
+                                {emp.pos} • <span className="font-semibold text-blue-600 dark:text-blue-400">{emp.dept}</span>
+                              </p>
+                            </div>
+                          </div>
+                          <span className="text-[10px] font-bold text-emerald-700 dark:text-emerald-400 bg-emerald-50 dark:bg-emerald-950/60 border border-emerald-200 dark:border-emerald-800/60 px-2 py-0.5 rounded-md shrink-0 ml-2">
+                            {emp.status}
+                          </span>
+                        </div>
+                      ))
+                    ) : (
+                      <div className="py-8 text-center bg-white dark:bg-slate-900 rounded-xl border border-dashed border-slate-200 dark:border-slate-800 px-4">
+                        <Search className="w-6 h-6 mx-auto text-slate-400 dark:text-slate-500 mb-2 opacity-60" />
+                        <p className="text-xs font-bold text-slate-800 dark:text-slate-200">
+                          No employee records found
+                        </p>
+                        <p className="text-[11px] text-slate-500 dark:text-slate-400 mt-1 max-w-xs mx-auto">
+                          No staff records matched your search query in name or department.
+                        </p>
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setEmployeeSearchQuery("");
+                            setEmployeeDeptFilter("All");
+                          }}
+                          className="mt-3 px-3 py-1.5 rounded-lg bg-blue-50 dark:bg-blue-950/60 text-blue-600 dark:text-blue-400 border border-blue-200 dark:border-blue-800 text-xs font-semibold hover:bg-blue-100 dark:hover:bg-blue-900 cursor-pointer transition-all"
+                        >
+                          Clear Filter &amp; Show All
+                        </button>
+                      </div>
+                    )}
+                  </div>
                 </div>
               </div>
             )}
@@ -920,25 +1008,12 @@ export const LandingPage = () => {
       >
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
           <div className="grid grid-cols-1 md:grid-cols-4 gap-8 mb-10">
-            {/* Column 1: Company / WorkPulse Brand */}
+            {/* Column 1: Default SaaS Platform Brand */}
             <div className="space-y-3 md:col-span-2">
               <div className="flex items-center gap-3">
-                {logoUrl ? (
-                  <img
-                    src={logoUrl}
-                    alt={companyName || "WorkPulse"}
-                    className="h-8 w-auto object-contain"
-                    onError={(e) => {
-                      e.target.style.display = "none";
-                    }}
-                  />
-                ) : (
-                  <div className="w-8 h-8 rounded-lg bg-[#0B1E48] text-white flex items-center justify-center font-bold text-xs">
-                    <Building2 className="w-4 h-4 text-blue-400" />
-                  </div>
-                )}
+                <DefaultPlatformLogo className="w-8 h-8" iconSize="w-4 h-4" />
                 <span className="text-base font-black text-[#0B1E48] dark:text-white">
-                  {companyName || "WorkPulse"}
+                  WorkPulse
                 </span>
               </div>
               <p className="text-xs text-slate-500 dark:text-slate-400 max-w-md leading-relaxed">

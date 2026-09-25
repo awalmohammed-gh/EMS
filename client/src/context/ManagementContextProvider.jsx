@@ -1,5 +1,5 @@
 import { createContext, useContext, useState, useEffect, useCallback } from "react";
-import { getAuthMe, getAdminMe, getEmployee, authLogout, adminLogout, employeeLogout, getSettings } from "../apis/fontApis";
+import { getAuthMe, getAdminMe, getEmployee, authLogout, adminLogout, employeeLogout, getSettings, getCompanyProfile } from "../apis/fontApis";
 import { useAuth, clearAllAuthSessionData } from "./AuthContext";
 import { notificationService } from "../services/notificationService";
 import Toaster from "../ui/Toaster";
@@ -56,6 +56,24 @@ export const ManagementContextProvider = ({ children }) => {
   });
 
   const [user, setUser] = useState(auth?.user || null);
+  const [company, setCompany] = useState(null);
+  const [companyLogoUrl, setCompanyLogoUrl] = useState("");
+
+  const fetchCompanyProfile = useCallback(async () => {
+    try {
+      const res = await getCompanyProfile();
+      if (res?.data?.success) {
+        const comp = res.data.company || res.data;
+        if (comp) {
+          setCompany(comp);
+          const logo = comp.logoUrl || comp.logo || comp.companyLogo || "";
+          setCompanyLogoUrl(logo);
+        }
+      }
+    } catch (err) {
+      console.warn("fetchCompanyProfile error:", err.message);
+    }
+  }, []);
 
   // Sync with AuthContext in real-time
   useEffect(() => {
@@ -87,6 +105,13 @@ export const ManagementContextProvider = ({ children }) => {
         if (meRes?.data?.success && meRes.data.user) {
           const fetchedUser = meRes.data.user;
           setUser(fetchedUser);
+          if (meRes.data.company) {
+            setCompany(meRes.data.company);
+            setCompanyLogoUrl(meRes.data.companyLogoUrl || meRes.data.company?.logoUrl || "");
+          } else if (fetchedUser.company) {
+            setCompany(fetchedUser.company);
+            setCompanyLogoUrl(fetchedUser.companyLogoUrl || fetchedUser.company?.logoUrl || "");
+          }
           const resolvedRole = meRes.data.role || fetchedUser.role || activeRole;
           setRole(resolvedRole);
           return;
@@ -172,7 +197,8 @@ export const ManagementContextProvider = ({ children }) => {
   useEffect(() => {
     fetchCurrentUser();
     fetchSettings();
-  }, [fetchCurrentUser, fetchSettings]);
+    fetchCompanyProfile();
+  }, [fetchCurrentUser, fetchSettings, fetchCompanyProfile]);
 
   // Logout handler: explicitly clears all authentication session data, tokens, and local persistent keys,
   // then navigates the user to the public Welcome page to ensure a clean state
@@ -313,7 +339,7 @@ export const ManagementContextProvider = ({ children }) => {
   const value = {
     user,
     setUser,
-    admin: (role === "admin" || user?.role === "admin" || user?.role === "super_admin") ? user : null,
+    admin: (role === "admin" || user?.role === "admin" || role === "manager" || user?.role === "manager") ? user : null,
     setAdmin: (newAdminData) => {
       if (typeof newAdminData === "function") {
         setUser((prev) => newAdminData(prev));
@@ -339,6 +365,11 @@ export const ManagementContextProvider = ({ children }) => {
     settings,
     setSettings,
     fetchSettings,
+    company,
+    setCompany,
+    companyLogoUrl,
+    setCompanyLogoUrl,
+    fetchCompanyProfile,
     companySettings: settings,
     showEmployeeModal,
     setShowEmployeeModal,

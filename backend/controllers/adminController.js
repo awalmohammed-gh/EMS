@@ -391,6 +391,25 @@ export const updateAdminProfile = async (req, res) => {
 
       const savedAdmin = await dbAdmin.save();
 
+      // Log profile update action in audit trail
+      try {
+        await logAuditAction({
+          req,
+          action: "UPDATE_PROFILE",
+          category: "Security",
+          target: `${savedAdmin.full_name || savedAdmin.email} (Administrator)`,
+          targetModel: "Admin",
+          summary: `Updated administrator profile details for ${savedAdmin.full_name || savedAdmin.email}.`,
+          details: `Name: ${savedAdmin.full_name}, Email: ${savedAdmin.email}, Department: ${savedAdmin.department || "Executive Management"}.`,
+          changes: [
+            ...(nameToUpdate ? [{ field: "fullName", label: "Full Name", oldValue: "Previous", newValue: nameToUpdate }] : []),
+            ...(emailToUpdate ? [{ field: "email", label: "Email", oldValue: "Previous", newValue: emailToUpdate }] : []),
+          ],
+        });
+      } catch (logErr) {
+        console.warn("[AdminProfile] Audit log warning:", logErr.message);
+      }
+
       return res.status(200).json({
         success: true,
         message: "Profile updated successfully.",
@@ -1161,77 +1180,11 @@ export const bulkDeleteEmployees = async (req, res) => {
   }
 };
 
+import { getDashboardStats as getAnalyticsDashboardStats } from "./analyticsController.js";
+
 // Live Backend Aggregation Endpoint: GET /api/admin/dashboard-stats
 export const getDashboardStats = async (req, res) => {
-  try {
-    let totalPayroll = 0;
-    let totalPayrollDisbursed = 0;
-    let pendingDisbursements = 0;
-    let employeesPaidCount = 0;
-    let totalEmployees = 0;
-
-    const tenantScope = buildTenantScope(req);
-    const userId = req.user?._id || req.user?.id || req.admin?._id || req.admin?.id || "unknown";
-    const userOrgId = req.user?.organizationId || req.user?.companyId || req.organizationId || req.companyId || req.tenantId || "none";
-
-    try {
-      const allCount = await Employee.countDocuments(tenantScope);
-      if (allCount === 0) {
-        totalEmployees = 0;
-      } else {
-        totalEmployees = await Employee.countDocuments(
-          combineTenantScope(tenantScope, {
-            $or: [{ status: "active" }, { status: { $exists: false }, isActive: { $ne: false } }],
-          })
-        );
-      }
-    } catch (err) {
-      console.warn("DB employee count error in getDashboardStats:", err.message);
-    }
-
-    try {
-      const payrollRecords = await Payroll.find(tenantScope).lean();
-      if (payrollRecords && payrollRecords.length > 0) {
-        payrollRecords.forEach((p) => {
-          const net = Number(p.netPay !== undefined ? p.netPay : (p.netSalary !== undefined ? p.netSalary : (p.basicSalary || 0)));
-          const status = (p.status || "").toLowerCase().trim();
-
-          totalPayroll += net;
-          if (status === "paid") {
-            totalPayrollDisbursed += net;
-            employeesPaidCount += 1;
-          } else if (status === "pending" || status === "draft" || status === "unpaid") {
-            pendingDisbursements += net;
-          }
-        });
-      }
-    } catch (dbErr) {
-      console.warn("DB payroll aggregation in getDashboardStats:", dbErr.message);
-    }
-
-    return res.status(200).json({
-      success: true,
-      totalPayroll: parseFloat(totalPayroll.toFixed(2)),
-      totalPayrollDisbursed: parseFloat(totalPayrollDisbursed.toFixed(2)),
-      monthlyPayrollTotal: parseFloat(totalPayrollDisbursed.toFixed(2)),
-      pendingDisbursements: parseFloat(pendingDisbursements.toFixed(2)),
-      employeesPaidCount,
-      totalEmployeesPaid: employeesPaidCount,
-      totalEmployees,
-    });
-  } catch (error) {
-    console.error("Error in getDashboardStats:", error);
-    return res.status(500).json({
-      success: false,
-      totalPayroll: 0,
-      totalPayrollDisbursed: 0,
-      monthlyPayrollTotal: 0,
-      pendingDisbursements: 0,
-      employeesPaidCount: 0,
-      totalEmployeesPaid: 0,
-      message: error.message || "Failed to fetch dashboard stats.",
-    });
-  }
+  return getAnalyticsDashboardStats(req, res);
 };
 
 import { getAdminPayrollSummary as payrollAdminSummary } from "./payrollAdminController.js";

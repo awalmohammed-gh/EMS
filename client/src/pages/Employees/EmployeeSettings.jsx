@@ -20,6 +20,7 @@ import {
   Volume2,
   Loader2,
   Hash,
+  Award,
 } from "lucide-react";
 import { useManagement } from "../../context/ManagementContextProvider";
 import ThemePreferenceCard from "../../components/ThemePreferenceCard";
@@ -29,11 +30,13 @@ import {
   changeEmployeePassword,
 } from "../../apis/fontApis";
 import ProfilePictureUploader from "../../components/ProfilePictureUploader";
+import QuarterlyPerformanceVisualizer from "../../components/QuarterlyPerformanceVisualizer";
 import Loading from "../../ui/Loading";
 import ErrorMessage from "../../ui/ErrorMessage";
 
 const TABS = [
   { id: "profile", label: "Profile & Avatar", icon: User },
+  { id: "performance", label: "Performance & Reviews", icon: Award },
   { id: "security", label: "Security & Password", icon: Shield },
   { id: "preferences", label: "Theme & Preferences", icon: Palette },
   { id: "notifications", label: "Notifications", icon: Bell },
@@ -396,7 +399,7 @@ const EmployeeSettings = () => {
             Account & Profile Settings
           </h1>
           <p className="text-sm font-medium text-slate-500 dark:text-slate-400 mt-1">
-            Manage your personal profile, credentials, workspace preferences, and alerts
+            Manage your personal profile, credentials, preferences, and alerts
           </p>
         </div>
       </div>
@@ -661,6 +664,17 @@ const EmployeeSettings = () => {
               </button>
             </div>
           </form>
+        </div>
+      )}
+
+      {/* TAB: Quarterly Performance Reviews & Growth Trajectory */}
+      {activeTab === "performance" && (
+        <div className="bg-white dark:bg-[#111927] border border-slate-200 dark:border-slate-800/80 rounded-2xl p-6 shadow-sm">
+          <QuarterlyPerformanceVisualizer
+            employeeId={user?._id || user?.id || user?.employeeId}
+            employeeData={user}
+            isAdmin={false}
+          />
         </div>
       )}
 

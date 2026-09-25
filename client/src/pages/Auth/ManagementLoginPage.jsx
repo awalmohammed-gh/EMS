@@ -505,6 +505,21 @@ export const ManagementLoginPage = () => {
 
           {/* FORM 2: ADMIN SIGN UP */}
           {mode === "signup" && (
+            <div className="mb-4 p-3 bg-blue-50 dark:bg-blue-950/40 border border-blue-200 dark:border-blue-900/60 rounded-xl flex items-center justify-between gap-3 text-xs">
+              <div className="text-blue-900 dark:text-blue-200">
+                <span className="font-bold">Initial Single-Tenant Setup?</span>
+                <p className="text-[11px] text-blue-700 dark:text-blue-400">Configure admin credentials & company profile in 2 steps.</p>
+              </div>
+              <button
+                type="button"
+                onClick={() => navigate("/setup")}
+                className="px-3 py-1.5 rounded-lg bg-blue-600 hover:bg-blue-500 text-white font-bold text-[11px] shrink-0 cursor-pointer shadow-xs"
+              >
+                Launch Wizard &rarr;
+              </button>
+            </div>
+          )}
+          {mode === "signup" && (
             <form onSubmit={handleSignUpSubmit} className="space-y-3.5">
               {/* FULL NAME */}
               <div>

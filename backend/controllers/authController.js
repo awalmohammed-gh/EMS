@@ -5,6 +5,7 @@ import { Admin } from "../models/Admin.js";
 import { Employee } from "../models/employeeModel.js";
 import { User } from "../models/userModel.js";
 import { Attendance } from "../models/attendanceModel.js";
+import { CompanySettings } from "../models/CompanySettings.js";
 import { liveAttendanceStore, autoCloseUnfinishedShifts } from "./employeeAttendance.js";
 import { logAuditAction } from "../utils/auditLogger.js";
 
@@ -713,6 +714,25 @@ export const getAuthMe = async (req, res) => {
 
     const userId = decoded.id || decoded._id;
 
+    let companyObj = null;
+    let companyLogoUrl = "";
+    try {
+      const compSettings = await CompanySettings.findOne({}).lean();
+      if (compSettings) {
+        companyLogoUrl = compSettings.logoUrl || compSettings.logo || "";
+        companyObj = {
+          _id: compSettings._id,
+          name: compSettings.companyName || "WorkPulse",
+          companyName: compSettings.companyName || "WorkPulse",
+          logoUrl: companyLogoUrl,
+          companyLogoUrl,
+          primaryColor: compSettings.primaryColor || "#0B1E48",
+        };
+      }
+    } catch {
+      // ignore
+    }
+
     if (decoded.role === "admin" || decoded.role === "manager" || decoded.role === "company_admin") {
       if (mongoose.Types.ObjectId.isValid(userId)) {
         const dbAdmin = await Admin.findById(userId).select("-password_hash").lean();
@@ -729,12 +749,16 @@ export const getAuthMe = async (req, res) => {
             position: dbAdmin.role === "manager" ? "Manager" : "Administrator",
             avatar: adminAvatar,
             avatarUrl: adminAvatar,
+            company: companyObj,
+            companyLogoUrl,
           };
           return res.status(200).json({
             success: true,
             role: dbAdmin.role || "admin",
             user: adminObj,
             admin: adminObj,
+            company: companyObj,
+            companyLogoUrl,
           });
         }
       }
@@ -749,6 +773,8 @@ export const getAuthMe = async (req, res) => {
         department: "Executive Management",
         position: "Administrator",
         avatar: "",
+        company: companyObj,
+        companyLogoUrl,
       };
 
       return res.status(200).json({
@@ -756,6 +782,8 @@ export const getAuthMe = async (req, res) => {
         role: decoded.role || "admin",
         user: fallbackAdmin,
         admin: fallbackAdmin,
+        company: companyObj,
+        companyLogoUrl,
       });
     } else {
       let dbEmp = null;
@@ -780,6 +808,8 @@ export const getAuthMe = async (req, res) => {
           avatar: empAvatar,
           avatarUrl: empAvatar,
           role: dbEmp.role || "employee",
+          company: companyObj,
+          companyLogoUrl,
         };
 
         const shiftVerification = await verifyActiveIncompleteShift(safeEmp);
@@ -789,6 +819,8 @@ export const getAuthMe = async (req, res) => {
           role: safeEmp.role || "employee",
           user: safeEmp,
           employee: safeEmp,
+          company: companyObj,
+          companyLogoUrl,
           hasActiveShift: shiftVerification.hasActiveShift,
           activeShift: shiftVerification.activeShift,
           todayRecord: shiftVerification.todayRecord,

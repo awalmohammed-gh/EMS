@@ -86,7 +86,11 @@ export const ThemePreferenceCard = ({ className = "" }) => {
       </div>
 
       {/* Three-Option Segmented Control Tiles */}
-      <div className="grid grid-cols-1 sm:grid-cols-3 gap-3.5">
+      <div
+        role="radiogroup"
+        aria-label="Theme appearance options"
+        className="grid grid-cols-1 sm:grid-cols-3 gap-3.5"
+      >
         {options.map((opt) => {
           const Icon = opt.icon;
           const isSelected = theme === opt.id;
@@ -96,6 +100,8 @@ export const ThemePreferenceCard = ({ className = "" }) => {
               key={opt.id}
               type="button"
               id={`theme-tile-option-${opt.id}`}
+              role="radio"
+              aria-checked={isSelected}
               onClick={() => handleSelect(opt.id, opt.label)}
               aria-pressed={isSelected}
               className={`relative overflow-hidden p-4 rounded-xl border text-left cursor-pointer transition-all duration-200 flex flex-col justify-between min-h-[136px] group focus:outline-none focus:ring-2 focus:ring-[#0B1E48]/30 dark:focus:ring-blue-500/40 ${

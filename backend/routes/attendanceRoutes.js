@@ -22,7 +22,7 @@ import {
   forceClockOutHandler,
   getAttendanceById,
 } from "../controllers/employeeAttendance.js";
-import { overrideAttendanceRecord } from "../controllers/attendanceManagementController.js";
+import { overrideAttendanceRecord, getAdminDailyStats } from "../controllers/attendanceManagementController.js";
 import { verifyAdmin } from "../middleware/authAdmin.js";
 import { validateOrganizationAccess } from "../middleware/validateOrganizationAccess.js";
 import { Attendance } from "../models/Attendance.js";
@@ -43,6 +43,7 @@ attendanceRouter.post("/sync", employeeAuth, syncAttendancePenalties);
 attendanceRouter.post("/sync-penalties", employeeAuth, syncAttendancePenalties);
 
 // admin side
+attendanceRouter.get("/daily-stats", verifyAdmin, getAdminDailyStats);
 attendanceRouter.get("/", verifyAdmin, getAllAttendance);
 attendanceRouter.get("/all", verifyAdmin, getAllAttendance);
 attendanceRouter.get("/record/:id", verifyAdmin, validateOrganizationAccess(Attendance), getAttendanceById);

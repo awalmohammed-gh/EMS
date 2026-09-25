@@ -28,10 +28,10 @@ export const getDashboardOverview = async (req, res) => {
   try {
     const today = new Date().toISOString().split("T")[0];
 
-    const tenantId = getTenantId(req);
-    const tenantScope = buildTenantScope(req);
+    const tenantId = null;
+    const tenantScope = {};
     const userId = req.user?._id || req.user?.id || req.admin?._id || req.admin?.id || "unknown";
-    const userOrgId = tenantId || req.user?.organizationId || req.user?.companyId || req.organizationId || "none";
+    const userOrgId = "global";
 
     let totalEmployees = 0;
     let dbActiveCount = 0;
@@ -412,7 +412,7 @@ export const getDashboardOverview = async (req, res) => {
           const s = Number(e.salary || e.basicSalary || e.baseSalary || 0);
           return sum + (isNaN(s) ? 0 : s);
         }, 0)
-      : (activeHeadcount * 3500);
+      : 0;
 
     const monthlyWorkforceTrends = monthlyTrends.map((m) => {
       const monthAtt = attByMonth.get(m.key) || [];
@@ -457,16 +457,16 @@ export const getDashboardOverview = async (req, res) => {
         });
       }
 
-      // Proportional fallback if historical month has no explicit recorded run
-      const effectiveGross = grossPayroll > 0 ? grossPayroll : activeBaseSalaryEst;
-      const effectivePenalties = penaltiesDeductions > 0 ? penaltiesDeductions : Math.round(effectiveGross * 0.02);
-      const effectiveNet = netPayroll > 0 ? netPayroll : Math.max(0, effectiveGross - effectivePenalties - Math.round(effectiveGross * 0.08));
+      // Live aggregations with safe zero defaults
+      const effectiveGross = grossPayroll;
+      const effectivePenalties = penaltiesDeductions;
+      const effectiveNet = netPayroll;
 
-      const effectivePresent = totalLogs > 0 ? presentCount : (activeHeadcount > 0 ? Math.round(activeHeadcount * 0.90) : 0);
-      const effectiveLate = totalLogs > 0 ? lateCount : (activeHeadcount > 0 ? Math.round(activeHeadcount * 0.06) : 0);
-      const effectiveAbsent = totalLogs > 0 ? absentCount : (activeHeadcount > 0 ? Math.round(activeHeadcount * 0.04) : 0);
-      const effectiveOnLeave = totalLogs > 0 ? onLeaveCount : (activeHeadcount > 0 ? Math.round(activeHeadcount * 0.02) : 0);
-      const effectiveTotalAtt = totalLogs > 0 ? totalLogs : (effectivePresent + effectiveLate + effectiveAbsent);
+      const effectivePresent = presentCount;
+      const effectiveLate = lateCount;
+      const effectiveAbsent = absentCount;
+      const effectiveOnLeave = onLeaveCount;
+      const effectiveTotalAtt = totalLogs;
 
       const attendanceRate = effectiveTotalAtt > 0
         ? parseFloat(((effectivePresent / effectiveTotalAtt) * 100).toFixed(1))
@@ -694,8 +694,8 @@ export const getDashboardOverview = async (req, res) => {
     const deptExpenseMap = {};
     (allEmployees || []).forEach((emp) => {
       const dept = emp.department || "General";
-      const sal = Number(emp.salary || emp.basicSalary || emp.baseSalary || 3500);
-      const validSal = isNaN(sal) || sal <= 0 ? 3500 : sal;
+      const sal = Number(emp.salary || emp.basicSalary || emp.baseSalary || 0);
+      const validSal = isNaN(sal) || sal <= 0 ? 0 : sal;
       if (!deptExpenseMap[dept]) {
         deptExpenseMap[dept] = {
           name: dept,
@@ -897,17 +897,6 @@ export const getDashboardOverview = async (req, res) => {
           }
         }
       });
-    }
-
-    if (currentMonthGross === 0 && activeBaseSalaryEst > 0 && activeHeadcount > 0) {
-      currentMonthBasic = parseFloat((activeBaseSalaryEst * 0.85).toFixed(2));
-      currentMonthAllowances = parseFloat((activeBaseSalaryEst * 0.15).toFixed(2));
-      currentMonthGross = activeBaseSalaryEst;
-      currentMonthPenalties = parseFloat((activeBaseSalaryEst * 0.02).toFixed(2));
-      currentMonthDeductions = parseFloat((activeBaseSalaryEst * 0.12).toFixed(2));
-      currentMonthNet = parseFloat((currentMonthGross - currentMonthDeductions).toFixed(2));
-      currentMonthPending = currentMonthNet;
-      currentMonthPendingCount = activeHeadcount;
     }
 
     const currentMonthPayrollCategories = [

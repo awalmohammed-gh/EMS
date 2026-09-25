@@ -11,6 +11,7 @@ import {
   EyeOff,
   ArrowRight,
   X,
+  UserPlus,
 } from "lucide-react";
 
 /**
@@ -55,25 +56,58 @@ export const NotificationItem = ({
   const isPayroll =
     item.category === "payroll" ||
     item.type === "payroll_alert" ||
+    item.type === "payroll_status_update" ||
     item.category === "payslip" ||
     item.type === "penalty_alert";
+
+  const isEmployeeRegistration =
+    item.type === "new_employee_registration" ||
+    item.category === "employee" ||
+    item.category === "employees";
 
   const actionTargetUrl =
     item.action_url ||
     item.actionUrl ||
     (isPayroll
       ? role === "admin"
-        ? "/admin/dashboard/payslips"
+        ? "/admin/payroll"
         : "/employee/dashboard/payslips"
+      : isEmployeeRegistration
+      ? "/admin/employees"
+      : item.category === "leave"
+      ? role === "admin"
+        ? "/admin/leave"
+        : "/employee/dashboard/leave"
       : "");
 
   const actionBtnLabel =
     item.action_label ||
     item.actionLabel ||
-    (isPayroll ? "View Payslip Impact" : "View Details");
+    (isPayroll
+      ? role === "admin"
+        ? "View Payroll"
+        : "View Payslip Impact"
+      : isEmployeeRegistration
+      ? "View Directory"
+      : item.category === "leave"
+      ? role === "admin"
+        ? "Review Leave"
+        : "View Leave Status"
+      : "View Details");
 
   // Determine category icon and styling
   const renderCategoryIcon = () => {
+    if (isEmployeeRegistration) {
+      return (
+        <div
+          id={`notification-icon-employee-${itemId}`}
+          className="w-10 h-10 rounded-2xl bg-cyan-50 dark:bg-cyan-950/40 text-cyan-600 dark:text-cyan-400 flex items-center justify-center border border-cyan-200/60 dark:border-cyan-800/40 shrink-0 mt-0.5 shadow-xs"
+        >
+          <UserPlus className="w-5 h-5 text-cyan-600 dark:text-cyan-400" />
+        </div>
+      );
+    }
+
     if (isPayroll) {
       return (
         <div
@@ -175,7 +209,17 @@ export const NotificationItem = ({
           {/* Category Badges */}
           {isPayroll && (
             <span className="inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-bold bg-emerald-100 dark:bg-emerald-950/80 text-emerald-800 dark:text-emerald-300 border border-emerald-200 dark:border-emerald-800">
-              Payslip
+              {role === "admin" ? "Payroll" : "Payslip"}
+            </span>
+          )}
+          {isEmployeeRegistration && (
+            <span className="inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-bold bg-cyan-100 dark:bg-cyan-950/80 text-cyan-800 dark:text-cyan-300 border border-cyan-200 dark:border-cyan-800">
+              New Staff
+            </span>
+          )}
+          {item.category === "leave" && (
+            <span className="inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-bold bg-amber-100 dark:bg-amber-950/80 text-amber-800 dark:text-amber-300 border border-amber-200 dark:border-amber-800">
+              {item.type === "pending_leave_approval" ? "Pending Approval" : "Leave"}
             </span>
           )}
 

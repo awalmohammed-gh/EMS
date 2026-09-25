@@ -129,14 +129,14 @@ export const CompanyBrandingSettings = ({ onSaveSuccess }) => {
       const res = await brandingService.updateAdminBranding(formData);
 
       if (res?.success) {
-        // 2. Immediate real-time invalidation: re-fetch active workspace branding
+        // 2. Immediate real-time invalidation: re-fetch active company branding
         await refreshBranding();
 
         setLogoFile(null);
         setBgFile(null);
         setStatusMessage({
           type: "success",
-          text: "Brand identity updated! Sidebar logo and workspace styling refreshed instantly.",
+          text: "Brand identity updated! Sidebar logo and company styling refreshed instantly.",
         });
 
         if (typeof onSaveSuccess === "function") {

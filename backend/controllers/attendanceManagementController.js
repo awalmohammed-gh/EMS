@@ -2,6 +2,7 @@ import mongoose from "mongoose";
 import { Attendance } from "../models/attendanceModel.js";
 import { CompanySettings } from "../models/CompanySettings.js";
 import { Employee } from "../models/Employee.js";
+import { User } from "../models/userModel.js";
 import { AuditLog } from "../models/AuditLog.js";
 import { calculateWorkHours, safeDateTime } from "../utils/calculateWorkHours.js";
 import { evaluateLatenessPenalty } from "../utils/latenessPenaltyCalculator.js";
@@ -332,6 +333,90 @@ export const overrideAttendanceRecord = async (req, res) => {
   }
 };
 
+/**
+ * Strict Employee Daily Attendance Statistics: GET /api/admin/daily-stats
+ * Supplies daily metrics with strict employee filtering (explicitly filtering out Admin users).
+ * If total employee count is 0, reliably returns all zeros for headcount, present, late, absent, and average hours.
+ */
+export const getAdminDailyStats = async (req, res) => {
+  try {
+    const today = new Date().toISOString().split("T")[0];
+
+    // Strict employee filtering: Count genuine employees, explicitly excluding Admin/manager users
+    const employeeUserCount = await User.countDocuments({ role: "employee" });
+    const staffUserCount = await User.countDocuments({ role: "staff" });
+    const userCount = employeeUserCount + staffUserCount;
+
+    const employeeDocsCount = await Employee.countDocuments({
+      role: { $nin: ["admin", "superadmin", "super_admin", "manager"] },
+    });
+
+    const staffHeadcount = Math.max(userCount, employeeDocsCount);
+
+    if (staffHeadcount === 0) {
+      return res.status(200).json({
+        success: true,
+        staffHeadcount: 0,
+        headcount: 0,
+        totalEmployees: 0,
+        presentToday: 0,
+        present: 0,
+        onTimeToday: 0,
+        onTime: 0,
+        lateToday: 0,
+        late: 0,
+        absentToday: 0,
+        absent: 0,
+        avgHours: "0.0",
+        averageHours: "0.0",
+      });
+    }
+
+    const todayAttendance = await Attendance.find({ date: today }).lean();
+    const presentRecords = todayAttendance.filter(
+      (a) => a.clockIn || a.status === "Present" || a.status === "On Time" || a.status === "Late"
+    );
+    const presentToday = presentRecords.length;
+
+    const lateToday = todayAttendance.filter(
+      (a) => a.status === "Late" || Number(a.lateMinutes || 0) > 0
+    ).length;
+
+    const onTimeToday = todayAttendance.filter(
+      (a) => (a.status === "On Time" || a.status === "Present") && !a.lateMinutes && a.status !== "Late"
+    ).length;
+
+    const absentToday = Math.max(0, staffHeadcount - presentToday);
+
+    const totalHours = todayAttendance.reduce((sum, item) => sum + (Number(item.workHours) || 0), 0);
+    const avgHours = todayAttendance.length > 0 ? (totalHours / todayAttendance.length).toFixed(1) : "0.0";
+
+    return res.status(200).json({
+      success: true,
+      staffHeadcount,
+      headcount: staffHeadcount,
+      totalEmployees: staffHeadcount,
+      presentToday,
+      present: presentToday,
+      onTimeToday,
+      onTime: onTimeToday,
+      lateToday,
+      late: lateToday,
+      absentToday,
+      absent: absentToday,
+      avgHours,
+      averageHours: avgHours,
+    });
+  } catch (error) {
+    console.error("Error in getAdminDailyStats:", error);
+    return res.status(500).json({
+      success: false,
+      message: error.message || "Failed to retrieve daily attendance statistics.",
+    });
+  }
+};
+
 export default {
   overrideAttendanceRecord,
+  getAdminDailyStats,
 };

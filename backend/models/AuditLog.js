@@ -28,6 +28,7 @@ const auditLogSchema = new mongoose.Schema(
         "Tenant Lifecycle",
         "Workspace Management",
         "System Administration",
+        "System",
       ],
       default: "System Administration",
       index: true,
@@ -101,6 +102,33 @@ auditLogSchema.pre("validate", function () {
   }
   if (!this.organizationId && this.companyId) this.organizationId = this.companyId;
   if (!this.companyId && this.organizationId) this.companyId = this.organizationId;
+
+  const validCategories = [
+    "Penalties & Deductions",
+    "Admin Settings",
+    "Payroll",
+    "Attendance",
+    "Leave",
+    "Employees",
+    "Security",
+    "Authentication",
+    "Companies",
+    "Departments",
+    "Settings",
+    "Platform",
+    "Tenant Setup",
+    "Organization Setup",
+    "Tenant Lifecycle",
+    "Workspace Management",
+    "System Administration",
+    "System",
+  ];
+  if (this.category && !validCategories.includes(this.category)) {
+    const match = validCategories.find(
+      (c) => c.toLowerCase() === String(this.category).trim().toLowerCase()
+    );
+    this.category = match || "System Administration";
+  }
 });
 
 auditLogSchema.index({ companyId: 1, _id: 1 });

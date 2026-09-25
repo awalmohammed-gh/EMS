@@ -1455,6 +1455,37 @@ export const generatePayroll = async (req, res) => {
       console.warn("Audit log notice in generatePayroll:", auditErr.message);
     }
 
+    // Centralized Notification: Alert administrators about newly generated payroll record
+    try {
+      await createNotificationRecord({
+        recipient_id: "admin",
+        recipient_role: "admin",
+        sender_id: String(req.admin?.id || req.admin?._id || "system"),
+        sender_role: req.admin ? "admin" : "system",
+        sender_name: req.admin?.fullName || "Payroll Administrator",
+        title: `💵 New Payroll Generated: ${empDoc.fullName} (${payMonth})`,
+        message: `Payroll record generated for ${empDoc.fullName} (${payMonth}). Net Take-Home: GH₵${calculatedNetPay.toFixed(2)}. Status: ${finalStatus}.`,
+        type: "payroll_status_update",
+        category: "payroll",
+        priority: "medium",
+        action_url: "/admin/payroll",
+        action_label: "View Payroll",
+        organizationId: targetOrgId,
+        companyId: targetOrgId,
+        metadata: {
+          payrollId: String(newRecord._id),
+          payslipNumber,
+          employeeId: empDoc.employeeId,
+          employeeName: empDoc.fullName,
+          payMonth,
+          netSalary: calculatedNetPay,
+          status: finalStatus,
+        },
+      });
+    } catch (notifErr) {
+      console.warn("Could not dispatch admin payroll generation notification:", notifErr.message);
+    }
+
     return res.status(201).json({
       success: true,
       message: "Payroll generated successfully.",
@@ -2240,6 +2271,39 @@ export const updatePayrollStatus = async (req, res) => {
       } catch (notifErr) {
         console.warn("Could not dispatch payslip status notification:", notifErr.message);
       }
+    }
+
+    // Centralized Notification: Alert administrators about payroll status update
+    try {
+      const empName = updated?.employee?.fullName || updated?.employeeName || "Staff Member";
+      const pMonth = updated?.payMonth || updated?.month || "Current Period";
+      const netTakeHome = Number(updated?.netSalary || updated?.netPay || 0);
+
+      await createNotificationRecord({
+        recipient_id: "admin",
+        recipient_role: "admin",
+        sender_id: String(req.admin?.id || req.admin?._id || "system"),
+        sender_role: req.admin ? "admin" : "system",
+        sender_name: req.admin?.fullName || "Payroll System",
+        title: `💳 Payroll Status Update: ${empName} (${status})`,
+        message: `Payroll status for ${empName} (${pMonth}) has been updated to "${status}". Net salary: GH₵${netTakeHome.toFixed(2)}.`,
+        type: "payroll_status_update",
+        category: "payroll",
+        priority: status === "Paid" ? "high" : "medium",
+        action_url: "/admin/payroll",
+        action_label: "View Payroll",
+        organizationId: orgId,
+        companyId: orgId,
+        metadata: {
+          payrollId: String(updated?._id || id),
+          status,
+          payMonth: pMonth,
+          employeeName: empName,
+          netSalary: netTakeHome,
+        },
+      });
+    } catch (adminNotifErr) {
+      console.warn("Could not dispatch admin payroll status notification:", adminNotifErr.message);
     }
 
     // Log payroll status update / finalization action

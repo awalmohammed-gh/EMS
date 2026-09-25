@@ -7,12 +7,14 @@ import {
 } from "lucide-react";
 import Avatar from "./Avatar";
 import { useManagement } from "../context/ManagementContextProvider";
+import DefaultPlatformLogo from "./DefaultPlatformLogo";
 
 const EmployeeProfileIdentityBannerComponent = ({
   employeeData,
   todayAttendance,
 }) => {
-  const { user } = useManagement();
+  const { user, company, companyLogoUrl } = useManagement();
+  const activeCompanyLogo = company?.logoUrl || companyLogoUrl;
 
   // Merge employee data from props and context
   const emp = useMemo(() => ({
@@ -161,6 +163,30 @@ const EmployeeProfileIdentityBannerComponent = ({
                 </span>
               )}
             </div>
+          </div>
+
+          {/* Company Branding Logo Integration */}
+          <div className="hidden lg:flex items-center gap-3 pl-4 border-l border-slate-200/80 dark:border-slate-800 shrink-0 self-center">
+            {activeCompanyLogo ? (
+              <div className="w-12 h-12 rounded-xl bg-white dark:bg-slate-800 border border-slate-200/80 dark:border-slate-700 shadow-xs flex items-center justify-center p-1 overflow-hidden shrink-0">
+                <img
+                  src={activeCompanyLogo}
+                  alt={company?.name || company?.companyName || "Company Logo"}
+                  className="w-full h-full object-contain"
+                  onError={(e) => {
+                    e.target.style.display = "none";
+                    if (e.target.nextSibling) {
+                      e.target.nextSibling.style.display = "flex";
+                    }
+                  }}
+                />
+                <div className="hidden w-full h-full items-center justify-center bg-[#0B1E48] text-white font-bold text-sm rounded-lg">
+                  {(company?.name || company?.companyName || "W").charAt(0).toUpperCase()}
+                </div>
+              </div>
+            ) : (
+              <DefaultPlatformLogo className="w-12 h-12" />
+            )}
           </div>
         </div>
       </div>

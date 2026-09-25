@@ -23,6 +23,7 @@ import { useManagement } from "../../context/ManagementContextProvider";
 import { useNavigate } from "react-router-dom";
 import EmployeeLeaveChart from "../../components/EmployeeLeaveChart";
 import AnnouncementBoard from "../../components/AnnouncementBoard";
+import EmployeeHeader from "../../components/EmployeeHeader";
 import ApplyLeaveModal from "../../components/modal/ApplyLeaveModal";
 import EmployeePayslipsModal from "../../components/modal/EmployeePayslipsModal";
 import DailyShiftClock from "../../components/DailyShiftClock";
@@ -541,6 +542,9 @@ const EmployeeDashboard = () => {
 
       {/* Main Dashboard Overview Body */}
       <div className="space-y-6">
+        {/* Protected Dashboard Header with Company Branding */}
+        <EmployeeHeader />
+
         {/* Employee Profile Visual Identity & Attendance Status Header Banner */}
         <EmployeeProfileIdentityBanner
           employeeData={dashboardData?.employee || user}

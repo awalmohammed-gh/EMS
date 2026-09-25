@@ -154,19 +154,12 @@ export const DepartmentStatusVisualizer = ({
   });
   const [selectedDept, setSelectedDept] = useState(null);
 
-  // Default fallback data if empty
+  // Default fallback data if empty - strict 0-state with zero fake departments
   const rawData = useMemo(() => {
     if (departmentDistribution && departmentDistribution.length > 0) {
       return departmentDistribution;
     }
-    return [
-      { department: "Engineering", active: 5, inactive: 1, suspended: 0, total: 6 },
-      { department: "Sales", active: 4, inactive: 1, suspended: 1, total: 6 },
-      { department: "Marketing", active: 3, inactive: 1, suspended: 0, total: 4 },
-      { department: "Operations", active: 3, inactive: 0, suspended: 1, total: 4 },
-      { department: "Human Resources", active: 2, inactive: 0, suspended: 0, total: 2 },
-      { department: "Finance", active: 2, inactive: 0, suspended: 0, total: 2 },
-    ];
+    return [];
   }, [departmentDistribution]);
 
   // Aggregate overall status totals
@@ -175,7 +168,7 @@ export const DepartmentStatusVisualizer = ({
     const inactive = rawData.reduce((acc, curr) => acc + (curr.inactive || 0), 0);
     const suspended = rawData.reduce((acc, curr) => acc + (curr.suspended || 0), 0);
     const total = active + inactive + suspended;
-    return { active, inactive, suspended, total: total || totalEmployees || 1 };
+    return { active, inactive, suspended, total: total || totalEmployees || 0 };
   }, [rawData, totalEmployees]);
 
   // Pie chart dataset with dynamic counts
@@ -366,7 +359,7 @@ export const DepartmentStatusVisualizer = ({
                   {statusTotals.inactive}
                 </span>
                 <span className="text-[11px] text-[#D97706] dark:text-amber-300 font-bold">
-                  ({Math.round((statusTotals.inactive / statusTotals.total) * 100)}%)
+                  ({statusTotals.total > 0 ? Math.round((statusTotals.inactive / statusTotals.total) * 100) : 0}%)
                 </span>
               </div>
             </div>
@@ -393,7 +386,7 @@ export const DepartmentStatusVisualizer = ({
                   {statusTotals.suspended}
                 </span>
                 <span className="text-[11px] text-[#DC2626] dark:text-red-300 font-bold">
-                  ({Math.round((statusTotals.suspended / statusTotals.total) * 100)}%)
+                  ({statusTotals.total > 0 ? Math.round((statusTotals.suspended / statusTotals.total) * 100) : 0}%)
                 </span>
               </div>
             </div>
@@ -465,89 +458,97 @@ export const DepartmentStatusVisualizer = ({
           </div>
 
           {/* Main Recharts Bar Chart Container */}
-          <div className="w-full h-80 pt-2">
-            <ResponsiveContainer width="100%" height="100%">
-              <BarChart
-                data={chartData}
-                margin={{ top: 15, right: 15, left: -15, bottom: 25 }}
-                barGap={4}
-              >
-                <CartesianGrid strokeDasharray="3 3" stroke="#334155" opacity={0.3} vertical={false} />
-                <XAxis
-                  dataKey="department"
-                  stroke="#94A3B8"
-                  fontSize={11}
-                  fontWeight={500}
-                  tickLine={false}
-                  axisLine={{ stroke: "#475569" }}
-                  interval={0}
-                  angle={-15}
-                  textAnchor="end"
-                />
-                <YAxis
-                  stroke="#94A3B8"
-                  fontSize={11}
-                  tickLine={false}
-                  axisLine={false}
-                  allowDecimals={false}
-                  domain={viewMode === "percent" ? [0, 100] : ["auto", "auto"]}
-                  unit={viewMode === "percent" ? "%" : ""}
-                />
-                <Tooltip
-                  content={<CustomBarTooltip viewMode={viewMode} />}
-                  cursor={{ fill: "rgba(59, 130, 246, 0.08)" }}
-                />
-
-                {/* Active Bar */}
-                {visibleStatuses.active && (
-                  <Bar
-                    dataKey={viewMode === "percent" ? "activePercent" : "activeVal"}
-                    name="Active"
-                    fill="#16A34A"
-                    stackId={viewMode !== "grouped" ? "deptStack" : undefined}
-                    radius={
-                      viewMode === "grouped"
-                        ? [4, 4, 0, 0]
-                        : !visibleStatuses.inactive && !visibleStatuses.suspended
-                        ? [4, 4, 0, 0]
-                        : [0, 0, 0, 0]
-                    }
-                    barSize={viewMode === "grouped" ? 14 : 28}
+          {chartData.length === 0 ? (
+            <div className="w-full h-80 flex flex-col items-center justify-center text-center p-6 text-[#64748B] dark:text-slate-400">
+              <Building2 className="w-10 h-10 mb-2 text-slate-300 dark:text-slate-600" />
+              <p className="text-sm font-semibold text-slate-700 dark:text-slate-300">No Department Data</p>
+              <p className="text-xs text-slate-400 dark:text-slate-500 mt-1 max-w-sm">No employees currently registered. Register employee records to view departmental workforce distribution.</p>
+            </div>
+          ) : (
+            <div className="w-full h-80 pt-2">
+              <ResponsiveContainer width="100%" height="100%">
+                <BarChart
+                  data={chartData}
+                  margin={{ top: 15, right: 15, left: -15, bottom: 25 }}
+                  barGap={4}
+                >
+                  <CartesianGrid strokeDasharray="3 3" stroke="#334155" opacity={0.3} vertical={false} />
+                  <XAxis
+                    dataKey="department"
+                    stroke="#94A3B8"
+                    fontSize={11}
+                    fontWeight={500}
+                    tickLine={false}
+                    axisLine={{ stroke: "#475569" }}
+                    interval={0}
+                    angle={-15}
+                    textAnchor="end"
                   />
-                )}
-
-                {/* Inactive Bar */}
-                {visibleStatuses.inactive && (
-                  <Bar
-                    dataKey={viewMode === "percent" ? "inactivePercent" : "inactiveVal"}
-                    name="Inactive"
-                    fill="#F59E0B"
-                    stackId={viewMode !== "grouped" ? "deptStack" : undefined}
-                    radius={
-                      viewMode === "grouped"
-                        ? [4, 4, 0, 0]
-                        : !visibleStatuses.suspended
-                        ? [4, 4, 0, 0]
-                        : [0, 0, 0, 0]
-                    }
-                    barSize={viewMode === "grouped" ? 14 : 28}
+                  <YAxis
+                    stroke="#94A3B8"
+                    fontSize={11}
+                    tickLine={false}
+                    axisLine={false}
+                    allowDecimals={false}
+                    domain={viewMode === "percent" ? [0, 100] : ["auto", "auto"]}
+                    unit={viewMode === "percent" ? "%" : ""}
                   />
-                )}
-
-                {/* Suspended Bar */}
-                {visibleStatuses.suspended && (
-                  <Bar
-                    dataKey={viewMode === "percent" ? "suspendedPercent" : "suspendedVal"}
-                    name="Suspended"
-                    fill="#DC2626"
-                    stackId={viewMode !== "grouped" ? "deptStack" : undefined}
-                    radius={[4, 4, 0, 0]}
-                    barSize={viewMode === "grouped" ? 14 : 28}
+                  <Tooltip
+                    content={<CustomBarTooltip viewMode={viewMode} />}
+                    cursor={{ fill: "rgba(59, 130, 246, 0.08)" }}
                   />
-                )}
-              </BarChart>
-            </ResponsiveContainer>
-          </div>
+
+                  {/* Active Bar */}
+                  {visibleStatuses.active && (
+                    <Bar
+                      dataKey={viewMode === "percent" ? "activePercent" : "activeVal"}
+                      name="Active"
+                      fill="#16A34A"
+                      stackId={viewMode !== "grouped" ? "deptStack" : undefined}
+                      radius={
+                        viewMode === "grouped"
+                          ? [4, 4, 0, 0]
+                          : !visibleStatuses.inactive && !visibleStatuses.suspended
+                          ? [4, 4, 0, 0]
+                          : [0, 0, 0, 0]
+                      }
+                      barSize={viewMode === "grouped" ? 14 : 28}
+                    />
+                  )}
+
+                  {/* Inactive Bar */}
+                  {visibleStatuses.inactive && (
+                    <Bar
+                      dataKey={viewMode === "percent" ? "inactivePercent" : "inactiveVal"}
+                      name="Inactive"
+                      fill="#F59E0B"
+                      stackId={viewMode !== "grouped" ? "deptStack" : undefined}
+                      radius={
+                        viewMode === "grouped"
+                          ? [4, 4, 0, 0]
+                          : !visibleStatuses.suspended
+                          ? [4, 4, 0, 0]
+                          : [0, 0, 0, 0]
+                      }
+                      barSize={viewMode === "grouped" ? 14 : 28}
+                    />
+                  )}
+
+                  {/* Suspended Bar */}
+                  {visibleStatuses.suspended && (
+                    <Bar
+                      dataKey={viewMode === "percent" ? "suspendedPercent" : "suspendedVal"}
+                      name="Suspended"
+                      fill="#DC2626"
+                      stackId={viewMode !== "grouped" ? "deptStack" : undefined}
+                      radius={[4, 4, 0, 0]}
+                      barSize={viewMode === "grouped" ? 14 : 28}
+                    />
+                  )}
+                </BarChart>
+              </ResponsiveContainer>
+            </div>
+          )}
         </div>
 
         {/* RECHARTS DONUT CHART: Company-wide Employee Status Share */}
@@ -658,84 +659,90 @@ export const DepartmentStatusVisualizer = ({
           </span>
         </div>
 
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3.5">
-          {rawData.map((dept, idx) => {
-            const deptActive = dept.active || 0;
-            const deptInactive = dept.inactive || 0;
-            const deptSuspended = dept.suspended || 0;
-            const deptTotal = dept.total || deptActive + deptInactive + deptSuspended || 1;
-            const activePercent = Math.round((deptActive / deptTotal) * 100);
+        {rawData.length === 0 ? (
+          <div className="text-center py-8 text-xs text-[#64748B] dark:text-slate-400">
+            No departments registered yet. Add employees with department assignments to view composition metrics.
+          </div>
+        ) : (
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3.5">
+            {rawData.map((dept, idx) => {
+              const deptActive = dept.active || 0;
+              const deptInactive = dept.inactive || 0;
+              const deptSuspended = dept.suspended || 0;
+              const deptTotal = dept.total || deptActive + deptInactive + deptSuspended || 1;
+              const activePercent = Math.round((deptActive / deptTotal) * 100);
 
-            return (
-              <div
-                key={idx}
-                onClick={() => setSelectedDept(dept.department === selectedDept ? null : dept.department)}
-                className={`p-4 rounded-xl border transition-all cursor-pointer ${
-                  selectedDept === dept.department
-                    ? "border-[#002185] dark:border-blue-500 bg-[#002185]/5 dark:bg-blue-950/30 shadow-sm"
-                    : "border-[#E2E8F0] dark:border-slate-700/60 bg-[#FFFFFF] dark:bg-slate-800/90 hover:border-[#002185]/40 dark:hover:border-blue-500/50 hover:shadow-xs"
-                }`}
-              >
-                <div className="flex items-start justify-between gap-2 mb-2.5">
-                  <div className="min-w-0">
-                    <h4 className="text-sm font-bold text-[#0F172A] dark:text-white truncate">
-                      {dept.department || "General"}
-                    </h4>
-                    <span className="text-[11px] text-[#64748B] dark:text-slate-300 font-medium">
-                      {deptTotal} Staff Registered
+              return (
+                <div
+                  key={idx}
+                  onClick={() => setSelectedDept(dept.department === selectedDept ? null : dept.department)}
+                  className={`p-4 rounded-xl border transition-all cursor-pointer ${
+                    selectedDept === dept.department
+                      ? "border-[#002185] dark:border-blue-500 bg-[#002185]/5 dark:bg-blue-950/30 shadow-sm"
+                      : "border-[#E2E8F0] dark:border-slate-700/60 bg-[#FFFFFF] dark:bg-slate-800/90 hover:border-[#002185]/40 dark:hover:border-blue-500/50 hover:shadow-xs"
+                  }`}
+                >
+                  <div className="flex items-start justify-between gap-2 mb-2.5">
+                    <div className="min-w-0">
+                      <h4 className="text-sm font-bold text-[#0F172A] dark:text-white truncate">
+                        {dept.department || "General"}
+                      </h4>
+                      <span className="text-[11px] text-[#64748B] dark:text-slate-300 font-medium">
+                        {deptTotal} Staff Registered
+                      </span>
+                    </div>
+                    <span
+                      className={`text-[10px] font-bold px-2 py-0.5 rounded-full border shrink-0 ${
+                        activePercent >= 80
+                          ? "bg-[#F0FDF4] dark:bg-emerald-950/40 text-[#16A34A] dark:text-emerald-300 border-[#BBF7D0] dark:border-emerald-800"
+                          : activePercent >= 50
+                          ? "bg-[#FFFBEB] dark:bg-amber-950/40 text-[#D97706] dark:text-amber-300 border-[#FDE68A] dark:border-amber-800"
+                          : "bg-[#FEF2F2] dark:bg-red-950/40 text-[#DC2626] dark:text-red-300 border-[#FECACA] dark:border-red-800"
+                      }`}
+                    >
+                      {activePercent}% Active
                     </span>
                   </div>
-                  <span
-                    className={`text-[10px] font-bold px-2 py-0.5 rounded-full border shrink-0 ${
-                      activePercent >= 80
-                        ? "bg-[#F0FDF4] dark:bg-emerald-950/40 text-[#16A34A] dark:text-emerald-300 border-[#BBF7D0] dark:border-emerald-800"
-                        : activePercent >= 50
-                        ? "bg-[#FFFBEB] dark:bg-amber-950/40 text-[#D97706] dark:text-amber-300 border-[#FDE68A] dark:border-amber-800"
-                        : "bg-[#FEF2F2] dark:bg-red-950/40 text-[#DC2626] dark:text-red-300 border-[#FECACA] dark:border-red-800"
-                    }`}
-                  >
-                    {activePercent}% Active
-                  </span>
-                </div>
 
-                {/* Micro Distribution Bar */}
-                <div className="w-full bg-[#E2E8F0] dark:bg-slate-700 h-2 rounded-full overflow-hidden flex mb-2.5">
-                  <div
-                    style={{ width: `${(deptActive / deptTotal) * 100}%` }}
-                    className="bg-[#16A34A] h-full"
-                    title={`Active: ${deptActive}`}
-                  ></div>
-                  <div
-                    style={{ width: `${(deptInactive / deptTotal) * 100}%` }}
-                    className="bg-[#F59E0B] h-full"
-                    title={`Inactive: ${deptInactive}`}
-                  ></div>
-                  <div
-                    style={{ width: `${(deptSuspended / deptTotal) * 100}%` }}
-                    className="bg-[#DC2626] h-full"
-                    title={`Suspended: ${deptSuspended}`}
-                  ></div>
-                </div>
+                  {/* Micro Distribution Bar */}
+                  <div className="w-full bg-[#E2E8F0] dark:bg-slate-700 h-2 rounded-full overflow-hidden flex mb-2.5">
+                    <div
+                      style={{ width: `${(deptActive / deptTotal) * 100}%` }}
+                      className="bg-[#16A34A] h-full"
+                      title={`Active: ${deptActive}`}
+                    ></div>
+                    <div
+                      style={{ width: `${(deptInactive / deptTotal) * 100}%` }}
+                      className="bg-[#F59E0B] h-full"
+                      title={`Inactive: ${deptInactive}`}
+                    ></div>
+                    <div
+                      style={{ width: `${(deptSuspended / deptTotal) * 100}%` }}
+                      className="bg-[#DC2626] h-full"
+                      title={`Suspended: ${deptSuspended}`}
+                    ></div>
+                  </div>
 
-                {/* Sub-counts */}
-                <div className="flex items-center justify-between text-[11px] pt-1 text-[#64748B] dark:text-slate-300">
-                  <span className="flex items-center gap-1 font-semibold text-[#16A34A] dark:text-emerald-400">
-                    <span className="w-1.5 h-1.5 rounded-full bg-[#16A34A]"></span>
-                    {deptActive} Active
-                  </span>
-                  <span className="flex items-center gap-1 font-semibold text-[#D97706] dark:text-amber-400">
-                    <span className="w-1.5 h-1.5 rounded-full bg-[#F59E0B]"></span>
-                    {deptInactive} Inactive
-                  </span>
-                  <span className="flex items-center gap-1 font-semibold text-[#DC2626] dark:text-red-400">
-                    <span className="w-1.5 h-1.5 rounded-full bg-[#DC2626]"></span>
-                    {deptSuspended} Suspended
-                  </span>
+                  {/* Sub-counts */}
+                  <div className="flex items-center justify-between text-[11px] pt-1 text-[#64748B] dark:text-slate-300">
+                    <span className="flex items-center gap-1 font-semibold text-[#16A34A] dark:text-emerald-400">
+                      <span className="w-1.5 h-1.5 rounded-full bg-[#16A34A]"></span>
+                      {deptActive} Active
+                    </span>
+                    <span className="flex items-center gap-1 font-semibold text-[#D97706] dark:text-amber-400">
+                      <span className="w-1.5 h-1.5 rounded-full bg-[#F59E0B]"></span>
+                      {deptInactive} Inactive
+                    </span>
+                    <span className="flex items-center gap-1 font-semibold text-[#DC2626] dark:text-red-400">
+                      <span className="w-1.5 h-1.5 rounded-full bg-[#DC2626]"></span>
+                      {deptSuspended} Suspended
+                    </span>
+                  </div>
                 </div>
-              </div>
-            );
-          })}
-        </div>
+              );
+            })}
+          </div>
+        )}
       </div>
     </div>
   );

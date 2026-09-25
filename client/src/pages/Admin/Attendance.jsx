@@ -1,4 +1,5 @@
 import { useState, useEffect, useMemo } from "react";
+import { useNavigate } from "react-router-dom";
 import {
   Calendar,
   Search,
@@ -14,6 +15,7 @@ import {
   TrendingUp,
   TrendingDown,
   Users,
+  UserPlus,
   CalendarDays,
   ArrowRight,
   X,
@@ -42,6 +44,7 @@ import {
   deleteAttendanceRecord,
   allEmployees,
   allLeaves,
+  getDailyStats,
 } from "../../apis/fontApis";
 import GlobalDateRangePicker from "../../components/GlobalDateRangePicker";
 import Avatar from "../../components/Avatar";
@@ -63,6 +66,7 @@ import { motion } from "framer-motion";
 import { tableContainerVariants, tableRowVariants } from "../../utils/motion";
 
 const Attendance = () => {
+  const navigate = useNavigate();
   const [attendance, setAttendance] = useState([]);
   const [employeesList, setEmployeesList] = useState([]);
   const [leaveRequests, setLeaveRequests] = useState([]);
@@ -336,15 +340,31 @@ const Attendance = () => {
     }
   };
 
+  const [dailyStats, setDailyStats] = useState(null);
+
+  // Fetch daily attendance stats directly from backend endpoint (/api/admin/daily-stats)
+  const fetchDailyStats = async () => {
+    try {
+      const { data } = await getDailyStats();
+      if (data && data.success) {
+        setDailyStats(data);
+      }
+    } catch (err) {
+      console.warn("Could not fetch daily stats from backend:", err.message);
+    }
+  };
+
   // Initial fetch and automatic real-time sync
   useEffect(() => {
     fetchAttendance();
     fetchEmployees();
     fetchLeaves();
+    fetchDailyStats();
 
     // Auto-refresh interval every 4 seconds for real-time employee clock-in/out updates
     const interval = setInterval(() => {
       fetchAttendance(true);
+      fetchDailyStats();
     }, 4000);
 
     // Cross-tab broadcast channel synchronization
@@ -354,6 +374,7 @@ const Attendance = () => {
       bc.onmessage = (event) => {
         console.log("Real-time attendance broadcast received:", event.data);
         fetchAttendance(true);
+        fetchDailyStats();
       };
     } catch (err) {
       console.warn("BroadcastChannel not supported:", err.message);
@@ -377,50 +398,78 @@ const Attendance = () => {
     return Array.from(set);
   }, [attendance, employeesList]);
 
-  // Real-time statistics computed directly from live database records
+  // Real-time statistics computed directly from live database records with strict employee role filtering
   const stats = useMemo(() => {
     const today = new Date().toISOString().split("T")[0];
     const todayAttendance = attendance.filter((item) => item.date === today);
 
-    // Unique employees who have logged or are in the system
-    const employeeIds = new Set();
-    attendance.forEach((item) => {
-      if (item.employee?._id || item.employee?.id) {
-        employeeIds.add(item.employee._id || item.employee.id);
-      }
-    });
-    employeesList.forEach((emp) => {
-      if (emp._id || emp.employeeId) {
-        employeeIds.add(emp._id || emp.employeeId);
-      }
+    // Strictly filter genuine employees (explicitly excluding Admin and Manager accounts)
+    const validEmployees = employeesList.filter((emp) => {
+      const role = (emp.role || "").toLowerCase().trim();
+      return role !== "admin" && role !== "superadmin" && role !== "super_admin" && role !== "manager";
     });
 
-    const totalHeadcount = Math.max(employeeIds.size, employeesList.length || 1);
-    const presentToday = todayAttendance.filter((item) => item.clockIn).length;
-    const lateToday = todayAttendance.filter(
-      (item) => item.status === "Late",
-    ).length;
-    const onTimeToday = todayAttendance.filter(
-      (item) => item.status === "On Time" || item.status === "Present",
-    ).length;
-    const absentToday = Math.max(0, totalHeadcount - presentToday);
+    const staffHeadcount =
+      dailyStats?.staffHeadcount !== undefined
+        ? Number(dailyStats.staffHeadcount)
+        : validEmployees.length;
+
+    // Strict zero-employee handling: if count is 0, reliably return all zeros for all 6 metrics
+    if (staffHeadcount === 0) {
+      return {
+        totalEmployees: 0,
+        staffHeadcount: 0,
+        presentToday: 0,
+        absentToday: 0,
+        lateToday: 0,
+        onTimeToday: 0,
+        averageHours: "0.0",
+      };
+    }
+
+    const presentToday =
+      dailyStats?.presentToday !== undefined
+        ? Number(dailyStats.presentToday)
+        : todayAttendance.filter((item) => item.clockIn).length;
+
+    const lateToday =
+      dailyStats?.lateToday !== undefined
+        ? Number(dailyStats.lateToday)
+        : todayAttendance.filter(
+            (item) => item.status === "Late" || Number(item.lateMinutes || 0) > 0,
+          ).length;
+
+    const onTimeToday =
+      dailyStats?.onTimeToday !== undefined
+        ? Number(dailyStats.onTimeToday)
+        : todayAttendance.filter(
+            (item) => (item.status === "On Time" || item.status === "Present") && !item.lateMinutes && item.status !== "Late",
+          ).length;
+
+    const absentToday =
+      dailyStats?.absentToday !== undefined
+        ? Number(dailyStats.absentToday)
+        : Math.max(0, staffHeadcount - presentToday);
 
     const totalHours = attendance.reduce(
-      (sum, item) => sum + (item.workHours || 0),
+      (sum, item) => sum + (Number(item.workHours) || 0),
       0,
     );
     const averageHours =
-      attendance.length > 0 ? (totalHours / attendance.length).toFixed(1) : "0.0";
+      dailyStats?.averageHours ||
+      dailyStats?.avgHours ||
+      (attendance.length > 0 ? (totalHours / attendance.length).toFixed(1) : "0.0");
 
     return {
-      totalEmployees: totalHeadcount,
+      totalEmployees: staffHeadcount,
+      staffHeadcount,
       presentToday,
       absentToday,
       lateToday,
       onTimeToday,
       averageHours,
     };
-  }, [attendance, employeesList]);
+  }, [attendance, employeesList, dailyStats]);
 
   // Live status counts for quick status indicator filters (respecting search, department, and date)
   const _statusCounts = useMemo(() => {
@@ -642,10 +691,14 @@ const Attendance = () => {
     const explicitAbsent = periodList.filter((item) => item.status === "Absent").length;
     let absentCount = explicitAbsent;
     if ((dateFilter || (startDateFilter && startDateFilter === endDateFilter)) && absentCount === 0) {
-      const relevantHeadcount = departmentFilter !== "All"
-        ? employeesList.filter((e) => (e.department || "").toLowerCase() === departmentFilter.toLowerCase()).length
-        : Math.max(stats.totalEmployees, employeesList.length || 0);
-      absentCount = Math.max(0, relevantHeadcount - presentCount);
+      if (stats.totalEmployees === 0) {
+        absentCount = 0;
+      } else {
+        const relevantHeadcount = departmentFilter !== "All"
+          ? employeesList.filter((e) => !["admin", "superadmin", "super_admin"].includes((e.role || "").toLowerCase()) && (e.department || "").toLowerCase() === departmentFilter.toLowerCase()).length
+          : stats.totalEmployees;
+        absentCount = Math.max(0, relevantHeadcount - presentCount);
+      }
     }
 
     const totalHours = periodList.reduce((sum, item) => sum + (Number(item.workHours) || 0), 0);
@@ -1076,104 +1129,132 @@ const Attendance = () => {
           />
         )}
 
-        {/* Live Attendance Statistics Cards */}
-        <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-3 sm:gap-4">
-          <div className="relative overflow-hidden rounded-xl border border-slate-200 dark:border-slate-800/80 bg-white dark:bg-[#111927] p-4 shadow-xs hover:border-blue-500/40 transition-all">
-            <div className="flex items-center gap-3">
-              <div className="rounded-lg bg-blue-600 dark:bg-blue-600/80 p-2 text-white shrink-0 shadow-2xs">
-                <Users className="h-4 w-4" />
-              </div>
-              <div className="min-w-0">
-                <p className="text-[11px] font-bold text-slate-500 dark:text-slate-400 truncate uppercase tracking-wider">
-                  Staff Headcount
-                </p>
-                <p className="text-xl font-extrabold text-[#0B1E48] dark:text-white">
-                  {stats.totalEmployees}
-                </p>
+        {/* Live Attendance Statistics Cards / Empty State */}
+        {stats.totalEmployees === 0 || stats.staffHeadcount === 0 ? (
+          <div
+            id="attendance-zero-employees-empty-state"
+            className="rounded-2xl border border-dashed border-slate-200 dark:border-slate-800 bg-white dark:bg-[#111927] p-8 sm:p-10 shadow-xs text-center flex flex-col items-center justify-center space-y-3.5 transition-all"
+          >
+            <div className="w-14 h-14 rounded-2xl bg-blue-50 dark:bg-blue-950/40 text-[#002185] dark:text-blue-400 flex items-center justify-center border border-blue-100 dark:border-blue-900/60 shadow-2xs">
+              <Users className="w-7 h-7" />
+            </div>
+            <div className="max-w-md space-y-1">
+              <h3 className="text-base font-bold text-slate-900 dark:text-white">
+                No staff metrics available
+              </h3>
+              <p className="text-xs text-slate-500 dark:text-slate-400 leading-relaxed">
+                Add employees to start tracking attendance, shift hours, and punctuality metrics.
+              </p>
+            </div>
+            <button
+              type="button"
+              id="btn-empty-state-add-employees"
+              onClick={() => navigate("/admin/employees")}
+              className="inline-flex items-center gap-2 px-4 py-2 text-xs font-bold text-white bg-[#002185] hover:bg-[#ff5500] dark:bg-blue-600 dark:hover:bg-blue-700 rounded-xl transition shadow-xs cursor-pointer"
+            >
+              <UserPlus className="w-4 h-4" />
+              <span>Add Employees</span>
+            </button>
+          </div>
+        ) : (
+          <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-3 sm:gap-4">
+            <div className="relative overflow-hidden rounded-xl border border-slate-200 dark:border-slate-800/80 bg-white dark:bg-[#111927] p-4 shadow-xs hover:border-blue-500/40 transition-all">
+              <div className="flex items-center gap-3">
+                <div className="rounded-lg bg-blue-600 dark:bg-blue-600/80 p-2 text-white shrink-0 shadow-2xs">
+                  <Users className="h-4 w-4" />
+                </div>
+                <div className="min-w-0">
+                  <p className="text-[11px] font-bold text-slate-500 dark:text-slate-400 truncate uppercase tracking-wider">
+                    Staff Headcount
+                  </p>
+                  <p className="text-xl font-extrabold text-[#0B1E48] dark:text-white">
+                    {stats.totalEmployees}
+                  </p>
+                </div>
               </div>
             </div>
-          </div>
 
-          <div className="relative overflow-hidden rounded-xl border border-emerald-200/80 dark:border-emerald-800/40 bg-emerald-50/40 dark:bg-emerald-950/20 p-4 shadow-xs hover:border-emerald-500/40 transition-all">
-            <div className="flex items-center gap-3">
-              <div className="rounded-lg bg-emerald-600 text-white p-2 shrink-0 shadow-2xs">
-                <CheckCircle className="h-4 w-4" />
-              </div>
-              <div className="min-w-0">
-                <p className="text-[11px] font-bold text-emerald-700 dark:text-emerald-400 truncate uppercase tracking-wider">
-                  Present Today
-                </p>
-                <p className="text-xl font-extrabold text-emerald-700 dark:text-emerald-300">
-                  {stats.presentToday}
-                </p>
+            <div className="relative overflow-hidden rounded-xl border border-emerald-200/80 dark:border-emerald-800/40 bg-emerald-50/40 dark:bg-emerald-950/20 p-4 shadow-xs hover:border-emerald-500/40 transition-all">
+              <div className="flex items-center gap-3">
+                <div className="rounded-lg bg-emerald-600 text-white p-2 shrink-0 shadow-2xs">
+                  <CheckCircle className="h-4 w-4" />
+                </div>
+                <div className="min-w-0">
+                  <p className="text-[11px] font-bold text-emerald-700 dark:text-emerald-400 truncate uppercase tracking-wider">
+                    Present Today
+                  </p>
+                  <p className="text-xl font-extrabold text-emerald-700 dark:text-emerald-300">
+                    {stats.presentToday}
+                  </p>
+                </div>
               </div>
             </div>
-          </div>
 
-          <div className="relative overflow-hidden rounded-xl border border-emerald-200/80 dark:border-emerald-800/40 bg-emerald-50/40 dark:bg-emerald-950/20 p-4 shadow-xs hover:border-emerald-500/40 transition-all">
-            <div className="flex items-center gap-3">
-              <div className="rounded-lg bg-emerald-600 text-white p-2 shrink-0 shadow-2xs">
-                <TrendingUp className="h-4 w-4" />
-              </div>
-              <div className="min-w-0">
-                <p className="text-[11px] font-bold text-emerald-700 dark:text-emerald-400 truncate uppercase tracking-wider">
-                  On Time
-                </p>
-                <p className="text-xl font-extrabold text-emerald-700 dark:text-emerald-300">
-                  {stats.onTimeToday}
-                </p>
+            <div className="relative overflow-hidden rounded-xl border border-emerald-200/80 dark:border-emerald-800/40 bg-emerald-50/40 dark:bg-emerald-950/20 p-4 shadow-xs hover:border-emerald-500/40 transition-all">
+              <div className="flex items-center gap-3">
+                <div className="rounded-lg bg-emerald-600 text-white p-2 shrink-0 shadow-2xs">
+                  <TrendingUp className="h-4 w-4" />
+                </div>
+                <div className="min-w-0">
+                  <p className="text-[11px] font-bold text-emerald-700 dark:text-emerald-400 truncate uppercase tracking-wider">
+                    On Time
+                  </p>
+                  <p className="text-xl font-extrabold text-emerald-700 dark:text-emerald-300">
+                    {stats.onTimeToday}
+                  </p>
+                </div>
               </div>
             </div>
-          </div>
 
-          <div className="relative overflow-hidden rounded-xl border border-amber-200/80 dark:border-amber-800/40 bg-amber-50/40 dark:bg-amber-950/20 p-4 shadow-xs hover:border-amber-500/40 transition-all">
-            <div className="flex items-center gap-3">
-              <div className="rounded-lg bg-amber-600 text-white p-2 shrink-0 shadow-2xs">
-                <TrendingDown className="h-4 w-4" />
-              </div>
-              <div className="min-w-0">
-                <p className="text-[11px] font-bold text-amber-700 dark:text-amber-400 truncate uppercase tracking-wider">
-                  Late Check-ins
-                </p>
-                <p className="text-xl font-extrabold text-amber-700 dark:text-amber-300">
-                  {stats.lateToday}
-                </p>
+            <div className="relative overflow-hidden rounded-xl border border-amber-200/80 dark:border-amber-800/40 bg-amber-50/40 dark:bg-amber-950/20 p-4 shadow-xs hover:border-amber-500/40 transition-all">
+              <div className="flex items-center gap-3">
+                <div className="rounded-lg bg-amber-600 text-white p-2 shrink-0 shadow-2xs">
+                  <TrendingDown className="h-4 w-4" />
+                </div>
+                <div className="min-w-0">
+                  <p className="text-[11px] font-bold text-amber-700 dark:text-amber-400 truncate uppercase tracking-wider">
+                    Late Check-ins
+                  </p>
+                  <p className="text-xl font-extrabold text-amber-700 dark:text-amber-300">
+                    {stats.lateToday}
+                  </p>
+                </div>
               </div>
             </div>
-          </div>
 
-          <div className="relative overflow-hidden rounded-xl border border-rose-200/80 dark:border-rose-800/40 bg-rose-50/40 dark:bg-rose-950/20 p-4 shadow-xs hover:border-rose-500/40 transition-all">
-            <div className="flex items-center gap-3">
-              <div className="rounded-lg bg-rose-600 text-white p-2 shrink-0 shadow-2xs">
-                <XCircle className="h-4 w-4" />
-              </div>
-              <div className="min-w-0">
-                <p className="text-[11px] font-bold text-rose-700 dark:text-rose-400 truncate uppercase tracking-wider">
-                  Absent
-                </p>
-                <p className="text-xl font-extrabold text-rose-700 dark:text-rose-300">
-                  {stats.absentToday}
-                </p>
+            <div className="relative overflow-hidden rounded-xl border border-rose-200/80 dark:border-rose-800/40 bg-rose-50/40 dark:bg-rose-950/20 p-4 shadow-xs hover:border-rose-500/40 transition-all">
+              <div className="flex items-center gap-3">
+                <div className="rounded-lg bg-rose-600 text-white p-2 shrink-0 shadow-2xs">
+                  <XCircle className="h-4 w-4" />
+                </div>
+                <div className="min-w-0">
+                  <p className="text-[11px] font-bold text-rose-700 dark:text-rose-400 truncate uppercase tracking-wider">
+                    Absent
+                  </p>
+                  <p className="text-xl font-extrabold text-rose-700 dark:text-rose-300">
+                    {stats.absentToday}
+                  </p>
+                </div>
               </div>
             </div>
-          </div>
 
-          <div className="relative overflow-hidden rounded-xl border border-blue-200/80 dark:border-blue-800/40 bg-blue-50/40 dark:bg-blue-950/20 p-4 shadow-xs hover:border-blue-500/40 transition-all">
-            <div className="flex items-center gap-3">
-              <div className="rounded-lg bg-blue-600 text-white p-2 shrink-0 shadow-2xs">
-                <ClockIcon className="h-4 w-4 text-white" />
-              </div>
-              <div className="min-w-0">
-                <p className="text-[11px] font-bold text-blue-700 dark:text-blue-400 truncate uppercase tracking-wider">
-                  Avg. Hours
-                </p>
-                <p className="text-xl font-extrabold text-blue-700 dark:text-blue-300">
-                  {stats.averageHours}h
-                </p>
+            <div className="relative overflow-hidden rounded-xl border border-blue-200/80 dark:border-blue-800/40 bg-blue-50/40 dark:bg-blue-950/20 p-4 shadow-xs hover:border-blue-500/40 transition-all">
+              <div className="flex items-center gap-3">
+                <div className="rounded-lg bg-blue-600 text-white p-2 shrink-0 shadow-2xs">
+                  <ClockIcon className="h-4 w-4 text-white" />
+                </div>
+                <div className="min-w-0">
+                  <p className="text-[11px] font-bold text-blue-700 dark:text-blue-400 truncate uppercase tracking-wider">
+                    Avg. Hours
+                  </p>
+                  <p className="text-xl font-extrabold text-blue-700 dark:text-blue-300">
+                    {stats.averageHours}h
+                  </p>
+                </div>
               </div>
             </div>
           </div>
-        </div>
+        )}
 
         {/* Global Date-Range Picker Filter */}
         <GlobalDateRangePicker

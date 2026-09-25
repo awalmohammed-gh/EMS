@@ -10,23 +10,17 @@ export const OnboardingGate = ({ children }) => {
     return <WorkspaceLoader fullScreen />;
   }
 
-  const isSetupOrLandingRoute =
+  const isSetupRoute =
     location.pathname === "/setup" ||
+    location.pathname === "/system-setup" ||
+    location.pathname === "/admin/setup" ||
     location.pathname === "/setup-admin" ||
-    location.pathname === "/setup-company" ||
-    location.pathname === "/" ||
-    location.pathname === "/landing" ||
-    location.pathname === "/welcome" ||
-    location.pathname === "/admin/login" ||
-    location.pathname === "/admin/auth" ||
-    location.pathname === "/management/login" ||
-    location.pathname === "/login" ||
-    location.pathname === "/employee/login";
+    location.pathname === "/setup-company";
 
-  // If no company exists or setup is required and user is not on an allowed route, redirect to /admin/login?mode=signup
+  // If no company exists or setup is required, redirect to initial setup wizard /setup
   const needsInitialization = requiresSetup || !hasExistingCompany || !isConfigured;
-  if (needsInitialization && !isSetupOrLandingRoute) {
-    return <Navigate to="/admin/login?mode=signup" replace />;
+  if (needsInitialization && !isSetupRoute) {
+    return <Navigate to="/setup" replace />;
   }
 
   return children;

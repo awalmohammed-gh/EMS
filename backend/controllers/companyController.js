@@ -4,6 +4,7 @@ import mongoose from "mongoose";
 import { CompanySettings } from "../models/CompanySettings.js";
 import { Settings } from "../models/adminSettingsModel.js";
 import { Admin } from "../models/Admin.js";
+import { User } from "../models/userModel.js";
 import { Department } from "../models/Department.js";
 import { ShiftPolicy } from "../models/ShiftPolicy.js";
 
@@ -84,15 +85,19 @@ export const getPublicBranding = async (_req, res) => {
  */
 export const getCompanyStatus = async (_req, res) => {
   try {
-    const settings = await CompanySettings.getSettings();
-    const adminCount = await Admin.countDocuments();
+    const settings = await CompanySettings.findOne();
+    const adminCount = await User.countDocuments({ role: { $in: ["admin", "manager"] } });
+    const legacyAdminCount = await Admin.countDocuments({ role: { $in: ["admin", "manager"] } });
+    const totalAdmins = adminCount + legacyAdminCount;
+    const isConfigured = Boolean(settings && settings.isConfigured && totalAdmins > 0);
 
     return res.status(200).json({
       success: true,
-      isConfigured: Boolean(settings.isConfigured),
-      hasAdmin: adminCount > 0,
-      companyName: settings.companyName || "WorkPulse",
-      logoUrl: settings.logoUrl || settings.logo || "",
+      isConfigured,
+      requiresSetup: !isConfigured,
+      hasAdmin: totalAdmins > 0,
+      companyName: settings?.companyName || "",
+      logoUrl: settings?.logoUrl || settings?.logo || "",
     });
   } catch (error) {
     console.error("[CompanyController] getCompanyStatus error:", error);
@@ -108,21 +113,34 @@ export const getCompanyStatus = async (_req, res) => {
  */
 export const getInitStatus = async (_req, res) => {
   try {
-    const adminCount = await Admin.countDocuments();
-    const settings = await CompanySettings.getSettings();
+    const adminCount = await User.countDocuments({ role: { $in: ["admin", "manager"] } });
+    const legacyAdminCount = await Admin.countDocuments({ role: { $in: ["admin", "manager"] } });
+    const totalAdmins = adminCount + legacyAdminCount;
+    const settings = await CompanySettings.findOne();
+
+    const hasCompany = Boolean(settings && (settings.isConfigured || settings.companyName));
+    const isConfigured = Boolean(settings && settings.isConfigured && totalAdmins > 0);
+    const requiresSetup = !isConfigured || totalAdmins === 0;
 
     return res.status(200).json({
       success: true,
-      isConfigured: Boolean(settings.isConfigured),
-      hasAdmin: adminCount > 0,
-      configured: Boolean(settings.isConfigured),
-      adminExists: adminCount > 0,
+      hasExistingCompany: hasCompany && totalAdmins > 0,
+      isConfigured,
+      configured: isConfigured,
+      hasAdmin: totalAdmins > 0,
+      adminExists: totalAdmins > 0,
+      requiresSetup,
+      companyName: settings?.companyName || "",
     });
   } catch (error) {
     return res.status(200).json({
       success: true,
-      isConfigured: true,
-      hasAdmin: true,
+      hasExistingCompany: false,
+      isConfigured: false,
+      configured: false,
+      hasAdmin: false,
+      adminExists: false,
+      requiresSetup: true,
     });
   }
 };

@@ -218,13 +218,18 @@ export default function CurrentMonthAnalyticsDashboard({ dashboardData }) {
     }
 
     // Fallback synthesis from overview data
-    const activeStaff = dashboardData?.cards?.activeEmployees || dashboardData?.cards?.totalEmployees || 12;
-    const grossEst = dashboardData?.payroll?.monthlyPayrollTotal || (activeStaff * 3800);
+    const activeStaff = Number(
+      dashboardData?.cards?.activeEmployees ??
+      dashboardData?.cards?.totalEmployees ??
+      dashboardData?.activeEmployees ??
+      0
+    );
+    const grossEst = Number(dashboardData?.payroll?.monthlyPayrollTotal ?? dashboardData?.payroll?.totalPayroll ?? 0);
     const basicEst = parseFloat((grossEst * 0.85).toFixed(2));
     const allowEst = parseFloat((grossEst * 0.15).toFixed(2));
-    const penEst = parseFloat((grossEst * 0.02).toFixed(2));
-    const dedEst = parseFloat((grossEst * 0.12).toFixed(2));
-    const netEst = parseFloat((grossEst - dedEst).toFixed(2));
+    const penEst = Number(dashboardData?.payroll?.totalPenaltiesDeducted ?? 0);
+    const dedEst = penEst;
+    const netEst = Math.max(0, parseFloat((grossEst - dedEst).toFixed(2)));
 
     const syntheticTrends = [];
     for (let d = 1; d <= daysInMonth; d++) {
@@ -234,9 +239,9 @@ export default function CurrentMonthAnalyticsDashboard({ dashboardData }) {
       const dayName = dateObj.toLocaleDateString("en-US", { weekday: "short" });
 
       let p = 0, l = 0, a = 0, ol = 0;
-      if (!isWeekend && !isFuture) {
+      if (!isWeekend && !isFuture && activeStaff > 0) {
         const offset = (d * 7) % 4;
-        p = Math.max(1, Math.round(activeStaff * 0.9) - offset);
+        p = Math.max(0, Math.round(activeStaff * 0.9) - offset);
         l = Math.max(0, Math.round(activeStaff * 0.06) + (offset % 2));
         a = Math.max(0, activeStaff - p - l);
       }
@@ -253,7 +258,7 @@ export default function CurrentMonthAnalyticsDashboard({ dashboardData }) {
         late: l,
         absent: a,
         onLeave: ol,
-        turnoutRate: isWeekend || isFuture ? 0 : Math.round((turnout / activeStaff) * 100),
+        turnoutRate: isWeekend || isFuture || activeStaff === 0 ? 0 : Math.round((turnout / activeStaff) * 100),
         punctualityRate: turnout > 0 ? Math.round((p / turnout) * 100) : 0,
         totalEmployees: activeStaff,
       });
@@ -270,30 +275,30 @@ export default function CurrentMonthAnalyticsDashboard({ dashboardData }) {
       },
       attendance: {
         trends: syntheticTrends,
-        avgTurnoutRate: 95,
-        avgPunctualityRate: 93,
-        totalPresentLogs: Math.round(activeStaff * 0.9 * Math.min(currentDay, 22)),
-        totalLateLogs: Math.round(activeStaff * 0.06 * Math.min(currentDay, 22)),
-        totalAbsentLogs: Math.round(activeStaff * 0.04 * Math.min(currentDay, 22)),
-        totalOnLeaveLogs: 2,
+        avgTurnoutRate: activeStaff > 0 ? 95 : 0,
+        avgPunctualityRate: activeStaff > 0 ? 93 : 0,
+        totalPresentLogs: activeStaff > 0 ? Math.round(activeStaff * 0.9 * Math.min(currentDay, 22)) : 0,
+        totalLateLogs: activeStaff > 0 ? Math.round(activeStaff * 0.06 * Math.min(currentDay, 22)) : 0,
+        totalAbsentLogs: activeStaff > 0 ? Math.round(activeStaff * 0.04 * Math.min(currentDay, 22)) : 0,
+        totalOnLeaveLogs: 0,
       },
       payroll: {
         grossExpenditure: grossEst,
         netExpenditure: netEst,
         basicSalaries: basicEst,
         allowances: allowEst,
-        statutoryDeductions: parseFloat((dedEst - penEst).toFixed(2)),
+        statutoryDeductions: parseFloat(Math.max(0, dedEst - penEst).toFixed(2)),
         penaltyDeductions: penEst,
         totalDeductions: dedEst,
-        disbursedExpenditure: dashboardData?.payroll?.paid || (netEst * 0.75),
-        pendingExpenditure: dashboardData?.payroll?.pending || (netEst * 0.25),
+        disbursedExpenditure: Number(dashboardData?.payroll?.paid ?? dashboardData?.payroll?.totalPayrollDisbursed ?? 0),
+        pendingExpenditure: Number(dashboardData?.payroll?.pending ?? dashboardData?.payroll?.pendingDisbursements ?? 0),
         totalHeadcount: activeStaff,
-        averageCostPerEmployee: Math.round(grossEst / activeStaff),
+        averageCostPerEmployee: activeStaff > 0 ? Math.round(grossEst / activeStaff) : 0,
         categories: [
-          { name: "Base Salaries", amount: basicEst, fill: "#002185", percentage: 85 },
-          { name: "Allowances & Benefits", amount: allowEst, fill: "#2563EB", percentage: 15 },
-          { name: "Statutory Tax & SSNIT", amount: parseFloat((dedEst - penEst).toFixed(2)), fill: "#F59E0B", percentage: 10 },
-          { name: "Lateness & Absence Penalties", amount: penEst, fill: "#DC2626", percentage: 2 },
+          { name: "Base Salaries", amount: basicEst, fill: "#002185", percentage: grossEst > 0 ? 85 : 0 },
+          { name: "Allowances & Benefits", amount: allowEst, fill: "#2563EB", percentage: grossEst > 0 ? 15 : 0 },
+          { name: "Statutory Tax & SSNIT", amount: parseFloat(Math.max(0, dedEst - penEst).toFixed(2)), fill: "#F59E0B", percentage: 0 },
+          { name: "Lateness & Absence Penalties", amount: penEst, fill: "#DC2626", percentage: 0 },
         ],
         departmentBreakdown: dashboardData?.departmentExpenseDistribution || [],
       },
@@ -399,11 +404,11 @@ export default function CurrentMonthAnalyticsDashboard({ dashboardData }) {
           </div>
           <div className="mt-3">
             <div className="text-2xl font-bold text-slate-900 dark:text-white">
-              {attendance?.avgTurnoutRate ?? 95}%
+              {attendance?.avgTurnoutRate ?? 0}%
             </div>
             <div className="mt-1 flex items-center gap-1.5 text-xs text-slate-500 dark:text-slate-400">
               <span className="text-emerald-600 dark:text-emerald-400 font-semibold">
-                {attendance?.avgPunctualityRate ?? 92}% Punctuality
+                {attendance?.avgPunctualityRate ?? 0}% Punctuality
               </span>
               <span>across workdays</span>
             </div>

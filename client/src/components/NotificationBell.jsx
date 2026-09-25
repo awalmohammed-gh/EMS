@@ -122,11 +122,15 @@ export const NotificationBell = ({ role = "admin", className = "", userId }) => 
     async (item) => {
       const itemId = item._id || item.id;
       const isItemRead = Boolean(item.is_read || item.unread === false);
-      const isPayroll = item.category === "payroll" || item.type === "payroll_alert" || item.category === "payslip";
+      const isPayroll =
+        item.category === "payroll" ||
+        item.type === "payroll_alert" ||
+        item.category === "payslip" ||
+        item.type === "payroll_status_update";
       const actionTargetUrl =
         item.action_url ||
         item.actionUrl ||
-        (isPayroll ? (role === "admin" ? "/admin/dashboard/payslips" : "/employee/dashboard/payslips") : "");
+        (isPayroll ? (role === "admin" ? "/admin/payroll" : "/employee/dashboard/payslips") : "");
 
       if (!isItemRead) {
         await markAsRead(itemId);
@@ -386,7 +390,7 @@ export const NotificationBell = ({ role = "admin", className = "", userId }) => 
                 >
                   Leaves ({metrics.leave})
                 </button>
-                {(metrics.payroll > 0 || role === "employee") && (
+                {(metrics.payroll > 0 || role === "employee" || role === "admin") && (
                   <button
                     type="button"
                     onClick={() => setActiveTab("payroll")}
@@ -396,7 +400,7 @@ export const NotificationBell = ({ role = "admin", className = "", userId }) => 
                         : "text-[#64748B] dark:text-slate-400 hover:text-[#002185] dark:hover:text-blue-400 hover:bg-white dark:hover:bg-slate-850"
                     }`}
                   >
-                    Payslips ({metrics.payroll})
+                    {role === "admin" ? "Payroll" : "Payslips"} ({metrics.payroll})
                   </button>
                 )}
                 <button

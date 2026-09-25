@@ -6,6 +6,7 @@ import { User } from "../models/userModel.js";
 import { Admin } from "../models/Admin.js";
 import { verifyActiveIncompleteShift } from "./authController.js";
 import { logAuditAction } from "../utils/auditLogger.js";
+import { createNotificationRecord } from "./notificationController.js";
 
 const isValidObjectId = (id) =>
   id && mongoose.Types.ObjectId.isValid(id) && String(new mongoose.Types.ObjectId(id)) === String(id);
@@ -176,6 +177,36 @@ export const createEmployeeAccount = async (req, res) => {
       });
     } catch (auditErr) {
       console.warn("Audit log notice in createEmployeeAccount:", auditErr.message);
+    }
+
+    // Centralized Notification: Alert administrators about new employee registration
+    try {
+      await createNotificationRecord({
+        recipient_id: "admin",
+        recipient_role: "admin",
+        sender_id: String(req.admin?.id || req.admin?._id || "system"),
+        sender_role: req.admin ? "admin" : "system",
+        sender_name: req.admin?.fullName || "System Administration",
+        title: `👤 New Employee Registered: ${name}`,
+        message: `${name} (${id}) has joined the ${department.trim()} department as ${position.trim()}. Workspace access is active.`,
+        type: "new_employee_registration",
+        category: "system",
+        priority: "high",
+        action_url: "/admin/employees",
+        action_label: "View Employees",
+        organizationId: targetOrgId,
+        companyId: targetOrgId,
+        metadata: {
+          employeeId: id,
+          fullName: name,
+          email: cleanEmail,
+          department: department.trim(),
+          position: position.trim(),
+          role: assignedRole,
+        },
+      });
+    } catch (notifErr) {
+      console.warn("Notification error in createEmployeeAccount:", notifErr.message);
     }
 
     res.status(201).json({

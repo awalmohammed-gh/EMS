@@ -16,6 +16,7 @@ import LandingPage from "../pages/LandingPage";
 import WelcomePage from "../pages/WelcomePage";
 import EmployeeLoginPage from "../pages/Auth/EmployeeLoginPage";
 import ManagementLoginPage from "../pages/Auth/ManagementLoginPage";
+import SystemSetup from "../pages/Auth/SystemSetup";
 import OnboardingGate from "./OnboardingGate";
 import EmployeesLayout from "../layout/EmployeesLayout";
 import EmployeesAttendance from "../pages/Employees/EmployeesAttendance";
@@ -93,9 +94,12 @@ export const router = createHashRouter(
       <Route path="/workspace" element={<Navigate to="/" replace />} />
       <Route path="/workspace/*" element={<Navigate to="/" replace />} />
       <Route path="/register-organization" element={<Navigate to="/" replace />} />
-      <Route path="/setup" element={<Navigate to="/" replace />} />
-      <Route path="/setup-company" element={<Navigate to="/" replace />} />
-      <Route path="/setup-admin" element={<Navigate to="/" replace />} />
+      {/* Single-Tenant System Onboarding Wizard */}
+      <Route path="/setup" element={<SystemSetup />} />
+      <Route path="/admin/setup" element={<SystemSetup />} />
+      <Route path="/system-setup" element={<SystemSetup />} />
+      <Route path="/setup-company" element={<Navigate to="/setup" replace />} />
+      <Route path="/setup-admin" element={<Navigate to="/setup" replace />} />
       <Route path="/super-admin/*" element={<Navigate to="/admin/auth" replace />} />
       <Route path="/superadmin/*" element={<Navigate to="/admin/auth" replace />} />
       <Route path="/super-admin" element={<Navigate to="/admin/auth" replace />} />

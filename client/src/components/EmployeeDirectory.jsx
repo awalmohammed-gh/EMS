@@ -25,6 +25,7 @@ import {
   Square,
   Layers,
   Building,
+  Building2,
   Activity,
   ArrowUpDown,
   ArrowUp,
@@ -196,20 +197,20 @@ export const EmployeeDirectory = ({
   const filteredEmployees = useMemo(() => {
     const list = employees.filter((emp) => {
       const q = search.toLowerCase().trim();
-      const nameMatch = (emp.fullName || "").toLowerCase().includes(q);
+      const nameMatch = (emp.fullName || emp.name || "").toLowerCase().includes(q);
       const emailMatch = (emp.email || "").toLowerCase().includes(q);
       const phoneMatch = (emp.phone || "").toLowerCase().includes(q);
-      const deptMatch = (emp.department || "").toLowerCase().includes(q);
-      const posMatch = (emp.position || "").toLowerCase().includes(q);
-      const idMatch = (emp.employeeId || "").toLowerCase().includes(q);
+      const deptMatch = (emp.department || emp.dept || "").toLowerCase().includes(q);
+      const posMatch = (emp.position || emp.role || emp.title || "").toLowerCase().includes(q);
+      const idMatch = (emp.employeeId || emp.id || "").toLowerCase().includes(q);
       const locMatch = (emp.location || "").toLowerCase().includes(q);
 
       const matchesSearch =
         !q ||
         nameMatch ||
+        deptMatch ||
         emailMatch ||
         phoneMatch ||
-        deptMatch ||
         posMatch ||
         idMatch ||
         locMatch;
@@ -992,46 +993,62 @@ export const EmployeeDirectory = ({
         )}
 
         {/* Search Input and Filter Bar */}
-        <div className="mt-4 pt-4 border-t border-slate-100 dark:border-slate-800/80 flex flex-col md:flex-row gap-3">
-          {/* Search Bar */}
-          <div className="flex-1 relative">
-            <div className="absolute inset-y-0 left-0 pl-3.5 flex items-center pointer-events-none text-slate-400">
-              <Search className="w-4 h-4" />
+        <div className="mt-4 pt-4 border-t border-slate-100 dark:border-slate-800/80 flex flex-col lg:flex-row gap-3">
+          {/* Real-Time Name Search Bar & Department Dropdown Filter Group */}
+          <div className="flex-1 flex flex-col sm:flex-row gap-2.5">
+            {/* Search Bar */}
+            <div className="flex-1 relative">
+              <div className="absolute inset-y-0 left-0 pl-3.5 flex items-center pointer-events-none text-slate-400">
+                <Search className="w-4 h-4" />
+              </div>
+              <input
+                id="employee-search-bar"
+                type="text"
+                value={search}
+                onChange={(e) => setSearch(e.target.value)}
+                placeholder="Search employee records by name, role, email, or ID..."
+                aria-label="Real-time employee search by name or department"
+                className="w-full pl-10 pr-9 py-2.5 bg-slate-50 dark:bg-slate-950/60 border border-slate-200/80 dark:border-slate-800/80 rounded-xl text-xs text-slate-900 dark:text-white placeholder-slate-400 focus:bg-white dark:focus:bg-slate-900 focus:outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500 transition-all shadow-2xs"
+              />
+              {search && (
+                <button
+                  type="button"
+                  onClick={() => setSearch("")}
+                  title="Clear search input"
+                  className="absolute inset-y-0 right-0 pr-3 flex items-center text-slate-400 hover:text-slate-700 dark:hover:text-slate-200 cursor-pointer"
+                >
+                  <X className="w-3.5 h-3.5" />
+                </button>
+              )}
             </div>
-            <input
-              type="text"
-              value={search}
-              onChange={(e) => setSearch(e.target.value)}
-              placeholder="Search by name, role, email, phone, employee ID, location..."
-              className="w-full pl-10 pr-4 py-2.5 bg-slate-50 dark:bg-slate-950/60 border border-slate-200/80 dark:border-slate-800/80 rounded-xl text-xs text-slate-900 dark:text-white placeholder-slate-400 focus:bg-white dark:focus:bg-slate-900 focus:outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500 transition-all"
-            />
-            {search && (
-              <button
-                type="button"
-                onClick={() => setSearch("")}
-                className="absolute inset-y-0 right-0 pr-3 flex items-center text-slate-400 hover:text-slate-700 dark:hover:text-slate-200"
+
+            {/* Department Dropdown Filter alongside Search Bar */}
+            <div className="relative sm:w-52 shrink-0">
+              <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none text-slate-400">
+                <Building2 className="w-3.5 h-3.5" />
+              </div>
+              <select
+                id="employee-department-filter"
+                aria-label="Filter by department"
+                value={selectedDepartment}
+                onChange={(e) => setSelectedDepartment(e.target.value)}
+                className="w-full pl-8.5 pr-8 py-2.5 bg-slate-50 dark:bg-slate-950/60 border border-slate-200/80 dark:border-slate-800/80 rounded-xl text-xs text-slate-700 dark:text-slate-200 focus:outline-none focus:border-blue-500 cursor-pointer hover:border-blue-500 transition-all shrink-0 font-medium shadow-2xs"
               >
-                <X className="w-3.5 h-3.5" />
-              </button>
-            )}
+                {departments.map((dept) => (
+                  <option key={dept} value={dept}>
+                    {dept === "All" ? "All Departments" : dept}
+                  </option>
+                ))}
+              </select>
+            </div>
           </div>
 
-          {/* Department Filter */}
+          {/* Secondary Controls: Status, Sort, View Mode & Actions */}
           <div className="flex flex-wrap sm:flex-nowrap items-center gap-2">
-            <select
-              value={selectedDepartment}
-              onChange={(e) => setSelectedDepartment(e.target.value)}
-              className="px-3 py-2.5 bg-slate-50 dark:bg-slate-950/60 border border-slate-200/80 dark:border-slate-800/80 rounded-xl text-xs text-slate-700 dark:text-slate-200 focus:outline-none focus:border-blue-500 cursor-pointer hover:border-blue-500 transition-all shrink-0"
-            >
-              {departments.map((dept) => (
-                <option key={dept} value={dept}>
-                  {dept === "All" ? "All Departments" : dept}
-                </option>
-              ))}
-            </select>
-
             {/* Status Filter */}
             <select
+              id="employee-status-filter"
+              aria-label="Filter by status"
               value={selectedStatus}
               onChange={(e) => setSelectedStatus(e.target.value)}
               className="px-3 py-2.5 bg-slate-50 dark:bg-slate-950/60 border border-slate-200/80 dark:border-slate-800/80 rounded-xl text-xs text-slate-700 dark:text-slate-200 focus:outline-none focus:border-blue-500 cursor-pointer hover:border-blue-500 transition-all shrink-0"
@@ -1161,6 +1178,31 @@ export const EmployeeDirectory = ({
           </div>
         </div>
 
+        {/* Real-time Department Quick Filter Pills */}
+        <div className="mt-3 flex items-center gap-1.5 overflow-x-auto pb-1 scrollbar-none text-[11px]">
+          <span className="text-slate-400 dark:text-slate-500 font-medium shrink-0 flex items-center gap-1 mr-0.5">
+            <Layers className="w-3 h-3" />
+            <span>Quick Dept:</span>
+          </span>
+          {departments.slice(0, 9).map((dept) => {
+            const isActive = selectedDepartment === dept;
+            return (
+              <button
+                key={dept}
+                type="button"
+                onClick={() => setSelectedDepartment(dept)}
+                className={`px-2.5 py-1 rounded-lg text-[11px] font-semibold whitespace-nowrap transition-all cursor-pointer ${
+                  isActive
+                    ? "bg-blue-600 text-white shadow-2xs"
+                    : "bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300 hover:bg-slate-200 dark:hover:bg-slate-700 border border-slate-200/60 dark:border-slate-700/60"
+                }`}
+              >
+                {dept === "All" ? "All Departments" : dept}
+              </button>
+            );
+          })}
+        </div>
+
         {/* Filter tags summary */}
         {(search || selectedDepartment !== "All" || selectedStatus !== "All") && (
           <div className="mt-3 flex items-center justify-between text-xs text-slate-500 dark:text-slate-400 bg-slate-50 dark:bg-slate-950/60 p-2.5 rounded-xl border border-slate-200/80 dark:border-slate-800/80">
@@ -1196,8 +1238,89 @@ export const EmployeeDirectory = ({
         )}
       </div>
 
-      {/* Grid Card View with Selection Checkboxes & Framer Motion Transitions */}
-      {viewMode === "grid" && (
+      {/* LOADING STATE PROTECTION & EMPTY STATE CONDITION */}
+      {isLoading ? (
+        <div className="space-y-4">
+          <div className="bg-white dark:bg-[#111927] border border-slate-200/80 dark:border-slate-800 rounded-2xl p-6 shadow-xs animate-pulse">
+            <div className="flex items-center justify-between pb-4 border-b border-slate-100 dark:border-slate-800">
+              <div className="h-4 bg-slate-200 dark:bg-slate-800 rounded w-1/4"></div>
+              <div className="h-4 bg-slate-200 dark:bg-slate-800 rounded w-16"></div>
+            </div>
+            {viewMode === "grid" ? (
+              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 pt-4">
+                {[1, 2, 3, 4, 5, 6].map((idx) => (
+                  <div key={idx} className="h-48 bg-slate-100 dark:bg-slate-800/50 rounded-2xl p-5 space-y-3">
+                    <div className="flex items-center gap-3">
+                      <div className="w-10 h-10 rounded-full bg-slate-200 dark:bg-slate-700"></div>
+                      <div className="space-y-1.5 flex-1">
+                        <div className="h-3.5 bg-slate-200 dark:bg-slate-700 rounded w-3/4"></div>
+                        <div className="h-2.5 bg-slate-200 dark:bg-slate-800 rounded w-1/2"></div>
+                      </div>
+                    </div>
+                    <div className="h-3 bg-slate-200 dark:bg-slate-700 rounded w-full"></div>
+                    <div className="h-8 bg-slate-200 dark:bg-slate-700 rounded-xl w-full"></div>
+                  </div>
+                ))}
+              </div>
+            ) : (
+              <div className="divide-y divide-slate-100 dark:divide-slate-800/80 pt-2">
+                {[1, 2, 3, 4, 5, 6].map((idx) => (
+                  <div key={idx} className="py-3.5 flex items-center justify-between">
+                    <div className="flex items-center gap-3 w-1/3">
+                      <div className="w-8 h-8 rounded-full bg-slate-200 dark:bg-slate-700 shrink-0"></div>
+                      <div className="space-y-1.5 flex-1">
+                        <div className="h-3.5 bg-slate-200 dark:bg-slate-700 rounded w-3/4"></div>
+                        <div className="h-2.5 bg-slate-200 dark:bg-slate-800 rounded w-1/2"></div>
+                      </div>
+                    </div>
+                    <div className="h-3 bg-slate-200 dark:bg-slate-700 rounded w-24"></div>
+                    <div className="h-3 bg-slate-200 dark:bg-slate-700 rounded w-24"></div>
+                    <div className="h-5 bg-slate-200 dark:bg-slate-700 rounded-full w-16"></div>
+                    <div className="h-7 bg-slate-200 dark:bg-slate-700 rounded-xl w-24"></div>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+        </div>
+      ) : !isLoading && employees.length === 0 ? (
+        /* PROFESSIONAL EMPTY STATE: Zero database records */
+        <motion.div
+          initial={{ opacity: 0, y: 10 }}
+          animate={{ opacity: 1, y: 0 }}
+          className="bg-white dark:bg-[#111927] border border-slate-200/80 dark:border-slate-800 rounded-3xl p-12 sm:p-16 text-center shadow-xs"
+        >
+          <div className="w-16 h-16 rounded-full bg-blue-50 dark:bg-blue-950/60 text-blue-600 dark:text-blue-400 border border-blue-100 dark:border-blue-900/40 flex items-center justify-center mx-auto mb-4 shadow-2xs">
+            <Users className="w-8 h-8" />
+          </div>
+          <h3 className="text-lg sm:text-xl font-bold text-slate-900 dark:text-white tracking-tight">
+            No employees added yet.
+          </h3>
+          <p className="text-xs sm:text-sm text-slate-500 dark:text-slate-400 mt-2 max-w-md mx-auto leading-relaxed">
+            Get started by adding your first employee to the system to view attendance and payroll data.
+          </p>
+          <div className="mt-6 flex items-center justify-center">
+            <button
+              id="btn-empty-add-employee"
+              type="button"
+              onClick={() => {
+                if (typeof setShowEmployeeModal === "function") {
+                  setShowEmployeeModal(true);
+                } else {
+                  window.location.href = "/admin/employees";
+                }
+              }}
+              className="inline-flex items-center gap-2 px-5 py-2.5 bg-blue-600 hover:bg-blue-700 text-white text-xs font-semibold rounded-xl transition-all shadow-sm cursor-pointer hover:shadow-md active:scale-98"
+            >
+              <UserPlus className="w-4 h-4" />
+              <span>+ Add Employee</span>
+            </button>
+          </div>
+        </motion.div>
+      ) : (
+        <>
+          {/* Grid Card View with Selection Checkboxes & Framer Motion Transitions */}
+          {viewMode === "grid" && filteredEmployees.length > 0 && (
         <motion.div
           layout
           className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 sm:gap-5"
@@ -1395,7 +1518,7 @@ export const EmployeeDirectory = ({
       )}
 
       {/* Table / List View - Desktop Table + Mobile Card-View */}
-      {viewMode === "table" && (
+      {viewMode === "table" && filteredEmployees.length > 0 && (
         <motion.div
           layout
           initial={{ opacity: 0, y: 6 }}
@@ -1915,48 +2038,50 @@ export const EmployeeDirectory = ({
         </motion.div>
       )}
 
-      {/* Empty State */}
-      {filteredEmployees.length === 0 && (
-        <motion.div
-          initial={{ opacity: 0, y: 10 }}
-          animate={{ opacity: 1, y: 0 }}
-          className="bg-white dark:bg-[#111927] border border-slate-200/70 dark:border-slate-800 rounded-2xl p-12 text-center shadow-none"
-        >
-          <div className="w-12 h-12 rounded-xl bg-slate-100 dark:bg-slate-800 text-slate-400 flex items-center justify-center mx-auto mb-3">
-            <Users className="w-6 h-6" />
-          </div>
-          <h3 className="text-base font-bold text-slate-900 dark:text-white">
-            No matching staff members found
-          </h3>
-          <p className="text-xs text-slate-500 dark:text-slate-400 mt-1 max-w-sm mx-auto">
-            Try adjusting your search query or clear the filter selections to view all registered staff.
-          </p>
-          <div className="mt-4 flex flex-wrap items-center justify-center gap-2.5">
-            <button
-              id="btn-empty-clear-filters"
-              type="button"
-              onClick={() => {
-                setSearch("");
-                setSelectedDepartment("All");
-                setSelectedStatus("All");
-              }}
-              className="px-4 py-2 bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-750 text-slate-700 dark:text-slate-300 text-xs font-semibold rounded-xl transition-colors cursor-pointer"
+          {/* Filter Empty State (when records exist in database but active search/filter matches 0) */}
+          {filteredEmployees.length === 0 && (
+            <motion.div
+              initial={{ opacity: 0, y: 10 }}
+              animate={{ opacity: 1, y: 0 }}
+              className="bg-white dark:bg-[#111927] border border-slate-200/70 dark:border-slate-800 rounded-2xl p-12 text-center shadow-none"
             >
-              Clear All Filters
-            </button>
-            {typeof setShowEmployeeModal === "function" && (
-              <button
-                id="btn-empty-new-employee"
-                type="button"
-                onClick={() => setShowEmployeeModal(true)}
-                className="px-4 py-2 bg-blue-600 text-white text-xs font-semibold rounded-xl hover:bg-blue-700 transition-colors cursor-pointer shadow-none flex items-center gap-1.5"
-              >
-                <UserPlus className="w-3.5 h-3.5" />
-                <span>New Employee</span>
-              </button>
-            )}
-          </div>
-        </motion.div>
+              <div className="w-12 h-12 rounded-xl bg-slate-100 dark:bg-slate-800 text-slate-400 flex items-center justify-center mx-auto mb-3">
+                <Users className="w-6 h-6" />
+              </div>
+              <h3 className="text-base font-bold text-slate-900 dark:text-white">
+                No matching staff members found
+              </h3>
+              <p className="text-xs text-slate-500 dark:text-slate-400 mt-1 max-w-sm mx-auto">
+                Try adjusting your search query or clear the filter selections to view all registered staff.
+              </p>
+              <div className="mt-4 flex flex-wrap items-center justify-center gap-2.5">
+                <button
+                  id="btn-empty-clear-filters"
+                  type="button"
+                  onClick={() => {
+                    setSearch("");
+                    setSelectedDepartment("All");
+                    setSelectedStatus("All");
+                  }}
+                  className="px-4 py-2 bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-750 text-slate-700 dark:text-slate-300 text-xs font-semibold rounded-xl transition-colors cursor-pointer"
+                >
+                  Clear All Filters
+                </button>
+                {typeof setShowEmployeeModal === "function" && (
+                  <button
+                    id="btn-empty-new-employee"
+                    type="button"
+                    onClick={() => setShowEmployeeModal(true)}
+                    className="px-4 py-2 bg-blue-600 text-white text-xs font-semibold rounded-xl hover:bg-blue-700 transition-colors cursor-pointer shadow-none flex items-center gap-1.5"
+                  >
+                    <UserPlus className="w-3.5 h-3.5" />
+                    <span>New Employee</span>
+                  </button>
+                )}
+              </div>
+            </motion.div>
+          )}
+        </>
       )}
 
       {/* Bulk Action Confirmation Modal */}

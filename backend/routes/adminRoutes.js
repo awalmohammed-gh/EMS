@@ -39,11 +39,21 @@ import {
   getPayrollCycles,
   getEmployeePayslipBreakdownById,
 } from "../controllers/payrollController.js";
-import { employeeDetails, getEmployeeById } from "../controllers/employeeController.js";
+import { employeeDetails, getEmployeeById, exportEmployeesCSV } from "../controllers/employeeController.js";
+import {
+  getEmployeeQuarterlyReviews,
+  addQuarterlyReview,
+} from "../controllers/performanceController.js";
 import { getPayrollForecasting, exportForecastingCSV } from "../controllers/payrollForecastingController.js";
 import { deleteLeave, updateLeaveStatus, getAllLeaves } from "../controllers/leaveController.js";
 import { deleteAttendanceRecord, getAllAttendance, getAttendanceById } from "../controllers/employeeAttendance.js";
-import { overrideAttendanceRecord } from "../controllers/attendanceManagementController.js";
+import { overrideAttendanceRecord, getAdminDailyStats } from "../controllers/attendanceManagementController.js";
+import { getActivityLogs, getActivityLogStats } from "../controllers/activityLogController.js";
+import {
+  getLateUnclockedEmployees,
+  notifyLateEmployees,
+  excuseLateEmployee,
+} from "../controllers/lateAttendanceController.js";
 import { verifyAdmin } from "../middleware/authAdmin.js";
 import { validateOrganizationAccess } from "../middleware/validateOrganizationAccess.js";
 import { Employee } from "../models/Employee.js";
@@ -105,7 +115,14 @@ adminRouter.get("/monthly-run", verifyAdmin, getMonthlyPayrollRun);
 adminRouter.get("/payroll/calculate-employee", verifyAdmin, calculateMonthlyPayrollSummary);
 adminRouter.get("/payroll/calculate-summary", verifyAdmin, calculateMonthlyPayrollSummary);
 adminRouter.get("/payroll/employees", verifyAdmin, employeeDetails);
+adminRouter.get("/employees/export-csv", verifyAdmin, exportEmployeesCSV);
+adminRouter.get("/employees/export", verifyAdmin, exportEmployeesCSV);
+adminRouter.get("/employees/export/csv", verifyAdmin, exportEmployeesCSV);
+adminRouter.get("/export-employees-csv", verifyAdmin, exportEmployeesCSV);
+adminRouter.get("/export-employees", verifyAdmin, exportEmployeesCSV);
 adminRouter.get("/employees", verifyAdmin, employeeDetails);
+adminRouter.get("/employees/:id/performance", verifyAdmin, getEmployeeQuarterlyReviews);
+adminRouter.post("/employees/:id/performance", verifyAdmin, addQuarterlyReview);
 adminRouter.get("/employees/:id", verifyAdmin, validateOrganizationAccess(Employee), getEmployeeById);
 adminRouter.get("/employee/:id", verifyAdmin, validateOrganizationAccess(Employee), getEmployeeById);
 
@@ -127,6 +144,8 @@ adminRouter.get("/recent-activity", verifyAdmin, getRecentActivityFeed);
 
 // Biometric Attendance Bulk Upload
 // Attendance Management
+adminRouter.get("/daily-stats", verifyAdmin, getAdminDailyStats);
+adminRouter.get("/attendance/daily-stats", verifyAdmin, getAdminDailyStats);
 adminRouter.get("/attendance", verifyAdmin, getAllAttendance);
 adminRouter.get("/attendance/all", verifyAdmin, getAllAttendance);
 adminRouter.get("/attendance/:id", verifyAdmin, validateOrganizationAccess(Attendance), getAttendanceById);
@@ -139,6 +158,16 @@ adminRouter.post("/attendance/override", verifyAdmin, overrideAttendanceRecord);
 adminRouter.put("/attendance/:id/override", verifyAdmin, validateOrganizationAccess(Attendance), overrideAttendanceRecord);
 adminRouter.post("/attendance/manual-record", verifyAdmin, overrideAttendanceRecord);
 adminRouter.put("/attendance/record/:id", verifyAdmin, validateOrganizationAccess(Attendance), overrideAttendanceRecord);
+
+// High-Priority Late Attendance & Unclocked Employee Alerts
+adminRouter.get("/attendance/late-unclocked", verifyAdmin, getLateUnclockedEmployees);
+adminRouter.post("/attendance/notify-late", verifyAdmin, notifyLateEmployees);
+adminRouter.post("/attendance/excuse-late", verifyAdmin, excuseLateEmployee);
+
+// Activity Logs / Audit Trail (Fetched from ActivityLog MongoDB collection)
+adminRouter.get("/activity-logs", verifyAdmin, getActivityLogs);
+adminRouter.get("/activity-logs/stats", verifyAdmin, getActivityLogStats);
+adminRouter.get("/audit-trail", verifyAdmin, getActivityLogs);
 
 // Admin Announcement Endpoints (POST /api/admin/announcements, GET, DELETE, PUT)
 adminRouter.get("/announcements", verifyAdmin, getAnnouncements);

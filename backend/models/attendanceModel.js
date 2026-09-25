@@ -8,6 +8,11 @@ const attendanceSchema = new mongoose.Schema(
       required: true,
     },
 
+    userId: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: "Employee",
+    },
+
     employeeId: {
       type: String,
       default: "",

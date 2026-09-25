@@ -19,6 +19,10 @@ import {
   MoreVertical,
   Loader2,
   AlertTriangle,
+  CheckSquare,
+  Square,
+  FileDown,
+  Files,
 } from "lucide-react";
 
 import { useManagement } from "../../context/ManagementContextProvider";
@@ -31,7 +35,7 @@ import PenaltyPayrollImpactChart from "../../components/PenaltyPayrollImpactChar
 import PayrollForecastingTool from "../../components/PayrollForecastingTool";
 import GlobalDateRangePicker from "../../components/GlobalDateRangePicker";
 import { getAllPayslips, updatePayrollStatus, deletePayroll, getAdminPayrollSummary, namesList } from "../../apis/fontApis";
-import { downloadPayslipPDF } from "../../utils/payslipPdfGenerator";
+import { downloadPayslipPDF, downloadBulkPayslipsPDF } from "../../utils/payslipPdfGenerator";
 import ExportPayrollReportButton from "../../components/ExportPayrollReportButton";
 import {
   List,
@@ -76,6 +80,11 @@ const Payslips = () => {
 
   // Action Menu Dropdown State for rows
   const [activeMenuId, setActiveMenuId] = useState(null);
+
+  // Bulk selection and PDF generation state
+  const [selectedPayIds, setSelectedPayIds] = useState(new Set());
+  const [isBulkExporting, setIsBulkExporting] = useState(false);
+  const [bulkExportProgress, setBulkExportProgress] = useState(null);
 
   // Get current month and year
   const getCurrentMonth = () => {
@@ -354,6 +363,87 @@ const Payslips = () => {
         show: true,
       });
       navigate(`/print-payslips/${payrollItem?._id || payrollItem?.id || payrollItem?.payslipNumber}`);
+    }
+  };
+
+  // Toggle selection for all visible rows
+  const handleToggleSelectAll = () => {
+    if (selectedPayIds.size === filteredData.length && filteredData.length > 0) {
+      setSelectedPayIds(new Set());
+    } else {
+      const allIds = new Set(
+        filteredData.map((p, idx) => String(p?._id || p?.id || p?.payslipNumber || `pay-${idx}`))
+      );
+      setSelectedPayIds(allIds);
+    }
+  };
+
+  // Toggle selection for a single row
+  const handleToggleSelectRow = (payItem, idx) => {
+    const id = String(payItem?._id || payItem?.id || payItem?.payslipNumber || `pay-${idx}`);
+    setSelectedPayIds((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) {
+        next.delete(id);
+      } else {
+        next.add(id);
+      }
+      return next;
+    });
+  };
+
+  // Bulk Download Pay Stubs Action (uses html2canvas + jsPDF)
+  const handleBulkDownloadPDF = async (onlySelected = false) => {
+    const targetItems = onlySelected
+      ? filteredData.filter((p, idx) => {
+          const id = String(p?._id || p?.id || p?.payslipNumber || `pay-${idx}`);
+          return selectedPayIds.has(id);
+        })
+      : filteredData;
+
+    if (targetItems.length === 0) {
+      setShowToast({
+        message: "No payroll records selected for bulk PDF download.",
+        type: "error",
+        show: true,
+      });
+      return;
+    }
+
+    try {
+      setIsBulkExporting(true);
+      setBulkExportProgress({
+        current: 1,
+        total: targetItems.length,
+        percentage: 0,
+        employeeName: "Initializing...",
+      });
+
+      setShowToast({
+        message: `Compiling ${targetItems.length} official pay stubs using html2canvas & jsPDF...`,
+        type: "success",
+        show: true,
+      });
+
+      const result = await downloadBulkPayslipsPDF(targetItems, {
+        onProgress: (p) => setBulkExportProgress(p),
+      });
+
+      setShowToast({
+        message: `Successfully generated ${result.count} pay stubs into "${result.fileName}"!`,
+        type: "success",
+        show: true,
+      });
+    } catch (err) {
+      console.error("[Payslips] Bulk PDF export error:", err);
+      setShowToast({
+        message: err.message || "Failed to generate bulk PDF statements.",
+        type: "error",
+        show: true,
+      });
+    } finally {
+      setIsBulkExporting(false);
+      setBulkExportProgress(null);
     }
   };
 
@@ -758,11 +848,85 @@ const Payslips = () => {
             )}
           </div>
 
+          {/* Bulk Pay Stub Export Action Bar */}
+          <div className="flex flex-wrap items-center justify-between gap-3 p-3.5 bg-blue-50/80 dark:bg-blue-950/30 border border-blue-200/80 dark:border-blue-900/50 rounded-2xl">
+            <div className="flex items-center gap-2.5">
+              <button
+                type="button"
+                onClick={handleToggleSelectAll}
+                className="inline-flex items-center gap-1.5 text-xs font-bold text-blue-900 dark:text-blue-300 hover:text-blue-700 cursor-pointer"
+              >
+                {selectedPayIds.size > 0 && selectedPayIds.size === filteredData.length ? (
+                  <CheckSquare className="w-4 h-4 text-blue-600 dark:text-blue-400" />
+                ) : (
+                  <Square className="w-4 h-4 text-slate-400" />
+                )}
+                <span>
+                  {selectedPayIds.size > 0
+                    ? `${selectedPayIds.size} Selected`
+                    : "Select All for Bulk PDF Export"}
+                </span>
+              </button>
+
+              {selectedPayIds.size > 0 && (
+                <button
+                  type="button"
+                  onClick={() => setSelectedPayIds(new Set())}
+                  className="text-[11px] text-slate-500 hover:text-slate-800 dark:hover:text-slate-200 cursor-pointer underline ml-1"
+                >
+                  Clear Selection
+                </button>
+              )}
+            </div>
+
+            <div className="flex items-center gap-2">
+              {/* Download Selected Stubs */}
+              {selectedPayIds.size > 0 && (
+                <button
+                  type="button"
+                  disabled={isBulkExporting}
+                  onClick={() => handleBulkDownloadPDF(true)}
+                  className="px-3.5 py-1.5 rounded-xl bg-blue-600 hover:bg-blue-500 text-white font-bold text-xs shadow-xs transition flex items-center gap-1.5 cursor-pointer disabled:opacity-50"
+                  title="Download selected pay stubs into a consolidated PDF using html2canvas & jsPDF"
+                >
+                  <FileDown className="w-3.5 h-3.5" />
+                  <span>Download Selected ({selectedPayIds.size}) Stubs (PDF)</span>
+                </button>
+              )}
+
+              {/* Download All Visible Stubs */}
+              <button
+                type="button"
+                disabled={isBulkExporting || filteredData.length === 0}
+                onClick={() => handleBulkDownloadPDF(false)}
+                className="px-3.5 py-1.5 rounded-xl bg-white dark:bg-slate-800 border border-slate-300 dark:border-slate-700 hover:bg-slate-50 dark:hover:bg-slate-750 text-slate-800 dark:text-slate-200 font-bold text-xs shadow-xs transition flex items-center gap-1.5 cursor-pointer disabled:opacity-50"
+                title="Download all filtered pay stubs in bulk using html2canvas & jsPDF"
+              >
+                <Files className="w-3.5 h-3.5 text-blue-600 dark:text-blue-400" />
+                <span>Bulk Download All ({filteredData.length}) Stubs (PDF)</span>
+              </button>
+            </div>
+          </div>
+
           {/* Main Payroll Table */}
           <div className="bg-white dark:bg-slate-900 rounded-2xl sm:rounded-3xl border border-slate-200/80 dark:border-slate-800/80 shadow-sm dark:shadow-black/20 overflow-hidden">
             {/* Table Header */}
-            <div className="hidden lg:grid grid-cols-12 gap-3 px-5 py-3.5 bg-slate-50 dark:bg-slate-800/50 border-b border-slate-200/80 dark:border-slate-800/80 text-xs font-semibold text-slate-400 uppercase tracking-wider">
-              <div className="col-span-4">Employee Details</div>
+            <div className="hidden lg:grid grid-cols-12 gap-2 px-5 py-3.5 bg-slate-50 dark:bg-slate-800/50 border-b border-slate-200/80 dark:border-slate-800/80 text-xs font-semibold text-slate-400 uppercase tracking-wider items-center">
+              <div className="col-span-1 flex items-center">
+                <button
+                  type="button"
+                  onClick={handleToggleSelectAll}
+                  className="text-slate-400 hover:text-blue-600 cursor-pointer"
+                  title="Select All Rows"
+                >
+                  {selectedPayIds.size > 0 && selectedPayIds.size === filteredData.length ? (
+                    <CheckSquare className="w-4 h-4 text-blue-600" />
+                  ) : (
+                    <Square className="w-4 h-4" />
+                  )}
+                </button>
+              </div>
+              <div className="col-span-3">Employee Details</div>
               <div className="col-span-2">Department</div>
               <div className="col-span-2">Pay Period</div>
               <div className="col-span-1">Status</div>
@@ -773,6 +937,8 @@ const Payslips = () => {
             {/* Main Content Rows */}
             <div className="divide-y divide-slate-100 dark:divide-slate-800/80">
               {filteredData.map((pay, index) => {
+                const rowId = String(pay?._id || pay?.id || pay?.payslipNumber || `pay-${index}`);
+                const isSelected = selectedPayIds.has(rowId);
                 const empName = pay?.employee?.fullName || pay?.employeeName || "Employee";
                 const empId = pay?.employee?.employeeId || pay?.employeeId || "EMP001";
                 const dept = pay?.employee?.department || pay?.department || "Operations";
@@ -783,13 +949,34 @@ const Payslips = () => {
 
                 return (
                   <div
-                    key={pay?._id || pay?.id || index}
-                    className="hover:bg-slate-50/80 dark:hover:bg-slate-800/40 transition-colors duration-150"
+                    key={rowId}
+                    className={`hover:bg-slate-50/80 dark:hover:bg-slate-800/40 transition-colors duration-150 ${
+                      isSelected ? "bg-blue-50/50 dark:bg-blue-950/20" : ""
+                    }`}
                   >
                     {/* Desktop Grid Row */}
-                    <div className="hidden lg:grid grid-cols-12 gap-3 items-center px-5 py-3.5">
+                    <div className="hidden lg:grid grid-cols-12 gap-2 items-center px-5 py-3.5">
+                      {/* Selection Checkbox */}
+                      <div className="col-span-1 flex items-center">
+                        <button
+                          type="button"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            handleToggleSelectRow(pay, index);
+                          }}
+                          className="text-slate-400 hover:text-blue-600 cursor-pointer p-0.5"
+                          title="Select for bulk PDF export"
+                        >
+                          {isSelected ? (
+                            <CheckSquare className="w-4 h-4 text-blue-600 dark:text-blue-400" />
+                          ) : (
+                            <Square className="w-4 h-4" />
+                          )}
+                        </button>
+                      </div>
+
                       {/* Employee Details */}
-                      <div className="col-span-4 flex items-center gap-3">
+                      <div className="col-span-3 flex items-center gap-3">
                         <div className="w-9 h-9 rounded-xl bg-blue-600 flex items-center justify-center text-white font-bold text-xs shrink-0 shadow-2xs">
                           {getInitials(empName)}
                         </div>
@@ -1213,6 +1400,52 @@ const Payslips = () => {
                 )}
               </button>
             </div>
+          </div>
+        </div>
+      )}
+
+      {/* Bulk PDF Export Progress Modal */}
+      {isBulkExporting && (
+        <div className="fixed inset-0 bg-slate-950/70 backdrop-blur-xs flex items-center justify-center p-4 z-50 animate-in fade-in duration-200">
+          <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-3xl p-6 sm:p-7 max-w-md w-full shadow-2xl space-y-5 text-center">
+            <div className="w-14 h-14 rounded-2xl bg-blue-500/10 text-blue-600 dark:text-blue-400 border border-blue-500/20 flex items-center justify-center mx-auto">
+              <Loader2 className="w-7 h-7 animate-spin" />
+            </div>
+
+            <div>
+              <h3 className="text-base font-bold text-slate-900 dark:text-white">
+                Generating Bulk Payroll Statements
+              </h3>
+              <p className="text-xs text-slate-500 dark:text-slate-400 mt-1">
+                Rendering documents with html2canvas and compiling into a consolidated PDF via jsPDF.
+              </p>
+            </div>
+
+            {bulkExportProgress && (
+              <div className="space-y-2">
+                <div className="flex items-center justify-between text-xs font-semibold text-slate-700 dark:text-slate-300">
+                  <span className="truncate max-w-[200px]">
+                    {bulkExportProgress.employeeName || "Processing..."}
+                  </span>
+                  <span>
+                    {bulkExportProgress.current} / {bulkExportProgress.total} (
+                    {bulkExportProgress.percentage || 0}%)
+                  </span>
+                </div>
+
+                {/* Progress bar */}
+                <div className="w-full h-2.5 bg-slate-100 dark:bg-slate-800 rounded-full overflow-hidden">
+                  <div
+                    className="h-full bg-blue-600 rounded-full transition-all duration-300 ease-out"
+                    style={{ width: `${bulkExportProgress.percentage || 5}%` }}
+                  ></div>
+                </div>
+              </div>
+            )}
+
+            <p className="text-[11px] text-slate-400">
+              Please do not close this window while statements are being compiled.
+            </p>
           </div>
         </div>
       )}

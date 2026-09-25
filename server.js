@@ -29,11 +29,13 @@ import authRouter from "./backend/routes/authRoutes.js";
 import announcementRouter from "./backend/routes/announcementRoutes.js";
 import userRouter from "./backend/routes/userRoutes.js";
 import companyRouter from "./backend/routes/companyRoutes.js";
+import setupRouter from "./backend/routes/setupRoutes.js";
 import { verifyWorkspace, getWorkspaceBySlug } from "./backend/controllers/companyController.js";
 import { ensureSuperAdmin } from "./backend/utils/seedSuperAdmin.js";
 import { CompanySettings } from "./backend/models/CompanySettings.js";
 import { logErrorToFile } from "./backend/utils/logger.js";
 import { autoCloseAllStaleShifts } from "./backend/controllers/employeeAttendance.js";
+import { syncActivityLogsCollection } from "./backend/utils/auditLogger.js";
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -236,8 +238,10 @@ app.use("/api/leave", leaveRouter);
 app.use("/api/settings", settingsRouter);
 app.use("/api/notifications", notificationRouter);
 app.use("/api/announcements", announcementRouter);
+app.use("/api/setup", setupRouter);
 
 // Direct mounts without /api prefix to gracefully handle requests if client baseURL omits /api
+app.use("/setup", setupRouter);
 app.use("/company", companyRouter);
 app.use("/companies", companyRouter);
 app.use("/organization", companyRouter);
@@ -363,11 +367,13 @@ const startServer = async () => {
     if (mongoose.connection.readyState === 1) {
       console.log("[Server] Database connection fully initialized and verified.");
 
-      // Ensure Platform Super Administrator exists
-      try {
-        await ensureSuperAdmin();
-      } catch (saErr) {
-        console.warn("[Server] Super Admin initialization notice:", saErr.message);
+      // Ensure Platform Super Administrator exists only when explicit AUTO_SEED_ADMIN flag is enabled
+      if (process.env.AUTO_SEED_ADMIN === "true") {
+        try {
+          await ensureSuperAdmin();
+        } catch (saErr) {
+          console.warn("[Server] Super Admin initialization notice:", saErr.message);
+        }
       }
 
       // Run initial auto-close sweep for unclosed shifts from prior calendar days
@@ -375,6 +381,13 @@ const startServer = async () => {
         await autoCloseAllStaleShifts();
       } catch (sweepErr) {
         console.warn("[Server] Stale shift auto-close sweep notice:", sweepErr.message);
+      }
+
+      // Initialize and synchronize ActivityLog collection
+      try {
+        await syncActivityLogsCollection();
+      } catch (syncErr) {
+        console.warn("[Server] ActivityLog sync notice:", syncErr.message);
       }
 
       // Schedule periodic background sweep to catch 7:30 PM auto-close and midnight rollovers

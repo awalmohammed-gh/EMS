@@ -35,7 +35,7 @@ export const OfficialPayslipDocument = ({
   const handleDownload = async () => {
     try {
       setIsExporting(true);
-      await downloadPayslipPDF(payslip);
+      await downloadPayslipPDF(payslip, "corporate-payslip-canvas");
     } catch (err) {
       console.error("PDF download error:", err);
     } finally {

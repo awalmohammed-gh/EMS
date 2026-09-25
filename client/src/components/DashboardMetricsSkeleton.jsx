@@ -4,10 +4,10 @@ import { useBranding } from "../context/BrandingContext";
 /**
  * DashboardMetricsSkeleton Component
  * Full skeleton loader displayed while dashboard metrics and analytical data are fetched from the database.
- * Dynamically displays the registered workspace organization's brand and title.
+ * Dynamically displays the registered company's brand and title.
  */
 export const DashboardMetricsSkeleton = () => {
-  let companyName = "Workspace";
+  let companyName = "WorkPulse";
   try {
     const branding = useBranding();
     if (branding?.companyName) companyName = branding.companyName;
@@ -17,7 +17,7 @@ export const DashboardMetricsSkeleton = () => {
 
   return (
     <div className="space-y-8 pb-10 animate-pulse">
-      {/* Dynamic Tenant Loading Header Skeleton */}
+      {/* Dynamic Company Loading Header Skeleton */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 bg-white dark:bg-slate-800 p-6 rounded-2xl border border-slate-200 dark:border-slate-700/60 shadow-xs">
         <div className="flex items-center gap-4">
           <div className="w-10 h-10 rounded-xl bg-blue-50 dark:bg-blue-950/50 border border-blue-100 dark:border-blue-900/50 flex items-center justify-center shrink-0">

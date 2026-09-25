@@ -1385,45 +1385,44 @@ export const getMonthlyAttendanceCalendar = async (req, res) => {
   }
 };
 
-// Get all attendance for admin - Live automated database sync
+// Get all attendance for admin - Live automated database sync (Single-Tenant Global Access)
 export const getAllAttendance = async (req, res) => {
   try {
     // Auto-close today's unclosed shifts if current time is >= 19:30 (7:30 PM)
     await autoCloseEveningPastGracePeriod();
 
     let attendance = [];
-    const tenantId = req.organizationId || req.companyId || req.user?.companyId || req.user?.organizationId;
-    if (!tenantId && req.user?.role !== "super_admin") {
-      return res.status(403).json({
-        success: false,
-        message: "Access restricted: No company workspace identified for this request.",
-      });
-    }
-    const query = tenantId
-      ? { $or: [{ organizationId: tenantId }, { companyId: tenantId }] }
-      : {};
-
     try {
-      const dbAtt = await Attendance.find(query)
-        .populate("employee", "fullName department position employeeId email avatar")
+      const dbAtt = await Attendance.find({})
+        .populate("userId", "fullName department position employeeId email avatar profilePicture")
+        .populate("employee", "fullName department position employeeId email avatar profilePicture")
         .sort({ date: -1, createdAt: -1 })
         .lean();
 
       if (dbAtt) {
-        attendance = dbAtt;
+        attendance = dbAtt.map((rec) => {
+          const emp = rec.employee || rec.userId || {};
+          return {
+            ...rec,
+            userId: emp,
+            employee: emp,
+          };
+        });
       }
     } catch (dbErr) {
       console.warn("DB query in getAllAttendance:", dbErr.message);
     }
 
-    res.status(200).json({
+    return res.status(200).json({
       success: true,
+      count: attendance.length,
       attendance,
     });
   } catch (error) {
-    res.status(500).json({
+    console.error("Error in getAllAttendance:", error);
+    return res.status(500).json({
       success: false,
-      message: error.message,
+      message: error.message || "Failed to retrieve attendance records.",
     });
   }
 };

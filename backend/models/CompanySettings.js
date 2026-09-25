@@ -158,7 +158,7 @@ const companySettingsSchema = new mongoose.Schema(
 
     isConfigured: {
       type: Boolean,
-      default: true,
+      default: false,
     },
   },
   {
@@ -182,18 +182,20 @@ companySettingsSchema.pre("save", function () {
 });
 
 /**
- * Singleton getter: ensures exactly one CompanySettings document exists in this deployment.
+ * Singleton getter: returns the deployment CompanySettings document or fallback unconfigured metadata.
  */
 companySettingsSchema.statics.getSettings = async function () {
   let settings = await this.findOne();
   if (!settings) {
-    settings = await this.create({
-      companyName: "WorkPulse",
-      name: "WorkPulse",
-      slug: "workpulse",
+    return {
+      companyName: "",
+      name: "",
+      slug: "",
       primaryColor: "#0B1E48",
-      isConfigured: true,
-    });
+      logoUrl: "",
+      logo: "",
+      isConfigured: false,
+    };
   }
   return settings;
 };
@@ -202,6 +204,7 @@ export const CompanySettings =
   mongoose.models.CompanySettings || mongoose.model("CompanySettings", companySettingsSchema);
 
 // Backward-compatibility exports for controllers and models during single-tenant refactor
+export const Company = CompanySettings;
 export const Organization = CompanySettings;
 export const Workspace = CompanySettings;
 export const Settings = CompanySettings;

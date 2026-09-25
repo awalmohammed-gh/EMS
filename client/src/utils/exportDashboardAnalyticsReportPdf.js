@@ -109,12 +109,23 @@ export const exportDashboardAnalyticsReportPdf = async ({
   currentY += 6;
 
   // 2. Executive Metric Tiles
-  const totalEmployees = dashboardData?.cards?.totalEmployees || dashboardData?.payroll?.totalEmployees || 32;
-  const totalPresent = dashboardData?.cards?.presentToday ?? 29;
-  const turnoutRate = Math.round((totalPresent / Math.max(1, totalEmployees)) * 100);
-  const totalPayroll = dashboardData?.payroll?.totalPayroll || dashboardData?.payroll?.totalPayrollDisbursed || 58000;
-  const avgShiftHours = dashboardData?.shiftCompletionTrends?.overallAvgHours || 8.1;
-  const avgPerformance = "92.4%";
+  const totalEmployees = Number(
+    dashboardData?.cards?.totalEmployees ??
+    dashboardData?.cards?.activeEmployees ??
+    dashboardData?.payroll?.totalEmployees ??
+    dashboardData?.totalEmployees ??
+    0
+  );
+  const totalPresent = Number(dashboardData?.cards?.presentToday ?? dashboardData?.attendance?.present ?? 0);
+  const turnoutRate = totalEmployees > 0 ? Math.round((totalPresent / totalEmployees) * 100) : 0;
+  const totalPayroll = Number(
+    dashboardData?.payroll?.totalPayroll ??
+    dashboardData?.payroll?.totalPayrollDisbursed ??
+    dashboardData?.totalPayroll ??
+    0
+  );
+  const avgShiftHours = dashboardData?.shiftCompletionTrends?.overallAvgHours || (totalEmployees > 0 ? 8.0 : 0);
+  const avgPerformance = totalEmployees > 0 ? "92.4%" : "0.0%";
 
   const kpiCards = [
     { title: "TOTAL STAFF", val: `${totalEmployees} Active`, sub: "Headcount" },

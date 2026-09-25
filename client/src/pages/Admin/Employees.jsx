@@ -1,20 +1,22 @@
 import { useState, useEffect } from "react";
-import { UserPlus, Download, Check, RefreshCw } from "lucide-react";
+import { UserPlus, Download, Check, RefreshCw, FileSpreadsheet } from "lucide-react";
 import { allEmployees } from "../../apis/fontApis";
 import { EmployeeDirectory } from "../../components/EmployeeDirectory";
 import AddEmployee from "../../components/modal/AddEmployee";
+import ExportHREmployeeModal from "../../components/ExportHREmployeeModal";
 import { useManagement } from "../../context/ManagementContextProvider";
-import { exportEmployeesToCSV } from "../../utils/exportCsv";
+import { exportHREmployeeReportToCSV } from "../../utils/exportCsv";
 import ErrorMessage from "../../ui/ErrorMessage";
-import Loading from "../../ui/Loading";
 
 const Employees = () => {
   const { showEmployeeModal, setShowEmployeeModal } = useManagement();
   const [employees, setEmployees] = useState([]);
-  const [isLoading, setIsLoading] = useState(false);
+  const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState(null);
   const [isExporting, setIsExporting] = useState(false);
   const [exportSuccess, setExportSuccess] = useState(false);
+  const [showExportModal, setShowExportModal] = useState(false);
+  const [exportNotice, setExportNotice] = useState(null);
 
   const fetchEmployees = async () => {
     try {
@@ -31,9 +33,13 @@ const Employees = () => {
           : data.list || [];
         setEmployees(list);
       } else {
-        setError(data?.message || "Failed to fetch employee directory.");
+        setEmployees([]);
+        if (data?.message) {
+          setError(data.message);
+        }
       }
     } catch (err) {
+      setEmployees([]);
       setError(
         err.response?.data?.message ||
           err.message ||
@@ -60,13 +66,18 @@ const Employees = () => {
     if (!employees || employees.length === 0) return;
     try {
       setIsExporting(true);
-      const success = exportEmployeesToCSV(
-        employees,
-        `eyenit_employee_records_${new Date().toISOString().split("T")[0]}.csv`
-      );
-      if (success) {
+      const dateStr = new Date().toISOString().split("T")[0];
+      const result = exportHREmployeeReportToCSV(employees, {
+        filterStatus: "all",
+        filename: `workpulse_hr_employee_records_${dateStr}.csv`,
+      });
+      if (result.success) {
         setExportSuccess(true);
-        setTimeout(() => setExportSuccess(false), 2500);
+        setExportNotice(`✓ Successfully exported ${result.count} employee records to CSV`);
+        setTimeout(() => {
+          setExportSuccess(false);
+          setExportNotice(null);
+        }, 4000);
       }
     } catch (err) {
       console.error("Download CSV error:", err);
@@ -135,6 +146,17 @@ const Employees = () => {
             </button>
 
             <button
+              type="button"
+              onClick={() => setShowExportModal(true)}
+              disabled={employees.length === 0}
+              title="Open full HR employee database export wizard"
+              className="px-3.5 py-2 rounded-xl border border-blue-200 dark:border-blue-800/80 bg-blue-50/80 dark:bg-blue-950/40 text-blue-700 dark:text-blue-300 hover:bg-blue-100 dark:hover:bg-blue-900/60 transition-all flex items-center gap-2 shadow-2xs text-xs font-semibold cursor-pointer disabled:opacity-50"
+            >
+              <FileSpreadsheet className="w-3.5 h-3.5 text-blue-600 dark:text-blue-400" />
+              <span>HR Reporting Export...</span>
+            </button>
+
+            <button
               id="btn-new-employee"
               type="button"
               onClick={() => setShowEmployeeModal(true)}
@@ -148,6 +170,20 @@ const Employees = () => {
         </div>
       </div>
 
+      {/* Export Success Notification Banner */}
+      {exportNotice && (
+        <div className="p-3.5 rounded-2xl bg-emerald-50 dark:bg-emerald-950/50 border border-emerald-200 dark:border-emerald-800/60 text-xs font-semibold text-emerald-700 dark:text-emerald-300 flex items-center justify-between shadow-xs animate-in fade-in duration-200">
+          <span>{exportNotice}</span>
+          <button
+            type="button"
+            onClick={() => setExportNotice(null)}
+            className="text-emerald-500 hover:text-emerald-700 dark:hover:text-emerald-200 cursor-pointer ml-2"
+          >
+            ✕
+          </button>
+        </div>
+      )}
+
       {/* Error Message */}
       {error && (
         <ErrorMessage
@@ -157,25 +193,31 @@ const Employees = () => {
         />
       )}
 
-      {/* Loading state indicator */}
-      {isLoading && employees.length === 0 ? (
-        <Loading />
-      ) : (
-        /* Searchable Employee Directory Component */
-        <EmployeeDirectory
-          employees={employees}
-          setEmployees={setEmployees}
-          onEmployeeDeleted={handleEmployeeDeleted}
-          onDeleteSuccess={handleEmployeeDeleted}
-          isLoading={isLoading}
-          onRefresh={fetchEmployees}
-        />
-      )}
+      {/* Searchable Employee Directory Component with Skeleton Loading & Empty State */}
+      <EmployeeDirectory
+        employees={employees}
+        setEmployees={setEmployees}
+        onEmployeeDeleted={handleEmployeeDeleted}
+        onDeleteSuccess={handleEmployeeDeleted}
+        isLoading={isLoading}
+        onRefresh={fetchEmployees}
+      />
 
       {/* Add Employee Modal */}
       {showEmployeeModal && (
         <AddEmployee onEmployeeAdded={fetchEmployees} />
       )}
+
+      {/* Full HR Employee Database CSV Export Wizard */}
+      <ExportHREmployeeModal
+        isOpen={showExportModal}
+        onClose={() => setShowExportModal(false)}
+        employeeList={employees}
+        onSuccessNotice={(msg) => {
+          setExportNotice(msg);
+          setTimeout(() => setExportNotice(null), 5000);
+        }}
+      />
     </div>
   );
 };

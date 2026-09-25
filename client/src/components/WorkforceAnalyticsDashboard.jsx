@@ -317,13 +317,7 @@ export const WorkforceAnalyticsDashboard = ({ dashboardData }) => {
       if (dashboardData?.attendanceTrends && dashboardData.attendanceTrends.length > 0) {
         return dashboardData.attendanceTrends;
       }
-      return [
-        { day: "Mon", date: "2026-09-07", present: 28, late: 2, absent: 1, onLeave: 1, turnoutRate: 94 },
-        { day: "Tue", date: "2026-09-08", present: 30, late: 1, absent: 0, onLeave: 1, turnoutRate: 97 },
-        { day: "Wed", date: "2026-09-09", present: 29, late: 3, absent: 1, onLeave: 1, turnoutRate: 94 },
-        { day: "Thu", date: "2026-09-10", present: 31, late: 1, absent: 0, onLeave: 0, turnoutRate: 100 },
-        { day: "Fri", date: "2026-09-11", present: 27, late: 4, absent: 2, onLeave: 1, turnoutRate: 91 },
-      ];
+      return [];
     }
     if (dashboardData?.monthlyWorkforceTrends && dashboardData.monthlyWorkforceTrends.length > 0) {
       return dashboardData.monthlyWorkforceTrends.slice(-6).map((m) => ({
@@ -334,7 +328,7 @@ export const WorkforceAnalyticsDashboard = ({ dashboardData }) => {
         late: m.late || 0,
         absent: m.absent || 0,
         onLeave: m.onLeave || 0,
-        turnoutRate: m.attendanceRate || 95,
+        turnoutRate: m.attendanceRate || 0,
       }));
     }
     return [];
@@ -347,7 +341,7 @@ export const WorkforceAnalyticsDashboard = ({ dashboardData }) => {
         if (!r.date) return true;
         return r.date >= dateRangeFilter.startDate && r.date <= dateRangeFilter.endDate;
       });
-      return filtered.length > 0 ? filtered : rawAttendance;
+      return filtered;
     }
     return rawAttendance;
   }, [rawAttendance, attendanceTimeframe, dateRangeFilter]);
@@ -358,53 +352,38 @@ export const WorkforceAnalyticsDashboard = ({ dashboardData }) => {
     const totalTurnoutRate =
       attendanceChartData.length > 0
         ? Math.round(
-            attendanceChartData.reduce((acc, c) => acc + (c.turnoutRate || 90), 0) /
+            attendanceChartData.reduce((acc, c) => acc + (c.turnoutRate || 0), 0) /
               attendanceChartData.length
           )
-        : 95;
+        : 0;
     const totalLate = attendanceChartData.reduce((acc, c) => acc + (c.late || 0), 0);
     return {
       avgTurnout: totalTurnoutRate,
       totalLate,
-      avgPresent: Math.round(totalPresent / Math.max(1, attendanceChartData.length)),
+      avgPresent: attendanceChartData.length > 0 ? Math.round(totalPresent / attendanceChartData.length) : 0,
     };
   }, [attendanceChartData]);
 
   // 2. Process Average Shift Completion Times
   const shiftChartData = useMemo(() => {
-    const defaultWeekdayData = [
-      { day: "Mon", dayFull: "Monday", avgShiftHours: 8.2, completedShifts: 30, completionRate: 97, overtimeCount: 3 },
-      { day: "Tue", dayFull: "Tuesday", avgShiftHours: 8.0, completedShifts: 31, completionRate: 98, overtimeCount: 1 },
-      { day: "Wed", dayFull: "Wednesday", avgShiftHours: 8.4, completedShifts: 32, completionRate: 96, overtimeCount: 4 },
-      { day: "Thu", dayFull: "Thursday", avgShiftHours: 8.1, completedShifts: 31, completionRate: 99, overtimeCount: 2 },
-      { day: "Fri", dayFull: "Friday", avgShiftHours: 7.9, completedShifts: 30, completionRate: 94, overtimeCount: 1 },
-    ];
-
     if (shiftTimeframe === "weekdays") {
-      return dashboardData?.shiftCompletionTrends?.weekdays || defaultWeekdayData;
+      return dashboardData?.shiftCompletionTrends?.weekdays || [];
     }
     if (shiftTimeframe === "daily") {
-      const dailyData = dashboardData?.shiftCompletionTrends?.daily || defaultWeekdayData;
+      const dailyData = dashboardData?.shiftCompletionTrends?.daily || [];
       if (dateRangeFilter?.startDate && dateRangeFilter?.endDate) {
         const filtered = dailyData.filter((d) => {
           if (!d.date) return true;
           return d.date >= dateRangeFilter.startDate && d.date <= dateRangeFilter.endDate;
         });
-        return filtered.length > 0 ? filtered : dailyData;
+        return filtered;
       }
       return dailyData;
     }
     if (shiftTimeframe === "monthly") {
-      return dashboardData?.shiftCompletionTrends?.monthly || [
-        { day: "Apr", dayFull: "April", avgShiftHours: 8.1, completedShifts: 620, completionRate: 96 },
-        { day: "May", dayFull: "May", avgShiftHours: 8.2, completedShifts: 650, completionRate: 97 },
-        { day: "Jun", dayFull: "June", avgShiftHours: 8.0, completedShifts: 640, completionRate: 98 },
-        { day: "Jul", dayFull: "July", avgShiftHours: 8.3, completedShifts: 670, completionRate: 95 },
-        { day: "Aug", dayFull: "August", avgShiftHours: 8.1, completedShifts: 660, completionRate: 97 },
-        { day: "Sep", dayFull: "September", avgShiftHours: 8.0, completedShifts: 240, completionRate: 98 },
-      ];
+      return dashboardData?.shiftCompletionTrends?.monthly || [];
     }
-    return defaultWeekdayData;
+    return [];
   }, [dashboardData, shiftTimeframe, dateRangeFilter]);
 
   const shiftSummary = useMemo(() => {
@@ -412,54 +391,33 @@ export const WorkforceAnalyticsDashboard = ({ dashboardData }) => {
       shiftChartData.length > 0
         ? parseFloat(
             (
-              shiftChartData.reduce((acc, c) => acc + (c.avgShiftHours || c.avgHours || 8.0), 0) /
+              shiftChartData.reduce((acc, c) => acc + (c.avgShiftHours || c.avgHours || 0), 0) /
               shiftChartData.length
             ).toFixed(2)
           )
-        : 8.1;
+        : 0;
     const avgCompletion =
       shiftChartData.length > 0
         ? Math.round(
-            shiftChartData.reduce((acc, c) => acc + (c.completionRate || 95), 0) /
+            shiftChartData.reduce((acc, c) => acc + (c.completionRate || 0), 0) /
               shiftChartData.length
           )
-        : 96;
+        : 0;
     const totalCompleted = shiftChartData.reduce((acc, c) => acc + (c.completedShifts || 0), 0);
 
     return {
       avgHours,
       completionRate: avgCompletion,
       totalCompleted,
-      targetHours: 8.0,
+      targetHours: shiftChartData.length > 0 ? 8.0 : 0,
     };
   }, [shiftChartData]);
 
   // 3. Process 30-Day Employee Performance Scores
   const performanceChartData = useMemo(() => {
-    let source = dashboardData?.employeePerformance30Days || [];
+    const source = dashboardData?.employeePerformance30Days || [];
     if (!source || source.length === 0) {
-      // Generate realistic 30-day performance curve
-      const now = new Date();
-      source = [];
-      for (let i = 29; i >= 0; i--) {
-        const d = new Date(now.getTime() - i * 24 * 60 * 60 * 1000);
-        const dStr = d.toISOString().split("T")[0];
-        const monthShort = d.toLocaleDateString("en-US", { month: "short" });
-        const dayNum = d.getDate();
-        const variance = ((i * 7 + dayNum * 3) % 9) - 4;
-        const overall = Math.min(100, Math.max(78, 92 + variance));
-        const punctuality = Math.min(100, Math.max(80, 94 + (((i * 5) % 7) - 3)));
-        const completion = Math.min(100, Math.max(85, 95 + (((i * 3) % 5) - 2)));
-        source.push({
-          date: dStr,
-          label: `${monthShort} ${dayNum}`,
-          dayNumber: 30 - i,
-          overallScore: overall,
-          punctualityScore: punctuality,
-          shiftCompletionScore: completion,
-          turnoutRate: Math.min(100, overall + 2),
-        });
-      }
+      return [];
     }
 
     // Apply date filtering if applicable
@@ -475,9 +433,9 @@ export const WorkforceAnalyticsDashboard = ({ dashboardData }) => {
   // Performance summary KPIs
   const performanceSummary = useMemo(() => {
     if (!performanceChartData.length) {
-      return { avgScore: 92, peakScore: 98, lowScore: 84, compliancePct: 96 };
+      return { avgScore: 0, peakScore: 0, lowScore: 0, compliancePct: 0 };
     }
-    const scores = performanceChartData.map((p) => p.overallScore || 90);
+    const scores = performanceChartData.map((p) => p.overallScore || 0);
     const avgScore = Math.round(scores.reduce((a, b) => a + b, 0) / scores.length);
     const peakScore = Math.max(...scores);
     const lowScore = Math.min(...scores);
@@ -489,19 +447,10 @@ export const WorkforceAnalyticsDashboard = ({ dashboardData }) => {
 
   // 4. Process Payroll Distribution & Department Expenses
   const payrollChartData = useMemo(() => {
-    const defaultMonths = [
-      { month: "Apr", monthFull: "April 2026", baseSalary: 48000, allowances: 6200, deductions: 1800, netDisbursed: 52400, headcount: 31 },
-      { month: "May", monthFull: "May 2026", baseSalary: 50000, allowances: 6500, deductions: 2100, netDisbursed: 54400, headcount: 32 },
-      { month: "Jun", monthFull: "June 2026", baseSalary: 51000, allowances: 7000, deductions: 1900, netDisbursed: 56100, headcount: 32 },
-      { month: "Jul", monthFull: "July 2026", baseSalary: 52000, allowances: 7200, deductions: 2400, netDisbursed: 56800, headcount: 33 },
-      { month: "Aug", monthFull: "August 2026", baseSalary: 53500, allowances: 7800, deductions: 2200, netDisbursed: 59100, headcount: 34 },
-      { month: "Sep", monthFull: "September 2026", baseSalary: 54000, allowances: 8000, deductions: 1700, netDisbursed: 60300, headcount: 34 },
-    ];
-
     const source =
       dashboardData?.payrollDistributionTrends ||
       dashboardData?.monthlyWorkforceTrends ||
-      defaultMonths;
+      [];
 
     if (payrollTimeframe === "6months") {
       return source.slice(-6);
@@ -513,9 +462,10 @@ export const WorkforceAnalyticsDashboard = ({ dashboardData }) => {
     const totalDisbursed = payrollChartData.reduce((acc, c) => acc + (c.netDisbursed || c.baseSalary || 0), 0);
     const totalDeductions = payrollChartData.reduce((acc, c) => acc + (c.deductions || 0), 0);
     const totalAllowances = payrollChartData.reduce((acc, c) => acc + (c.allowances || 0), 0);
-    const avgHeadcount = Math.round(
-      payrollChartData.reduce((acc, c) => acc + (c.headcount || 32), 0) / Math.max(1, payrollChartData.length)
-    );
+    const totalHeadcountSum = payrollChartData.reduce((acc, c) => acc + (c.headcount || 0), 0);
+    const avgHeadcount = payrollChartData.length > 0
+      ? Math.round(totalHeadcountSum / payrollChartData.length)
+      : 0;
     const avgPerStaff = avgHeadcount > 0 ? Math.round(totalDisbursed / Math.max(1, payrollChartData.length) / avgHeadcount) : 0;
 
     return {
@@ -535,14 +485,7 @@ export const WorkforceAnalyticsDashboard = ({ dashboardData }) => {
     ) {
       return dashboardData.departmentExpenseDistribution;
     }
-    // Realistic fallback based on employee counts
-    return [
-      { name: "Engineering", department: "Engineering", value: 42000, totalExpense: 42000, headcount: 12, percentage: 38, fill: DEPARTMENT_COLORS[0] },
-      { name: "Operations", department: "Operations", value: 26500, totalExpense: 26500, headcount: 8, percentage: 24, fill: DEPARTMENT_COLORS[1] },
-      { name: "Sales & Marketing", department: "Sales & Marketing", value: 19800, totalExpense: 19800, headcount: 6, percentage: 18, fill: DEPARTMENT_COLORS[2] },
-      { name: "Administration", department: "Administration", value: 12400, totalExpense: 12400, headcount: 4, percentage: 11, fill: DEPARTMENT_COLORS[3] },
-      { name: "Customer Support", department: "Customer Support", value: 9800, totalExpense: 9800, headcount: 3, percentage: 9, fill: DEPARTMENT_COLORS[4] },
-    ];
+    return [];
   }, [dashboardData]);
 
   const totalDepartmentExpenditure = useMemo(() => {

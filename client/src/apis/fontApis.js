@@ -273,6 +273,18 @@ export const getAllAttendance = () =>{
   return api.get("/attendance/all");
 }
 
+export const getDailyStats = () => {
+  return api.get("/admin/daily-stats");
+};
+
+export const getAdminDailyStats = () => {
+  return api.get("/admin/daily-stats");
+};
+
+export const getCompanyProfile = () => {
+  return api.get("/company/profile");
+};
+
 export const getNowAttendance = () =>{
   return api.get("/attendance/now");
 }
@@ -508,11 +520,10 @@ export const updateSecuritySettings = (data) => {
 
 // Admin Settings Audit Logs & Activity Trail
 export const getAuditLogs = (params) => {
-  return api.get("/admin/audit-logs", { params }).catch(() => {
-    return api.get("/admin/activity", { params });
+  return api.get("/admin/activity-logs", { params }).catch(() => {
+    return api.get("/admin/audit-logs", { params });
   });
 };
-export const getActivityLogs = getAuditLogs;
 
 // Profile Picture & Avatar Management
 export const uploadProfilePicture = (payload) => {
@@ -560,6 +571,84 @@ export const exportPayrollForecastingCSV = (params = {}) => {
     responseType: "blob",
   });
 };
+
+// HR Employee Database CSV Export
+export const exportEmployeesCSV = (params = {}) => {
+  return api.get("/admin/employees/export-csv", {
+    params,
+    responseType: "blob",
+  });
+};
+
+// Quarterly Employee Performance & Growth Trends
+export const getEmployeePerformanceReviews = (employeeId) => {
+  return api.get(`/admin/employees/${employeeId}/performance`).catch(() => {
+    return api.get(`/employee/profile/${employeeId}/performance`);
+  });
+};
+
+export const addEmployeePerformanceReview = (employeeId, reviewData) => {
+  return api.post(`/admin/employees/${employeeId}/performance`, reviewData);
+};
+
+export const getMyPerformanceReviews = () => {
+  return api.get("/employee/my-performance");
+};
+
+// Admin Live Data Endpoints (Strictly Single-Tenant Global)
+export const getDashboardStats = (params = {}) => {
+  return api.get("/admin/dashboard-stats", { params });
+};
+
+export const getAdminAttendanceList = (params = {}) => {
+  return api.get("/admin/attendance", { params });
+};
+
+export const getAdminAttendance = getAdminAttendanceList;
+
+export const getAdminEmployeesList = (params = {}) => {
+  return api.get("/admin/employees", { params });
+};
+
+export const getAdminEmployees = getAdminEmployeesList;
+
+// System Onboarding & Initialization (Strictly Single-Tenant Global)
+export const getSetupStatus = () => {
+  return api.get("/setup/status");
+};
+
+export const initializeSystem = (data, isFormData = false) => {
+  return api.post(
+    "/setup/initialize",
+    data,
+    isFormData ? { headers: { "Content-Type": "multipart/form-data" } } : {}
+  );
+};
+
+// High-Priority Late Attendance & Attention Required Feeds
+export const getLateAttendanceAlerts = (params = {}) => {
+  return api.get("/admin/attendance/late-unclocked", { params });
+};
+
+export const notifyLateEmployees = (payload) => {
+  return api.post("/admin/attendance/notify-late", payload);
+};
+
+export const excuseLateEmployee = (payload) => {
+  return api.post("/admin/attendance/excuse-late", payload);
+};
+
+// Administrative Activity Logs / Audit Trail (Fetched from ActivityLog MongoDB collection)
+export const getActivityLogs = (params = {}) => {
+  return api.get("/admin/activity-logs", { params });
+};
+
+export const getActivityLogStats = () => {
+  return api.get("/admin/activity-logs/stats");
+};
+
+
+
 
 
 

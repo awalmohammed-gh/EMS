@@ -8,14 +8,18 @@ import {
 } from "lucide-react";
 import { useManagement } from "../context/ManagementContextProvider";
 import { useBranding } from "../context/BrandingContext";
+import DefaultPlatformLogo from "./DefaultPlatformLogo";
 
 export const Sidebar = ({
   children,
   role: propRole,
 }) => {
   const navigate = useNavigate();
-  const { role: contextRole, user, logout } = useManagement();
+  const { role: contextRole, user, logout, company, companyLogoUrl } = useManagement();
   const { companyName, logoUrl } = useBranding();
+
+  const resolvedLogo = company?.logoUrl || companyLogoUrl || logoUrl;
+  const resolvedName = company?.name || company?.companyName || companyName || "WorkPulse";
 
   const isAdmin =
     propRole === "admin" ||
@@ -40,13 +44,13 @@ export const Sidebar = ({
       <div className="flex flex-col h-full bg-white dark:bg-slate-900">
         {/* Sidebar Brand Header */}
         <div className="h-16 px-5 border-b border-slate-200/80 dark:border-slate-800 flex items-center gap-3">
-          <motion.div layout key={logoUrl || companyName} className="shrink-0">
-            {logoUrl ? (
+          <motion.div layout key={resolvedLogo || resolvedName} className="shrink-0">
+            {resolvedLogo ? (
               <div className="w-10 h-10 rounded-xl bg-white dark:bg-slate-800 border border-slate-200/80 dark:border-slate-700 shadow-xs flex items-center justify-center p-1 overflow-hidden shrink-0">
                 <motion.img
                   layout
-                  src={logoUrl}
-                  alt={companyName || "Company Logo"}
+                  src={resolvedLogo}
+                  alt={resolvedName}
                   className="w-full h-full object-contain"
                   onError={(e) => {
                     // Graceful fallback if image fails to resolve
@@ -58,21 +62,18 @@ export const Sidebar = ({
                 />
                 {/* Fallback Icon if custom image fails to load */}
                 <div className="hidden w-full h-full items-center justify-center bg-[#0B1E48] text-white font-bold text-sm rounded-lg">
-                  {companyName ? companyName.charAt(0).toUpperCase() : "W"}
+                  {resolvedName.charAt(0).toUpperCase()}
                 </div>
               </div>
             ) : (
-              /* Default fallback monogram if no custom logo was provided */
-              <div className="w-10 h-10 rounded-xl bg-[#0B1E48] text-white flex items-center justify-center font-bold text-sm shadow-xs shrink-0">
-                {companyName ? companyName.charAt(0).toUpperCase() : "W"}
-              </div>
+              <DefaultPlatformLogo className="w-10 h-10" />
             )}
           </motion.div>
 
           {/* Dynamic Company Label */}
           <div className="flex flex-col min-w-0">
             <span className="text-sm font-bold text-slate-900 dark:text-slate-100 truncate">
-              {companyName || "WorkPulse"}
+              {resolvedName}
             </span>
             <span className="text-[10px] font-semibold text-slate-400 uppercase tracking-wider">
               Workforce Suite

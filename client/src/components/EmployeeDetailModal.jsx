@@ -16,7 +16,9 @@ import {
   Loader2,
   Trash2,
   X,
+  Award,
 } from "lucide-react";
+import QuarterlyPerformanceVisualizer from "./QuarterlyPerformanceVisualizer";
 
 // Generates realistic historical salary adjustment increments based on employee joining details
 const generateSalaryHistory = (employee) => {
@@ -317,6 +319,27 @@ export const EmployeeDetailModal = ({
                 }`}
               >
                 {rawSalaryHistory.length}
+              </span>
+            </button>
+            <button
+              type="button"
+              onClick={() => setActiveTab("performance")}
+              className={`px-3.5 py-1.5 rounded-xl text-xs font-bold transition-all cursor-pointer flex items-center gap-1.5 ${
+                activeTab === "performance"
+                  ? "bg-white text-[#002185] shadow-xs"
+                  : "text-white/80 hover:text-white hover:bg-white/10"
+              }`}
+            >
+              <Award className="w-3.5 h-3.5" />
+              <span>Performance Reviews</span>
+              <span
+                className={`px-1.5 py-0.2 text-[10px] rounded-full font-bold ${
+                  activeTab === "performance"
+                    ? "bg-blue-100 text-[#002185]"
+                    : "bg-emerald-500/30 text-emerald-200"
+                }`}
+              >
+                QoQ
               </span>
             </button>
           </div>
@@ -669,6 +692,15 @@ export const EmployeeDetailModal = ({
                 </div>
               )}
             </div>
+          )}
+
+          {/* Tab 3: Quarterly Performance Reviews & Growth Trajectory */}
+          {activeTab === "performance" && (
+            <QuarterlyPerformanceVisualizer
+              employeeId={employee?._id || employee?.employeeId}
+              employeeData={employee}
+              isAdmin={isAdmin}
+            />
           )}
         </div>
 

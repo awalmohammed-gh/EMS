@@ -29,6 +29,8 @@ companyRouter.use((req, res, next) => {
 });
 
 // Public endpoints
+companyRouter.get("/profile", getPublicBranding);
+companyRouter.get("/company-profile", getPublicBranding);
 companyRouter.get("/public-branding", getPublicBranding);
 companyRouter.get("/public-branding/:slug", getPublicBranding);
 companyRouter.get("/status", getCompanyStatus);

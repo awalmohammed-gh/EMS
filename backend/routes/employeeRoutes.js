@@ -12,6 +12,7 @@ import {
   getEmployeeById,
   getCurrentLoggedInEmployee,
   updateCurrentEmployee,
+  exportEmployeesCSV,
 } from "../controllers/employeeController.js";
 import {
   employeePayslips,
@@ -22,6 +23,10 @@ import {
 } from "../controllers/payrollController.js";
 import { employeeDashboardOverview } from "../controllers/dashboardController.js";
 import { updateEmployeeStatus, deleteEmployee } from "../controllers/adminController.js";
+import {
+  getMyQuarterlyReviews,
+  getEmployeeQuarterlyReviews,
+} from "../controllers/performanceController.js";
 import { getEmployeeLeave, getLeaveEmployeeStats, applyLeave } from "../controllers/leaveController.js";
 import { getCurrentMonthLatenessAnalytics } from "../controllers/analyticsController.js";
 import { getEmployeeAttendance } from "../controllers/employeeAttendance.js";
@@ -87,6 +92,9 @@ employeeRouter.get("/payslip/:id", employeeAuth, validateOrganizationAccess(Payr
 employeeRouter.get("/attendance", employeeAuth, getEmployeeAttendance);
 
 // Employee details & directory list (supports both custom and REST standard endpoints)
+employeeRouter.get("/export-csv", verifyAdmin, exportEmployeesCSV);
+employeeRouter.get("/export", verifyAdmin, exportEmployeesCSV);
+employeeRouter.get("/export/csv", verifyAdmin, exportEmployeesCSV);
 employeeRouter.get("/me", employeeAuth, getCurrentLoggedInEmployee);
 employeeRouter.put("/me", employeeAuth, updateCurrentEmployee);
 employeeRouter.put("/profile", employeeAuth, updateCurrentEmployee);
@@ -112,6 +120,12 @@ employeeRouter.patch("/:id/status", verifyAdmin, validateOrganizationAccess(Empl
 
 // Admin-only deletion
 employeeRouter.delete("/:id", verifyAdmin, validateOrganizationAccess(Employee), deleteEmployee);
+
+// Performance Reviews & Growth Visualizations
+employeeRouter.get("/my-performance", employeeAuth, getMyQuarterlyReviews);
+employeeRouter.get("/performance", employeeAuth, getMyQuarterlyReviews);
+employeeRouter.get("/profile/:id/performance", employeeAuth, getEmployeeQuarterlyReviews);
+employeeRouter.get("/:id/performance", employeeAuth, getEmployeeQuarterlyReviews);
 
 export default employeeRouter;
 

@@ -379,8 +379,7 @@ const EmployeesAttendance = () => {
 
   const canOverride =
     user?.role === "admin" ||
-    user?.role === "manager" ||
-    user?.role === "superadmin";
+    user?.role === "manager";
 
   // Determine whether current time is past scheduled work start time for late clock-in detection
   const isLateNow = useMemo(() => {
