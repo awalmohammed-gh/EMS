@@ -27,6 +27,7 @@ const ShiftStatusCard = ({
   attendanceData = {},
   hasClockedIn = false,
   isLoading = false,
+  isCheckingStatus = false,
   isSyncing = false,
   onClockIn,
   workStartTime: propWorkStartTime,
@@ -398,7 +399,12 @@ const ShiftStatusCard = ({
                 <RefreshCw className={`w-4 h-4 ${isSyncing ? "animate-spin text-blue-600" : ""}`} />
               </motion.button>
             )}
-            {!hasClockedIn && statusEvaluation.type !== "absent" && typeof onClockIn === "function" && (
+            {isCheckingStatus ? (
+              <div className="flex items-center gap-2 px-3 py-1.5 rounded-xl bg-slate-100 dark:bg-slate-800 text-slate-400 text-xs font-medium animate-pulse border border-slate-200 dark:border-slate-700/60">
+                <RefreshCw className="w-3.5 h-3.5 animate-spin text-blue-600" />
+                <span>Checking...</span>
+              </div>
+            ) : !hasClockedIn && statusEvaluation.type !== "absent" && typeof onClockIn === "function" ? (
               <motion.button
                 type="button"
                 id="btn-status-card-clock-in"
@@ -410,7 +416,7 @@ const ShiftStatusCard = ({
                 <LogIn className="w-3.5 h-3.5" />
                 <span>{isLoading ? "Recording..." : "Clock In Now"}</span>
               </motion.button>
-            )}
+            ) : null}
           </div>
         </div>
       </div>

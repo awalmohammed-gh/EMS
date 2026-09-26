@@ -1669,6 +1669,8 @@ export const getTodayAttendance = async (req, res) => {
       shiftStatus: attendance?.shiftStatus || (hasClockedOut ? "Completed" : hasClockedIn ? "In-Progress" : "Not Started"),
       clockIn: attendance?.clockIn || attendance?.clockInTime || null,
       clockOut: attendance?.clockOut || attendance?.clockOutTime || null,
+      clockInTime: attendance?.clockIn || attendance?.clockInTime || null,
+      clockOutTime: attendance?.clockOut || attendance?.clockOutTime || null,
       workHours: attendance?.workHours || 0,
       autoClockedOut: Boolean(attendance?.autoClockedOut),
       notes: attendance?.notes || "",
@@ -1676,6 +1678,193 @@ export const getTodayAttendance = async (req, res) => {
       delayMinutes: attendance?.delayMinutes ?? attendance?.lateMinutes ?? 0,
       latePenalty: attendance?.latePenalty || 0,
       penaltyTier: attendance?.penaltyTier || "",
+    });
+  } catch (error) {
+    res.status(500).json({
+      success: false,
+      message: error.message,
+    });
+  }
+};
+
+/**
+ * GET /api/attendance/today-status
+ * Dedicated attendance status persistence endpoint:
+ * Queries the Attendance collection for a document matching the authenticated employee's ID and today's calendar date.
+ * Explicitly states the user's current status for the day:
+ * - If no record exists: { hasClockedIn: false, hasClockedOut: false, clockInTime: null, clockOutTime: null, attendance: null }
+ * - If clocked in but not clocked out: { hasClockedIn: true, hasClockedOut: false, clockInTime: "...", clockOutTime: null, attendance }
+ * - If shift is finished: { hasClockedIn: true, hasClockedOut: true, clockInTime: "...", clockOutTime: "...", attendance }
+ */
+export const getTodayAttendanceStatus = async (req, res) => {
+  try {
+    const rawAuthId = req.user?._id || req.user?.id || req.employee?.id || req.employee?._id;
+    let employeeId = rawAuthId;
+    const tenantId = req.organizationId || req.companyId || req.user?.companyId || req.employee?.companyId;
+    const tenantScope = tenantId ? { $or: [{ companyId: tenantId }, { organizationId: tenantId }] } : {};
+
+    const startOfToday = new Date();
+    startOfToday.setHours(0, 0, 0, 0);
+    const endOfToday = new Date();
+    endOfToday.setHours(23, 59, 59, 999);
+    const today = startOfToday.toISOString().split("T")[0];
+
+    let employee = null;
+    let validObjectId = null;
+
+    if (employeeId && !isValidObjectId(employeeId)) {
+      const empDoc = await Employee.findOne({
+        ...tenantScope,
+        $or: [{ employeeId: employeeId }, { email: employeeId }],
+      }).lean();
+      if (empDoc) {
+        employee = empDoc;
+        employeeId = empDoc._id.toString();
+        validObjectId = employeeId;
+      }
+    }
+
+    if (isValidObjectId(employeeId)) {
+      try {
+        if (!employee) {
+          employee = await Employee.findOne({ _id: employeeId, ...tenantScope })
+            .select("fullName position department employeeId email avatar profile_picture")
+            .lean();
+        }
+        if (employee) {
+          validObjectId = employee._id.toString();
+        }
+      } catch (dbErr) {
+        console.warn("Employee lookup in getTodayAttendanceStatus:", dbErr.message);
+      }
+    }
+
+    if (!employee && isValidObjectId(rawAuthId)) {
+      try {
+        const userDoc = await User.findOne({ _id: rawAuthId, ...tenantScope }).lean();
+        if (userDoc) {
+          const matchedEmp = await Employee.findOne({
+            ...tenantScope,
+            $or: [
+              ...(userDoc.email ? [{ email: userDoc.email }] : []),
+              ...(userDoc.employeeId ? [{ employeeId: userDoc.employeeId }] : []),
+            ],
+          }).lean();
+          if (matchedEmp) {
+            employee = matchedEmp;
+            validObjectId = matchedEmp._id.toString();
+          } else {
+            employee = userDoc;
+            validObjectId = userDoc._id.toString();
+          }
+        }
+      } catch (userErr) {
+        console.warn("User lookup in getTodayAttendanceStatus:", userErr.message);
+      }
+    }
+
+    // Auto-close any lingering shift from prior calendar days
+    await autoCloseUnfinishedShifts(validObjectId || employeeId, req.user || req.employee);
+    await autoCloseEveningPastGracePeriod(validObjectId || employeeId);
+
+    const employeeCode = employee?.employeeId || req.employee?.employeeId || req.user?.employeeId || "";
+    const activeUserId = req.user?._id || req.user?.id || rawAuthId;
+    const activeOrgId = req.user?.organizationId || req.organizationId || employee?.organizationId;
+    const idCandidates = [activeUserId, validObjectId, employeeId, rawAuthId, employee?._id].filter(Boolean);
+
+    let attendance = null;
+    try {
+      const filterConditions = [
+        { employee: { $in: idCandidates } },
+        { employeeId: { $in: idCandidates } },
+        ...(employeeCode ? [{ employeeId: employeeCode }] : []),
+      ];
+
+      attendance = await Attendance.findOne({
+        $and: [
+          { $or: filterConditions },
+          ...(activeOrgId ? [{ $or: [{ organizationId: activeOrgId }, { organizationId: null }, { organizationId: { $exists: false } }] }] : []),
+          {
+            $or: [
+              { date: { $gte: startOfToday, $lte: endOfToday } },
+              { clockIn: { $gte: startOfToday, $lte: endOfToday } },
+              { date: today },
+            ],
+          },
+        ],
+      })
+        .populate("employee", "fullName department position employeeId email avatar")
+        .sort({ updatedAt: -1, createdAt: -1 })
+        .lean();
+    } catch (dbErr) {
+      console.warn("DB query in getTodayAttendanceStatus:", dbErr.message);
+    }
+
+    // Merge in-memory live attendance store records if fresh and strictly matching today
+    if (liveAttendanceStore) {
+      const keysToCheck = [
+        `${employeeId}_${today}`,
+        `${rawAuthId}_${today}`,
+        `${validObjectId}_${today}`,
+        `${employeeCode}_${today}`,
+      ].filter(Boolean);
+
+      for (const k of keysToCheck) {
+        const memAtt = liveAttendanceStore.get(k);
+        if (memAtt && memAtt.date === today) {
+          attendance = { ...(attendance || {}), ...memAtt };
+          break;
+        }
+      }
+    }
+
+    const hasClockedIn = Boolean(attendance && (attendance.clockIn || attendance.clockInTime));
+    const hasClockedOut = Boolean(attendance && (attendance.clockOut || attendance.clockOutTime));
+    const clockInTime = hasClockedIn
+      ? (attendance.clockIn || attendance.clockInTime || "").toString()
+      : null;
+    const clockOutTime = hasClockedOut
+      ? (attendance.clockOut || attendance.clockOutTime || "").toString()
+      : null;
+
+    if (!hasClockedIn) {
+      return res.status(200).json({
+        success: true,
+        hasClockedIn: false,
+        hasClockedOut: false,
+        clockInTime: null,
+        clockOutTime: null,
+        status: "Not Clocked In",
+        shiftStatus: "Not Started",
+        attendance: null,
+        todayRecord: null,
+      });
+    }
+
+    if (hasClockedIn && !hasClockedOut) {
+      return res.status(200).json({
+        success: true,
+        hasClockedIn: true,
+        hasClockedOut: false,
+        clockInTime,
+        clockOutTime: null,
+        status: attendance.status || "On Time",
+        shiftStatus: "In-Progress",
+        attendance,
+        todayRecord: attendance,
+      });
+    }
+
+    return res.status(200).json({
+      success: true,
+      hasClockedIn: true,
+      hasClockedOut: true,
+      clockInTime,
+      clockOutTime,
+      status: attendance.status || "On Time",
+      shiftStatus: "Completed",
+      attendance,
+      todayRecord: attendance,
     });
   } catch (error) {
     res.status(500).json({

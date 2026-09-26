@@ -52,7 +52,7 @@ export const clearAllAuthSessionData = () => {
  */
 export const AuthProvider = ({ children }) => {
   const [user, setUser] = useState(null);
-  const [isInitializing, setIsInitializing] = useState(true);
+  const [isLoading, setIsLoading] = useState(true); // Must default to true
 
   // Persistent Session Hydration restoring user session data from API call
   const checkSession = useCallback(async () => {
@@ -87,26 +87,13 @@ export const AuthProvider = ({ children }) => {
       setUser(null);
       return null;
     } finally {
-      setIsInitializing(false);
+      setIsLoading(false); // Only release the barrier after verification
     }
   }, []);
 
   // Persistent checkSession effect on mount
   useEffect(() => {
-    let isMounted = true;
-    const runCheck = async () => {
-      try {
-        await checkSession();
-      } finally {
-        if (isMounted) {
-          setIsInitializing(false);
-        }
-      }
-    };
-    runCheck();
-    return () => {
-      isMounted = false;
-    };
+    checkSession();
   }, [checkSession]);
 
   // Login handler
@@ -220,9 +207,9 @@ export const AuthProvider = ({ children }) => {
           else apiService.clearToken();
         },
         isAuthenticated,
-        isInitializing,
-        loading: isInitializing,
-        isLoading: isInitializing,
+        isLoading,
+        isInitializing: isLoading,
+        loading: isLoading,
         login,
         logout,
         checkSession,

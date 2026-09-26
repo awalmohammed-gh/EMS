@@ -78,7 +78,7 @@ export const ResponsiveSidebar = ({
     if (logout) {
       await logout(isAdmin ? "admin" : "employee");
     }
-    navigate("/admin/login");
+    navigate("/welcome");
   };
 
   const isLinkActive = (itemPath) => {

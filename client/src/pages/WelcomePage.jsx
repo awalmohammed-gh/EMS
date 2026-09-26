@@ -108,19 +108,19 @@ export const WelcomePage = () => {
         <div className="max-w-xl mx-auto mb-8 sm:mb-12">
           <div className="inline-flex items-center gap-1.5 px-3.5 py-1 rounded-full text-xs font-semibold bg-blue-50 dark:bg-blue-950/60 text-[#0B1E48] dark:text-blue-300 border border-blue-200/70 dark:border-blue-900/60 mb-3 shadow-2xs">
             <Sparkles className="w-3.5 h-3.5 text-blue-600 dark:text-blue-400" />
-            <span>Single-Company Workforce Gateway</span>
+            <span>Workforce Authentication Portal</span>
           </div>
           <h1 className="text-3xl sm:text-4xl font-black tracking-tight text-[#0B1E48] dark:text-white mb-2">
             Welcome to {branding.companyName}
           </h1>
           <p className="text-sm sm:text-base text-slate-600 dark:text-slate-300 font-normal">
-            Choose how you want to continue.
+            Select your portal to continue.
           </p>
         </div>
 
         {/* 2 Role Choice Cards */}
         <div className="w-full grid grid-cols-1 md:grid-cols-2 gap-6 max-w-3xl text-left">
-          {/* Choice 1: Admin / Manager */}
+          {/* Choice 1: Management Login */}
           <div
             id="card-choice-admin"
             className="group relative bg-white dark:bg-slate-900 rounded-2xl border border-slate-200/90 dark:border-slate-800 p-6 sm:p-8 shadow-md hover:shadow-xl hover:border-blue-500/50 transition-all duration-200 flex flex-col justify-between"
@@ -137,7 +137,7 @@ export const WelcomePage = () => {
 
               <div>
                 <h2 className="text-xl font-black tracking-tight text-[#0B1E48] dark:text-white mb-1.5">
-                  Admin / Manager
+                  Management Login
                 </h2>
                 <p className="text-xs sm:text-sm text-slate-500 dark:text-slate-400 leading-relaxed">
                   Manage your workforce, monitor shift attendance, run monthly payroll, and configure company settings.
@@ -156,7 +156,7 @@ export const WelcomePage = () => {
                 </div>
                 <div className="flex items-center gap-2">
                   <span className="w-1.5 h-1.5 rounded-full bg-blue-600 dark:bg-blue-400" />
-                  <span>Supports Admin Login &amp; Sign Up</span>
+                  <span>Supports Management Login &amp; Sign Up</span>
                 </div>
               </div>
             </div>
@@ -168,13 +168,13 @@ export const WelcomePage = () => {
                 onClick={() => navigate("/admin/auth")}
                 className="w-full py-3 px-4 rounded-xl text-sm font-bold text-white bg-[#0B1E48] hover:bg-[#071534] dark:bg-blue-600 dark:hover:bg-blue-700 shadow-md shadow-[#0B1E48]/20 transition-all flex items-center justify-center gap-2 cursor-pointer group-hover:scale-[1.01]"
               >
-                <span>Continue to Admin Portal</span>
+                <span>Management Login</span>
                 <ArrowRight className="w-4 h-4 transition-transform group-hover:translate-x-0.5" />
               </button>
             </div>
           </div>
 
-          {/* Choice 2: Employee */}
+          {/* Choice 2: Employee Login */}
           <div
             id="card-choice-employee"
             className="group relative bg-white dark:bg-slate-900 rounded-2xl border border-slate-200/90 dark:border-slate-800 p-6 sm:p-8 shadow-md hover:shadow-xl hover:border-emerald-500/50 transition-all duration-200 flex flex-col justify-between"
@@ -191,7 +191,7 @@ export const WelcomePage = () => {
 
               <div>
                 <h2 className="text-xl font-black tracking-tight text-[#0B1E48] dark:text-white mb-1.5">
-                  Employee
+                  Employee Login
                 </h2>
                 <p className="text-xs sm:text-sm text-slate-500 dark:text-slate-400 leading-relaxed">
                   Access your employee dashboard, clock in &amp; out for daily shifts, request leave, and view payslips.
@@ -222,7 +222,7 @@ export const WelcomePage = () => {
                 onClick={() => navigate("/employee/login")}
                 className="w-full py-3 px-4 rounded-xl text-sm font-bold text-white bg-emerald-600 hover:bg-emerald-700 shadow-md shadow-emerald-600/20 transition-all flex items-center justify-center gap-2 cursor-pointer group-hover:scale-[1.01]"
               >
-                <span>Continue to Employee Portal</span>
+                <span>Employee Login</span>
                 <ArrowRight className="w-4 h-4 transition-transform group-hover:translate-x-0.5" />
               </button>
             </div>

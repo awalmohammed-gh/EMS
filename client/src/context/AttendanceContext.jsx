@@ -13,6 +13,7 @@ import {
   getNowAttendance,
   getEmployeeAttendance,
   getTodayAttendance,
+  getTodayAttendanceStatus,
 } from "../apis/fontApis";
 
 const AttendanceContext = createContext(null);
@@ -101,6 +102,7 @@ export const AttendanceProvider = ({ children }) => {
   const [attendanceHistory, setAttendanceHistory] = useState([]);
   const [isClocking, setIsClocking] = useState(false);
   const [isSyncing, setIsSyncing] = useState(false);
+  const [isCheckingStatus, setIsCheckingStatus] = useState(true);
   const [error, setError] = useState(null);
   const [lastSyncTime, setLastSyncTime] = useState(Date.now());
 
@@ -138,6 +140,7 @@ export const AttendanceProvider = ({ children }) => {
   const refreshAttendance = useCallback(async (silent = false) => {
     // Avoid querying employee attendance if in super admin mode
     if (typeof document !== "undefined" && document.cookie.includes("superAdminToken")) {
+      setIsCheckingStatus(false);
       return;
     }
 
@@ -146,16 +149,20 @@ export const AttendanceProvider = ({ children }) => {
     setError(null);
 
     try {
-      // Query /attendance/today as primary source of truth (with /now fallback)
+      // Query /attendance/today-status as primary source of truth (with fallbacks)
       let res;
       try {
-        res = await getTodayAttendance();
+        res = await getTodayAttendanceStatus();
       } catch {
-        res = await getNowAttendance();
+        try {
+          res = await getTodayAttendance();
+        } catch {
+          res = await getNowAttendance();
+        }
       }
 
       if (res?.data?.success) {
-        const rawAtt = res.data.data !== undefined ? res.data.data : (res.data.todayRecord || res.data.attendance);
+        const rawAtt = res.data.attendance || res.data.todayRecord || res.data.data;
         const recordDate = rawAtt?.date || (rawAtt?.clockIn ? new Date(rawAtt.clockIn).toISOString().split("T")[0] : "");
         if (rawAtt && (!recordDate || recordDate === todayStr)) {
           const normalized = normalizeAttendanceRecord(rawAtt, todayStr);
@@ -187,6 +194,7 @@ export const AttendanceProvider = ({ children }) => {
       setError(err.message);
     } finally {
       if (!silent) setIsSyncing(false);
+      setIsCheckingStatus(false);
     }
   }, [saveToStorage]);
 
@@ -250,6 +258,7 @@ export const AttendanceProvider = ({ children }) => {
       );
       setTodayRecord(normalized);
       saveToStorage(normalized);
+      setIsCheckingStatus(false);
 
       if (
         authPayload.hasActiveShift ||
@@ -647,6 +656,7 @@ export const AttendanceProvider = ({ children }) => {
       attendanceData: todayRecord, // backward compatibility alias
       attendanceHistory,
       isLoading,
+      isCheckingStatus,
       isClocking,
       isSyncing,
       error,
@@ -675,6 +685,7 @@ export const AttendanceProvider = ({ children }) => {
       todayRecord,
       attendanceHistory,
       isLoading,
+      isCheckingStatus,
       isClocking,
       isSyncing,
       error,

@@ -130,6 +130,7 @@ const EmployeesAttendance = () => {
   // Centralized Global Attendance State
   const {
     todayRecord,
+    isCheckingStatus,
     clockIn: contextClockIn,
     clockOut: contextClockOut,
     refreshAttendance: contextRefreshAttendance,
@@ -1056,67 +1057,77 @@ const EmployeesAttendance = () => {
           <div className="flex flex-wrap items-center gap-3 self-start xl:self-auto">
             {/* Action Buttons */}
             <div className="flex items-center gap-2.5">
-              {/* Button 1: Clock In */}
-              <button
-                id="btn-primary-clock-in"
-                type="button"
-                onClick={handleClockIn}
-                disabled={hasClockedIn || isClocking || attendanceStatus === "absent"}
-                className={`flex items-center justify-center gap-2 px-4 sm:px-5 py-2.5 rounded-xl text-xs sm:text-sm font-bold transition-all duration-200 shadow-xs cursor-pointer ${
-                  hasClockedIn || attendanceStatus === "absent"
-                    ? "bg-slate-100 dark:bg-[#162033] text-slate-500 dark:text-slate-400 border border-slate-200 dark:border-slate-700/60 cursor-not-allowed"
-                    : isClocking
-                    ? "bg-blue-400 text-white cursor-not-allowed"
-                    : "bg-[#002185] hover:bg-[#001760] dark:bg-blue-600 dark:hover:bg-blue-700 text-white active:scale-[0.98]"
-                }`}
-                title={
-                  attendanceStatus === "absent"
-                    ? "Cutoff reached — Marked Absent"
-                    : hasClockedIn
-                    ? `Clocked In (${formatTime(attendanceData.clockIn)})`
-                    : "Click to clock in now"
-                }
-              >
-                {attendanceStatus === "absent" ? (
-                  <>
-                    <XCircle className="w-4 h-4 text-rose-500" />
-                    <span>Marked Absent</span>
-                  </>
-                ) : hasClockedIn ? (
-                  <>
-                    <CheckCircle2 className="w-4 h-4 text-emerald-600 dark:text-emerald-400" />
-                    <span>Clocked In ({formatTime(attendanceData.clockIn)})</span>
-                  </>
-                ) : isClocking ? (
-                  <>
-                    <Loader2 className="w-4 h-4 animate-spin" />
-                    <span>Recording...</span>
-                  </>
-                ) : (
-                  <>
-                    <LogIn className="w-4 h-4" />
-                    <span>Clock In</span>
-                  </>
-                )}
-              </button>
+              {isCheckingStatus ? (
+                <div
+                  id="attendance-buttons-skeleton"
+                  className="flex items-center gap-2 px-5 py-2.5 rounded-xl bg-slate-100 dark:bg-[#162033] border border-slate-200 dark:border-slate-700/60 animate-pulse text-slate-400 text-xs sm:text-sm font-semibold"
+                >
+                  <Loader2 className="w-4 h-4 animate-spin text-blue-600" />
+                  <span>Verifying attendance status...</span>
+                </div>
+              ) : (
+                <>
+                  {/* Button 1: Clock In */}
+                  <button
+                    id="btn-primary-clock-in"
+                    type="button"
+                    onClick={handleClockIn}
+                    disabled={hasClockedIn || isClocking || attendanceStatus === "absent"}
+                    className={`flex items-center justify-center gap-2 px-4 sm:px-5 py-2.5 rounded-xl text-xs sm:text-sm font-bold transition-all duration-200 shadow-xs cursor-pointer ${
+                      hasClockedIn || attendanceStatus === "absent"
+                        ? "bg-slate-100 dark:bg-[#162033] text-slate-500 dark:text-slate-400 border border-slate-200 dark:border-slate-700/60 cursor-not-allowed"
+                        : isClocking
+                        ? "bg-blue-400 text-white cursor-not-allowed"
+                        : "bg-[#002185] hover:bg-[#001760] dark:bg-blue-600 dark:hover:bg-blue-700 text-white active:scale-[0.98]"
+                    }`}
+                    title={
+                      attendanceStatus === "absent"
+                        ? "Cutoff reached — Marked Absent"
+                        : hasClockedIn
+                        ? `Clocked In (${formatTime(attendanceData.clockIn)})`
+                        : "Click to clock in now"
+                    }
+                  >
+                    {attendanceStatus === "absent" ? (
+                      <>
+                        <XCircle className="w-4 h-4 text-rose-500" />
+                        <span>Marked Absent</span>
+                      </>
+                    ) : hasClockedIn ? (
+                      <>
+                        <CheckCircle2 className="w-4 h-4 text-emerald-600 dark:text-emerald-400" />
+                        <span>Clocked In ({formatTime(attendanceData.clockIn)})</span>
+                      </>
+                    ) : isClocking ? (
+                      <>
+                        <Loader2 className="w-4 h-4 animate-spin" />
+                        <span>Recording...</span>
+                      </>
+                    ) : (
+                      <>
+                        <LogIn className="w-4 h-4" />
+                        <span>Clock In</span>
+                      </>
+                    )}
+                  </button>
 
-              {/* Button 2: Clock Out */}
-              <button
-                id="btn-primary-clock-out"
-                type="button"
-                onClick={handleClockOut}
-                disabled={!hasClockedIn || effectiveHasClockedOut || !isClockOutUnlocked || isClocking || attendanceStatus === "absent"}
-                className={`flex items-center justify-center gap-2 px-4 sm:px-5 py-2.5 rounded-xl text-xs sm:text-sm font-bold transition-all duration-200 shadow-xs cursor-pointer ${
-                  effectiveHasClockedOut
-                    ? "bg-slate-100 dark:bg-[#162033] text-slate-500 dark:text-slate-400 border border-slate-200 dark:border-slate-700/60 cursor-not-allowed"
-                    : !hasClockedIn || attendanceStatus === "absent"
-                    ? "bg-slate-100 dark:bg-[#162033] text-slate-400 dark:text-slate-500 border border-slate-200 dark:border-slate-700/60 cursor-not-allowed"
-                    : !isClockOutUnlocked
-                    ? "bg-slate-100 dark:bg-[#162033] text-slate-400 dark:text-slate-500 border border-slate-200 dark:border-slate-700/60 cursor-not-allowed"
-                    : isClocking
-                    ? "bg-emerald-400 text-white cursor-not-allowed"
-                    : "bg-emerald-600 hover:bg-emerald-700 text-white active:scale-[0.98]"
-                }`}
+                  {/* Button 2: Clock Out */}
+                  <button
+                    id="btn-primary-clock-out"
+                    type="button"
+                    onClick={handleClockOut}
+                    disabled={!hasClockedIn || effectiveHasClockedOut || !isClockOutUnlocked || isClocking || attendanceStatus === "absent"}
+                    className={`flex items-center justify-center gap-2 px-4 sm:px-5 py-2.5 rounded-xl text-xs sm:text-sm font-bold transition-all duration-200 shadow-xs cursor-pointer ${
+                      effectiveHasClockedOut
+                        ? "bg-slate-100 dark:bg-[#162033] text-slate-500 dark:text-slate-400 border border-slate-200 dark:border-slate-700/60 cursor-not-allowed"
+                        : !hasClockedIn || attendanceStatus === "absent"
+                        ? "bg-slate-100 dark:bg-[#162033] text-slate-400 dark:text-slate-500 border border-slate-200 dark:border-slate-700/60 cursor-not-allowed"
+                        : !isClockOutUnlocked
+                        ? "bg-slate-100 dark:bg-[#162033] text-slate-400 dark:text-slate-500 border border-slate-200 dark:border-slate-700/60 cursor-not-allowed"
+                        : isClocking
+                        ? "bg-emerald-400 text-white cursor-not-allowed"
+                        : "bg-emerald-600 hover:bg-emerald-700 text-white active:scale-[0.98]"
+                    }`}
                 title={
                   effectiveHasClockedOut
                     ? `Shift Completed (${isAutoClosed && !hasClockedOut ? "Auto-Closed at 07:30 PM" : formatTime(attendanceData.clockOut)})`
@@ -1153,8 +1164,10 @@ const EmployeesAttendance = () => {
                   </>
                 )}
               </button>
-            </div>
-          </div>
+            </>
+          )}
+        </div>
+      </div>
         </div>
 
         {/* Lateness Reason Input Section (Visible when not yet clocked in and not absent) */}

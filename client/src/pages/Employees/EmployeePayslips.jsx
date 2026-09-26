@@ -10,8 +10,11 @@ import {
   RefreshCw,
   CheckCircle2,
   Filter,
+  Table,
+  LayoutGrid,
 } from "lucide-react";
 import EmployeePayslipsModal from "../../components/modal/EmployeePayslipsModal";
+import EmployeePayrollHistory from "../../components/EmployeePayrollHistory";
 import { useManagement } from "../../context/ManagementContextProvider";
 import { getEmployeePayslip } from "../../apis/fontApis";
 import { downloadPayslipPDF, printPayslipDocument } from "../../utils/payslipPdfGenerator";
@@ -25,6 +28,7 @@ const EmployeePayslips = () => {
   const [isError, setIsError] = useState(null);
   const [selectedYear, setSelectedYear] = useState("all");
   const [selectedMonth, setSelectedMonth] = useState("all");
+  const [viewMode, setViewMode] = useState("table"); // "table" | "cards"
 
   const { setShowToast } = useManagement();
 
@@ -208,6 +212,33 @@ const EmployeePayslips = () => {
             </p>
           </div>
           <div className="flex items-center gap-3">
+            <div className="flex items-center p-1 bg-slate-100 dark:bg-[#162033] rounded-xl border border-slate-200 dark:border-slate-800">
+              <button
+                type="button"
+                onClick={() => setViewMode("table")}
+                className={`flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold rounded-lg transition cursor-pointer ${
+                  viewMode === "table"
+                    ? "bg-white dark:bg-[#111927] text-[#002185] dark:text-blue-400 shadow-xs"
+                    : "text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white"
+                }`}
+              >
+                <Table className="w-3.5 h-3.5" />
+                <span>Table</span>
+              </button>
+              <button
+                type="button"
+                onClick={() => setViewMode("cards")}
+                className={`flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold rounded-lg transition cursor-pointer ${
+                  viewMode === "cards"
+                    ? "bg-white dark:bg-[#111927] text-[#002185] dark:text-blue-400 shadow-xs"
+                    : "text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white"
+                }`}
+              >
+                <LayoutGrid className="w-3.5 h-3.5" />
+                <span>Cards</span>
+              </button>
+            </div>
+
             <button
               type="button"
               onClick={fetchEmployeePayslips}
@@ -223,11 +254,17 @@ const EmployeePayslips = () => {
           </div>
         </div>
 
-        {/* Clean, Streamlined Monthly Billing Cycle Filter */}
-        <div
-          id="payslip-monthly-filter-bar"
-          className="flex flex-wrap items-center justify-between gap-3 p-4 bg-white dark:bg-[#111927] border border-slate-200 dark:border-slate-800/80 rounded-2xl shadow-sm"
-        >
+        {viewMode === "table" ? (
+          <EmployeePayrollHistory
+            initialPayslips={employeePayslips.length > 0 ? employeePayslips : null}
+          />
+        ) : (
+          <>
+            {/* Clean, Streamlined Monthly Billing Cycle Filter */}
+            <div
+              id="payslip-monthly-filter-bar"
+              className="flex flex-wrap items-center justify-between gap-3 p-4 bg-white dark:bg-[#111927] border border-slate-200 dark:border-slate-800/80 rounded-2xl shadow-sm"
+            >
           <div className="flex items-center gap-2 text-xs font-bold uppercase tracking-wider text-slate-600 dark:text-slate-300">
             <Filter className="w-4 h-4 text-[#002185] dark:text-blue-400" />
             <span>Billing Cycle Filter</span>
@@ -552,6 +589,8 @@ const EmployeePayslips = () => {
               Your official payslip for this period has not been released yet. Once generated and verified by management upon payment, your complete itemized breakdown and downloadable official PDF will be unlocked here.
             </p>
           </div>
+        )}
+          </>
         )}
       </div>
 

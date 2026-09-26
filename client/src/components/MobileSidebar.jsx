@@ -106,7 +106,7 @@ export const MobileSidebar = ({
     if (logout) {
       await logout(isAdmin ? "admin" : "employee");
     }
-    navigate("/admin/login");
+    navigate("/welcome");
   };
 
   const adminNavItems = [

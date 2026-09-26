@@ -29,7 +29,7 @@ import DefaultPlatformLogo from "../components/DefaultPlatformLogo";
 
 export const LandingPage = () => {
   const navigate = useNavigate();
-  const { contactEmail, contactPhone, address } = useBranding();
+  const { companyName, contactEmail, contactPhone, address } = useBranding();
   const [activeTab, setActiveTab] = useState("attendance");
   const [employeeSearchQuery, setEmployeeSearchQuery] = useState("");
   const [employeeDeptFilter, setEmployeeDeptFilter] = useState("All");
@@ -255,7 +255,7 @@ export const LandingPage = () => {
             </div>
           </div>
 
-          {/* Public CTA: Admin Login */}
+          {/* Public CTA: Management Login */}
           <div className="flex items-center gap-3">
             <button
               type="button"
@@ -264,7 +264,7 @@ export const LandingPage = () => {
               className="px-4 sm:px-5 py-2 sm:py-2.5 rounded-xl text-xs sm:text-sm font-bold text-white bg-[#0B1E48] hover:bg-[#071534] dark:bg-blue-600 dark:hover:bg-blue-700 shadow-sm hover:shadow-md transition-all cursor-pointer whitespace-nowrap flex items-center gap-2"
             >
               <Lock className="w-3.5 h-3.5 text-blue-300" />
-              <span>Admin Login</span>
+              <span>Management Login</span>
               <ArrowRight className="w-3.5 h-3.5 text-blue-300" />
             </button>
           </div>
@@ -313,7 +313,7 @@ export const LandingPage = () => {
               WorkPulse brings employee management, attendance, leave, payroll, performance, and workplace operations together in one powerful system.
             </motion.p>
 
-            {/* ONLY ONE AUTHENTICATION CTA: Admin Login */}
+            {/* ONLY ONE AUTHENTICATION CTA: Management Login */}
             <motion.div
               id="hero-cta-container"
               variants={itemVariants}
@@ -326,7 +326,7 @@ export const LandingPage = () => {
                 className="w-full sm:w-auto px-9 py-4 rounded-xl font-extrabold text-base sm:text-lg text-white bg-[#0B1E48] hover:bg-[#081738] dark:bg-blue-600 dark:hover:bg-blue-700 shadow-xl shadow-[#0B1E48]/20 hover:shadow-2xl transition-all flex items-center justify-center gap-3 group cursor-pointer"
               >
                 <Lock className="w-5 h-5 text-blue-300" />
-                <span>Admin Login</span>
+                <span>Management Login</span>
                 <ArrowRight className="w-5 h-5 text-blue-300 transition-transform group-hover:translate-x-1" />
               </button>
             </motion.div>
@@ -968,7 +968,7 @@ export const LandingPage = () => {
                     className="px-8 py-3.5 rounded-xl font-extrabold text-sm sm:text-base text-[#0B1E48] bg-white hover:bg-slate-100 shadow-lg hover:shadow-xl transition-all inline-flex items-center gap-2 cursor-pointer"
                   >
                     <Lock className="w-4 h-4 text-[#0B1E48]" />
-                    <span>Admin Login</span>
+                    <span>Management Login</span>
                     <ArrowRight className="w-4 h-4 text-[#0B1E48]" />
                   </button>
                 </div>
@@ -994,7 +994,7 @@ export const LandingPage = () => {
               className="px-9 py-4 rounded-xl font-extrabold text-base sm:text-lg text-white bg-[#0B1E48] hover:bg-[#081738] dark:bg-blue-600 dark:hover:bg-blue-700 shadow-xl shadow-[#0B1E48]/20 hover:shadow-2xl transition-all inline-flex items-center gap-2.5 cursor-pointer"
             >
               <Lock className="w-5 h-5 text-blue-300" />
-              <span>Admin Login</span>
+              <span>Management Login</span>
               <ArrowRight className="w-5 h-5 text-blue-300" />
             </button>
           </div>
@@ -1085,7 +1085,7 @@ export const LandingPage = () => {
                     className="hover:text-[#0B1E48] dark:hover:text-white transition-colors font-bold text-[#0B1E48] dark:text-blue-400 cursor-pointer flex items-center gap-1.5"
                   >
                     <Lock className="w-3 h-3" />
-                    <span>Admin Login</span>
+                    <span>Management Login</span>
                   </button>
                 </li>
                 {contactEmail && (

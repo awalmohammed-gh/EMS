@@ -8,10 +8,10 @@ const ProtectedRoute = ({ allowRole }) => {
   const { user, role: authRole, isLoading: isAuthLoading, isInitializing } = useAuth();
   const { isLoading: isAdminLoading, adminExists, isAuthorized } = useAdminAuth();
 
-  const effectiveRole = authRole || user?.role || null;
+  const effectiveRole = String(authRole || user?.role || "").toLowerCase().trim();
 
-  // Ensure that when a user refreshes the page, the application waits for the session check
-  // to complete before deciding to redirect, thus preserving the current route
+  // 1. Barrier: Wait for session hydration to complete before evaluating redirects.
+  // This guarantees strict page persistence on browser refresh and avoids flash redirects.
   if (isInitializing || isAuthLoading || (allowRole === "admin" && isAdminLoading)) {
     return (
       <WorkspaceLoader
@@ -21,48 +21,52 @@ const ProtectedRoute = ({ allowRole }) => {
     );
   }
 
-  // Session check completed. If there is no authenticated user, redirect to Admin Auth
+  // 2. Unauthenticated Barrier: Redirect to appropriate role login endpoint preserving location state
   if (!user) {
-    return <Navigate to="/admin/auth" replace state={{ from: location }} />;
+    const loginTarget = allowRole === "employee" ? "/employee/login" : "/admin/auth";
+    return <Navigate to={loginTarget} replace state={{ from: location }} />;
   }
 
-  // If protecting an Admin route
+  // 3. Admin Protected Route Evaluation
   if (allowRole === "admin") {
-    if (adminExists === false) {
-      return <Navigate to="/admin/auth" replace state={{ from: location }} />;
-    }
-
-    // Explicitly reject logged-in employees attempting to access admin routes
-    if (effectiveRole === "employee" && !isAuthorized && user?.role !== "admin") {
-      return <Navigate to="/employee/dashboard" replace state={{ from: location }} />;
-    }
-
     const isAdminUser =
       effectiveRole === "admin" ||
       effectiveRole === "company_admin" ||
       effectiveRole === "manager" ||
-      isAuthorized ||
-      user?.role === "admin";
+      effectiveRole === "superadmin" ||
+      effectiveRole === "super_admin" ||
+      isAuthorized;
 
     if (!isAdminUser) {
+      // If a logged-in employee tries to access admin routes, keep them in employee portal
+      if (effectiveRole === "employee") {
+        return <Navigate to="/employee/dashboard" replace state={{ from: location }} />;
+      }
+      return <Navigate to="/admin/auth" replace state={{ from: location }} />;
+    }
+
+    if (adminExists === false && !isAuthorized && !isAdminUser) {
       return <Navigate to="/admin/auth" replace state={{ from: location }} />;
     }
 
     return <Outlet />;
   }
 
-  // If protecting an Employee route
+  // 4. Employee Protected Route Evaluation
   if (allowRole === "employee") {
     const isEmployeeAuthenticated =
       effectiveRole === "employee" ||
       effectiveRole === "admin" ||
+      effectiveRole === "company_admin" ||
       effectiveRole === "manager" ||
+      effectiveRole === "superadmin" ||
+      effectiveRole === "super_admin" ||
       isAuthorized ||
       Boolean(user?.employeeId) ||
       Boolean(user?._id || user?.id);
 
     if (!isEmployeeAuthenticated) {
-      return <Navigate to="/admin/auth" replace state={{ from: location }} />;
+      return <Navigate to="/employee/login" replace state={{ from: location }} />;
     }
 
     return <Outlet />;

@@ -3,19 +3,18 @@ import {
   employeeDashboardOverview,
   getEmployeeMe,
   syncAttendance,
+  getTodayAttendanceStatus,
 } from "../../apis/fontApis";
 import {
   UserCheck,
   CalendarDays,
   CalendarCheck,
   Clock,
-  Lock,
   CheckCircle2,
   AlertTriangle,
   Megaphone,
-  Eye,
-  Download,
-  ShieldCheck,
+  Receipt,
+  LayoutDashboard,
 } from "lucide-react";
 import Loading from "../../ui/Loading";
 import ErrorMessage from "../../ui/ErrorMessage";
@@ -32,68 +31,12 @@ import WeeklyAttendanceChart from "../../components/WeeklyAttendanceChart";
 import LatenessDeductionsLineChart from "../../components/LatenessDeductionsLineChart";
 import MonthlyAttendanceCalendarCard from "../../components/MonthlyAttendanceCalendarCard";
 import EmployeeProfileIdentityBanner from "../../components/EmployeeProfileIdentityBanner";
-import { downloadPayslipPDF } from "../../utils/payslipPdfGenerator";
+import EmployeePayrollHistory from "../../components/EmployeePayrollHistory";
+import EmployeeLeaveRequestsManagement from "../../components/EmployeeLeaveRequestsManagement";
 import { useAttendance } from "../../context/AttendanceContext";
 
 // Stable reference fallback for zero re-render allocations
 const EMPTY_ARRAY = [];
-
-// Pure date formatting helper declared at module scope
-const formatDate = (dateString) => {
-  if (!dateString) return "N/A";
-  try {
-    const date = new Date(dateString);
-    return date.toLocaleDateString("en-GH", {
-      year: "numeric",
-      month: "short",
-      day: "numeric",
-    });
-  } catch {
-    return dateString;
-  }
-};
-
-// Pure month formatting helper declared at module scope
-const formatMonth = (monthString) => {
-  if (!monthString) return "Current Month";
-  try {
-    if (monthString.includes("-")) {
-      const [year, month] = monthString.split("-");
-      const date = new Date(parseInt(year, 10), parseInt(month, 10) - 1);
-      return date.toLocaleDateString("en-GH", {
-        year: "numeric",
-        month: "long",
-      });
-    }
-    return monthString;
-  } catch {
-    return monthString;
-  }
-};
-
-// Pure status styling helper declared at module scope
-const getStatusColor = (status) => {
-  const s = String(status || "").toLowerCase();
-  switch (s) {
-    case "approved":
-    case "paid":
-    case "published":
-    case "present":
-    case "on time":
-    case "ontime":
-      return "bg-emerald-50 dark:bg-emerald-950/40 text-emerald-700 dark:text-emerald-300 border border-emerald-200 dark:border-emerald-800/60";
-    case "pending":
-    case "pending management review":
-      return "bg-amber-50 dark:bg-amber-950/40 text-amber-700 dark:text-amber-300 border border-amber-200 dark:border-amber-800/60";
-    case "rejected":
-    case "absent":
-      return "bg-rose-50 dark:bg-rose-950/40 text-rose-700 dark:text-rose-300 border border-rose-200 dark:border-rose-800/60";
-    case "late":
-      return "bg-orange-50 dark:bg-orange-950/40 text-orange-700 dark:text-orange-300 border border-orange-200 dark:border-orange-800/60";
-    default:
-      return "bg-slate-100 dark:bg-[#162033] text-slate-600 dark:text-slate-300 border border-slate-200 dark:border-slate-700/60";
-  }
-};
 
 const EmployeeDashboard = () => {
   const [dashboardData, setDashboardData] = useState(null);
@@ -104,19 +47,53 @@ const EmployeeDashboard = () => {
   // Centralized Global Attendance State
   const {
     todayRecord,
+    isCheckingStatus: contextIsCheckingStatus,
     clockIn: contextClockIn,
     clockOut: contextClockOut,
     refreshAttendance: contextRefreshAttendance,
     updateTodayRecord,
   } = useAttendance();
 
+  // Local status verification barrier defaulting to true
+  const [isCheckingStatus, setIsCheckingStatus] = useState(true);
+
   const attendanceData = todayRecord;
+
+  // Hydrate today's attendance status directly on mount to synchronize with database
+  useEffect(() => {
+    let isSubscribed = true;
+    const hydrateTodayAttendanceStatus = async () => {
+      try {
+        setIsCheckingStatus(true);
+        const res = await getTodayAttendanceStatus();
+        if (isSubscribed && res?.data?.success) {
+          const payload = res.data;
+          const shiftData = payload.todayRecord || payload.attendance;
+          if (shiftData && typeof updateTodayRecord === "function") {
+            updateTodayRecord(shiftData);
+          }
+        }
+      } catch (err) {
+        console.warn("[EmployeeDashboard] Error fetching /api/attendance/today-status:", err.message);
+      } finally {
+        if (isSubscribed) {
+          setIsCheckingStatus(false);
+        }
+      }
+    };
+
+    hydrateTodayAttendanceStatus();
+    return () => {
+      isSubscribed = false;
+    };
+  }, [updateTodayRecord]);
 
   // Modals State
   const [showApplyLeaveModal, setShowApplyLeaveModal] = useState(false);
   const [showPayslipModal, setShowPayslipModal] = useState(false);
   const [analyticsRefreshKey, setAnalyticsRefreshKey] = useState(0);
   const [latenessThresholdAlert, setLatenessThresholdAlert] = useState(null);
+  const [activeDashboardTab, setActiveDashboardTab] = useState("overview"); // "overview" | "leave" | "payroll"
 
   const { setShowToast, user, setUser, settings } = useManagement();
   const navigate = useNavigate();
@@ -401,11 +378,6 @@ const EmployeeDashboard = () => {
     };
   }, [fetchEmployeeDashboardData]);
 
-  const handleNavigateToLeave = useCallback(() => {
-    navigate("/employee/dashboard/leave");
-    window.scrollTo({ top: 0, behavior: "smooth" });
-  }, [navigate]);
-
   if (isLoading && !dashboardData) {
     return <Loading />;
   }
@@ -431,14 +403,6 @@ const EmployeeDashboard = () => {
   // Extract data from API response
   const employee = dashboardData.employee || {};
   const overview = dashboardData.overview || {};
-  const recentLeaves = dashboardData.recentLeaves || EMPTY_ARRAY;
-
-  // Get latest payslip and privacy state from overview
-  const latestPayslip = overview.latestPayslip || {};
-  const isPayslipReleased = Boolean(
-    latestPayslip.isReleased ||
-    (latestPayslip.status && ["paid", "published"].includes(String(latestPayslip.status).toLowerCase()))
-  );
 
   // Stable attendance logs reference to avoid re-rendering heavy child charts
   const attendanceLogs = dashboardData.attendanceRecords || dashboardData.attendanceLogs || EMPTY_ARRAY;
@@ -535,8 +499,6 @@ const EmployeeDashboard = () => {
     remaining: overview.remainingLeaveDays !== undefined ? overview.remainingLeaveDays : overview.leaveBalance || 15,
   };
 
-  const currentPayMonth = latestPayslip.month || `${new Date().toLocaleDateString("en-US", { month: "long" })} ${new Date().getFullYear()}`;
-
   return (
     <div className="w-full max-w-7xl mx-auto p-4 sm:p-6 lg:p-8 space-y-6 overflow-x-hidden">
 
@@ -551,7 +513,80 @@ const EmployeeDashboard = () => {
           todayAttendance={attendanceData}
         />
 
-        {/* Visual Threshold Warning Banner for Employee Dashboard */}
+        {/* Dashboard Section Navigation Tabs */}
+        <div className="flex items-center gap-2 p-1.5 bg-white dark:bg-[#111927] border border-slate-200 dark:border-slate-800/80 rounded-2xl shadow-xs overflow-x-auto">
+          <button
+            type="button"
+            onClick={() => setActiveDashboardTab("overview")}
+            className={`flex items-center gap-2 px-4 py-2.5 rounded-xl text-xs font-bold transition-all cursor-pointer whitespace-nowrap ${
+              activeDashboardTab === "overview"
+                ? "bg-[#002185] text-white shadow-xs dark:bg-blue-600"
+                : "text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white hover:bg-slate-50 dark:hover:bg-[#162033]"
+            }`}
+          >
+            <LayoutDashboard className="w-4 h-4" />
+            <span>Dashboard Overview</span>
+          </button>
+
+          <button
+            type="button"
+            onClick={() => setActiveDashboardTab("leave")}
+            className={`flex items-center gap-2 px-4 py-2.5 rounded-xl text-xs font-bold transition-all cursor-pointer whitespace-nowrap ${
+              activeDashboardTab === "leave"
+                ? "bg-[#002185] text-white shadow-xs dark:bg-blue-600"
+                : "text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white hover:bg-slate-50 dark:hover:bg-[#162033]"
+            }`}
+          >
+            <CalendarCheck className="w-4 h-4" />
+            <span>Leave Requests</span>
+            <span
+              className={`text-[10px] px-1.5 py-0.2 rounded-full font-bold ${
+                activeDashboardTab === "leave"
+                  ? "bg-white/20 text-white"
+                  : "bg-emerald-100 dark:bg-emerald-900/50 text-emerald-700 dark:text-emerald-300"
+              }`}
+            >
+              {overview.remainingLeaveDays !== undefined ? overview.remainingLeaveDays : overview.leaveBalance || 15}d left
+            </span>
+          </button>
+
+          <button
+            type="button"
+            onClick={() => setActiveDashboardTab("payroll")}
+            className={`flex items-center gap-2 px-4 py-2.5 rounded-xl text-xs font-bold transition-all cursor-pointer whitespace-nowrap ${
+              activeDashboardTab === "payroll"
+                ? "bg-[#002185] text-white shadow-xs dark:bg-blue-600"
+                : "text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white hover:bg-slate-50 dark:hover:bg-[#162033]"
+            }`}
+          >
+            <Receipt className="w-4 h-4" />
+            <span>Payroll History</span>
+          </button>
+        </div>
+
+        {/* Dedicated Leave Requests View */}
+        {activeDashboardTab === "leave" && (
+          <div className="space-y-6">
+            <EmployeeLeaveRequestsManagement
+              onLeaveApplied={() => fetchEmployeeDashboardData()}
+            />
+            <div className="bg-white dark:bg-[#111927] border border-slate-200 dark:border-slate-800/80 rounded-2xl p-6 shadow-xs">
+              <EmployeeLeaveChart onApplyLeave={() => setShowApplyLeaveModal(true)} />
+            </div>
+          </div>
+        )}
+
+        {/* Dedicated Payroll History View */}
+        {activeDashboardTab === "payroll" && (
+          <div className="space-y-6">
+            <EmployeePayrollHistory />
+          </div>
+        )}
+
+        {/* Main Dashboard Overview */}
+        {activeDashboardTab === "overview" && (
+          <>
+            {/* Visual Threshold Warning Banner for Employee Dashboard */}
         {latenessThresholdAlert &&
           (latenessThresholdAlert.isWarningExceeded ||
             latenessThresholdAlert.isLimitExceeded) && (
@@ -625,6 +660,7 @@ const EmployeeDashboard = () => {
           hasClockedIn={hasClockedIn}
           hasClockedOut={hasClockedOut}
           isLoading={isLoading}
+          isCheckingStatus={isCheckingStatus || contextIsCheckingStatus}
           isSyncing={isSyncingAttendance}
           onClockIn={handleClockIn}
           onRefresh={handleSyncAttendance}
@@ -639,6 +675,7 @@ const EmployeeDashboard = () => {
           hasClockedIn={hasClockedIn}
           hasClockedOut={hasClockedOut}
           isLoading={isLoading}
+          isCheckingStatus={isCheckingStatus || contextIsCheckingStatus}
           onClockIn={handleClockIn}
           onClockOut={handleClockOut}
           workEndTime={settings?.workEndTime || settings?.attendance?.workEndTime || "19:00"}
@@ -763,204 +800,20 @@ const EmployeeDashboard = () => {
           </div>
         </div>
 
-        {/* Requests by Leave Type Chart & Recent Leave Requests */}
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
-          {/* Dynamic Leave Type Distribution Chart */}
-          <EmployeeLeaveChart
-            onApplyLeave={handleNavigateToLeave}
-          />
+            {/* Comprehensive Leave Requests Management Component */}
+            <EmployeeLeaveRequestsManagement
+              onLeaveApplied={() => fetchEmployeeDashboardData()}
+            />
 
-          {/* Recent Leave Requests */}
-          <div className="bg-white dark:bg-[#111927] border border-slate-200 dark:border-slate-800/80 rounded-xl p-6 flex flex-col justify-between shadow-sm">
-            <div>
-              <div className="flex items-center justify-between mb-4">
-                <h3 className="text-sm font-semibold text-slate-900 dark:text-white flex items-center gap-2">
-                  <CalendarCheck className="w-4 h-4 text-slate-400" />
-                  Recent Leave Requests
-                </h3>
-                <button
-                  onClick={() => {
-                    navigate("/employee/dashboard/leave");
-                    window.scrollTo({ top: 0, behavior: "smooth" });
-                  }}
-                  className="text-xs text-[#002185] dark:text-blue-400 hover:underline font-medium cursor-pointer"
-                >
-                  View all
-                </button>
-              </div>
-              <div className="space-y-0">
-                {recentLeaves && recentLeaves.length > 0 ? (
-                  recentLeaves.slice(0, 4).map((request, index) => (
-                    <div
-                      key={index}
-                      className="flex items-center justify-between py-2.5 border-b border-slate-100 dark:border-slate-800/80 last:border-0"
-                    >
-                      <div>
-                        <p className="text-sm font-medium text-slate-900 dark:text-white">
-                          {request.leaveType || "Leave Request"}
-                        </p>
-                        <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">
-                          {formatDate(request.startDate)} –{" "}
-                          {formatDate(request.endDate)} ({request.days || 0} days)
-                        </p>
-                      </div>
-                      <span
-                        className={`px-2.5 py-0.5 rounded-md text-[11px] font-medium ${getStatusColor(
-                          request.status,
-                        )}`}
-                      >
-                        {request.status || "Pending"}
-                      </span>
-                    </div>
-                  ))
-                ) : (
-                  <div className="text-center py-8">
-                    <CalendarCheck className="w-8 h-8 mx-auto mb-3 text-slate-400" />
-                    <p className="text-sm font-medium text-slate-900 dark:text-white">
-                      No leave requests found
-                    </p>
-                    <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">
-                      You have not submitted any time-off requests yet.
-                    </p>
-                    <button
-                      onClick={() => {
-                        navigate("/employee/dashboard/leave");
-                        window.scrollTo({ top: 0, behavior: "smooth" });
-                      }}
-                      className="mt-3 inline-flex items-center gap-1.5 px-3.5 py-1.5 bg-[#002185] hover:bg-[#001760] dark:bg-blue-600 dark:hover:bg-blue-700 text-white rounded-lg text-xs font-medium transition-colors cursor-pointer"
-                    >
-                      Apply for Leave
-                    </button>
-                  </div>
-                )}
-              </div>
-            </div>
-          </div>
-        </div>
-
-        {/* Payslip Status Widget: Enforcing strict privacy before official manager release */}
-        <div className="bg-white dark:bg-[#111927] border border-slate-200 dark:border-slate-800/80 rounded-xl p-6 shadow-sm">
-          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pb-4 border-b border-slate-100 dark:border-slate-800/80">
-            <div className="flex items-center gap-3">
-              <div className="w-10 h-10 rounded-xl bg-blue-50 dark:bg-blue-950/40 flex items-center justify-center text-[#002185] dark:text-blue-400">
-                {isPayslipReleased ? (
-                  <CheckCircle2 className="w-5 h-5 text-emerald-600 dark:text-emerald-400" />
-                ) : (
-                  <Lock className="w-5 h-5 text-amber-600 dark:text-amber-400" />
-                )}
-              </div>
-              <div>
-                <h3 className="text-base font-semibold text-slate-900 dark:text-white">
-                  Monthly Payslip Status
-                </h3>
-                <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">
-                  Official financial breakdown and disbursement release tracking
-                </p>
-              </div>
+            {/* Dynamic Leave Type Distribution Chart */}
+            <div className="bg-white dark:bg-[#111927] border border-slate-200 dark:border-slate-800/80 rounded-2xl p-6 shadow-xs">
+              <EmployeeLeaveChart onApplyLeave={() => setShowApplyLeaveModal(true)} />
             </div>
 
-            <div className="flex items-center gap-2">
-              {isPayslipReleased ? (
-                <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-semibold bg-emerald-50 dark:bg-emerald-950/40 text-emerald-700 dark:text-emerald-300 border border-emerald-200 dark:border-emerald-800/60">
-                  <CheckCircle2 className="w-3.5 h-3.5" />
-                  {currentPayMonth} Payslip: Paid &amp; Available
-                </span>
-              ) : (
-                <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-medium bg-amber-50 dark:bg-amber-950/40 text-amber-700 dark:text-amber-300 border border-amber-200 dark:border-amber-800/60">
-                  <Lock className="w-3.5 h-3.5" />
-                  {currentPayMonth} Payslip: Pending Management Review
-                </span>
-              )}
-            </div>
-          </div>
-
-          {/* Body depending on release state */}
-          {isPayslipReleased ? (
-            <div className="pt-5 space-y-4">
-              <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-                <div className="p-4 bg-slate-50 dark:bg-[#162033] border border-slate-200 dark:border-slate-700/60 rounded-xl">
-                  <p className="text-xs font-medium text-slate-500 dark:text-slate-400">Pay Month</p>
-                  <p className="text-base font-semibold text-slate-900 dark:text-white mt-1">
-                    {formatMonth(latestPayslip.month || latestPayslip.payMonth)}
-                  </p>
-                </div>
-                <div className="p-4 bg-slate-50 dark:bg-[#162033] border border-slate-200 dark:border-slate-700/60 rounded-xl">
-                  <p className="text-xs font-medium text-slate-500 dark:text-slate-400">Payment Status</p>
-                  <p className="text-base font-semibold text-emerald-600 dark:text-emerald-400 mt-1 flex items-center gap-1">
-                    <CheckCircle2 className="w-4 h-4" />
-                    Paid &amp; Released
-                  </p>
-                </div>
-                <div className="p-4 bg-emerald-50/60 dark:bg-emerald-950/30 border border-emerald-200 dark:border-emerald-800/60 rounded-xl">
-                  <p className="text-xs font-medium text-emerald-800 dark:text-emerald-300">Official Payslip Status</p>
-                  <p className="text-base font-bold text-emerald-800 dark:text-emerald-300 mt-1 flex items-center gap-1.5">
-                    <ShieldCheck className="w-4 h-4" />
-                    Available on Payslips
-                  </p>
-                </div>
-              </div>
-
-              <div className="flex flex-col sm:flex-row items-center justify-between gap-3 pt-3">
-                <p className="text-xs text-slate-500 dark:text-slate-400">
-                  Payslip #{latestPayslip.payslipNumber || latestPayslip.id || "OFFICIAL"} · Disbursed via {latestPayslip.paymentMethod || "Bank Transfer"}
-                </p>
-                <div className="flex items-center gap-2.5 w-full sm:w-auto">
-                  <button
-                    type="button"
-                    onClick={() => navigate("/employee/dashboard/payslips")}
-                    className="flex-1 sm:flex-initial inline-flex items-center justify-center gap-1.5 px-4 py-2 bg-[#002185] hover:bg-[#001760] dark:bg-blue-600 dark:hover:bg-blue-700 text-white rounded-xl text-xs font-semibold transition-colors cursor-pointer shadow-xs"
-                  >
-                    <Eye className="w-3.5 h-3.5" />
-                    View Itemized Payslip on Payslips Page
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => {
-                      downloadPayslipPDF(latestPayslip);
-                      setShowToast({
-                        show: true,
-                        message: "Official payslip PDF downloaded.",
-                        type: "success",
-                      });
-                    }}
-                    className="flex-1 sm:flex-initial inline-flex items-center justify-center gap-1.5 px-4 py-2 border border-slate-200 dark:border-slate-700 text-slate-900 dark:text-slate-100 rounded-xl text-xs font-semibold hover:bg-slate-50 dark:hover:bg-[#162033] transition-colors cursor-pointer"
-                  >
-                    <Download className="w-3.5 h-3.5" />
-                    Download PDF
-                  </button>
-                </div>
-              </div>
-            </div>
-          ) : (
-            <div className="pt-5 space-y-4">
-              <div className="p-4 bg-amber-50/60 dark:bg-amber-950/30 border border-amber-200 dark:border-amber-800/60 rounded-xl flex items-start gap-3.5">
-                <ShieldCheck className="w-5 h-5 text-amber-600 dark:text-amber-400 shrink-0 mt-0.5" />
-                <div className="space-y-1">
-                  <p className="text-xs font-semibold text-amber-900 dark:text-amber-300">
-                    Strict Salary Privacy Policy Enforced
-                  </p>
-                  <p className="text-xs text-amber-800/90 dark:text-amber-400 leading-relaxed">
-                    Salary amounts, itemized allowances, attendance penalties, and final net earnings are kept strictly confidential until management officially reviews, approves, and marks the billing cycle as <strong>Paid &amp; Published</strong>.
-                  </p>
-                </div>
-              </div>
-
-              <div className="flex flex-col sm:flex-row items-center justify-between gap-3 pt-1">
-                <p className="text-xs text-slate-500 dark:text-slate-400">
-                  Cycle: {currentPayMonth} · Status: Locked pending administrator payment authorization
-                </p>
-                <button
-                  type="button"
-                  onClick={() => navigate("/employee/dashboard/payslips")}
-                  className="w-full sm:w-auto inline-flex items-center justify-center gap-1.5 px-4 py-2 bg-slate-100 dark:bg-[#162033] text-slate-600 dark:text-slate-300 hover:bg-slate-200 dark:hover:bg-slate-800 rounded-xl text-xs font-semibold transition-colors cursor-pointer"
-                >
-                  <Eye className="w-3.5 h-3.5" />
-                  View Historical Released Payslips
-                </button>
-              </div>
-            </div>
-          )}
-        </div>
+            {/* Comprehensive Payroll History Table View with Direct PDF Downloads */}
+            <EmployeePayrollHistory />
+          </>
+        )}
       </div>
 
       {/* Direct Modals Triggered by Quick Actions */}

@@ -3,6 +3,7 @@ import { Notification } from "../models/notificationModel.js";
 import { Payroll } from "../models/payrollModel.js";
 import { Employee } from "../models/employeeModel.js";
 import { Leave } from "../models/leaveModel.js";
+import { CompanySettings } from "../models/CompanySettings.js";
 import { validateOrganizationAccess } from "../utils/validateOrganizationAccess.js";
 
 /**
@@ -26,6 +27,18 @@ export const createNotificationRecord = async ({
   companyId = null,
 }) => {
   try {
+    let resolvedCompanyId = companyId || organizationId || null;
+    if (!resolvedCompanyId && mongoose.connection.readyState === 1) {
+      try {
+        const comp = await CompanySettings.findOne().select("_id").lean();
+        if (comp && comp._id) {
+          resolvedCompanyId = comp._id;
+        }
+      } catch {
+        // ignore fallback lookup error
+      }
+    }
+
     const doc = await Notification.create({
       recipient_id: String(
         recipient_id || (recipient_role === "admin" ? "admin" : "all_employees")
@@ -42,8 +55,8 @@ export const createNotificationRecord = async ({
       action_url,
       action_label,
       metadata,
-      organizationId: organizationId || companyId || null,
-      companyId: companyId || organizationId || null,
+      organizationId: resolvedCompanyId,
+      companyId: resolvedCompanyId,
       is_read: false,
       created_at: new Date(),
     });

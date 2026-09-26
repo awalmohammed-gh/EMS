@@ -3,6 +3,7 @@ import mongoose from "mongoose";
 import { User } from "../models/userModel.js";
 import { Employee } from "../models/employeeModel.js";
 import { Admin } from "../models/Admin.js";
+import { CompanySettings } from "../models/CompanySettings.js";
 
 const getJwtSecret = () => process.env.JWT_SECRET || "default_jwt_secret_key_12345";
 
@@ -106,10 +107,36 @@ export const protect = async (req, res, next) => {
     const normalizedEmpCode =
       activeUser?.employeeId || decoded.employeeId || (role === "admin" ? "ADMIN" : "");
 
-    req.organizationId = null;
-    req.companyId = null;
-    req.tenantId = null;
-    req.tenantQuery = (baseQuery = {}) => baseQuery;
+    let resolvedOrgId =
+      activeUser?.organizationId ||
+      activeUser?.companyId ||
+      decoded.organizationId ||
+      decoded.companyId ||
+      null;
+
+    if (!resolvedOrgId && mongoose.connection.readyState === 1) {
+      try {
+        const compSettings = await CompanySettings.findOne().select("_id").lean();
+        if (compSettings && compSettings._id) {
+          resolvedOrgId = compSettings._id;
+        }
+      } catch (compErr) {
+        // ignore fallback error
+      }
+    }
+
+    req.organizationId = resolvedOrgId;
+    req.companyId = resolvedOrgId;
+    req.tenantId = resolvedOrgId;
+    req.tenantQuery = (baseQuery = {}) => {
+      if (resolvedOrgId) {
+        return {
+          ...baseQuery,
+          $or: [{ organizationId: resolvedOrgId }, { companyId: resolvedOrgId }],
+        };
+      }
+      return baseQuery;
+    };
     req.ensureTenant = () => true;
 
     req.user = {
@@ -130,6 +157,8 @@ export const protect = async (req, res, next) => {
       status: activeUser?.status || "active",
       isActive: activeUser?.isActive !== false,
       userDoc: activeUser || null,
+      organizationId: resolvedOrgId,
+      companyId: resolvedOrgId,
     };
 
     req.admin = {
@@ -138,6 +167,9 @@ export const protect = async (req, res, next) => {
       email: req.user.email,
       role: req.user.role,
       full_name: req.user.fullName,
+      fullName: req.user.fullName,
+      organizationId: resolvedOrgId,
+      companyId: resolvedOrgId,
     };
 
     req.employee = {
@@ -148,6 +180,8 @@ export const protect = async (req, res, next) => {
       email: req.user.email,
       fullName: req.user.fullName,
       department: req.user.department,
+      organizationId: resolvedOrgId,
+      companyId: resolvedOrgId,
     };
 
     next();

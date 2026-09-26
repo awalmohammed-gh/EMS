@@ -4,6 +4,7 @@ import mongoose from "mongoose";
 import { Employee } from "../models/employeeModel.js";
 import { User } from "../models/userModel.js";
 import { Admin } from "../models/Admin.js";
+import { CompanySettings } from "../models/CompanySettings.js";
 import { verifyActiveIncompleteShift } from "./authController.js";
 import { logAuditAction } from "../utils/auditLogger.js";
 import { createNotificationRecord } from "./notificationController.js";
@@ -60,8 +61,8 @@ export const createEmployeeAccount = async (req, res) => {
       });
     }
 
-    // Resolve Tenant Workspace: STRICTLY from authenticated session, NEVER frontend payload
-    const targetOrgId =
+    // Resolve Tenant Workspace: from authenticated session or singleton CompanySettings
+    let targetOrgId =
       req.companyId ||
       req.organizationId ||
       req.user?.companyId ||
@@ -70,10 +71,37 @@ export const createEmployeeAccount = async (req, res) => {
       req.admin?.organizationId ||
       null;
 
-    if (!targetOrgId && req.user?.role !== "super_admin") {
+    if (!targetOrgId && mongoose.connection.readyState === 1) {
+      try {
+        const comp = await CompanySettings.findOne().lean();
+        if (comp && comp._id) {
+          targetOrgId = comp._id;
+        } else {
+          const newComp = await CompanySettings.create({
+            companyName: "WorkPulse",
+            name: "WorkPulse",
+            slug: "workpulse",
+          });
+          targetOrgId = newComp._id;
+        }
+      } catch (compErr) {
+        console.warn("[createEmployeeAccount] fallback workspace lookup:", compErr.message);
+      }
+    }
+
+    const callerRole = (req.user?.role || req.admin?.role || "").toLowerCase();
+    const isAllowedAdmin = [
+      "admin",
+      "company_admin",
+      "manager",
+      "superadmin",
+      "super_admin",
+    ].includes(callerRole);
+
+    if (!isAllowedAdmin) {
       return res.status(403).json({
         success: false,
-        message: "Security violation: An employee account can only be provisioned within an authenticated company workspace.",
+        message: "Forbidden: You do not have administrative privileges to create employee accounts.",
       });
     }
 

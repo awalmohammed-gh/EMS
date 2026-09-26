@@ -13,7 +13,7 @@ import {
   Sparkles,
 } from "lucide-react";
 import { useAttendanceContext } from "../context/AttendanceContext";
-import { getTodayAttendance } from "../apis/fontApis";
+import { getTodayAttendance, getTodayAttendanceStatus } from "../apis/fontApis";
 
 /**
  * Custom Hook: useMidnightRefresh
@@ -74,6 +74,7 @@ const DailyShiftClock = ({
   hasClockedIn: propHasClockedIn,
   hasClockedOut: propHasClockedOut,
   isLoading: propIsLoading,
+  isCheckingStatus: propIsCheckingStatus,
   onClockIn: propOnClockIn,
   onClockOut: propOnClockOut,
   workStartTime = "08:00",
@@ -88,34 +89,54 @@ const DailyShiftClock = ({
     hasClockedIn: ctxHasClockedIn = false,
     hasClockedOut: ctxHasClockedOut = false,
     isClocking: ctxIsClocking = false,
+    isCheckingStatus: ctxIsCheckingStatus = false,
     clockIn: ctxClockIn,
     clockOut: ctxClockOut,
     refreshAttendance: ctxRefreshAttendance,
+    updateTodayRecord,
   } = contextValues || {};
 
   const [mountAttendance, setMountAttendance] = useState(null);
+  const [internalIsCheckingStatus, setInternalIsCheckingStatus] = useState(true);
 
-  // Fetch /api/attendance/today on mount to ensure zero loss of state upon refresh
+  // Fetch /api/attendance/today-status on mount to ensure zero loss of state upon refresh
   useEffect(() => {
     let isMounted = true;
-    const fetchTodayOnMount = async () => {
+    const fetchTodayStatusOnMount = async () => {
       try {
-        const res = await getTodayAttendance();
+        setInternalIsCheckingStatus(true);
+        const res = await getTodayAttendanceStatus();
         if (res?.data?.success && isMounted) {
-          const shiftData = res.data.data !== undefined ? res.data.data : (res.data.todayRecord || res.data.attendance);
+          const shiftData =
+            res.data.attendance ||
+            res.data.todayRecord ||
+            res.data.data;
           if (shiftData) {
             setMountAttendance(shiftData);
+            if (typeof updateTodayRecord === "function") {
+              updateTodayRecord(shiftData);
+            }
           }
         }
       } catch (err) {
-        console.warn("[DailyShiftClock] Error hydrating /api/attendance/today on mount:", err.message);
+        console.warn("[DailyShiftClock] Error hydrating /api/attendance/today-status on mount:", err.message);
+      } finally {
+        if (isMounted) {
+          setInternalIsCheckingStatus(false);
+        }
       }
     };
-    fetchTodayOnMount();
+    fetchTodayStatusOnMount();
     return () => {
       isMounted = false;
     };
-  }, []);
+  }, [updateTodayRecord]);
+
+  // Unified status verification barrier: prevents Clock In button from flashing on refresh
+  const isCheckingStatus =
+    propIsCheckingStatus !== undefined
+      ? propIsCheckingStatus
+      : ctxIsCheckingStatus || internalIsCheckingStatus;
 
   // Resolve attendance data & flags: priority to mount-fetched/props, fallback to context
   const activeRecord = propAttendanceData ?? mountAttendance ?? todayRecord;
@@ -537,115 +558,137 @@ const DailyShiftClock = ({
         </div>
       )}
 
-      {/* Action Button Section: strictly resolving the 3 specified cases */}
+      {/* Action Button Section: strictly resolving the specified cases with loading barrier */}
       <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-        {/* Action 1: Clock In Button */}
-        {/* CASE 1: No record found for today -> Primary enabled Clock In */}
-        {!isClockedIn && !effectiveIsClockedOut ? (
-          <button
-            id="btn-daily-clock-in"
-            type="button"
-            onClick={handleClockInClick}
-            disabled={isPending}
-            className="w-full flex items-center justify-center gap-2 py-3.5 px-6 rounded-xl font-medium bg-[#0B1E48] text-white hover:bg-[#081738] transition-all cursor-pointer shadow-sm active:scale-[0.99] disabled:opacity-50 disabled:cursor-not-allowed"
-          >
-            <LogIn className="w-5 h-5" />
-            <span>{isPending ? "Clocking In..." : "Clock In"}</span>
-          </button>
-        ) : isClockedIn && !effectiveIsClockedOut ? (
-          /* CASE 2: Record exists for today with clockOut === null -> Disabled Clocked In (HH:MM) */
-          <button
-            id="btn-daily-clocked-in-disabled"
-            type="button"
-            disabled
-            className="w-full flex items-center justify-center gap-2 py-3.5 px-6 rounded-xl font-medium bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-400 border border-slate-200 dark:border-slate-700 cursor-not-allowed opacity-85"
-          >
-            <CheckCircle2 className="w-5 h-5 text-emerald-600 dark:text-emerald-400" />
-            <span>Clocked In ({formattedClockInTime || "In Progress"})</span>
-          </button>
-        ) : (
-          /* CASE 3: Record exists for today with clockOut !== null -> Shift Completed */
-          <button
-            id="btn-daily-shift-completed-in"
-            type="button"
-            disabled
-            className="w-full flex items-center justify-center gap-2 py-3.5 px-6 rounded-xl font-medium bg-slate-50 dark:bg-slate-900/50 text-slate-500 dark:text-slate-400 border border-slate-200 dark:border-slate-800 cursor-default"
-          >
-            <CheckCircle2 className="w-5 h-5 text-emerald-600 dark:text-emerald-400" />
-            <span>Shift Completed</span>
-          </button>
-        )}
-
-        {/* Action 2: Clock Out Button */}
-        {/* CASE 1: No record found for today -> Default locked state (Unlocks at 07:00 PM) */}
-        {!isClockedIn && !effectiveIsClockedOut ? (
-          <button
-            id="btn-daily-clock-out-locked-init"
-            type="button"
-            disabled
-            className="w-full flex items-center justify-center gap-2 py-3.5 px-6 rounded-xl font-medium bg-slate-100 dark:bg-slate-800 text-slate-400 dark:text-slate-500 border border-slate-200/80 dark:border-slate-700/60 cursor-not-allowed opacity-60"
-          >
-            <Lock className="w-4 h-4" />
-            <span>Clock Out (Unlocks at {formattedEndTime})</span>
-          </button>
-        ) : isClockedIn && !effectiveIsClockedOut ? (
-          /* CASE 2: Record exists for today with clockOut === null -> Evaluate >= 19:00 */
-          isUnlockTime ? (
-            <button
-              id="btn-daily-clock-out-active"
-              type="button"
-              onClick={() => handleClockOutClick()}
-              disabled={isPending}
-              className="w-full flex items-center justify-center gap-2 py-3.5 px-6 rounded-xl font-medium bg-rose-600 hover:bg-rose-700 text-white transition-all cursor-pointer shadow-sm active:scale-[0.99] disabled:opacity-50"
+        {isCheckingStatus ? (
+          <>
+            {/* Loading Skeleton: prevents Clock In from flashing on page refresh before DB verification */}
+            <div
+              id="daily-clock-in-skeleton"
+              className="w-full flex items-center justify-center gap-3 py-3.5 px-6 rounded-xl bg-slate-100 dark:bg-slate-800/80 border border-slate-200 dark:border-slate-700/60 animate-pulse text-slate-500 dark:text-slate-400"
             >
-              <LogOut className="w-5 h-5" />
-              <span>{isPending ? "Clocking Out..." : "Clock Out Now"}</span>
-            </button>
-          ) : (
-            <div className="flex gap-2">
+              <Timer className="w-5 h-5 animate-spin text-[#0B1E48] dark:text-blue-400" />
+              <span className="text-sm font-medium">Verifying attendance status...</span>
+            </div>
+            <div
+              id="daily-clock-out-skeleton"
+              className="w-full flex items-center justify-center gap-3 py-3.5 px-6 rounded-xl bg-slate-100 dark:bg-slate-800/80 border border-slate-200 dark:border-slate-700/60 animate-pulse text-slate-400 dark:text-slate-500"
+            >
+              <Lock className="w-4 h-4 opacity-40" />
+              <span className="text-sm font-medium">Checking shift state...</span>
+            </div>
+          </>
+        ) : (
+          <>
+            {/* Action 1: Clock In Button */}
+            {/* CASE 1: No record found for today -> Primary enabled Clock In */}
+            {!isClockedIn && !effectiveIsClockedOut ? (
               <button
-                id="btn-daily-clock-out-locked"
+                id="btn-daily-clock-in"
+                type="button"
+                onClick={handleClockInClick}
+                disabled={isPending}
+                className="w-full flex items-center justify-center gap-2 py-3.5 px-6 rounded-xl font-medium bg-[#0B1E48] text-white hover:bg-[#081738] transition-all cursor-pointer shadow-sm active:scale-[0.99] disabled:opacity-50 disabled:cursor-not-allowed"
+              >
+                <LogIn className="w-5 h-5" />
+                <span>{isPending ? "Clocking In..." : "Clock In"}</span>
+              </button>
+            ) : isClockedIn && !effectiveIsClockedOut ? (
+              /* CASE 2: Record exists for today with clockOut === null -> Disabled Clocked In (HH:MM) */
+              <button
+                id="btn-daily-clocked-in-disabled"
                 type="button"
                 disabled
-                className="flex-1 flex items-center justify-center gap-2 py-3.5 px-4 rounded-xl font-medium bg-slate-100 dark:bg-slate-800 text-slate-500 dark:text-slate-400 border border-slate-200 dark:border-slate-700 cursor-not-allowed opacity-80"
+                className="w-full flex items-center justify-center gap-2 py-3.5 px-6 rounded-xl font-medium bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-400 border border-slate-200 dark:border-slate-700 cursor-not-allowed opacity-85"
               >
-                <Lock className="w-4 h-4 text-amber-600" />
-                <span className="truncate">Unlocks at {formattedEndTime}</span>
+                <CheckCircle2 className="w-5 h-5 text-emerald-600 dark:text-emerald-400" />
+                <span>Clocked In ({formattedClockInTime || "In Progress"})</span>
               </button>
-              {allowEarlyOverride && (
+            ) : (
+              /* CASE 3: Record exists for today with clockOut !== null -> Shift Completed */
+              <button
+                id="btn-daily-shift-completed-in"
+                type="button"
+                disabled
+                className="w-full flex items-center justify-center gap-2 py-3.5 px-6 rounded-xl font-medium bg-slate-50 dark:bg-slate-900/50 text-slate-500 dark:text-slate-400 border border-slate-200 dark:border-slate-800 cursor-default"
+              >
+                <CheckCircle2 className="w-5 h-5 text-emerald-600 dark:text-emerald-400" />
+                <span>Shift Completed</span>
+              </button>
+            )}
+
+            {/* Action 2: Clock Out Button */}
+            {/* CASE 1: No record found for today -> Default locked state (Unlocks at 07:00 PM) */}
+            {!isClockedIn && !effectiveIsClockedOut ? (
+              <button
+                id="btn-daily-clock-out-locked-init"
+                type="button"
+                disabled
+                className="w-full flex items-center justify-center gap-2 py-3.5 px-6 rounded-xl font-medium bg-slate-100 dark:bg-slate-800 text-slate-400 dark:text-slate-500 border border-slate-200/80 dark:border-slate-700/60 cursor-not-allowed opacity-60"
+              >
+                <Lock className="w-4 h-4" />
+                <span>Clock Out (Unlocks at {formattedEndTime})</span>
+              </button>
+            ) : isClockedIn && !effectiveIsClockedOut ? (
+              /* CASE 2: Record exists for today with clockOut === null -> Evaluate >= 19:00 */
+              isUnlockTime ? (
                 <button
-                  id="btn-daily-clock-out-early-override"
+                  id="btn-daily-clock-out-active"
                   type="button"
-                  onClick={() => setShowOverrideModal(true)}
-                  className="px-3.5 py-3.5 rounded-xl text-xs font-semibold text-slate-600 dark:text-slate-300 bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 transition cursor-pointer border border-slate-200 dark:border-slate-700"
-                  title="Clock out early with reason"
+                  onClick={() => handleClockOutClick()}
+                  disabled={isPending}
+                  className="w-full flex items-center justify-center gap-2 py-3.5 px-6 rounded-xl font-medium bg-rose-600 hover:bg-rose-700 text-white transition-all cursor-pointer shadow-sm active:scale-[0.99] disabled:opacity-50"
                 >
-                  Early Out
+                  <LogOut className="w-5 h-5" />
+                  <span>{isPending ? "Clocking Out..." : "Clock Out Now"}</span>
                 </button>
-              )}
-            </div>
-          )
-        ) : isAutoClosed ? (
-          <button
-            id="btn-daily-shift-completed-out-auto"
-            type="button"
-            disabled
-            className="w-full flex items-center justify-center gap-2 py-3.5 px-6 rounded-xl font-medium bg-amber-50 dark:bg-amber-950/30 text-amber-800 dark:text-amber-300 border border-amber-200 dark:border-amber-800/60 cursor-default"
-          >
-            <CheckCircle2 className="w-5 h-5 text-amber-600 dark:text-amber-400" />
-            <span>Shift Completed (Auto Clocked Out at 7:30 PM)</span>
-          </button>
-        ) : (
-          /* CASE 3: Record exists for today with clockOut !== null -> Shift Completed */
-          <button
-            id="btn-daily-shift-completed-out"
-            type="button"
-            disabled
-            className="w-full flex items-center justify-center gap-2 py-3.5 px-6 rounded-xl font-medium bg-emerald-50 dark:bg-emerald-950/30 text-emerald-700 dark:text-emerald-300 border border-emerald-200 dark:border-emerald-800 cursor-default"
-          >
-            <CheckCircle2 className="w-5 h-5 text-emerald-600 dark:text-emerald-400" />
-            <span>Shift Completed ({shiftDuration.totalHours} hrs)</span>
-          </button>
+              ) : (
+                <div className="flex gap-2">
+                  <button
+                    id="btn-daily-clock-out-locked"
+                    type="button"
+                    disabled
+                    className="flex-1 flex items-center justify-center gap-2 py-3.5 px-4 rounded-xl font-medium bg-slate-100 dark:bg-slate-800 text-slate-500 dark:text-slate-400 border border-slate-200 dark:border-slate-700 cursor-not-allowed opacity-80"
+                  >
+                    <Lock className="w-4 h-4 text-amber-600" />
+                    <span className="truncate">Unlocks at {formattedEndTime}</span>
+                  </button>
+                  {allowEarlyOverride && (
+                    <button
+                      id="btn-daily-clock-out-early-override"
+                      type="button"
+                      onClick={() => setShowOverrideModal(true)}
+                      className="px-3.5 py-3.5 rounded-xl text-xs font-semibold text-slate-600 dark:text-slate-300 bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 transition cursor-pointer border border-slate-200 dark:border-slate-700"
+                      title="Clock out early with reason"
+                    >
+                      Early Out
+                    </button>
+                  )}
+                </div>
+              )
+            ) : isAutoClosed ? (
+              <button
+                id="btn-daily-shift-completed-out-auto"
+                type="button"
+                disabled
+                className="w-full flex items-center justify-center gap-2 py-3.5 px-6 rounded-xl font-medium bg-amber-50 dark:bg-amber-950/30 text-amber-800 dark:text-amber-300 border border-amber-200 dark:border-amber-800/60 cursor-default"
+              >
+                <CheckCircle2 className="w-5 h-5 text-amber-600 dark:text-amber-400" />
+                <span>Shift Completed (Auto Clocked Out at 7:30 PM)</span>
+              </button>
+            ) : (
+              /* CASE 3: Record exists for today with clockOut !== null -> Shift Completed */
+              <button
+                id="btn-daily-shift-completed-out"
+                type="button"
+                disabled
+                className="w-full flex items-center justify-center gap-2 py-3.5 px-6 rounded-xl font-medium bg-emerald-50 dark:bg-emerald-950/30 text-emerald-700 dark:text-emerald-300 border border-emerald-200 dark:border-emerald-800 cursor-default"
+              >
+                <CheckCircle2 className="w-5 h-5 text-emerald-600 dark:text-emerald-400" />
+                <span>Shift Completed ({shiftDuration.totalHours} hrs)</span>
+              </button>
+            )}
+          </>
         )}
       </div>
 
@@ -706,5 +749,80 @@ const DailyShiftClock = ({
     </div>
   );
 };
+
+/**
+ * Strict Conditional Attendance Action Button Component
+ *
+ * Implements strict conditional rendering:
+ * 1. if (isCheckingStatus) return <LoadingSkeleton />;
+ * 2. if (!hasClockedIn) return <ClockInButton />;
+ * 3. if (hasClockedIn && !hasClockedOut) return <ClockOutButton />;
+ * 4. if (hasClockedIn && hasClockedOut) return <ShiftCompletedBadge />;
+ */
+export const AttendanceActionButton = memo(function AttendanceActionButton({
+  isCheckingStatus = false,
+  hasClockedIn = false,
+  hasClockedOut = false,
+  onClockIn,
+  onClockOut,
+  isPending = false,
+  workHours = 0,
+}) {
+  if (isCheckingStatus) {
+    return (
+      <div
+        id="attendance-action-skeleton"
+        className="w-full flex items-center justify-center gap-2 py-3.5 px-6 rounded-xl bg-slate-100 dark:bg-slate-800/80 border border-slate-200 dark:border-slate-700/60 animate-pulse text-slate-400 text-sm font-medium"
+      >
+        <Timer className="w-5 h-5 animate-spin text-blue-600" />
+        <span>Verifying status...</span>
+      </div>
+    );
+  }
+
+  if (!hasClockedIn) {
+    return (
+      <button
+        id="btn-strict-clock-in"
+        type="button"
+        onClick={onClockIn}
+        disabled={isPending}
+        className="w-full flex items-center justify-center gap-2 py-3.5 px-6 rounded-xl font-medium bg-[#0B1E48] text-white hover:bg-[#081738] transition-all cursor-pointer shadow-sm active:scale-[0.99] disabled:opacity-50"
+      >
+        <LogIn className="w-5 h-5" />
+        <span>{isPending ? "Clocking In..." : "Clock In"}</span>
+      </button>
+    );
+  }
+
+  if (hasClockedIn && !hasClockedOut) {
+    return (
+      <button
+        id="btn-strict-clock-out"
+        type="button"
+        onClick={onClockOut}
+        disabled={isPending}
+        className="w-full flex items-center justify-center gap-2 py-3.5 px-6 rounded-xl font-medium bg-rose-600 hover:bg-rose-700 text-white transition-all cursor-pointer shadow-sm active:scale-[0.99] disabled:opacity-50"
+      >
+        <LogOut className="w-5 h-5" />
+        <span>{isPending ? "Clocking Out..." : "Clock Out"}</span>
+      </button>
+    );
+  }
+
+  if (hasClockedIn && hasClockedOut) {
+    return (
+      <div
+        id="badge-strict-shift-completed"
+        className="w-full flex items-center justify-center gap-2 py-3.5 px-6 rounded-xl font-medium bg-emerald-50 dark:bg-emerald-950/30 text-emerald-700 dark:text-emerald-300 border border-emerald-200 dark:border-emerald-800 cursor-default"
+      >
+        <CheckCircle2 className="w-5 h-5 text-emerald-600 dark:text-emerald-400" />
+        <span>Shift Completed{workHours ? ` (${workHours} hrs)` : ""}</span>
+      </div>
+    );
+  }
+
+  return null;
+});
 
 export default memo(DailyShiftClock);

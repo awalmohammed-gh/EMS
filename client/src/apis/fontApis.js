@@ -265,6 +265,10 @@ export const getTodayAttendance = () => {
   return api.get("/attendance/today");
 };
 
+export const getTodayAttendanceStatus = () => {
+  return api.get("/attendance/today-status");
+};
+
 export const getEmployeeAttendance = () => {
   return api.get("/attendance/attendance");
 };

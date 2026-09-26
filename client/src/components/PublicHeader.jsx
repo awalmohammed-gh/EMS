@@ -1,4 +1,3 @@
-import React from "react";
 import { Link, useNavigate } from "react-router-dom";
 import DefaultPlatformLogo from "./DefaultPlatformLogo";
 
@@ -26,17 +25,17 @@ export const PublicHeader = () => {
           <div className="flex items-center gap-3">
             <button
               type="button"
-              onClick={() => navigate("/login")}
+              onClick={() => navigate("/welcome")}
               className="px-4 py-2 text-xs font-semibold text-[#002185] dark:text-blue-400 hover:bg-slate-50 dark:hover:bg-slate-800 rounded-xl transition"
             >
               Sign In
             </button>
             <button
               type="button"
-              onClick={() => navigate("/management-login")}
+              onClick={() => navigate("/admin/auth")}
               className="px-4 py-2 text-xs font-bold text-white bg-[#002185] hover:bg-[#ff5500] dark:bg-blue-600 dark:hover:bg-blue-700 rounded-xl transition shadow-xs"
             >
-              Admin Portal
+              Management Login
             </button>
           </div>
         </div>

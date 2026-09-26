@@ -14,12 +14,23 @@ export const useAdminAuth = () => {
 
   const user = auth?.user || mgmtUser;
   const role = auth?.role || mgmtRole || user?.role;
-  const isAuthInitializing = auth?.isInitializing;
+  const isAuthInitializing = auth?.isLoading || auth?.isInitializing;
 
   const [isLoading, setIsLoading] = useState(true);
   const [adminExists, setAdminExists] = useState(null);
   const [isAuthorized, setIsAuthorized] = useState(false);
   const [error, setError] = useState(null);
+
+  const isAdminRole = (r) => {
+    const normalized = String(r || "").toLowerCase().trim();
+    return (
+      normalized === "admin" ||
+      normalized === "company_admin" ||
+      normalized === "manager" ||
+      normalized === "superadmin" ||
+      normalized === "super_admin"
+    );
+  };
 
   const verifyAdminStatus = useCallback(async () => {
     // If auth is still initializing session in AuthContext, do not evaluate
@@ -33,7 +44,7 @@ export const useAdminAuth = () => {
 
     try {
       // 1. If active user in AuthContext is already an admin, authorize immediately
-      if (user && (user.role === "admin" || user.role === "super_admin" || role === "admin" || role === "super_admin")) {
+      if (user && (isAdminRole(user.role) || isAdminRole(role))) {
         setIsAuthorized(true);
         setAdminExists(true);
         setIsLoading(false);
@@ -41,7 +52,7 @@ export const useAdminAuth = () => {
       }
 
       // If user is actively logged in as employee, deny admin access
-      if (user && user.role === "employee" && !user.role?.includes("admin")) {
+      if (user && user.role === "employee" && !isAdminRole(user.role)) {
         setIsAuthorized(false);
         setAdminExists(true);
         setIsLoading(false);

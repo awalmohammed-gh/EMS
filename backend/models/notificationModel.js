@@ -70,14 +70,14 @@ const notificationSchema = new mongoose.Schema(
     },
     organizationId: {
       type: mongoose.Schema.Types.ObjectId,
-      ref: "Organization",
+      ref: "CompanySettings",
       index: true,
       default: null,
     },
     companyId: {
       type: mongoose.Schema.Types.ObjectId,
-      ref: "Organization",
-      required: true,
+      ref: "CompanySettings",
+      default: null,
       index: true,
     },
     created_at: {
@@ -91,9 +91,20 @@ const notificationSchema = new mongoose.Schema(
   }
 );
 
-notificationSchema.pre("validate", function () {
+notificationSchema.pre("validate", async function () {
   if (!this.organizationId && this.companyId) this.organizationId = this.companyId;
   if (!this.companyId && this.organizationId) this.companyId = this.organizationId;
+  if (!this.companyId && mongoose.connection.readyState === 1) {
+    try {
+      const comp = await mongoose.model("CompanySettings").findOne().select("_id").lean();
+      if (comp && comp._id) {
+        this.companyId = comp._id;
+        if (!this.organizationId) this.organizationId = comp._id;
+      }
+    } catch {
+      // ignore
+    }
+  }
 });
 
 // Helpful index for querying notifications by role and recipient

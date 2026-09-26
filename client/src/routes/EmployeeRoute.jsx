@@ -16,15 +16,20 @@ export const EmployeeRoute = ({ children }) => {
     return <WorkspaceLoader fullScreen />;
   }
 
-  const effectiveRole = authRole || user?.role || null;
+  const effectiveRole = String(authRole || user?.role || "").toLowerCase().trim();
 
   // Unauthenticated visitors redirect to Employee Login
   if (!user) {
     return <Navigate to="/employee/login" replace state={{ from: location }} />;
   }
 
-  // Company Admins / Managers attempting to access employee self-service are redirected
-  if (effectiveRole === "admin" || effectiveRole === "company_admin") {
+  // Company Admins / Managers without employee profiles attempting to access employee self-service are redirected
+  const isAdminOnly =
+    ["admin", "company_admin", "manager", "superadmin", "super_admin"].includes(effectiveRole) &&
+    !user.employeeId &&
+    user.role !== "employee";
+
+  if (isAdminOnly) {
     return <Navigate to="/admin/dashboard" replace state={{ from: location }} />;
   }
 

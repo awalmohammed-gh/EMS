@@ -91,7 +91,10 @@ export const ManagementContextProvider = ({ children }) => {
       setIsLoadingUser(true);
       let activeRole = currentRole;
       if (!activeRole) {
-        if (typeof window !== "undefined" && window.location.pathname.startsWith("/employee")) {
+        if (
+          typeof window !== "undefined" &&
+          (window.location.hash.includes("/employee") || window.location.pathname.startsWith("/employee"))
+        ) {
           activeRole = "employee";
         } else {
           activeRole = "admin";
