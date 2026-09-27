@@ -19,12 +19,10 @@ import {
 import Loading from "../../ui/Loading";
 import ErrorMessage from "../../ui/ErrorMessage";
 import { useManagement } from "../../context/ManagementContextProvider";
-import { useNavigate } from "react-router-dom";
 import EmployeeLeaveChart from "../../components/EmployeeLeaveChart";
 import AnnouncementBoard from "../../components/AnnouncementBoard";
 import EmployeeHeader from "../../components/EmployeeHeader";
 import ApplyLeaveModal from "../../components/modal/ApplyLeaveModal";
-import EmployeePayslipsModal from "../../components/modal/EmployeePayslipsModal";
 import DailyShiftClock from "../../components/DailyShiftClock";
 import ShiftStatusCard from "../../components/ShiftStatusCard";
 import WeeklyAttendanceChart from "../../components/WeeklyAttendanceChart";
@@ -90,13 +88,11 @@ const EmployeeDashboard = () => {
 
   // Modals State
   const [showApplyLeaveModal, setShowApplyLeaveModal] = useState(false);
-  const [showPayslipModal, setShowPayslipModal] = useState(false);
   const [analyticsRefreshKey, setAnalyticsRefreshKey] = useState(0);
   const [latenessThresholdAlert, setLatenessThresholdAlert] = useState(null);
   const [activeDashboardTab, setActiveDashboardTab] = useState("overview"); // "overview" | "leave" | "payroll"
 
   const { setShowToast, user, setUser, settings } = useManagement();
-  const navigate = useNavigate();
 
   const fetchEmployeeDashboardData = useCallback(async () => {
     try {
@@ -828,14 +824,6 @@ const EmployeeDashboard = () => {
               show: true,
             });
           }}
-        />
-      )}
-
-      {showPayslipModal && latestPayslip && (
-        <EmployeePayslipsModal
-          payslip={latestPayslip}
-          allPayslips={[latestPayslip]}
-          onClose={() => setShowPayslipModal(false)}
         />
       )}
     </div>

@@ -229,7 +229,7 @@ export const requireEmployee = [protect, authorize("employee", "manager", "admin
 export const requireSuperAdmin = (req, res, next) => {
   return res.status(404).json({
     success: false,
-    message: "Super Admin routes are not available in single-company mode.",
+    message: "Super Admin routes are not available.",
   });
 };
 

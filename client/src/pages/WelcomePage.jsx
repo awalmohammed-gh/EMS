@@ -260,8 +260,6 @@ export const WelcomePage = () => {
           &copy; {new Date().getFullYear()} {branding.companyName}. All rights reserved.
         </div>
         <div className="flex items-center gap-4">
-          <span>Single-Deployment Architecture</span>
-          <span>&bull;</span>
           <span>Workforce Management System</span>
         </div>
       </footer>

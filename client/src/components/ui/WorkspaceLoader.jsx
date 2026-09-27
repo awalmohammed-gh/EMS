@@ -44,7 +44,7 @@ const getStorageCache = () => {
 /**
  * WorkspaceLoader
  * 
- * Clean, single-company system loading component that displays the company branding,
+ * Clean system loading component that displays the company branding,
  * name, and animated loader during session verification or route transitions.
  */
 export const WorkspaceLoader = ({

@@ -25,7 +25,7 @@ const buildAssetUrl = (file) => {
 /**
  * GET /api/company/public-branding
  * Unauthenticated endpoint for login and public-facing views.
- * Dynamically queries the single deployment's CompanySettings.
+ * Dynamically queries the company's CompanySettings.
  */
 export const getPublicBranding = async (_req, res) => {
   try {
@@ -414,7 +414,7 @@ export const setupInitialCompany = async (req, res) => {
   }
 };
 
-// Backward-compatible endpoints that now return the single deployment's configuration
+// Backward-compatible endpoints that return company configuration
 export const getCurrentWorkspace = getPublicBranding;
 export const getWorkspaceBySlug = getPublicBranding;
 export const verifyWorkspace = async (_req, res) => {
@@ -435,7 +435,7 @@ export const getPublicOrganizations = async (_req, res) => {
 export const registerOrganization = async (_req, res) => {
   return res.status(400).json({
     success: false,
-    message: "Multi-tenant workspace registration is disabled. WorkPulse runs as a single-company deployment.",
+    message: "Workspace registration is disabled.",
   });
 };
 

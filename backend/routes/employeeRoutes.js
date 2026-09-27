@@ -13,7 +13,9 @@ import {
   getCurrentLoggedInEmployee,
   updateCurrentEmployee,
   exportEmployeesCSV,
+  bulkUploadEmployees,
 } from "../controllers/employeeController.js";
+import { handleCsvUpload } from "../middleware/csvUploadMiddleware.js";
 import {
   employeePayslips,
   getEmployeeLatestPayslipBreakdown,
@@ -74,6 +76,10 @@ employeeRouter.get("/projection", employeeAuth, getSalaryProjection);
 employeeRouter.post("/employee-account", verifyAdmin, createEmployeeAccount);
 employeeRouter.post("/create", verifyAdmin, createEmployeeAccount);
 employeeRouter.post("/add", verifyAdmin, createEmployeeAccount);
+employeeRouter.post("/bulk-upload", verifyAdmin, handleCsvUpload, bulkUploadEmployees);
+employeeRouter.post("/bulk-create", verifyAdmin, handleCsvUpload, bulkUploadEmployees);
+employeeRouter.post("/bulk-import", verifyAdmin, handleCsvUpload, bulkUploadEmployees);
+employeeRouter.post("/bulk", verifyAdmin, handleCsvUpload, bulkUploadEmployees);
 employeeRouter.post("/", verifyAdmin, createEmployeeAccount);
 
 // Authentication endpoints

@@ -126,7 +126,7 @@ export const initializeSystem = async (req, res) => {
       return res.status(400).json({
         success: false,
         message:
-          "The system is already initialized for this single-tenant deployment. Re-running the initial setup wizard is disabled. Please log in using your administrator credentials.",
+          "The system is already initialized. Re-running the initial setup wizard is disabled. Please log in using your administrator credentials.",
         isInitialized: true,
         redirectUrl: "/admin/auth?mode=login",
       });

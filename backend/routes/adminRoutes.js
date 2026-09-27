@@ -16,6 +16,8 @@ import {
 } from "../controllers/adminController.js";
 import { getSettings, getPenaltySettings, updatePenaltySettings, getAuditLogs } from "../controllers/adminSettingsController.js";
 import { createEmployeeAccount } from "../controllers/employeeAuthentication.js";
+import { bulkUploadEmployees } from "../controllers/employeeController.js";
+import { handleCsvUpload } from "../middleware/csvUploadMiddleware.js";
 import { bulkUploadBiometricAttendance } from "../controllers/employeeAttendance.js";
 import {
   getPenaltyImpactAnalytics,
@@ -82,6 +84,9 @@ adminRouter.post("/register", verifyAdmin, createAdminAccount);
 adminRouter.post("/create-user", verifyAdmin, createEmployeeAccount);
 adminRouter.post("/create-employee", verifyAdmin, createEmployeeAccount);
 adminRouter.post("/employees", verifyAdmin, createEmployeeAccount);
+adminRouter.post("/bulk-upload-employees", verifyAdmin, handleCsvUpload, bulkUploadEmployees);
+adminRouter.post("/bulk-employees", verifyAdmin, handleCsvUpload, bulkUploadEmployees);
+adminRouter.post("/employees/bulk-upload", verifyAdmin, handleCsvUpload, bulkUploadEmployees);
 adminRouter.get("/me", verifyAdmin, getAdminProfile);
 adminRouter.get("/profile", verifyAdmin, getAdminProfile);
 adminRouter.put("/me", verifyAdmin, updateAdminProfile);

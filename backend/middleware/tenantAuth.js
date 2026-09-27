@@ -1,7 +1,5 @@
 /**
- * Single Company Architecture - Tenant Auth Middleware
- * In single company deployment, all users belong to the single deployed company instance.
- * No multi-tenant workspace isolation or cross-tenant query rewriting required.
+ * Enterprise Architecture - Tenant Auth Middleware
  */
 
 export const tenantAuth = (req, _res, next) => {

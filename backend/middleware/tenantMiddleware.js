@@ -1,5 +1,5 @@
 /**
- * Single Company Architecture - Tenant Middleware Pass-through
+ * Enterprise Architecture - Tenant Middleware Pass-through
  * No cross-tenant query rewriting or multi-workspace isolation needed.
  */
 
@@ -9,7 +9,7 @@ export const tenantStorage = {
 };
 
 export const tenantPlugin = (_schema) => {
-  // No-op for single company deployment
+  // No-op
 };
 
 export const tenantMiddleware = (req, _res, next) => {

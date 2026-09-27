@@ -1,6 +1,5 @@
 /**
- * Single Company Architecture - Tenant Scope Neutralizer
- * WorkPulse operates as a single company deployment per database instance.
+ * Enterprise Architecture - Tenant Scope Neutralizer
  * All queries execute cleanly across the company's dedicated database.
  */
 

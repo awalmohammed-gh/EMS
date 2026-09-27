@@ -1,7 +1,5 @@
 /**
- * Single Company Architecture - Authorize Company Tenant Pass-through
- * Since the deployment uses a dedicated database for this single company,
- * cross-tenant checks are unnecessary.
+ * Enterprise Architecture - Authorize Company Tenant Pass-through
  */
 
 export const authorizeCompanyTenant = (req, _res, next) => {

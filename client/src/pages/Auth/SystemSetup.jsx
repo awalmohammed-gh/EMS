@@ -289,7 +289,7 @@ export const SystemSetup = () => {
             System Already Configured
           </h2>
           <p className="text-xs text-slate-500 dark:text-slate-400 mt-2 leading-relaxed">
-            The single-tenant workforce deployment for{" "}
+            The workforce management system for{" "}
             <span className="font-semibold text-slate-900 dark:text-white">
               {existingCompanyData?.companyName || "WorkPulse"}
             </span>{" "}
@@ -341,7 +341,7 @@ export const SystemSetup = () => {
         <div className="text-center space-y-2">
           <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-blue-500/10 border border-blue-500/20 text-blue-400 text-[11px] font-bold tracking-wide uppercase">
             <ShieldCheck className="w-3.5 h-3.5" />
-            <span>Single-Tenant System Onboarding</span>
+            <span>Enterprise System Onboarding</span>
           </div>
 
           <h1 className="text-2xl sm:text-3xl font-extrabold text-white tracking-tight">
@@ -589,7 +589,7 @@ export const SystemSetup = () => {
                   <span>Step 2: Global Company Configuration</span>
                 </h2>
                 <p className="text-xs text-slate-400 mt-1">
-                  Configure the single-tenant enterprise details, contact channels, and corporate branding.
+                  Configure enterprise details, contact channels, and corporate branding.
                 </p>
               </div>
 

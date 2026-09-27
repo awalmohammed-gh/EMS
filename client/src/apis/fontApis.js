@@ -97,6 +97,17 @@ export const createEmployeeUser = (data) => {
   return api.post("/admin/create-user", data);
 };
 
+export const bulkUploadEmployees = (dataOrFormData) => {
+  if (dataOrFormData instanceof FormData) {
+    return api.post("/employee/bulk-upload", dataOrFormData, {
+      headers: { "Content-Type": "multipart/form-data" },
+    });
+  }
+  return api.post("/employee/bulk-upload", dataOrFormData);
+};
+
+export const bulkImportEmployees = bulkUploadEmployees;
+
 // legacy aliases for backward compatibility
 export const adminLog = (data) => {
   return api.post("/auth/admin/login", data);

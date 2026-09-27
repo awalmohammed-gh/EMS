@@ -70,7 +70,7 @@ export const ManagementLoginPage = () => {
     useManagement();
   const { login: contextLogin } = useAuth();
 
-  // Load single company branding
+  // Load company branding
   useEffect(() => {
     let isMounted = true;
     brandingService
@@ -507,7 +507,7 @@ export const ManagementLoginPage = () => {
           {mode === "signup" && (
             <div className="mb-4 p-3 bg-blue-50 dark:bg-blue-950/40 border border-blue-200 dark:border-blue-900/60 rounded-xl flex items-center justify-between gap-3 text-xs">
               <div className="text-blue-900 dark:text-blue-200">
-                <span className="font-bold">Initial Single-Tenant Setup?</span>
+                <span className="font-bold">Initial System Setup?</span>
                 <p className="text-[11px] text-blue-700 dark:text-blue-400">Configure admin credentials & company profile in 2 steps.</p>
               </div>
               <button

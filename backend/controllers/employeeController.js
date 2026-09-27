@@ -1,8 +1,13 @@
 import { Employee } from "../models/employeeModel.js";
+import { User } from "../models/userModel.js";
+import { Admin } from "../models/Admin.js";
+import { CompanySettings } from "../models/CompanySettings.js";
+import bcrypt from "bcryptjs";
 import mongoose from "mongoose";
 import { validateOrganizationAccess } from "../utils/validateOrganizationAccess.js";
 import { buildTenantScope } from "../utils/tenantScope.js";
 import { logAuditAction } from "../utils/auditLogger.js";
+import { parseCSV } from "../utils/csvParser.js";
 
 // Helper for valid MongoDB ObjectId checking
 const isValidObjectId = (id) =>
@@ -371,6 +376,334 @@ export const exportEmployeesCSV = async (req, res) => {
     res.status(500).json({
       success: false,
       message: error.message || "Failed to export employee database to CSV.",
+    });
+  }
+};
+
+/**
+ * Bulk upload employee records via CSV or pre-parsed dataset.
+ * Supports file uploads (multipart/form-data), raw CSV text, or JSON payload.
+ * Validates entries, prevents duplicate emails/IDs, hashes passwords,
+ * synchronizes to User collection, and logs comprehensive audit history.
+ */
+export const bulkUploadEmployees = async (req, res) => {
+  try {
+    let rawRecords = [];
+
+    // 1. File Upload (multipart/form-data with multer memory storage)
+    if (req.file && req.file.buffer) {
+      const csvString = req.file.buffer.toString("utf-8");
+      rawRecords = parseCSV(csvString);
+    }
+    // 2. Direct CSV string in req.body
+    else if (req.body.csvData || req.body.csvText) {
+      rawRecords = parseCSV(req.body.csvData || req.body.csvText);
+    }
+    // 3. Pre-parsed JSON array
+    else if (Array.isArray(req.body.employees)) {
+      rawRecords = req.body.employees;
+    } else if (Array.isArray(req.body.data)) {
+      rawRecords = req.body.data;
+    } else if (Array.isArray(req.body)) {
+      rawRecords = req.body;
+    }
+
+    if (!rawRecords || rawRecords.length === 0) {
+      return res.status(400).json({
+        success: false,
+        message:
+          "No employee records could be parsed. Please ensure the CSV contains a valid header row and data rows.",
+      });
+    }
+
+    // Resolve Target Company Workspace
+    let targetOrgId =
+      req.companyId ||
+      req.organizationId ||
+      req.user?.companyId ||
+      req.user?.organizationId ||
+      req.admin?.companyId ||
+      req.admin?.organizationId ||
+      null;
+
+    if (!targetOrgId && mongoose.connection.readyState === 1) {
+      try {
+        const comp = await CompanySettings.findOne().lean();
+        if (comp && comp._id) {
+          targetOrgId = comp._id;
+        } else {
+          const newComp = await CompanySettings.create({
+            companyName: "WorkPulse",
+            name: "WorkPulse",
+            slug: "workpulse",
+          });
+          targetOrgId = newComp._id;
+        }
+      } catch (err) {
+        console.warn("[bulkUploadEmployees] fallback workspace lookup:", err.message);
+      }
+    }
+
+    const defaultPassword = (req.body.defaultPassword || "Password@123").trim();
+
+    // Fetch existing emails and employeeIds for fast O(1) conflict validation
+    const existingEmployees = await Employee.find({}, { email: 1, employeeId: 1 }).lean();
+    const existingEmails = new Set(
+      existingEmployees.map((e) => (e.email || "").toLowerCase().trim()).filter(Boolean)
+    );
+    const existingEmployeeIds = new Set(
+      existingEmployees.map((e) => (e.employeeId || "").trim()).filter(Boolean)
+    );
+
+    // Track intra-batch duplicates
+    const batchEmails = new Set();
+    const batchEmployeeIds = new Set();
+
+    const createdEmployees = [];
+    const failedRows = [];
+
+    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+
+    const generateId = () => {
+      let candidate = `EMP${Math.floor(1000 + Math.random() * 9000)}`;
+      while (existingEmployeeIds.has(candidate) || batchEmployeeIds.has(candidate)) {
+        candidate = `EMP${Math.floor(10000 + Math.random() * 90000)}`;
+      }
+      return candidate;
+    };
+
+    for (let i = 0; i < rawRecords.length; i++) {
+      const row = rawRecords[i];
+      const rowNum = row._rowNumber || i + 2;
+
+      const fullName = (row.fullName || row.name || "").trim();
+      const email = (row.email || "").toLowerCase().trim();
+      let employeeId = (row.employeeId || "").trim();
+      const phone = (row.phone || row.mobile || "").trim();
+      const department = (row.department || "Operations & Support").trim();
+      const position = (row.position || "Staff Member").trim();
+      const employmentType = (row.employmentType || "Full-time").trim();
+      const role = (row.role || "employee").toLowerCase().trim();
+      const status = (row.status || "active").toLowerCase().trim();
+      const location = (row.location || "Head Office").trim();
+      const rawSalary = row.baseSalary || row.salary || 0;
+      const parsedSalary = !isNaN(parseFloat(String(rawSalary).replace(/[^0-9.]/g, "")))
+        ? Math.max(0, parseFloat(String(rawSalary).replace(/[^0-9.]/g, "")))
+        : 0;
+
+      const parsedEmploymentDate =
+        row.employmentDate && !isNaN(new Date(row.employmentDate).getTime())
+          ? new Date(row.employmentDate)
+          : new Date();
+
+      const password = (row.password || defaultPassword || "Password@123").trim();
+
+      // Required validation: Full Name
+      if (!fullName || fullName.length < 2) {
+        failedRows.push({
+          row: rowNum,
+          name: fullName || "N/A",
+          email: email || "N/A",
+          employeeId: employeeId || "N/A",
+          reason: "Full Name is required (minimum 2 characters).",
+        });
+        continue;
+      }
+
+      // Required validation: Email
+      if (!email) {
+        failedRows.push({
+          row: rowNum,
+          name: fullName,
+          email: "N/A",
+          employeeId: employeeId || "N/A",
+          reason: "Email address is required.",
+        });
+        continue;
+      }
+
+      if (!emailRegex.test(email)) {
+        failedRows.push({
+          row: rowNum,
+          name: fullName,
+          email,
+          employeeId: employeeId || "N/A",
+          reason: `Invalid email address format "${email}".`,
+        });
+        continue;
+      }
+
+      // Intra-batch duplicate check
+      if (batchEmails.has(email)) {
+        failedRows.push({
+          row: rowNum,
+          name: fullName,
+          email,
+          employeeId: employeeId || "N/A",
+          reason: `Duplicate email "${email}" found multiple times in this CSV file.`,
+        });
+        continue;
+      }
+
+      // Existing DB duplicate check
+      if (existingEmails.has(email)) {
+        failedRows.push({
+          row: rowNum,
+          name: fullName,
+          email,
+          employeeId: employeeId || "N/A",
+          reason: `An employee with email "${email}" already exists in the system.`,
+        });
+        continue;
+      }
+
+      // Employee ID assignment & conflict check
+      if (!employeeId) {
+        employeeId = generateId();
+      } else if (existingEmployeeIds.has(employeeId) || batchEmployeeIds.has(employeeId)) {
+        failedRows.push({
+          row: rowNum,
+          name: fullName,
+          email,
+          employeeId,
+          reason: `Employee ID "${employeeId}" is already assigned to another staff member.`,
+        });
+        continue;
+      }
+
+      const validRoles = ["employee", "manager", "hr", "admin"];
+      const resolvedRole = validRoles.includes(role) ? role : "employee";
+
+      try {
+        const newEmp = await Employee.create({
+          employeeId,
+          fullName,
+          email,
+          password,
+          phone: phone || "+233 24 000 0000",
+          department,
+          position,
+          employmentType,
+          employmentDate: parsedEmploymentDate,
+          baseSalary: parsedSalary,
+          role: resolvedRole,
+          status: status === "inactive" ? "inactive" : "active",
+          isActive: status !== "inactive",
+          location,
+          organizationId: targetOrgId,
+          companyId: targetOrgId,
+        });
+
+        // Sync to User collection
+        try {
+          await User.findOneAndUpdate(
+            { email },
+            {
+              fullName,
+              name: fullName,
+              email,
+              password,
+              role: resolvedRole,
+              status: status === "inactive" ? "inactive" : "active",
+              isActive: status !== "inactive",
+              companyId: targetOrgId,
+              organizationId: targetOrgId,
+            },
+            { upsert: true, returnDocument: "after", setDefaultsOnInsert: true }
+          );
+        } catch (userErr) {
+          console.warn("[bulkUploadEmployees] User sync warning:", userErr.message);
+        }
+
+        // If admin role assigned, also ensure Admin account entry exists
+        if (resolvedRole === "admin") {
+          try {
+            const existingAdmin = await Admin.findOne({ email });
+            if (!existingAdmin) {
+              const adminHash = await bcrypt.hash(password, 10);
+              await Admin.create({
+                full_name: fullName,
+                email,
+                password_hash: adminHash,
+                role: "admin",
+                organizationId: targetOrgId,
+              });
+            }
+          } catch (adminErr) {
+            console.warn("[bulkUploadEmployees] Admin sync warning:", adminErr.message);
+          }
+        }
+
+        batchEmails.add(email);
+        existingEmails.add(email);
+        batchEmployeeIds.add(employeeId);
+        existingEmployeeIds.add(employeeId);
+
+        createdEmployees.push({
+          _id: newEmp._id,
+          employeeId: newEmp.employeeId,
+          fullName: newEmp.fullName,
+          email: newEmp.email,
+          phone: newEmp.phone,
+          department: newEmp.department,
+          position: newEmp.position,
+          baseSalary: newEmp.baseSalary,
+          role: newEmp.role,
+          status: newEmp.status,
+        });
+      } catch (insertErr) {
+        failedRows.push({
+          row: rowNum,
+          name: fullName,
+          email,
+          employeeId,
+          reason: insertErr.message || "Failed to save record to database.",
+        });
+      }
+    }
+
+    // Audit log
+    if (createdEmployees.length > 0) {
+      try {
+        await logAuditAction({
+          req,
+          action: "BULK_IMPORT_EMPLOYEES",
+          category: "Employees",
+          target: `${createdEmployees.length} Employee Records`,
+          targetModel: "Employee",
+          summary: `Bulk imported ${createdEmployees.length} employee records from CSV.`,
+          details: `Total processed: ${rawRecords.length}, Succeeded: ${createdEmployees.length}, Failed: ${failedRows.length}.`,
+          metadata: {
+            successCount: createdEmployees.length,
+            failedCount: failedRows.length,
+            sampleEmployees: createdEmployees.slice(0, 5).map((e) => `${e.fullName} (${e.employeeId})`),
+          },
+        });
+      } catch (auditErr) {
+        console.warn("[bulkUploadEmployees] Audit log warning:", auditErr.message);
+      }
+    }
+
+    const message =
+      createdEmployees.length > 0
+        ? `Successfully imported ${createdEmployees.length} of ${rawRecords.length} employee records.` +
+          (failedRows.length > 0 ? ` ${failedRows.length} rows were skipped due to errors.` : "")
+        : `No employee records were imported. All ${failedRows.length} rows had validation errors.`;
+
+    return res.status(createdEmployees.length > 0 ? 200 : 400).json({
+      success: createdEmployees.length > 0,
+      message,
+      totalProcessed: rawRecords.length,
+      importedCount: createdEmployees.length,
+      failedCount: failedRows.length,
+      importedEmployees: createdEmployees,
+      failedRows,
+    });
+  } catch (error) {
+    console.error("bulkUploadEmployees controller error:", error);
+    return res.status(500).json({
+      success: false,
+      message: error.message || "An unexpected error occurred during bulk employee CSV upload.",
     });
   }
 };

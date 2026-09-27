@@ -338,7 +338,7 @@ export const LandingPage = () => {
             >
               <div className="flex items-center gap-1.5">
                 <CheckCircle2 className="w-4 h-4 text-emerald-600 dark:text-emerald-400" />
-                <span>Single-Company Deployment</span>
+                <span>Enterprise Grade</span>
               </div>
               <div className="flex items-center gap-1.5">
                 <CheckCircle2 className="w-4 h-4 text-emerald-600 dark:text-emerald-400" />
@@ -1001,7 +1001,7 @@ export const LandingPage = () => {
         </section>
       </main>
 
-      {/* ==================== 8. PROFESSIONAL SINGLE-COMPANY FOOTER ==================== */}
+      {/* ==================== 8. PROFESSIONAL FOOTER ==================== */}
       <footer
         id="landing-footer"
         className="bg-white dark:bg-slate-900 border-t border-slate-200 dark:border-slate-800 py-12 text-slate-600 dark:text-slate-400 text-xs"
@@ -1017,12 +1017,12 @@ export const LandingPage = () => {
                 </span>
               </div>
               <p className="text-xs text-slate-500 dark:text-slate-400 max-w-md leading-relaxed">
-                A dedicated, single-deployment workforce management system for modern businesses. Empowering administrators and managers with real-time employee attendance, leave workflows, and automated payroll operations.
+                A comprehensive workforce management system for modern businesses. Empowering administrators and managers with real-time employee attendance, leave workflows, and automated payroll operations.
               </p>
               <div className="pt-2">
                 <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[11px] font-semibold bg-emerald-50 dark:bg-emerald-950/60 text-emerald-700 dark:text-emerald-400 border border-emerald-200/80 dark:border-emerald-800">
                   <span className="w-1.5 h-1.5 rounded-full bg-emerald-500" />
-                  Single-Deployment Architecture
+                  Enterprise Architecture
                 </span>
               </div>
             </div>
@@ -1113,7 +1113,7 @@ export const LandingPage = () => {
           {/* Bottom Copyright Strip */}
           <div className="pt-8 border-t border-slate-200 dark:border-slate-800 flex flex-col sm:flex-row items-center justify-between gap-4 text-[11px] text-slate-500 dark:text-slate-500">
             <p>
-              &copy; {new Date().getFullYear()} {companyName || "WorkPulse"}. All rights reserved. Single-company deployment.
+              &copy; {new Date().getFullYear()} {companyName || "WorkPulse"}. All rights reserved.
             </p>
             <div className="flex items-center gap-4">
               <span>Security &amp; RBAC Enforced</span>

@@ -18,6 +18,7 @@ import {
   Copy,
   Check,
   AlertCircle,
+  Upload,
 } from "lucide-react";
 
 const ROLE_OPTIONS = [
@@ -53,7 +54,7 @@ const DEPARTMENT_OPTIONS = [
   { value: "Operations & Support", label: "Operations & Support" },
 ];
 
-export const AddEmployee = ({ onEmployeeAdded }) => {
+export const AddEmployee = ({ onEmployeeAdded, onOpenBulkUpload }) => {
   const { setShowEmployeeModal, setShowToast } = useManagement();
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [createdCredentials, setCreatedCredentials] = useState(null);
@@ -437,14 +438,30 @@ Login URL: ${window.location.origin}/auth/employee/login`;
                     </p>
                   </div>
                 </div>
-                <button
-                  id="btn-close-add-employee-modal"
-                  type="button"
-                  onClick={() => setShowEmployeeModal(false)}
-                  className="p-1.5 sm:p-2 text-slate-400 hover:text-slate-700 dark:hover:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-800 rounded-lg transition-all shrink-0 cursor-pointer"
-                >
-                  <X className="w-5 h-5" />
-                </button>
+                <div className="flex items-center gap-2">
+                  {onOpenBulkUpload && (
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setShowEmployeeModal(false);
+                        onOpenBulkUpload();
+                      }}
+                      className="hidden sm:inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl border border-indigo-200 dark:border-indigo-800 bg-indigo-50/80 dark:bg-indigo-950/40 text-indigo-700 dark:text-indigo-300 hover:bg-indigo-100 dark:hover:bg-indigo-900/60 text-xs font-semibold transition cursor-pointer"
+                      title="Upload CSV to add multiple employees at once"
+                    >
+                      <Upload className="w-3.5 h-3.5" />
+                      <span>Bulk CSV Import</span>
+                    </button>
+                  )}
+                  <button
+                    id="btn-close-add-employee-modal"
+                    type="button"
+                    onClick={() => setShowEmployeeModal(false)}
+                    className="p-1.5 sm:p-2 text-slate-400 hover:text-slate-700 dark:hover:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-800 rounded-lg transition-all shrink-0 cursor-pointer"
+                  >
+                    <X className="w-5 h-5" />
+                  </button>
+                </div>
               </div>
 
               {/* Form Body with Live Validation */}

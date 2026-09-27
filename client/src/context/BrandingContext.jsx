@@ -51,7 +51,7 @@ export const BrandingProvider = ({ children }) => {
 
   const refreshBranding = useCallback(async () => {
     try {
-      // Fetch public company configuration from single-company endpoint
+      // Fetch public company configuration from endpoint
       const [brandRes, initRes] = await Promise.allSettled([
         brandingService.getPublicBranding(),
         brandingService.getInitStatus(),

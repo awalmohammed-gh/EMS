@@ -203,7 +203,7 @@ export const checkAdminExists = async (_req, res) => {
 
 /**
  * POST /api/auth/admin/register
- * Admin account registration for the single-company deployment.
+ * Admin account registration.
  * Enforces security: prevents employee accounts from escalating to admin,
  * rejects duplicate email addresses, and validates password constraints.
  */

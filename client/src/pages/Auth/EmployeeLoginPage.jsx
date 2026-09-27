@@ -39,7 +39,7 @@ export const EmployeeLoginPage = () => {
   const { login: contextLogin } = useAuth();
   const { autoPopulateFromAuth } = useAttendance();
 
-  // Load single company deployment branding
+  // Load company branding
   useEffect(() => {
     let isMounted = true;
     brandingService

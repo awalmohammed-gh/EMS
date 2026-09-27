@@ -1,9 +1,10 @@
 import { useState, useEffect } from "react";
-import { UserPlus, Download, Check, RefreshCw, FileSpreadsheet } from "lucide-react";
+import { UserPlus, Download, Check, RefreshCw, FileSpreadsheet, Upload } from "lucide-react";
 import { allEmployees } from "../../apis/fontApis";
 import { EmployeeDirectory } from "../../components/EmployeeDirectory";
 import AddEmployee from "../../components/modal/AddEmployee";
 import ExportHREmployeeModal from "../../components/ExportHREmployeeModal";
+import BulkUploadEmployeesModal from "../../components/modal/BulkUploadEmployeesModal";
 import { useManagement } from "../../context/ManagementContextProvider";
 import { exportHREmployeeReportToCSV } from "../../utils/exportCsv";
 import ErrorMessage from "../../ui/ErrorMessage";
@@ -16,6 +17,7 @@ const Employees = () => {
   const [isExporting, setIsExporting] = useState(false);
   const [exportSuccess, setExportSuccess] = useState(false);
   const [showExportModal, setShowExportModal] = useState(false);
+  const [showBulkUploadModal, setShowBulkUploadModal] = useState(false);
   const [exportNotice, setExportNotice] = useState(null);
 
   const fetchEmployees = async () => {
@@ -157,6 +159,17 @@ const Employees = () => {
             </button>
 
             <button
+              id="btn-upload-csv-employees"
+              type="button"
+              onClick={() => setShowBulkUploadModal(true)}
+              title="Bulk-add employee records by uploading a CSV file"
+              className="px-3.5 py-2 rounded-xl border border-indigo-200 dark:border-indigo-800/80 bg-indigo-50/80 dark:bg-indigo-950/40 text-indigo-700 dark:text-indigo-300 hover:bg-indigo-100 dark:hover:bg-indigo-900/60 transition-all flex items-center gap-2 shadow-2xs text-xs font-semibold cursor-pointer"
+            >
+              <Upload className="w-3.5 h-3.5 text-indigo-600 dark:text-indigo-400" />
+              <span>Upload CSV</span>
+            </button>
+
+            <button
               id="btn-new-employee"
               type="button"
               onClick={() => setShowEmployeeModal(true)}
@@ -205,8 +218,24 @@ const Employees = () => {
 
       {/* Add Employee Modal */}
       {showEmployeeModal && (
-        <AddEmployee onEmployeeAdded={fetchEmployees} />
+        <AddEmployee
+          onEmployeeAdded={fetchEmployees}
+          onOpenBulkUpload={() => setShowBulkUploadModal(true)}
+        />
       )}
+
+      {/* Bulk CSV Upload Modal */}
+      <BulkUploadEmployeesModal
+        isOpen={showBulkUploadModal}
+        onClose={() => setShowBulkUploadModal(false)}
+        onSuccess={(data) => {
+          fetchEmployees();
+          setExportNotice(
+            `✓ Successfully imported ${data.importedCount} employee records from CSV.`
+          );
+          setTimeout(() => setExportNotice(null), 5000);
+        }}
+      />
 
       {/* Full HR Employee Database CSV Export Wizard */}
       <ExportHREmployeeModal

@@ -1,7 +1,5 @@
 /**
- * Single Company Architecture - Enforce Company Middleware
- * In a single company deployment, there are no multi-tenant isolation barriers
- * or cross-tenant query rewriting required.
+ * Enterprise Architecture - Enforce Company Middleware
  */
 
 export const enforceCompanyTenant = (_req, _res, next) => {
