@@ -402,31 +402,60 @@ export const updateCompanySettings = async (req, res) => {
       await Settings.updateOne({}, { $set: attUpdate });
     }
 
-    const adminUser = req.admin || {};
+    const tenantId =
+      req.organizationId ||
+      req.companyId ||
+      req.admin?.organizationId ||
+      req.admin?.companyId ||
+      req.user?.organizationId ||
+      req.user?.companyId ||
+      null;
+
+    const adminUser = req.admin || req.user || {};
+    const performedBy = {
+      id: String(adminUser.id || adminUser._id || "admin_01"),
+      name: adminUser.fullName || adminUser.full_name || "Administrator",
+      email: adminUser.email || "admin@eyenit.com",
+      role: adminUser.role || "admin",
+    };
+
+    const summaryText = `Updated Organization Settings: ${req.body?.name || req.body?.companyName || "Company profile"}`;
+    const changes = Object.keys(req.body || {}).map((k) => ({
+      field: k,
+      label: k,
+      oldValue: "Previous",
+      newValue: req.body[k],
+    }));
+
     try {
-      await AuditLog.create({
+      const logEntry = await AuditLog.create({
         action: "UPDATE_COMPANY_SETTINGS",
         category: "Admin Settings",
         organizationId: tenantId || null,
         companyId: tenantId || null,
-        performedBy: {
-          id: String(adminUser.id || adminUser._id || "admin_01"),
-          name: adminUser.fullName || adminUser.full_name || "Administrator",
-          email: adminUser.email || "admin@eyenit.com",
-          role: adminUser.role || "admin",
-        },
+        performedBy,
         target: "Company Profile",
-        summary: `Updated Organization Settings: ${req.body?.name || "Company profile"}`,
-        changes: Object.keys(req.body || {}).map((k) => ({
-          field: k,
-          label: k,
-          oldValue: "Previous",
-          newValue: req.body[k],
-        })),
+        summary: summaryText,
+        changes,
         createdAt: new Date(),
+        ipAddress: req.ip || req.headers["x-forwarded-for"] || "127.0.0.1",
+        userAgent: req.headers["user-agent"] || "Browser",
       });
+      inMemoryAuditLogs.unshift(logEntry.toObject ? logEntry.toObject() : logEntry);
     } catch (e) {
       console.warn("Audit log creation error:", e.message);
+      inMemoryAuditLogs.unshift({
+        _id: "audit_" + Date.now(),
+        action: "UPDATE_COMPANY_SETTINGS",
+        category: "Admin Settings",
+        organizationId: tenantId || null,
+        companyId: tenantId || null,
+        performedBy,
+        target: "Company Profile",
+        summary: summaryText,
+        changes,
+        createdAt: new Date(),
+      });
     }
 
     res.status(200).json({
